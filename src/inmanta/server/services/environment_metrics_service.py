@@ -41,8 +41,8 @@ LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
 
-# The grouped_by fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
-DEFAULT_GROUPED_BY = "__None__"
+# The category fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
+DEFAULT_CATEGORY = "__None__"
 
 
 class MetricType(str, Enum):
@@ -64,9 +64,9 @@ class MetricValue:
     the Metric values as they should be returned by a MetricsCollector of type gauge
     """
 
-    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, grouped_by: Optional[str] = None) -> None:
+    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, category: Optional[str] = None) -> None:
         self.metric_name = metric_name
-        self.grouped_by = grouped_by
+        self.category = category
         self.count = count
         self.environment = environment
 
@@ -77,9 +77,9 @@ class MetricValueTimer(MetricValue):
     """
 
     def __init__(
-        self, metric_name: str, count: int, value: float, environment: uuid.UUID, grouped_by: Optional[str] = None
+        self, metric_name: str, count: int, value: float, environment: uuid.UUID, category: Optional[str] = None
     ) -> None:
-        super().__init__(metric_name, count, environment, grouped_by)
+        super().__init__(metric_name, count, environment, category)
         self.value = value
 
 
@@ -211,7 +211,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_gauge.append(
                     EnvironmentMetricsGauge(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by if mv.grouped_by else DEFAULT_GROUPED_BY,
+                        category=mv.category if mv.category else DEFAULT_CATEGORY,
                         timestamp=timestamp,
                         count=mv.count,
                         environment=mv.environment,
@@ -223,7 +223,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_timer.append(
                     EnvironmentMetricsTimer(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by if mv.grouped_by else DEFAULT_GROUPED_BY,
+                        category=mv.category if mv.category else DEFAULT_CATEGORY,
                         timestamp=timestamp,
                         count=mv.count,
                         value=mv.value,
