@@ -17,9 +17,9 @@
 """
 import abc
 import logging
-import uuid
 import math
 import textwrap
+import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -28,13 +28,19 @@ from typing import Dict, List, Optional
 import asyncpg
 
 from inmanta.data import (
-    Agent, Compile, ConfigurationModel, EnvironmentMetricsGauge, EnvironmentMetricsTimer, Resource, Environment,
+    Agent,
+    Compile,
+    ConfigurationModel,
+    Environment,
+    EnvironmentMetricsGauge,
+    EnvironmentMetricsTimer,
+    Resource,
 )
 from inmanta.data.model import EnvironmentMetricsResult
-from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
-from inmanta.protocol.decorators import handle
 from inmanta.protocol import methods_v2
+from inmanta.protocol.decorators import handle
 from inmanta.protocol.exceptions import BadRequest
+from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
 LOGGER = logging.getLogger(__name__)
 
@@ -257,7 +263,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             raise BadRequest(f"The following metrics given in the metrics parameter are unknown: {unknown_metric_names}")
 
         def _get_sub_query(metric: str, group_by: str, table_name: str, aggregation_function: str, metrics_list: str) -> str:
-            return textwrap.dedent(f"""
+            return textwrap.dedent(
+                f"""
                 SELECT
                     {metric},
                     {group_by},
@@ -275,18 +282,19 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     AND timestamp < $3::timestamp
                     AND metric_name=ANY({metrics_list}::varchar[])
                 GROUP BY metric_name, grouped_by, bucket_nr
-            """).strip()
+            """
+            ).strip()
 
         query_on_gauge_table = _get_sub_query(
             metric="metric_name",
-            group_by=f"grouped_by",
+            group_by="grouped_by",
             table_name=EnvironmentMetricsGauge.table_name(),
             aggregation_function="(sum(count)::float)/(count(*)::float)",
             metrics_list="$5",
         )
         query_on_timer_table = _get_sub_query(
             metric="metric_name",
-            group_by=f"grouped_by",
+            group_by="grouped_by",
             table_name=EnvironmentMetricsTimer.table_name(),
             aggregation_function="(sum(value)::float)/(sum(count)::float)",
             metrics_list="$5",
@@ -298,7 +306,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             aggregation_function=(
                 "(sum(count)::float) / ((EXTRACT(epoch FROM ($3::timestamp - $2::timestamp)))::float / 3600)::float"
             ),
-            metrics_list="'{ orchestrator.compile_time }'"
+            metrics_list="'{ orchestrator.compile_time }'",
         )
         query = f"""
             ({query_on_gauge_table})

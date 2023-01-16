@@ -16,16 +16,17 @@
     Contact: code@inmanta.com
 """
 import uuid
-from collections.abc import Sequence, AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timedelta
-from typing import List, Optional, cast, Callable, Awaitable
+from typing import Awaitable, Callable, List, Optional, cast
 
 import asyncpg
 import pytest
 
 from inmanta import const, data
-from inmanta.server import protocol, SLICE_ENVIRONMENT_METRICS
+from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
 from inmanta.server.services.environment_metrics_service import (
+    DEFAULT_GROUPED_BY,
     AgentCountMetricsCollector,
     CompileTimeMetricsCollector,
     CompileWaitingTimeMetricsCollector,
@@ -35,7 +36,6 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValue,
     MetricValueTimer,
     ResourceCountMetricsCollector,
-    DEFAULT_GROUPED_BY,
 )
 from inmanta.util import get_compiler_version
 from utils import ClientHelper
@@ -906,7 +906,6 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
 @pytest.fixture
 def server_with_dummy_metric_collectors(server: protocol.Server) -> AsyncIterator[protocol.Server]:
     class GaugeCollector1(MetricsCollector):
-
         def get_metric_name(self) -> str:
             return "gauge_metric1"
 
@@ -919,7 +918,6 @@ def server_with_dummy_metric_collectors(server: protocol.Server) -> AsyncIterato
             return []
 
     class GaugeCollector2(MetricsCollector):
-
         def get_metric_name(self) -> str:
             return "gauge_metric2"
 
@@ -932,7 +930,6 @@ def server_with_dummy_metric_collectors(server: protocol.Server) -> AsyncIterato
             return []
 
     class TimerCollector1(MetricsCollector):
-
         def get_metric_name(self) -> str:
             return "timer_metric1"
 
@@ -945,7 +942,6 @@ def server_with_dummy_metric_collectors(server: protocol.Server) -> AsyncIterato
             return []
 
     class TimerCollector2(MetricsCollector):
-
         def get_metric_name(self) -> str:
             return "timer_metric2"
 
@@ -1043,11 +1039,11 @@ async def test_get_environment_metrics_api_endpoint(
                 grouped_by=DEFAULT_GROUPED_BY,
                 timestamp=start_interval + timedelta(minutes=i),
                 # Add +3 to make sure we end up with a floating point number after aggregating the data.
-                count=int(i/6) if i % 6 != 0 else int(i/6)+3,
-            ) for i in range(61)
+                count=int(i / 6) if i % 6 != 0 else int(i / 6) + 3,
+            )
+            for i in range(61)
         ]
-        +
-        [
+        + [
             # Add a value for a metric with a different name to make sure that the filtering works correctly.
             data.EnvironmentMetricsGauge(
                 environment=uuid.UUID(env1_id),
@@ -1057,8 +1053,7 @@ async def test_get_environment_metrics_api_endpoint(
                 count=33,
             ),
         ]
-        +
-        [
+        + [
             # Insert metric in a different environment to verify that the aggregations function respects the
             # environment boundary.
             data.EnvironmentMetricsGauge(
@@ -1082,11 +1077,11 @@ async def test_get_environment_metrics_api_endpoint(
                 timestamp=start_interval + timedelta(minutes=i),
                 count=2,
                 # Add 0.25 to make sure we end up with a floating point number after aggregating the data.
-                value=int(i/6) + 0.25,
-            ) for i in range(61)
+                value=int(i / 6) + 0.25,
+            )
+            for i in range(61)
         ]
-        +
-        [
+        + [
             # Add a value for a metric with a different name to make sure that the filtering works correctly.
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env1_id),
@@ -1097,8 +1092,7 @@ async def test_get_environment_metrics_api_endpoint(
                 value=66.6,
             ),
         ]
-        +
-        [
+        + [
             # Insert metric in a different environment to verify that the aggregations function respects the
             # environment boundary.
             data.EnvironmentMetricsTimer(
@@ -1124,11 +1118,11 @@ async def test_get_environment_metrics_api_endpoint(
     assert result.code == 200, result.result
     assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval
     assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_1h
-    expected_timestamps = [start_interval + timedelta(minutes=(i+1)*6) for i in range(nb_datapoints)]
+    expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 2
-    assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6))/6 + 0.5 for i in range(10)]
-    assert result.result["data"]["metrics"]["timer_metric1"] == [(sum(i for _ in range(6))+1.5)/(2*6) for i in range(10)]
+    assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6)) / 6 + 0.5 for i in range(10)]
+    assert result.result["data"]["metrics"]["timer_metric1"] == [(sum(i for _ in range(6)) + 1.5) / (2 * 6) for i in range(10)]
 
     # Verify behavior when no data is available a time window
     nb_datapoints = 2
@@ -1192,10 +1186,10 @@ async def test_compile_rate_metric(
                 timestamp=start_interval + timedelta(minutes=i),
                 count=i,
                 value=float(i),
-            ) for i in range(61)
+            )
+            for i in range(61)
         ]
-        +
-        [
+        + [
             # Add a value for a metric with a different name to make sure that the filtering works correctly.
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env1_id),
@@ -1206,8 +1200,7 @@ async def test_compile_rate_metric(
                 value=float(22),
             ),
         ]
-        +
-        [
+        + [
             # Insert metric in a different environment to verify that the aggregations function respects the
             # environment boundary.
             data.EnvironmentMetricsTimer(
@@ -1237,7 +1230,7 @@ async def test_compile_rate_metric(
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [
-        sum((i*6)+j for j in range(6)) for i in range(nb_datapoints)
+        sum((i * 6) + j for j in range(6)) for i in range(nb_datapoints)
     ]
 
 

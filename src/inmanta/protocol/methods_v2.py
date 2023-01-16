@@ -1312,4 +1312,3 @@ def get_environment_metrics(
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
     """
-

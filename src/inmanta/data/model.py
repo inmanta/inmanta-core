@@ -716,8 +716,8 @@ class EnvironmentMetricsResult(BaseModel):
                     are grouped by a specific property, this list contains a dictionary where the key is the grouping
                     attribute and the value is the value of the metric.
     """
+
     start: datetime.datetime
     end: datetime.datetime
     timestamps: List[datetime.datetime]
     metrics: Dict[str, List[Optional[Union[float, Dict[str, float]]]]]
-

@@ -941,6 +941,7 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
             await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
         return env_id
+
     yield _create_environment
 
 
