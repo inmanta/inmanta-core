@@ -17,11 +17,27 @@ from collections import abc
 import pytest
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301100.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301160.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
+    get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
+    get_primary_key_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
 ) -> None:
-    """
-    Only an index was added, no need to test anything other than that the migration script applies.
-    """
+    for table_name in ["environmentmetricsgauge", "environmentmetricstimer"]:
+        assert "grouped_by" in (await get_columns_in_db_table(table_name))
+        assert not "category" in (await get_columns_in_db_table(table_name))
+
+        columns_pk = await get_primary_key_columns_in_db_table(table_name)
+        assert len(columns_pk) == 4
+        assert "grouped_by" in columns_pk
+        assert not "category" in columns_pk
     await migrate_db_from()
+
+    for table_name in ["environmentmetricsgauge", "environmentmetricstimer"]:
+        assert not "grouped_by" in (await get_columns_in_db_table(table_name))
+        assert "category" in (await get_columns_in_db_table(table_name))
+
+        columns_pk = await get_primary_key_columns_in_db_table(table_name)
+        assert len(columns_pk) == 4
+        assert not "grouped_by" in columns_pk
+        assert "category" in columns_pk

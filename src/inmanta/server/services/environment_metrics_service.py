@@ -153,6 +153,10 @@ class MetricsCollector(abc.ABC):
         the database. No in-memory state is being stored by this metrics collector. The provided interval
         should be interpreted as [start_interval, end_interval[
 
+        If, at the time of collection, no metric data exists for an environment and/or group,
+        the implementation should return a meaningful default (e.g. 0 for count metrics).
+        If no meaningful default exists (e.g. for some time metrics), the data may be left out.
+
         :param start_interval: The start time of the metrics collection interval (inclusive).
         :param end_interval: The end time of the metrics collection interval (exclusive).
         :param connection: An optional connection
@@ -366,20 +370,11 @@ class CompileTimeMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValueTimer]:
         query: str = f"""
-            WITH compile_time as (
-                SELECT count(*) as count, environment, sum(completed-started)
+            SELECT count(*) as count, environment, sum(completed-started) as compile_time
                 FROM {Compile.table_name()}
                 WHERE completed >= $1
                 AND completed < $2
                 GROUP BY environment
-            )
-            SELECT e.id AS environment,
-                COALESCE(compile_time.count, 0) AS count,
-                COALESCE(compile_time.sum, INTERVAL '0' SECOND) AS compile_time
-            FROM {Environment.table_name()} AS e
-            LEFT JOIN compile_time
-            ON compile_time.environment = e.id
-            ORDER BY environment
         """
         values = [start_interval, end_interval]
         result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
@@ -415,18 +410,11 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValueTimer]:
         query: str = f"""
-        WITH compile_waiting_time as (
-            SELECT count(*) as count,environment,sum(started-requested)
+            SELECT count(*)  as count,environment,sum(started-requested) as compile_waiting_time
             FROM {Compile.table_name()}
             WHERE started >= $1
             AND started < $2
             GROUP BY environment
-        ) SELECT e.id AS environment, COALESCE(compile_waiting_time.count, 0) AS count,
-            COALESCE(compile_waiting_time.sum, INTERVAL '0' SECOND) as compile_waiting_time
-            FROM {Environment.table_name()} AS e
-            LEFT JOIN compile_waiting_time
-            ON compile_waiting_time.environment = e.id
-            ORDER BY environment
         """
         values = [start_interval, end_interval]
         result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)

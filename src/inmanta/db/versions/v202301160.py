@@ -20,10 +20,9 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    # Add an index to speed up grouping by status for the latest version, e.g. ResourceCountMetricsCollector query
     await connection.execute(
         """
-    ALTER TABLE public.environmentmetricsgauge ALTER COLUMN grouped_by RENAME TO category;
-    ALTER TABLE public.environmentmetricstimer ALTER COLUMN grouped_by RENAME TO category;
+ALTER TABLE public.environmentmetricsgauge RENAME COLUMN grouped_by TO category;
+ALTER TABLE public.environmentmetricstimer RENAME COLUMN grouped_by TO category;
     """
     )
