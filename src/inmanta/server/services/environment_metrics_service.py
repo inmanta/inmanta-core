@@ -181,7 +181,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(CompileWaitingTimeMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
-        if COLLECTION_INTERVAL_IN_SEC != 0:
+        if COLLECTION_INTERVAL_IN_SEC > 0:
             self.schedule(
                 self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
             )
