@@ -103,8 +103,8 @@ class MetricsCollector(abc.ABC):
         the database. No in-memory state is being stored by this metrics collector. The provided interval
         should be interpreted as [start_interval, end_interval[
 
-        :param start_interval: The start time of the metrics collection interval (inclusive).
-        :param end_interval: The end time of the metrics collection interval (exclusive).
+        :param start_interval: The timezone-aware start time of the metrics collection interval (inclusive).
+        :param end_interval: The timezone-aware end time of the metrics collection interval (exclusive).
         :param connection: An optional connection
         :result: The metrics collected by this MetricCollector within the past metrics collection interval.
         """
