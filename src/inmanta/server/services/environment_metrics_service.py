@@ -153,8 +153,8 @@ class MetricsCollector(abc.ABC):
         the database. No in-memory state is being stored by this metrics collector. The provided interval
         should be interpreted as [start_interval, end_interval[
 
-        :param start_interval: The start time of the metrics collection interval (inclusive).
-        :param end_interval: The end time of the metrics collection interval (exclusive).
+        :param start_interval: The timezone-aware start time of the metrics collection interval (inclusive).
+        :param end_interval: The timezone-aware end time of the metrics collection interval (exclusive).
         :param connection: An optional connection
         :result: The metrics collected by this MetricCollector within the past metrics collection interval.
         """
@@ -167,7 +167,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     def __init__(self) -> None:
         super(EnvironmentMetricsService, self).__init__(SLICE_ENVIRONMENT_METRICS)
         self.metrics_collectors: Dict[str, MetricsCollector] = {}
-        self.previous_timestamp = datetime.now()
+        self.previous_timestamp = datetime.now().astimezone()
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE]
@@ -201,7 +201,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         collected by the MetricsCollectors in the past metrics collection interval
         to the database.
         """
-        now: datetime = datetime.now()
+        now: datetime = datetime.now().astimezone()
         old_previous_timestamp = self.previous_timestamp
         self.previous_timestamp = now
         metric_gauge: Sequence[EnvironmentMetricsGauge] = []
@@ -254,7 +254,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             await EnvironmentMetricsGauge.insert_many(metric_gauge, connection=con)
             await EnvironmentMetricsTimer.insert_many(metric_timer, connection=con)
 
-        if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
+        if datetime.now().astimezone() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
             LOGGER.warning(
                 "flush_metrics method took more than %d seconds: "
                 "new attempts to flush metrics are fired faster than they resolve. "
