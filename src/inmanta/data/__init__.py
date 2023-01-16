@@ -5071,7 +5071,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int) -> Tuple[Set[m.ResourceIdStr], Set[m.ResourceIdStr]]:
+    async def get_increment(cls, environment: uuid.UUID, version: int) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
