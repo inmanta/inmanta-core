@@ -702,3 +702,22 @@ class Source(BaseModel):
     is_byte_code: bool
     module_name: str
     requirements: List[str]
+
+
+class EnvironmentMetricsResult(BaseModel):
+    """
+    A container for metrics as returned by the /metrics endpoint.
+
+    :param start: The starting point of the requested aggregation interval.
+    :param end: The endpoint of the requested aggregation interval.
+    :param timestamps: The timestamps that belongs to the aggregated metrics present in the `metrics` dictionary.
+    :param metrics: A dictionary that maps the name of a metric a list of aggregated datapoints. For metrics that are not
+                    grouped on a specific property, this list only contains the values of the metrics. For metrics that
+                    are grouped by a specific property, this list contains a dictionary where the key is the grouping
+                    attribute and the value is the value of the metric.
+    """
+    start: datetime.datetime
+    end: datetime.datetime
+    timestamps: List[datetime.datetime]
+    metrics: Dict[str, List[Optional[Union[float, Dict[str, float]]]]]
+

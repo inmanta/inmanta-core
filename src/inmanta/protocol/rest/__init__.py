@@ -192,7 +192,20 @@ class CallArguments(object):
                 if not self._is_header_param(arg):
                     arg_type = self._argspec.annotations.get(arg)
                     if arg in self._message:
-                        value = self._message[arg]
+                        if (
+                            arg_type
+                            and self._properties.operation == "GET"
+                            and typing_inspect.is_generic_type(arg_type)
+                            and issubclass(typing_inspect.get_origin(arg_type), list)
+                            and not isinstance(self._message[arg], list)
+                            and len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+                            and isinstance(self._message[arg], typing_inspect.get_args(arg_type)[0])
+                        ):
+                            # If only one list element is provided, urllib cannot know this is supposed to be a list.
+                            # Map it here explicitly to a list.
+                            value = [self._message[arg]]
+                        else:
+                            value = self._message[arg]
                         all_fields.remove(arg)
                     # Pre-process dict params for GET
                     elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):

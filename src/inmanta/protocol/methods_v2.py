@@ -1287,3 +1287,29 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
     :param resource_type: The type name of the resource
     :raises NotFound: Raised when the version or type is not found
     """
+
+
+@typedmethod(
+    path="/metrics",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_environment_metrics(
+    tid: uuid.UUID,
+    metrics: List[str],
+    start_interval: datetime.datetime,
+    end_interval: datetime.datetime,
+    nb_datapoints: int,
+) -> model.EnvironmentMetricsResult:
+    """
+    Obtain metrics about the given environment for the given time interval.
+
+    :param tid: The id of the environment for which the metrics have to be collected.
+    :param metrics: List of names of metrics that have to be returned.
+    :param start_interval: The start of the time window for which the metrics should be returned.
+    :param end_interval: The end of the time window for which the metrics should be returned.
+    :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
+    """
+

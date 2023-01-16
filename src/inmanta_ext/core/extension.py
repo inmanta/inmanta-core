@@ -32,6 +32,7 @@ from inmanta.server.services import (
     paramservice,
     projectservice,
     resourceservice,
+    environment_metrics_service,
 )
 
 

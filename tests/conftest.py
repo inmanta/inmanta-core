@@ -912,62 +912,69 @@ def capture_warnings():
     logging.captureWarnings(False)
 
 
-async def create_environment(client, use_custom_env_settings: bool) -> str:
-    """
-    Create a project (env-test) and an environment (dev).
-
-    :param client: The client that should be used to create the project and environment.
-    :param use_custom_env_settings: True iff the auto_deploy features is disabled and the
-                                    agent trigger method is set to push_full_deploy.
-    :return: The uuid of the newly created environment as a string.
-    """
+@pytest.fixture
+async def project(server, client) -> AsyncIterator[str]:
     result = await client.create_project("env-test")
     assert result.code == 200
-    project_id = result.result["project"]["id"]
+    yield result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
 
-    cfg_env.set(env_id)
+@pytest.fixture
+async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str, str, bool], Awaitable[str]]]:
+    async def _create_environment(client, project_id: str, env_name: str, use_custom_env_settings: bool = True) -> str:
+        """
+        :param client: The client that should be used to create the project and environment.
+        :param use_custom_env_settings: True iff the auto_deploy features is disabled and the
+                                        agent trigger method is set to push_full_deploy.
+        :return: The uuid of the newly created environment as a string.
+        """
+        result = await client.create_environment(project_id=project_id, name=env_name)
+        env_id = result.result["environment"]["id"]
 
-    if use_custom_env_settings:
-        env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
-        await env_obj.set(data.AUTO_DEPLOY, False)
-        await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
-        await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
-        await env_obj.set(data.RECOMPILE_BACKOFF, 0)
+        cfg_env.set(env_id)
 
-    return env_id
+        if use_custom_env_settings:
+            env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
+            await env_obj.set(data.AUTO_DEPLOY, False)
+            await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
+            await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+            await env_obj.set(data.RECOMPILE_BACKOFF, 0)
+
+        return env_id
+    yield _create_environment
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server) -> AsyncIterator[str]:
+async def environment(
+    server, client, project: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and push_full_deploy set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client, use_custom_env_settings=True)
-    yield env_id
+    yield await environment_creator(client, project_id=project, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="function")
-async def environment_default(client, server) -> AsyncIterator[str]:
+async def environment_default(
+    server, client, project: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+) -> AsyncIterator[str]:
     """
     Create a project and environment with default environment settings.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client, use_custom_env_settings=False)
-    yield env_id
+    yield await environment_creator(client, project_id=project, env_name="dev", use_custom_env_settings=False)
 
 
 @pytest.fixture(scope="function")
-async def environment_multi(client_multi, server_multi) -> AsyncIterator[str]:
+async def environment_multi(
+    client_multi, server_multi, project: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and the agent trigger method set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client_multi, use_custom_env_settings=True)
-    yield env_id
+    yield await environment_creator(client_multi, project_id=project, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="session")
