@@ -50,7 +50,8 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
 
 @pytest.fixture
 def server_pre_start(server_config):
-    """This fixture is called before the server starts to disable the automatic flush_metrics done by the EnvironmentMetricsService"""
+    """This fixture is called before the server starts to disable the automatic flush_metrics done
+    by the EnvironmentMetricsService"""
     previous = environment_metrics_service.COLLECTION_INTERVAL_IN_SEC
     environment_metrics_service.COLLECTION_INTERVAL_IN_SEC = 0
     yield
