@@ -213,7 +213,7 @@ def is_bool(value: Union[bool, str]) -> bool:
         return value
     boolean_states: abc.Mapping[str, bool] = Config._get_instance().BOOLEAN_STATES
     if value.lower() not in boolean_states:
-        raise ValueError('Not a boolean: %s' % value)
+        raise ValueError("Not a boolean: %s" % value)
     return boolean_states[value.lower()]
 
 
