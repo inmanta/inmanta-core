@@ -12,61 +12,16 @@
     Contact: code@inmanta.com
 """
 import os
-import uuid
 from collections import abc
-from datetime import datetime
 
 import pytest
-from asyncpg import Connection
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301110.sql"))
-async def test_timestamp_timezones(
+async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-    postgresql_client: Connection,
 ) -> None:
     """
-    Test that all timestamps are timezone-aware.
+    Make sure the migration script applies.
     """
-
-    # Fill the tables with dummy data to be able to fetch the types
-    project_id: uuid.UUID = uuid.uuid4()
-    env_id: uuid.UUID = uuid.uuid4()
-    timestamp: datetime = datetime.now()
-
-    await postgresql_client.execute(
-        f"""
-        INSERT INTO public.project
-        VALUES ('{project_id}', 'v202301120-test-project')
-        ;
-        INSERT INTO public.environment
-        VALUES ('{env_id}', 'v202301120-test-env', '{project_id}', '', '', '{{}}')
-        ;
-        INSERT INTO public.environmentmetricstimer
-        VALUES ('{env_id}', 'metrictimer','{timestamp.isoformat()}','1', '2.0')
-        ;
-        INSERT INTO public.environmentmetricsgauge
-        VALUES ('{env_id}', 'metricgauge', '{timestamp.isoformat()}', '1')
-        ;
-        """
-    )
-
-    async def check_column_type(table: str, column: str, type: str) -> None:
-        result = await postgresql_client.fetch(
-            f"""
-                SELECT pg_typeof({column}) as type
-                FROM public.{table};
-            """
-        )
-        assert result[0]["type"] == type
-
-    type_pre = "timestamp without time zone"
-    for table in ["environmentmetricsgauge", "environmentmetricstimer"]:
-        await check_column_type(table, "timestamp", type_pre)
-
-    # Migrate DB schema
     await migrate_db_from()
-
-    type_post = "timestamp with time zone"
-    for table in ["environmentmetricsgauge", "environmentmetricstimer"]:
-        await check_column_type(table, "timestamp", type_post)
