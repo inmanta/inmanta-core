@@ -17,6 +17,7 @@
 """
 import uuid
 from collections.abc import AsyncIterator, Sequence
+from collections import abc, defaultdict
 from datetime import datetime, timedelta
 from typing import Awaitable, Callable, List, Optional, cast
 
@@ -25,6 +26,7 @@ import pytest
 
 from inmanta import const, data
 from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
+from inmanta.server.services import environment_metrics_service
 from inmanta.server.services.environment_metrics_service import (
     DEFAULT_GROUPED_BY,
     AgentCountMetricsCollector,
@@ -50,6 +52,16 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
 
 
 @pytest.fixture
+def server_pre_start(server_config):
+    """This fixture is called before the server starts to disable the automatic flush_metrics done
+    by the EnvironmentMetricsService"""
+    previous = environment_metrics_service.COLLECTION_INTERVAL_IN_SEC
+    environment_metrics_service.COLLECTION_INTERVAL_IN_SEC = 0
+    yield
+    environment_metrics_service.COLLECTION_INTERVAL_IN_SEC = previous
+
+
+@pytest.fixture
 async def env_with_uuid():
     project = data.Project(name="test")
     await project.insert()
@@ -72,7 +84,7 @@ class DummyGaugeMetric(MetricsCollector):
 
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-    ) -> Sequence[MetricValue]:
+    ) -> abc.Sequence[MetricValue]:
         a = MetricValue("dummy_gauge", 1, env_uuid)
         return [a]
 
@@ -86,7 +98,7 @@ class DummyGaugeMetricMulti(MetricsCollector):
 
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-    ) -> Sequence[MetricValue]:
+    ) -> abc.Sequence[MetricValue]:
         a = MetricValue("dummy_gauge_multi", 1, env_uuid, "up")
         b = MetricValue("dummy_gauge_multi", 2, env_uuid, "down")
         c = MetricValue("dummy_gauge_multi", 3, env_uuid, "left")
@@ -102,7 +114,7 @@ class DummyTimerMetric(MetricsCollector):
 
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-    ) -> Sequence[MetricValueTimer]:
+    ) -> abc.Sequence[MetricValueTimer]:
         a = MetricValueTimer("dummy_timer", 3, 50.50, env_uuid)
         return [a]
 
@@ -116,7 +128,7 @@ class DummyTimerMetricMulti(MetricsCollector):
 
     async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-    ) -> Sequence[MetricValueTimer]:
+    ) -> abc.Sequence[MetricValueTimer]:
         a = MetricValueTimer("dummy_timer_multi", 3, 50.50 * 1, env_uuid, "up")
         b = MetricValueTimer("dummy_timer_multi", 13, 50.50 * 2, env_uuid, "down")
         c = MetricValueTimer("dummy_timer_multi", 23, 50.50 * 3, env_uuid, "left")
@@ -151,7 +163,7 @@ async def test_bad_type_metric(env_metrics_service):
 
         async def get_metric_value(
             self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-        ) -> Sequence[MetricValue]:
+        ) -> abc.Sequence[MetricValue]:
             a = MetricValue(self.get_metric_name(), env_uuid, 10)
             return [a]
 
@@ -309,7 +321,7 @@ async def test_flush_metrics_for_different_envs(env_metrics_service):
 
         async def get_metric_value(
             self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
-        ) -> Sequence[MetricValue]:
+        ) -> abc.Sequence[MetricValue]:
             a = MetricValue("dummy_gauge_2", 2, env_uuid2)
             return [a]
 
@@ -641,9 +653,25 @@ async def test_agent_count_metric(clienthelper, client, agent):
     await agent1.insert()
     agent2 = data.Agent(environment=env2.id, name="agent2", paused=True)
     await agent2.insert()
+    agent3 = data.Agent(environment=env2.id, name="agent3", paused=True)
+    await agent3.insert()
 
     agents = await data.Agent.get_list()
-    assert len(agents) == 2
+    assert len(agents) == 3
+
+    # Add dummy resources that use some (but not all) of the agents
+    model1 = data.ConfigurationModel(environment=env1.id, version=1, released=True)
+    await model1.insert()
+    model2 = data.ConfigurationModel(environment=env2.id, version=1, released=True)
+    await model2.insert()
+    resource1 = data.Resource(
+        environment=env1.id, model=1, agent="agent1", resource_id="", resource_type="", resource_id_value=""
+    )
+    await resource1.insert()
+    resource2 = data.Resource(
+        environment=env2.id, model=1, agent="agent2", resource_id="", resource_type="", resource_id_value=""
+    )
+    await resource2.insert()
 
     # adds the AgentCountMetricsCollector
     acmc = AgentCountMetricsCollector()
@@ -653,15 +681,19 @@ async def test_agent_count_metric(clienthelper, client, agent):
     # environment and 1 for the second)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 2
-    assert any(
-        x.count == 1 and x.metric_name == "resource.agent_count" and x.grouped_by == "paused" and x.environment == env1.id
-        for x in result_gauge
-    )
-    assert any(
-        x.count == 1 and x.metric_name == "resource.agent_count" and x.grouped_by == "paused" and x.environment == env2.id
-        for x in result_gauge
-    )
+    assert all(gauge.metric_name == "resource.agent_count" for gauge in result_gauge)
+    gauges_by_status: dict[uuid.UUID, dict[str, data.EnvironmentMetricsGauge]] = defaultdict(dict)
+    for gauge in result_gauge:
+        gauges_by_status[gauge.environment][gauge.grouped_by] = gauge
+    # 3 environments: one created by the environment fixture (dependency of agent fixture), two created above
+    assert len(gauges_by_status) == 3
+    # 3 states for each environment => 9 rows in matrix
+    assert all(statuses.keys() == {"paused", "up", "down"} for _, statuses in gauges_by_status.items())
+    # verify counts
+    assert gauges_by_status[env1.id]["paused"].count == 1
+    assert gauges_by_status[env2.id]["paused"].count == 1  # agent3 is not used by any resource so it should not be counted
+    # verify that all other counts are 0
+    assert sum(abs(gauge.count) for gauge in result_gauge) == 2
 
 
 async def test_compile_time_metric(clienthelper, client, agent):
@@ -690,7 +722,7 @@ async def test_compile_time_metric(clienthelper, client, agent):
         )
         await compile.insert()
 
-    async def add_compiles(environment: uuid.UUID, compile_times: Sequence[float]):
+    async def add_compiles(environment: uuid.UUID, compile_times: abc.Sequence[float]):
         """
         These compiles are anchored in time around their COMPLETION time to make sure they are picked
         up by the next call to flush_metrics()
@@ -815,7 +847,7 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
         )
         await compile.insert()
 
-    async def add_compiles(environment: uuid.UUID, wait_times: Sequence[float]):
+    async def add_compiles(environment: uuid.UUID, wait_times: abc.Sequence[float]):
         time_origin = datetime.now()
         for wait_time in wait_times:
             requested_offset = timedelta(seconds=wait_time)

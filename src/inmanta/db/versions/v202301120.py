@@ -16,19 +16,14 @@
     Contact: code@inmanta.com
 """
 
+
 from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    # grouped_by has as default value '__None__' as it is part of the PRIMARY KEY and can therefore not be NULL.
     schema = """
-    ALTER TABLE public.environmentmetricsgauge ADD COLUMN grouped_by VARCHAR DEFAULT '__None__';
-    ALTER TABLE public.environmentmetricsgauge DROP Constraint environmentmetricsgauge_pkey;
-    ALTER TABLE public.environmentmetricsgauge ADD PRIMARY KEY (environment, metric_name,grouped_by, timestamp);
-
-    ALTER TABLE public.environmentmetricstimer ADD COLUMN grouped_by VARCHAR DEFAULT '__None__';
-    ALTER TABLE public.environmentmetricstimer DROP Constraint environmentmetricstimer_pkey;
-    ALTER TABLE public.environmentmetricstimer ADD PRIMARY KEY (environment, metric_name,grouped_by, timestamp);
+    ALTER TABLE public.environmentmetricsgauge ALTER COLUMN timestamp TYPE TIMESTAMP WITH TIME ZONE;
+    ALTER TABLE public.environmentmetricstimer ALTER COLUMN timestamp TYPE TIMESTAMP WITH TIME ZONE;
     """
 
     await connection.execute(schema)

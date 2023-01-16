@@ -19,6 +19,7 @@ import abc
 import logging
 import math
 import textwrap
+import textwrap
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
@@ -88,6 +89,47 @@ class MetricValueTimer(MetricValue):
         self.value = value
 
 
+LATEST_RELEASED_MODELS_SUBQUERY: str = textwrap.dedent(
+    f"""
+    latest_released_models AS (
+        SELECT cm.environment, MAX(cm.version) AS version
+        FROM {ConfigurationModel.table_name()} AS cm
+        WHERE cm.released = TRUE
+        GROUP BY cm.environment
+    )
+    """.strip(
+        "\n"
+    )
+).strip()
+"""
+Subquery to get the latest released version for each environment. Environments with no released versions are absent.
+To be used like f"WITH {LATEST_RELEASED_MODELS_SUBQUERY} <main_query>". The main query can use the name 'latest_released_models'
+to refer to this table.
+"""
+
+LATEST_RELEASED_RESOURCES_SUBQUERY: str = (
+    LATEST_RELEASED_MODELS_SUBQUERY
+    + textwrap.dedent(
+        f"""
+    , latest_released_resources AS (
+        SELECT r.*
+        FROM {Resource.table_name()} AS r
+        INNER JOIN latest_released_models as cm
+            ON r.environment = cm.environment AND r.model = cm.version
+    )
+    """.strip(
+            "\n"
+        )
+    ).strip()
+)
+"""
+Subquery to get the resources for latest released version for each environment. Environments with no released versions are
+absent. Includes LATEST_RELEASED_MODELS_SUBQUERY.
+To be used like f"WITH {LATEST_RELEASED_RESOURCES_SUBQUERY} <main_query>. The main query can use the name
+'latest_released_resources' to refer to this table.
+"""
+
+
 class MetricsCollector(abc.ABC):
     @abc.abstractmethod
     def get_metric_name(self) -> str:
@@ -117,8 +159,8 @@ class MetricsCollector(abc.ABC):
         the database. No in-memory state is being stored by this metrics collector. The provided interval
         should be interpreted as [start_interval, end_interval[
 
-        :param start_interval: The start time of the metrics collection interval (inclusive).
-        :param end_interval: The end time of the metrics collection interval (exclusive).
+        :param start_interval: The timezone-aware start time of the metrics collection interval (inclusive).
+        :param end_interval: The timezone-aware end time of the metrics collection interval (exclusive).
         :param connection: An optional connection
         :result: The metrics collected by this MetricCollector within the past metrics collection interval.
         """
@@ -131,7 +173,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     def __init__(self) -> None:
         super(EnvironmentMetricsService, self).__init__(SLICE_ENVIRONMENT_METRICS)
         self.metrics_collectors: Dict[str, MetricsCollector] = {}
-        self.previous_timestamp = datetime.now()
+        self.previous_timestamp = datetime.now().astimezone()
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_DATABASE]
@@ -145,7 +187,10 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(CompileWaitingTimeMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
-        self.schedule(self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=0, cancel_on_stop=True)
+        if COLLECTION_INTERVAL_IN_SEC > 0:
+            self.schedule(
+                self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
+            )
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """
@@ -162,7 +207,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         collected by the MetricsCollectors in the past metrics collection interval
         to the database.
         """
-        now: datetime = datetime.now()
+        now: datetime = datetime.now().astimezone()
         old_previous_timestamp = self.previous_timestamp
         self.previous_timestamp = now
         metric_gauge: Sequence[EnvironmentMetricsGauge] = []
@@ -215,7 +260,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             await EnvironmentMetricsGauge.insert_many(metric_gauge, connection=con)
             await EnvironmentMetricsTimer.insert_many(metric_timer, connection=con)
 
-        if datetime.now() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
+        if datetime.now().astimezone() - now > timedelta(seconds=COLLECTION_INTERVAL_IN_SEC):
             LOGGER.warning(
                 "flush_metrics method took more than %d seconds: "
                 "new attempts to flush metrics are fired faster than they resolve. "
@@ -367,14 +412,11 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            SELECT status,environment,count(*)
-            FROM {Resource.table_name()} AS r
-            WHERE r.model=(
-                SELECT MAX(cm.version)
-                FROM {ConfigurationModel.table_name()} AS cm
-                WHERE cm.environment=r.environment AND cm.released=TRUE
-                )
-            GROUP BY (status, environment)
+            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}
+            SELECT r.environment, r.status, COUNT(*)
+            FROM latest_released_resources AS r
+            GROUP BY r.environment, r.status
+            ORDER BY r.environment, r.status
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
@@ -397,18 +439,36 @@ class AgentCountMetricsCollector(MetricsCollector):
     def get_metric_type(self) -> MetricType:
         return MetricType.GAUGE
 
-    async def get_metric_value(  # todo
+    async def get_metric_value(
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-SELECT
-  CASE
-    WHEN paused THEN 'paused'
-    WHEN NOT paused AND id_primary IS NOT NULL THEN 'up'
-    ELSE 'down'
-  END AS status,environment,count(*)
-FROM {Agent.table_name()}
-GROUP BY (status, environment);
+-- fetch actual counts
+WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, agent_counts AS (
+    SELECT
+        environment,
+        CASE
+            WHEN paused THEN 'paused'
+            WHEN id_primary IS NOT NULL THEN 'up'
+            ELSE 'down'
+        END AS status,
+        COUNT(*)
+    FROM {Agent.table_name()} AS a
+    -- only count agents that are relevant for the latest model
+    WHERE EXISTS (
+        SELECT *
+        FROM latest_released_resources AS r
+        WHERE r.environment = a.environment AND r.agent = a.name
+    )
+    GROUP BY environment, status
+)
+-- inject zeroes for missing values in the environment - status matrix
+SELECT e.id AS environment, s.status, COALESCE(a.count, 0) AS count
+FROM {Environment.table_name()} AS e
+CROSS JOIN (VALUES ('paused'), ('up'), ('down')) AS s(status)
+LEFT JOIN agent_counts AS a
+    ON a.environment = e.id AND a.status = s.status
+ORDER BY environment, s.status
         """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
