@@ -21,7 +21,7 @@ import math
 import textwrap
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, List, Optional
 

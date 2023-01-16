@@ -1148,9 +1148,16 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval.astimezone(timezone.utc).replace(tzinfo=None)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_1h.astimezone(timezone.utc).replace(tzinfo=None)
-    expected_timestamps = [(start_interval + timedelta(minutes=(i + 1) * 6)).astimezone(timezone.utc).replace(tzinfo=None) for i in range(nb_datapoints)]
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval.astimezone(timezone.utc).replace(
+        tzinfo=None
+    )
+    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_1h.astimezone(timezone.utc).replace(
+        tzinfo=None
+    )
+    expected_timestamps = [
+        (start_interval + timedelta(minutes=(i + 1) * 6)).astimezone(timezone.utc).replace(tzinfo=None)
+        for i in range(nb_datapoints)
+    ]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 2
     assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6)) / 6 + 0.5 for i in range(10)]
@@ -1168,9 +1175,16 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min.astimezone(timezone.utc).replace(tzinfo=None)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)
-    expected_timestamps = [start_interval.astimezone(timezone.utc).replace(tzinfo=None), start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)]
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min.astimezone(timezone.utc).replace(
+        tzinfo=None
+    )
+    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min.astimezone(timezone.utc).replace(
+        tzinfo=None
+    )
+    expected_timestamps = [
+        start_interval.astimezone(timezone.utc).replace(tzinfo=None),
+        start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None),
+    ]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None, 0.5]
@@ -1185,8 +1199,12 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min.astimezone(timezone.utc).replace(tzinfo=None)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min.astimezone(timezone.utc).replace(
+        tzinfo=None
+    )
+    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min.astimezone(timezone.utc).replace(
+        tzinfo=None
+    )
     expected_timestamps = [start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
@@ -1256,9 +1274,14 @@ async def test_compile_rate_metric(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval.astimezone(timezone.utc).replace(tzinfo=None)
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval.astimezone(timezone.utc).replace(
+        tzinfo=None
+    )
     assert datetime.fromisoformat(result.result["data"]["end"]) == end_interval.astimezone(timezone.utc).replace(tzinfo=None)
-    expected_timestamps = [(start_interval + timedelta(minutes=(i + 1) * 6)).astimezone(timezone.utc).replace(tzinfo=None) for i in range(nb_datapoints)]
+    expected_timestamps = [
+        (start_interval + timedelta(minutes=(i + 1) * 6)).astimezone(timezone.utc).replace(tzinfo=None)
+        for i in range(nb_datapoints)
+    ]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [
