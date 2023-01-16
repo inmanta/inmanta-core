@@ -314,16 +314,16 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     {group_by},
                     width_bucket(
                         EXTRACT(EPOCH FROM timestamp),
-                        EXTRACT(EPOCH FROM $2::timestamp),
-                        EXTRACT(EPOCH FROM $3::timestamp),
+                        EXTRACT(EPOCH FROM $2::timestamp with time zone),
+                        EXTRACT(EPOCH FROM $3::timestamp with time zone),
                         $4
                     ) as bucket_nr,
                     {aggregation_function} as value
                 FROM {table_name}
                 WHERE
                     environment=$1
-                    AND timestamp >= $2::timestamp
-                    AND timestamp < $3::timestamp
+                    AND timestamp >= $2::timestamp with time zone
+                    AND timestamp < $3::timestamp with time zone
                     AND metric_name=ANY({metrics_list}::varchar[])
                 GROUP BY metric_name, grouped_by, bucket_nr
             """
@@ -362,15 +362,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         # Initialize everything with None values
         result_metrics = {m: [None for _ in range(nb_datapoints)] for m in metrics}
         async with EnvironmentMetricsGauge.get_connection() as con:
-            values = [
-                env.id,
-                start_interval.astimezone(timezone.utc).replace(tzinfo=None),
-                end_interval.astimezone(timezone.utc).replace(tzinfo=None),
-                nb_datapoints,
-                metrics,
-            ]
-            # TODO: FIX
-            # values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
+            values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
             records = await con.fetch(query, *values)
             for r in records:
                 metric_name = r["metric_name"]

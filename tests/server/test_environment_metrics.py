@@ -18,7 +18,7 @@
 import uuid
 from collections import abc, defaultdict
 from collections.abc import AsyncIterator, Sequence
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, List, Optional, cast
 
 import asyncpg
@@ -1059,7 +1059,7 @@ async def test_get_environment_metrics_api_endpoint(
     env1_id = await environment_creator(client, project, env_name="env1")
     env2_id = await environment_creator(client, project, env_name="env2")
 
-    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0)
+    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
     await data.EnvironmentMetricsGauge.insert_many(
         [
             # Add 60 metrics within the aggregation interval requested later on in the test case
@@ -1148,9 +1148,9 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval
-    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_1h
-    expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval.astimezone(timezone.utc).replace(tzinfo=None)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_1h.astimezone(timezone.utc).replace(tzinfo=None)
+    expected_timestamps = [(start_interval + timedelta(minutes=(i + 1) * 6)).astimezone(timezone.utc).replace(tzinfo=None) for i in range(nb_datapoints)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 2
     assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6)) / 6 + 0.5 for i in range(10)]
@@ -1168,9 +1168,9 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min
-    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min
-    expected_timestamps = [start_interval, start_interval_plus_6_min]
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min.astimezone(timezone.utc).replace(tzinfo=None)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)
+    expected_timestamps = [start_interval.astimezone(timezone.utc).replace(tzinfo=None), start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None, 0.5]
@@ -1185,9 +1185,9 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min
-    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min
-    expected_timestamps = [start_interval_plus_6_min]
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval_min_6_min.astimezone(timezone.utc).replace(tzinfo=None)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)
+    expected_timestamps = [start_interval_plus_6_min.astimezone(timezone.utc).replace(tzinfo=None)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [0.5]
@@ -1205,7 +1205,7 @@ async def test_compile_rate_metric(
     env1_id = await environment_creator(client, project, env_name="env1")
     env2_id = await environment_creator(client, project, env_name="env2")
 
-    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0)
+    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
     await data.EnvironmentMetricsTimer.insert_many(
         [
             # Add 60 metrics within the aggregation interval requested later on in the test case
@@ -1245,7 +1245,7 @@ async def test_compile_rate_metric(
             ),
         ]
     )
-    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0)
+    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
     end_interval = start_interval + timedelta(hours=1)
     nb_datapoints = 10
     result = await client.get_environment_metrics(
@@ -1256,9 +1256,9 @@ async def test_compile_rate_metric(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval
-    assert datetime.fromisoformat(result.result["data"]["end"]) == end_interval
-    expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval.astimezone(timezone.utc).replace(tzinfo=None)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == end_interval.astimezone(timezone.utc).replace(tzinfo=None)
+    expected_timestamps = [(start_interval + timedelta(minutes=(i + 1) * 6)).astimezone(timezone.utc).replace(tzinfo=None) for i in range(nb_datapoints)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [
