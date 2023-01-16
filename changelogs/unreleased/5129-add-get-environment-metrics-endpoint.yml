@@ -1,0 +1,6 @@
+---
+description: Add the endpoint to retrieve aggregated metrics from the server.
+issue-nr: 5129
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
