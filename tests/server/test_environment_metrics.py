@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 import uuid
-from collections.abc import AsyncIterator, Sequence
 from collections import abc, defaultdict
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timedelta
 from typing import Awaitable, Callable, List, Optional, cast
 
