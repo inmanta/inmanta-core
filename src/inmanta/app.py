@@ -126,6 +126,8 @@ def start_server(options: argparse.Namespace) -> None:
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
 
@@ -155,6 +157,8 @@ def start_server(options: argparse.Namespace) -> None:
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
+
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
