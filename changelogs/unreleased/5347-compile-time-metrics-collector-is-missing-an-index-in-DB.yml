@@ -1,0 +1,4 @@
+description: Add index on compile table.
+issue-nr: 5347
+change-type: minor
+destination-branches: [master, iso6]
