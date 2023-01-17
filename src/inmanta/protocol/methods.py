@@ -286,8 +286,8 @@ def clear_environment(id: uuid.UUID):
 
     :raises NotFound: The given environment doesn't exist.
     :raises Forbidden: The given environment is protected.
-    """
 
+    """
 
 # Send a heartbeat to indicate that an agent is alive
 @method(

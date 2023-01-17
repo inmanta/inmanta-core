@@ -188,7 +188,7 @@ server_purge_version_interval = Option(
     "purge-versions-interval",
     3600,
     """The number of seconds between version purging,
-                                          see :inmanta.config:option:`server.available-versions-to-keep`.""",
+                                          see :inmanta.environment-settings:setting:`available_versions_to_keep`.""",
     is_time,
 )
 
