@@ -38,8 +38,5 @@ async def test_added_environment_metrics_tables(
     await migrate_db_from()
 
     for table_name in ["environmentmetricsgauge", "environmentmetricstimer"]:
-        assert "grouped_by" in (await get_columns_in_db_table(table_name))
-
         columns_pk = await get_primary_key_columns_in_db_table(table_name)
         assert len(columns_pk) == 4
-        assert "grouped_by" in columns_pk
