@@ -201,7 +201,8 @@ class CallArguments(object):
                             and len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
                             and isinstance(self._message[arg], typing_inspect.get_args(arg_type)[0])
                         ):
-                            # If only one list element is provided, urllib cannot know this is supposed to be a list.
+                            # If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
+                            # specific request provides a list with one element, urllib doesn't parse it as a list.
                             # Map it here explicitly to a list.
                             value = [self._message[arg]]
                         else:

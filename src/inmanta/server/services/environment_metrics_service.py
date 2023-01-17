@@ -374,7 +374,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 bucket_nr = r["bucket_nr"]
                 assert isinstance(bucket_nr, int)
                 value = r["value"]
-                assert isinstance(bucket_nr, float)
+                assert isinstance(value, float) or isinstance(value, int)
                 index_in_list = bucket_nr - 1
                 assert 0 <= index_in_list < nb_datapoints
                 if grouped_by == DEFAULT_GROUPED_BY:

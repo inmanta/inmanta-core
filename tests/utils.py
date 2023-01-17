@@ -26,6 +26,7 @@ import uuid
 from collections import abc
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
+from datetime import timezone
 
 import pytest
 import yaml
@@ -653,3 +654,12 @@ async def resource_action_consistency_check():
     )
     assert post_ra_one_set == post_ra_two_set
     assert post_ra_one_set
+
+
+def get_as_naive_datetime(timestamp: datetime) -> datetime:
+    """
+    Convert the give timestamp, which is timezone aware, into a naive timestamp object.
+    """
+    if timestamp.tzinfo is None:
+        return timestamp
+    return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
