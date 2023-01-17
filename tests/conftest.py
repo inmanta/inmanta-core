@@ -938,6 +938,7 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
     """
     Fixture to create a new environment in a certain project.
     """
+
     async def _create_environment(client, project_id: str, env_name: str, use_custom_env_settings: bool = True) -> str:
         """
         :param client: The client that should be used to create the project and environment.
