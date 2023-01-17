@@ -31,6 +31,7 @@ async def test_migration(
         assert len(columns_pk) == 4
         assert "grouped_by" in columns_pk
         assert not "category" in columns_pk
+
     await migrate_db_from()
 
     for table_name in ["environmentmetricsgauge", "environmentmetricstimer"]:
