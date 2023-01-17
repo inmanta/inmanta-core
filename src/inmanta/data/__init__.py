@@ -2335,6 +2335,7 @@ PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
+ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
 
 
 class Setting(object):
@@ -2606,6 +2607,14 @@ class Environment(BaseDocument):
             validator=convert_positive_float,
             doc="""The number of seconds to wait before the server may attempt to do a new recompile.
                     Recompiles are triggered after facts updates for example.""",
+        ),
+        ENVIRONMENT_METRICS_RETENTION: Setting(
+            name=ENVIRONMENT_METRICS_RETENTION,
+            typ="int",
+            default=8760,
+            doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
+            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            validator=convert_int,
         ),
     }
 

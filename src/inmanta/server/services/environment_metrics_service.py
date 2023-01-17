@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import abc
+import itertools
 import logging
 import textwrap
 import uuid
@@ -27,6 +28,7 @@ from typing import Dict, List, Optional
 import asyncpg
 
 from inmanta.data import (
+    ENVIRONMENT_METRICS_RETENTION,
     Agent,
     Compile,
     ConfigurationModel,
@@ -185,6 +187,34 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             self.schedule(
                 self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
             )
+            # Cleanup metrics once per hour
+            self.schedule(self._cleanup_old_metrics, interval=3600, initial_delay=0, cancel_on_stop=True)
+
+    async def _cleanup_old_metrics(self) -> None:
+        """
+        Clean up metrics that are older than the retention time specified in the environment_metrics_retention
+        environment setting.
+        """
+        async with Environment.get_connection() as con:
+            environments = await Environment.get_list(connection=con)
+            env_id_to_delete_older_than_timestamp: Dict[uuid.UUID, datetime] = {}
+            for env in environments:
+                if env.halted:
+                    continue
+                rentention_time_in_hours: int = await env.get(ENVIRONMENT_METRICS_RETENTION)
+                if rentention_time_in_hours <= 0:
+                    # Cleanups are disabled
+                    continue
+                delete_order_than: datetime = datetime.now().astimezone() - timedelta(hours=rentention_time_in_hours)
+                env_id_to_delete_older_than_timestamp[env.id] = delete_order_than
+
+            filter_condition = " OR ".join(
+                f"(environment=${(2*i)+1} AND timestamp < ${(2*i)+2})"
+                for i in range(len(env_id_to_delete_older_than_timestamp))
+            )
+            values = list(itertools.chain.from_iterable(env_id_to_delete_older_than_timestamp.items()))
+            await con.execute(f"DELETE FROM {EnvironmentMetricsGauge.table_name()} WHERE {filter_condition}", *values)
+            await con.execute(f"DELETE FROM {EnvironmentMetricsTimer.table_name()} WHERE {filter_condition}", *values)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """
