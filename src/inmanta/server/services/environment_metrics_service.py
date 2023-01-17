@@ -20,10 +20,10 @@ import logging
 import math
 import textwrap
 import uuid
-from collections.abc import Sequence
+from collections.abc import Sequence, Mapping
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import asyncpg
 
@@ -269,7 +269,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
     def _divide_time_interval_in_time_windows(
         self, start_interval: datetime, end_interval: datetime, nb_time_windows: int
-    ) -> Sequence[datetime]:
+    ) -> list[datetime]:
         """
         This method divides the given time interval into the given number of time windows.
         The result is a list of timestamps that represent the end time of each window. This list of timestamps
@@ -360,15 +360,21 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """.strip()
 
         # Initialize everything with None values
-        result_metrics = {m: [None for _ in range(nb_datapoints)] for m in metrics}
+        result_metrics: Dict[str, List[Union[float, Dict[str, float], None]]] = {
+            m: [None for _ in range(nb_datapoints)] for m in metrics
+        }
         async with EnvironmentMetricsGauge.get_connection() as con:
             values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
             records = await con.fetch(query, *values)
             for r in records:
                 metric_name = r["metric_name"]
+                assert isinstance(metric_name, str)
                 grouped_by = r["grouped_by"]
+                assert isinstance(grouped_by, str)
                 bucket_nr = r["bucket_nr"]
+                assert isinstance(bucket_nr, int)
                 value = r["value"]
+                assert isinstance(bucket_nr, float)
                 index_in_list = bucket_nr - 1
                 assert 0 <= index_in_list < nb_datapoints
                 if grouped_by == DEFAULT_GROUPED_BY:

@@ -190,7 +190,7 @@ class CallArguments(object):
             value = self._map_headers(arg)
             if value is None:
                 if not self._is_header_param(arg):
-                    arg_type = self._argspec.annotations.get(arg)
+                    arg_type: Optional[Type[object]] = self._argspec.annotations.get(arg)
                     if arg in self._message:
                         if (
                             arg_type
