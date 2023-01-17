@@ -18,7 +18,7 @@
 import uuid
 from collections import abc, defaultdict
 from collections.abc import AsyncIterator, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Awaitable, Callable, List, Optional, cast
 
 import asyncpg
@@ -40,8 +40,7 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.util import get_compiler_version
-from utils import ClientHelper
-from utils import get_as_naive_datetime
+from utils import ClientHelper, get_as_naive_datetime
 
 env_uuid = uuid.uuid4()
 
@@ -1151,10 +1150,7 @@ async def test_get_environment_metrics_api_endpoint(
     assert result.code == 200, result.result
     assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
     assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_1h)
-    expected_timestamps = [
-        get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6))
-        for i in range(nb_datapoints)
-    ]
+    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 2
     assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6)) / 6 + 0.5 for i in range(10)]
@@ -1262,9 +1258,7 @@ async def test_compile_rate_metric(
     assert result.code == 200, result.result
     assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
     assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(end_interval)
-    expected_timestamps = [
-        get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)
-    ]
+    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [

@@ -25,8 +25,8 @@ import shutil
 import uuid
 from collections import abc
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 from datetime import timezone
+from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
 import pytest
 import yaml
