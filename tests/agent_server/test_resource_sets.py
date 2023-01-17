@@ -363,7 +363,10 @@ async def test_put_partial_merge_not_in_resource_set(server, client, environment
     )
 
     assert result.code == 200
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    # Explicitly sort the list because postgres gives no guarantee regarding order without explicit ORDER BY clause
+    resource_list = sorted(
+        await data.Resource.get_resources_in_latest_version(uuid.UUID(environment)), key=lambda resource: resource.resource_id
+    )
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 2
     assert resource_list[0].resource_version_id == "test::Resource[agent1,key=key1],v=2"
@@ -550,7 +553,10 @@ async def test_put_partial_update_multiple_resource_set(server, client, environm
     )
 
     assert result.code == 200
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    # Explicitly sort the list because postgres gives no guarantee regarding order without explicit ORDER BY clause
+    resource_list = sorted(
+        await data.Resource.get_resources_in_latest_version(uuid.UUID(environment)), key=lambda resource: resource.resource_id
+    )
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 2
     assert resource_list[0].resource_version_id == "test::Resource[agent1,key=key1],v=2"
@@ -1068,7 +1074,10 @@ async def test_put_partial_different_env(server, client):
 
     assert version_env1 != version_env2
 
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(env_id_1))
+    # Explicitly sort the list because postgres gives no guarantee regarding order without explicit ORDER BY clause
+    resource_list = sorted(
+        await data.Resource.get_resources_in_latest_version(uuid.UUID(env_id_1)), key=lambda resource: resource.resource_id
+    )
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 2
     assert resource_list[0].resource_version_id == "test::Resource[agent1,key=key1],v=2"
@@ -1077,7 +1086,10 @@ async def test_put_partial_different_env(server, client):
     for r in resource_list:
         assert r.model == 2
 
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(env_id_2))
+    # Explicitly sort the list because postgres gives no guarantee regarding order without explicit ORDER BY clause
+    resource_list = sorted(
+        await data.Resource.get_resources_in_latest_version(uuid.UUID(env_id_2)), key=lambda resource: resource.resource_id
+    )
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 1
     assert resource_list[0].resource_version_id == "test::Resource[agent1,key=key1],v=1"
@@ -1153,7 +1165,10 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
         "Invalid request: Following resource sets are present in the removed resource sets and in the resources "
         "that are exported: {'set-b'}"
     )
-    resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
+    # Explicitly sort the list because postgres gives no guarantee regarding order without explicit ORDER BY clause
+    resource_list = sorted(
+        await data.Resource.get_resources_in_latest_version(uuid.UUID(environment)), key=lambda resource: resource.resource_id
+    )
     resource_sets_from_db = {resource.resource_id: resource.resource_set for resource in resource_list}
     assert len(resource_list) == 2
     assert resource_list[0].attributes == {"key": "key1", "value": "1", "purged": False, "requires": [], "send_event": False}

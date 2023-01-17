@@ -23,6 +23,7 @@ from inmanta.server.services import (
     compilerservice,
     databaseservice,
     dryrunservice,
+    environment_metrics_service,
     environmentservice,
     fileservice,
     metricservice,
@@ -50,3 +51,4 @@ def setup(application: ApplicationContext) -> None:
     application.register_slice(orchestrationservice.OrchestrationService())
     application.register_slice(dryrunservice.DyrunService())
     application.register_slice(notificationservice.NotificationService())
+    application.register_slice(environment_metrics_service.EnvironmentMetricsService())

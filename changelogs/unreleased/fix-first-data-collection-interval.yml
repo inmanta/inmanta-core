@@ -1,0 +1,4 @@
+---
+description: Ensure that we only write metrics to the database after the server has been up for COLLECTION_INTERVAL_IN_SEC seconds.
+change-type: patch
+destination-branches: [master, iso6]

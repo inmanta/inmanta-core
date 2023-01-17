@@ -33,6 +33,7 @@ from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Dict,
     Generic,
@@ -58,6 +59,7 @@ import pydantic
 import pydantic.tools
 import typing_inspect
 from asyncpg import Connection
+from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
 import inmanta.const as const
@@ -1238,6 +1240,7 @@ class DocumentMeta(type):
 
 
 TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
+TransactionResult = TypeVar("TransactionResult")
 
 
 @stable_api
@@ -2185,6 +2188,31 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = metadata.default_value
 
         return result
+
+    @classmethod
+    async def execute_in_retryable_transaction(
+        cls,
+        fnc: Callable[[Connection], Awaitable[TransactionResult]],
+        tx_isolation_level: Optional[str] = None,
+    ) -> TransactionResult:
+        """
+        Execute the queries in fnc using the transaction isolation level `tx_isolation_level` and return the
+        result returned by fnc. This method performs retries when the transaction is aborted due to a
+        serialization error.
+        """
+        async with cls.get_connection() as postgresql_client:
+            attempt = 1
+            while True:
+                try:
+                    async with postgresql_client.transaction(isolation=tx_isolation_level):
+                        return await fnc(postgresql_client)
+                except SerializationError:
+                    if attempt > 3:
+                        raise Exception("Failed to execute transaction after 3 attempts.")
+                    else:
+                        # Exponential backoff
+                        await asyncio.sleep(pow(10, attempt) / 1000)
+                        attempt += 1
 
 
 class Project(BaseDocument):
@@ -5421,10 +5449,11 @@ class EnvironmentMetricsGauge(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
+    grouped_by: str
     timestamp: datetime.datetime
     count: int
 
-    __primary_key__ = ("environment", "metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
 
 
 class EnvironmentMetricsTimer(BaseDocument):
@@ -5440,11 +5469,12 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
+    grouped_by: str
     timestamp: datetime.datetime
     count: int
     value: float
 
-    __primary_key__ = ("environment", "metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
 
 
 _classes = [

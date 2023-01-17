@@ -2354,8 +2354,12 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             )
         if isinstance(module, ModuleV1):
             warnings.warn(
-                f"Loaded V1 module {module.name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
-                category=DeprecationWarning,
+                InmantaWarning(
+                    (
+                        f"Loaded V1 module {module.name}. The use of V1 modules is deprecated."
+                        " Use the equivalent V2 module instead."
+                    )
+                )
             )
         self.modules[module_name] = module
         return module
