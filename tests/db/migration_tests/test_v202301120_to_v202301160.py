@@ -17,7 +17,7 @@ from collections import abc
 import pytest
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301160.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301120.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
