@@ -914,13 +914,30 @@ def capture_warnings():
 
 @pytest.fixture
 async def project(server, client) -> AsyncIterator[str]:
+    """
+    Fixture that creates a new inmanta project called env-test.
+    """
     result = await client.create_project("env-test")
     assert result.code == 200
     yield result.result["project"]["id"]
 
 
 @pytest.fixture
+async def project_multi(server_multi, client_multi) -> AsyncIterator[str]:
+    """
+    Does the same as the project fixture, but this fixture should be used instead when the test case
+    uses the server_multi or client_multi fixture.
+    """
+    result = await client_multi.create_project("env-test")
+    assert result.code == 200
+    yield result.result["project"]["id"]
+
+
+@pytest.fixture
 async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str, str, bool], Awaitable[str]]]:
+    """
+    Fixture to create a new environment in a certain project.
+    """
     async def _create_environment(client, project_id: str, env_name: str, use_custom_env_settings: bool = True) -> str:
         """
         :param client: The client that should be used to create the project and environment.
@@ -969,13 +986,16 @@ async def environment_default(
 
 @pytest.fixture(scope="function")
 async def environment_multi(
-    client_multi, server_multi, project: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+    client_multi,
+    server_multi,
+    project_multi: str,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
 ) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and the agent trigger method set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    yield await environment_creator(client_multi, project_id=project, env_name="dev", use_custom_env_settings=True)
+    yield await environment_creator(client_multi, project_id=project_multi, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="session")
