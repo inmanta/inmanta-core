@@ -1156,7 +1156,7 @@ async def test_get_environment_metrics_api_endpoint(
     assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6)) / 6 + 0.5 for i in range(10)]
     assert result.result["data"]["metrics"]["timer_metric1"] == [(sum(i for _ in range(6)) + 1.5) / (2 * 6) for i in range(10)]
 
-    # Verify behavior when no data is available a time window
+    # Verify behavior when no data is available in the time window
     nb_datapoints = 2
     start_interval_min_6_min = start_interval - timedelta(minutes=6)
     start_interval_plus_6_min = start_interval + timedelta(minutes=6)
@@ -1175,7 +1175,7 @@ async def test_get_environment_metrics_api_endpoint(
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None, 0.5]
 
-    # Verify behavior when partial data is available a time window
+    # Verify behavior when partial data is available in the time window
     nb_datapoints = 1
     result = await client.get_environment_metrics(
         tid=env1_id,
