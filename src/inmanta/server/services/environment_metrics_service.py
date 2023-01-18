@@ -153,7 +153,7 @@ class MetricsCollector(abc.ABC):
         the database. No in-memory state is being stored by this metrics collector. The provided interval
         should be interpreted as [start_interval, end_interval[
 
-        If, at the time of collection, no metric data exists for an environment and/or group,
+        If, at the time of collection, no metric data exists for an environment and/or category,
         the implementation should return a meaningful default (e.g. 0 for count metrics).
         If no meaningful default exists (e.g. for some time metrics), the data may be left out.
 
