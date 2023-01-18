@@ -21,4 +21,4 @@
 
 # The content of this file was moved to inmanta.db.util to allow it to be used from other extensions.
 # This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore
+from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401

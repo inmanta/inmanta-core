@@ -108,6 +108,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.db import util as db_util
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
@@ -127,19 +128,14 @@ from packaging.version import Version
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
-    from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
     import utils
-    from db.common import PGRestore
 
-# These methods were moved to inmanta.db.util to allow them to be used from other extensions.
+# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
 # This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import (
-    postgres_get_custom_types,
-    postgres_get_custom_types as postgress_get_custom_types,
-    clear_database,
-    clear_database as do_clean_hard
-)
+from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
+from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
+from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -344,14 +340,14 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
 
 @pytest.fixture(scope="function")
 async def hard_clean_db(postgresql_client):
-    await clear_database(postgresql_client)
+    await db_util.clear_database(postgresql_client)
     yield
 
 
 @pytest.fixture(scope="function")
 async def hard_clean_db_post(postgresql_client):
     yield
-    await clear_database(postgresql_client)
+    await db_util.clear_database(postgresql_client)
 
 
 @pytest.fixture(scope="function")
@@ -426,7 +422,7 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
     """
 
     async def f() -> List[str]:
-        return await postgres_get_custom_types(postgresql_client)
+        return await db_util.postgres_get_custom_types(postgresql_client)
 
     return f
 

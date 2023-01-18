@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
-import logging
 import collections
+import logging
 from typing import List
 
 from asyncpg import Connection
+
 from inmanta.stable_api import stable_api
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class PGRestore:
     """
     Class that offers support to restore a database dump.
     """
+
     # asyncpg execute method can not read in COPY IN
 
     def __init__(self, script: List[str], postgresql_client: Connection) -> None:
