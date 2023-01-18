@@ -15,9 +15,9 @@
 
     Contact: code@inmanta.com
 """
-import collections
+import collections.abc
 import logging
-from typing import List
+from typing import List, Optional
 
 from asyncpg import Connection
 
@@ -29,16 +29,16 @@ MODE_READ_COMMAND = 0
 MODE_READ_INPUT = 1
 
 
-class AsyncSingleton(collections.abc.AsyncIterable):
+class AsyncSingleton(collections.abc.AsyncIterable[bytes]):
     """AsyncPG wants an async iterable"""
 
-    def __init__(self, item):
-        self.item = item
+    def __init__(self, item: bytes):
+        self.item: Optional[bytes] = item
 
-    def __aiter__(self):
+    def __aiter__(self) -> "AsyncSingleton":
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> bytes:
         if self.item is None:
             raise StopAsyncIteration
         item = self.item
@@ -61,7 +61,7 @@ class PGRestore:
         self.script = script
         self.client = postgresql_client
 
-    async def run(self):
+    async def run(self) -> None:
         for line in self.script:
             if self.mode == MODE_READ_COMMAND:
                 if line.startswith("COPY"):
@@ -79,20 +79,20 @@ class PGRestore:
         assert self.mode == MODE_READ_COMMAND
         await self.execute_buffer()
 
-    def buffer(self, cmd):
+    def buffer(self, cmd: str) -> None:
         if cmd.startswith("--"):
             return
         if not cmd.strip():
             return
         self.commandbuffer += cmd
 
-    async def execute_buffer(self):
+    async def execute_buffer(self) -> None:
         if not self.commandbuffer.strip():
             return
         await self.client.execute(self.commandbuffer)
         self.commandbuffer = ""
 
-    async def execute_input(self):
+    async def execute_input(self) -> None:
         await self.client._copy_in(self.extbuffer, AsyncSingleton(self.commandbuffer.encode()), 10)
         self.commandbuffer = ""
 
@@ -120,7 +120,7 @@ async def postgres_get_custom_types(postgresql_client: Connection) -> List[str]:
     """
 
     types_in_db = await postgresql_client.fetch(get_custom_types)
-    type_names = [x["Name"] for x in types_in_db]
+    type_names: List[str] = [str(x["Name"]) for x in types_in_db]
 
     return type_names
 
@@ -140,13 +140,13 @@ WHERE routine_type = 'FUNCTION'
 AND routine_schema = 'public';
     """
     functions_in_db = await postgresql_client.fetch(functions_query)
-    function_names = [x["routine_name"] for x in functions_in_db]
+    function_names = [str(x["routine_name"]) for x in functions_in_db]
     if function_names:
         drop_query = "DROP FUNCTION if exists %s " % ", ".join(function_names)
         await postgresql_client.execute(drop_query)
 
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    table_names = ["public." + x["table_name"] for x in tables_in_db]
+    table_names = [f"public.{x['table_name']}" for x in tables_in_db]
     if table_names:
         drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
         await postgresql_client.execute(drop_query)
