@@ -19,6 +19,7 @@ import abc
 import itertools
 import logging
 import textwrap
+import typing
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
@@ -201,7 +202,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             for env in environments:
                 if env.halted:
                     continue
-                rentention_time_in_hours: int = await env.get(ENVIRONMENT_METRICS_RETENTION)
+                rentention_time_in_hours: int = typing.cast(int, await env.get(ENVIRONMENT_METRICS_RETENTION))
                 if rentention_time_in_hours <= 0:
                     # Cleanups are disabled
                     continue
