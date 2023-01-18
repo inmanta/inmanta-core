@@ -1050,14 +1050,14 @@ async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema) -> 
             await data.EnvironmentMetricsGauge(
                 environment=env_id,
                 metric_name="test1",
-                grouped_by="group1",
+                category="group1",
                 timestamp=timestamp,
                 count=54,
             ).insert(),
             await data.EnvironmentMetricsTimer(
                 environment=env_id,
                 metric_name="test2",
-                grouped_by="group2",
+                category="group2",
                 timestamp=timestamp,
                 count=11,
                 value=22.0,
