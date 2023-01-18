@@ -974,7 +974,7 @@ async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema) -> 
     assert len(await data.EnvironmentMetricsGauge.get_list()) == 8
     assert len(await data.EnvironmentMetricsTimer.get_list()) == 8
 
-    # Do remove operation
+    # Do cleanup operation
     environment_metrics_service = EnvironmentMetricsService()
     await environment_metrics_service._cleanup_old_metrics()
 
