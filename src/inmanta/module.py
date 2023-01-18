@@ -1524,6 +1524,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
         in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
         can have the following values:
+        
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
