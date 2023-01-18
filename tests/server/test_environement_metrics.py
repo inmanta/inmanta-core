@@ -1022,7 +1022,7 @@ async def test_compile_wait_time_metric_no_empty_datapoint(client, server):
 
 async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema) -> None:
     """
-    Verify that the query to cleanup old environment metrics is working correctly.
+    Verify that the query to clean up old environment metrics is working correctly.
     """
     project = data.Project(name="test")
     await project.insert()
