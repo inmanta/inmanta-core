@@ -202,13 +202,15 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             for env in environments:
                 if env.halted:
                     continue
-                rentention_time_in_hours: int = typing.cast(int, await env.get(ENVIRONMENT_METRICS_RETENTION))
-                if rentention_time_in_hours <= 0:
+                retention_time_in_hours: int = typing.cast(int, await env.get(ENVIRONMENT_METRICS_RETENTION))
+                if retention_time_in_hours <= 0:
                     # Cleanups are disabled
                     continue
-                delete_order_than: datetime = datetime.now().astimezone() - timedelta(hours=rentention_time_in_hours)
-                env_id_to_delete_older_than_timestamp[env.id] = delete_order_than
+                delete_older_than: datetime = datetime.now().astimezone() - timedelta(hours=retention_time_in_hours)
+                env_id_to_delete_older_than_timestamp[env.id] = delete_older_than
 
+            if not env_id_to_delete_older_than_timestamp:
+                return
             filter_condition = " OR ".join(
                 f"(environment=${(2*i)+1} AND timestamp < ${(2*i)+2})"
                 for i in range(len(env_id_to_delete_older_than_timestamp))

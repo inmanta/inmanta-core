@@ -939,6 +939,10 @@ async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema) -> 
     project = data.Project(name="test")
     await project.insert()
 
+    # Do cleanup operation when there are no environments
+    environment_metrics_service = EnvironmentMetricsService()
+    await environment_metrics_service._cleanup_old_metrics()
+
     env1 = data.Environment(name="dev1", project=project.id, repo_url="", repo_branch="")
     await env1.insert()
     await env1.set(data.ENVIRONMENT_METRICS_RETENTION, 1)
