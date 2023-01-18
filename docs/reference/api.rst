@@ -329,6 +329,11 @@ Data
 
 .. autodata:: inmanta.data.model.ResourceVersionIdStr
 
+.. autoclass:: inmanta.db.util.PGRestore
+    :show-inheritance:
+
+.. autofunction:: inmanta.db.util.clear_database
+
 
 Domain conversion
 -----------------
