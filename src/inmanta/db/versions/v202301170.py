@@ -21,4 +21,4 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     # Add index to avoid a sequential scan in CompileTimeMetricsCollector.get_metric_value query
-    await connection.execute("CREATE INDEX ON public.compile (environment, completed DESC)")
+    await connection.execute("CREATE INDEX ON public.compile (completed)")
