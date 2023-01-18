@@ -289,6 +289,7 @@ def clear_environment(id: uuid.UUID):
 
     """
 
+
 # Send a heartbeat to indicate that an agent is alive
 @method(
     path="/heartbeat",

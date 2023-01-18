@@ -785,21 +785,20 @@ def resource_logs(
         'log_level' is at least 'INFO'.
 
         The following options are available:
+            * action: filter by the action of the log
 
-            action: filter by the action of the log
-
-            timestamp: return the logs matching the timestamp constraints. Valid constraints are of the form
-            "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
-            in UTC timezone.
+            * timestamp: return the logs matching the timestamp constraints. Valid constraints are of the form
+              "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
+              in UTC timezone.
 
             For example: `?filter.timestamp=ge:2021-08-18T09:21:30.568353&filter.timestamp=lt:2021-08-18T10:21:30.568353`.
             Multiple constraints can be specified, in which case only log messages that match all constraints will be
             returned.
 
-            message: filter by the content of the log messages. Partial matches are allowed. (case-insensitive)
+            * message: filter by the content of the log messages. Partial matches are allowed. (case-insensitive)
 
-            minimal_log_level: filter by the log level of the log messages. The filter specifies the minimal level,
-            so messages with either this level, or a higher severity level are going to be included in the result.
+            * minimal_log_level: filter by the log level of the log messages. The filter specifies the minimal level,
+              so messages with either this level, or a higher severity level are going to be included in the result.
 
             For example, for `filter.minimal_log_level=INFO`, the log messages with level `INFO, WARNING, ERROR, CRITICAL`
             all match the query.
@@ -1090,9 +1089,9 @@ def get_parameters(
     :param filter: Filter the list of returned parameters.
 
         The following options are available:
-            name: filter by the name of the parameter
-            source: filter by the source of the parameter
-            updated: filter by the updated time of the parameter
+            * name: filter by the name of the parameter
+            * source: filter by the source of the parameter
+            * updated: filter by the updated time of the parameter
     :param sort: Return the results sorted according to the parameter value.
         The following sorting attributes are supported: 'name', 'source', 'updated'.
         The following orders are supported: 'asc', 'desc'

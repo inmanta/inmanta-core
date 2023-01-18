@@ -1524,14 +1524,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
         in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
         can have the following values:
-
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
-            git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
-            of the module to the URL.
-
+          git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
+          of the module to the URL.
         * package: When the type is set to package, the URL field should contain the URL of the Python package repository.
-            The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-            compliant.
+          The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
+          compliant.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
