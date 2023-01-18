@@ -5453,16 +5453,18 @@ class EnvironmentMetricsGauge(BaseDocument):
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
     :param count: the counter for the metric for the given timestamp
     """
 
     environment: uuid.UUID
     metric_name: str
-    grouped_by: str
+    category: str
     timestamp: datetime.datetime
     count: int
 
-    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
 class EnvironmentMetricsTimer(BaseDocument):
@@ -5471,6 +5473,8 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
     :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
     :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
@@ -5478,12 +5482,12 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
-    grouped_by: str
+    category: str
     timestamp: datetime.datetime
     count: int
     value: float
 
-    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
 _classes = [
