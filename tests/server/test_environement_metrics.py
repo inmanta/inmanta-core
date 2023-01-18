@@ -201,15 +201,15 @@ async def test_flush_metrics_gauge_multi(env_metrics_service, env_with_uuid):
     assert len(result) == 3
     assert result[0].count == 1
     assert result[0].metric_name == "dummy_gauge_multi"
-    assert result[0].grouped_by == "up"
+    assert result[0].category == "up"
     assert isinstance(result[0].timestamp, datetime)
     assert result[1].count == 2
     assert result[1].metric_name == "dummy_gauge_multi"
-    assert result[1].grouped_by == "down"
+    assert result[1].category == "down"
     assert isinstance(result[1].timestamp, datetime)
     assert result[2].count == 3
     assert result[2].metric_name == "dummy_gauge_multi"
-    assert result[2].grouped_by == "left"
+    assert result[2].category == "left"
     assert isinstance(result[2].timestamp, datetime)
 
     await env_metrics_service.flush_metrics()
@@ -252,17 +252,17 @@ async def test_flush_metrics_timer_multi(env_metrics_service, env_with_uuid):
     assert result[0].count == 3
     assert result[0].value == 50.50
     assert result[0].metric_name == "dummy_timer_multi"
-    assert result[0].grouped_by == "up"
+    assert result[0].category == "up"
     assert isinstance(result[0].timestamp, datetime)
     assert result[1].count == 13
     assert result[1].value == 50.50 * 2
     assert result[1].metric_name == "dummy_timer_multi"
-    assert result[1].grouped_by == "down"
+    assert result[1].category == "down"
     assert isinstance(result[1].timestamp, datetime)
     assert result[2].count == 23
     assert result[2].value == 50.50 * 3
     assert result[2].metric_name == "dummy_timer_multi"
-    assert result[2].grouped_by == "left"
+    assert result[2].category == "left"
     assert isinstance(result[2].timestamp, datetime)
 
     await env_metrics_service.flush_metrics()
@@ -340,11 +340,12 @@ async def test_resource_count_metric(clienthelper, client, agent):
     """
     This test will create 2 environments and start by adding 1 resource to the first. then It will create a second version
     with 3 other resources. It also adds two resources to the second environment.
-    It then flushes the resource_count metric a first time. This creates 2 records in EnvironmentMetricsGauge:
+    It then flushes the resource_count metric a first time. This creates 2 records with counts different from zero
+    in EnvironmentMetricsGauge:
     - one for the first environment with 3 resources in the latest version in the available state.
     - one for the second environment with 2 resources in the latest version in the available state.
     following this, the state of one resource in the first environment is updated and the metrics are flushed again.
-    This creates 3 records in EnvironmentMetricsGauge:
+    This creates 3 records with counts different from zero in EnvironmentMetricsGauge:
     - one for the first environment with 2 resources in the latest version in the available state.
     - one for the first environment with 1 resource in the latest version in the deployed state.
     - one for the second environment with 2 resources in the latest version in the available state.
@@ -456,23 +457,18 @@ async def test_resource_count_metric(clienthelper, client, agent):
     rcmc = ResourceCountMetricsCollector()
     metrics_service.register_metric_collector(metrics_collector=rcmc)
 
-    # flush the metrics for the first time: 2 record (3 resources in available state for the first
-    # environment and 2 for the second)
+    # flush the metrics for the first time:
+    # create 30 records: (3 envs * 10 statuses)
+    # 2 records with count different from 0 (3 resources in available state for the first environment and 2 for the second)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 2
+    assert len(result_gauge) == 30
     assert any(
-        x.count == 3
-        and x.metric_name == "resource.resource_count"
-        and x.grouped_by == "available"
-        and x.environment == env_uuid1
+        x.count == 3 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid1
         for x in result_gauge
     )
     assert any(
-        x.count == 2
-        and x.metric_name == "resource.resource_count"
-        and x.grouped_by == "available"
-        and x.environment == env_uuid2
+        x.count == 2 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid2
         for x in result_gauge
     )
 
@@ -494,31 +490,24 @@ async def test_resource_count_metric(clienthelper, client, agent):
 
     assert result.code == 200
 
-    # flush the metrics for the second time: 2 old record +
-    # + 3 new records (1 for available state and one for the deployed state for the first environment
+    # flush the metrics for the second time:
+    # 60 records in total and 5 with a count different from 0
+    # the 2 old record +
+    # 3 new records (1 for available state and one for the deployed state for the first environment
     # and one for the available state for the second environment)
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 5
+    assert len(result_gauge) == 60
     assert any(
-        x.count == 3
-        and x.metric_name == "resource.resource_count"
-        and x.grouped_by == "available"
-        and x.environment == env_uuid1
+        x.count == 3 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid1
         for x in result_gauge
     )
     assert any(
-        x.count == 2
-        and x.metric_name == "resource.resource_count"
-        and x.grouped_by == "available"
-        and x.environment == env_uuid1
+        x.count == 2 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid1
         for x in result_gauge
     )
     assert any(
-        x.count == 1
-        and x.metric_name == "resource.resource_count"
-        and x.grouped_by == "deployed"
-        and x.environment == env_uuid1
+        x.count == 1 and x.metric_name == "resource.resource_count" and x.category == "deployed" and x.environment == env_uuid1
         for x in result_gauge
     )
 
@@ -527,14 +516,14 @@ async def test_resource_count_metric(clienthelper, client, agent):
         for r in result_gauge
         if r.environment == env_uuid2
         and r.metric_name == "resource.resource_count"
-        and r.grouped_by == "available"
+        and r.category == "available"
         and r.count == 2
     ]
 
     assert len(env_uuid2_records) == 2
 
 
-async def test_resource_count_metric_released(clienthelper, client, server, agent):
+async def test_resource_count_metric_released(client, server):
     """
     test that only the latest released version is used for the metrics:
     - adds a first version with 3 resources and a second one with one resource but don't deploy them
@@ -621,17 +610,42 @@ async def test_resource_count_metric_released(clienthelper, client, server, agen
 
     await metrics_service.flush_metrics()
     result_gauge = await data.EnvironmentMetricsGauge.get_list()
-    assert len(result_gauge) == 1
+    assert len(result_gauge) == 10
     assert any(
-        x.count == 3
-        and x.metric_name == "resource.resource_count"
-        and x.grouped_by == "available"
-        and x.environment == env_uuid1
+        x.count == 3 and x.metric_name == "resource.resource_count" and x.category == "available" and x.environment == env_uuid1
         for x in result_gauge
     )
+    assert 9 == len([obj for obj in result_gauge if obj.count == 0])
 
 
-async def test_agent_count_metric(clienthelper, client, agent):
+async def test_resource_count_empty_datapoint(client, server):
+    project = data.Project(name="test")
+    await project.insert()
+    projects = await data.Project.get_list(name="test")
+    assert len(projects) == 1
+    project_id = projects[0].id
+
+    env_uuid1 = uuid.uuid4()
+    environment1: data.Environment = data.Environment(id=env_uuid1, project=project_id, name="testenv1")
+    await environment1.insert()
+    env_uuid2 = uuid.uuid4()
+    environment2: data.Environment = data.Environment(id=env_uuid2, project=project_id, name="testenv2")
+    await environment2.insert()
+    envs = await data.Environment.get_list(project=project_id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    rcmc = ResourceCountMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=rcmc)
+
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    # 2 envs with each 10 statuses with count 0
+    assert len(result_gauge) == 20
+    assert all(hasattr(res, "category") and res.category != "__None__" and res.count == 0 for res in result_gauge)
+
+
+async def test_agent_count_metric(clienthelper, client, server):
     project = data.Project(name="test")
     await project.insert()
 
@@ -673,7 +687,6 @@ async def test_agent_count_metric(clienthelper, client, agent):
     # adds the AgentCountMetricsCollector
     acmc = AgentCountMetricsCollector()
     metrics_service.register_metric_collector(metrics_collector=acmc)
-
     # flush the metrics for the first time: 2 record (1 agent in paused state for the first
     # environment and 1 for the second)
     await metrics_service.flush_metrics()
@@ -681,7 +694,7 @@ async def test_agent_count_metric(clienthelper, client, agent):
     assert all(gauge.metric_name == "resource.agent_count" for gauge in result_gauge)
     gauges_by_status: dict[uuid.UUID, dict[str, data.EnvironmentMetricsGauge]] = defaultdict(dict)
     for gauge in result_gauge:
-        gauges_by_status[gauge.environment][gauge.grouped_by] = gauge
+        gauges_by_status[gauge.environment][gauge.category] = gauge
     # 3 environments: one created by the environment fixture (dependency of agent fixture), two created above
     assert len(gauges_by_status) == 3
     # 3 states for each environment => 9 rows in matrix
@@ -693,7 +706,34 @@ async def test_agent_count_metric(clienthelper, client, agent):
     assert sum(abs(gauge.count) for gauge in result_gauge) == 2
 
 
-async def test_compile_time_metric(clienthelper, client, agent):
+async def test_agent_count_metric_empty_datapoint(client, server):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    envs = await data.Environment.get_list(project=project.id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+
+    # adds the AgentCountMetricsCollector
+    acmc = AgentCountMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=acmc)
+
+    # flush the metrics for the first time: 2 record (1 agent in paused state for the first
+    # environment and 1 for the second)
+    await metrics_service.flush_metrics()
+    result_gauge = await data.EnvironmentMetricsGauge.get_list()
+    assert len(result_gauge) == 6
+    assert all(gauge.metric_name == "resource.agent_count" and gauge.count == 0 for gauge in result_gauge)
+
+
+async def test_compile_time_metric(client, server):
     async def _add_compile(
         environment: uuid.UUID,
         time_origin: datetime,
@@ -753,18 +793,18 @@ async def test_compile_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
     expected_total_compile_time = sum(compile_times)
 
-    assert len(result_gauge) == 1
+    assert len(result_timer) == 1
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment1.id
         and x.value == expected_total_compile_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Create another environment and insert a few compiles in it.
@@ -780,18 +820,19 @@ async def test_compile_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
     expected_total_compile_time = sum(compile_times)
 
-    assert len(result_gauge) == 2
+    # 1 new entry
+    assert len(result_timer) == 2
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment2.id
         and x.value == expected_total_compile_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Add another set of compiles to the first environment.
@@ -800,22 +841,45 @@ async def test_compile_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
     expected_total_compile_time = sum(compile_times)
 
-    assert len(result_gauge) == 3
+    # 1 new entry
+    assert len(result_timer) == 3
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_time"
         and x.environment == environment1.id
         and x.value == expected_total_compile_time
-        for x in result_gauge
+        for x in result_timer
     )
 
 
-async def test_compile_wait_time_metric(clienthelper, client, agent):
+async def test_compile_time_metric_no_empty_datapoint(client, server):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    envs = await data.Environment.get_list(project=project.id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    collector = CompileTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=collector)
+
+    await metrics_service.flush_metrics()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result_timer) == 0
+
+
+async def test_compile_wait_time_metric(client, server):
     async def _add_compile(
         environment: uuid.UUID,
         time_origin: datetime,
@@ -871,18 +935,18 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     await add_compiles(env_uuid1, wait_times)
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
     expected_total_wait_time = sum(wait_times)
 
-    assert len(result_gauge) == 1
+    assert len(result_timer) == 1
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment1.id
         and x.value == expected_total_wait_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Create another environment and insert a few compiles in it.
@@ -897,18 +961,19 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
     await add_compiles(env_uuid2, wait_times)
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
     expected_total_wait_time = sum(wait_times)
 
-    assert len(result_gauge) == 2
+    # 1 new entry
+    assert len(result_timer) == 2
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment2.id
         and x.value == expected_total_wait_time
-        for x in result_gauge
+        for x in result_timer
     )
 
     # Add another set of compiles to the first environment.
@@ -917,16 +982,39 @@ async def test_compile_wait_time_metric(clienthelper, client, agent):
 
     await metrics_service.flush_metrics()
 
-    result_gauge = await data.EnvironmentMetricsTimer.get_list()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
     expected_total_wait_time = sum(wait_times)
 
-    assert len(result_gauge) == 3
+    # 1 new entry
+    assert len(result_timer) == 3
     assert any(
         x.count == expected_count
         and x.metric_name == "orchestrator.compile_waiting_time"
         and x.environment == environment1.id
         and x.value == expected_total_wait_time
-        for x in result_gauge
+        for x in result_timer
     )
+
+
+async def test_compile_wait_time_metric_no_empty_datapoint(client, server):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    envs = await data.Environment.get_list(project=project.id)
+    assert len(envs) == 2
+
+    metrics_service = EnvironmentMetricsService()
+    collector = CompileWaitingTimeMetricsCollector()
+    metrics_service.register_metric_collector(metrics_collector=collector)
+
+    await metrics_service.flush_metrics()
+    result_timer = await data.EnvironmentMetricsTimer.get_list()
+    assert len(result_timer) == 0

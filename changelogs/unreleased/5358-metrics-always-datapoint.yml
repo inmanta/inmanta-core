@@ -1,0 +1,6 @@
+description: Make sure a datapoint is written to the database even if no records are present for the monitored element.
+issue-nr: 5358
+change-type: patch
+destination-branches:
+  - master
+  - iso6
