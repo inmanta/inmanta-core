@@ -17,15 +17,18 @@
 """
 import uuid
 from collections import abc, defaultdict
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Optional, cast
 
 import asyncpg
 import pytest
 
 from inmanta import const, data
+from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
 from inmanta.server.services import environment_metrics_service
 from inmanta.server.services.environment_metrics_service import (
+    DEFAULT_CATEGORY,
     AgentCountMetricsCollector,
     CompileTimeMetricsCollector,
     CompileWaitingTimeMetricsCollector,
@@ -37,7 +40,7 @@ from inmanta.server.services.environment_metrics_service import (
     ResourceCountMetricsCollector,
 )
 from inmanta.util import get_compiler_version
-from utils import ClientHelper
+from utils import ClientHelper, get_as_naive_datetime
 
 env_uuid = uuid.uuid4()
 
@@ -1018,3 +1021,364 @@ async def test_compile_wait_time_metric_no_empty_datapoint(client, server):
     await metrics_service.flush_metrics()
     result_timer = await data.EnvironmentMetricsTimer.get_list()
     assert len(result_timer) == 0
+
+
+@pytest.fixture
+def server_with_dummy_metric_collectors(server: protocol.Server) -> AsyncIterator[protocol.Server]:
+    class GaugeCollector1(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return "gauge_metric1"
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.GAUGE
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+        ) -> Sequence[MetricValue]:
+            return []
+
+    class GaugeCollector2(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return "gauge_metric2"
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.GAUGE
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+        ) -> Sequence[MetricValue]:
+            return []
+
+    class TimerCollector1(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return "timer_metric1"
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.TIMER
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+        ) -> Sequence[MetricValue]:
+            return []
+
+    class TimerCollector2(MetricsCollector):
+        def get_metric_name(self) -> str:
+            return "timer_metric2"
+
+        def get_metric_type(self) -> MetricType:
+            return MetricType.TIMER
+
+        async def get_metric_value(
+            self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
+        ) -> Sequence[MetricValue]:
+            return []
+
+    env_metrics_service = cast(EnvironmentMetricsService, server.get_slice(SLICE_ENVIRONMENT_METRICS))
+    env_metrics_service.register_metric_collector(GaugeCollector1())
+    env_metrics_service.register_metric_collector(GaugeCollector2())
+    env_metrics_service.register_metric_collector(TimerCollector1())
+    env_metrics_service.register_metric_collector(TimerCollector2())
+    yield server
+
+
+async def test_get_environment_metrics_input_validation(server_with_dummy_metric_collectors, client, environment) -> None:
+    """
+    Verify that the input validation of the get_environment_metrics endpoint works as expected.
+    """
+    now = datetime.now()
+    ten_hours_ago = now - timedelta(hours=10)
+    # Unknown metric in metrics list
+    result = await client.get_environment_metrics(
+        tid=environment,
+        metrics=["test"],
+        start_interval=ten_hours_ago,
+        end_interval=now,
+        nb_datapoints=10,
+    )
+    assert result.code == 400
+    assert "The following metrics given in the metrics parameter are unknown: ['test']" in result.result["message"]
+
+    # start_interval and end_interval are the same
+    result = await client.get_environment_metrics(
+        tid=environment,
+        metrics=["gauge_metric1", "timer_metric1"],
+        start_interval=now,
+        end_interval=now,
+        nb_datapoints=10,
+    )
+    assert result.code == 400
+    assert "start_interval should be strictly smaller than end_interval." in result.result["message"]
+
+    # Number of datapoint is negative
+    result = await client.get_environment_metrics(
+        tid=environment,
+        metrics=["gauge_metric1", "timer_metric1"],
+        start_interval=ten_hours_ago,
+        end_interval=now,
+        nb_datapoints=0,
+    )
+    assert result.code == 400
+    assert "nb_datapoints should be larger than 0" in result.result["message"]
+
+    # Too much datapoints requested for time interval. Collection interval is only once every minute.
+    result = await client.get_environment_metrics(
+        tid=environment,
+        metrics=["gauge_metric1", "timer_metric1"],
+        start_interval=now - timedelta(minutes=5),
+        end_interval=now,
+        nb_datapoints=100,
+    )
+    assert result.code == 400
+    assert (
+        "start_interval and end_interval should be at least <nb_datapoints> minutes separated from each other."
+        in result.result["message"]
+    )
+
+
+async def test_get_environment_metrics_api_endpoint(
+    server_with_dummy_metric_collectors,
+    client,
+    project,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
+):
+    """
+    Verify whether the get_environment_metrics() endpoint correctly aggregates the data.
+    """
+    env1_id = await environment_creator(client, project, env_name="env1")
+    env2_id = await environment_creator(client, project, env_name="env2")
+
+    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
+    await data.EnvironmentMetricsGauge.insert_many(
+        [
+            # Add 60 metrics within the aggregation interval requested later on in the test case
+            # (2023-01-01 9:00 -> 2023-01-01 9:59). And one measurement at 2023-01-01 10:00 to verify that we do a correct
+            # boundary check.
+            data.EnvironmentMetricsGauge(
+                environment=uuid.UUID(env1_id),
+                metric_name="gauge_metric1",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=i),
+                # Add +3 to make sure we end up with a floating point number after aggregating the data.
+                count=int(i / 6) if i % 6 != 0 else int(i / 6) + 3,
+            )
+            for i in range(61)
+        ]
+        + [
+            # Add a value for a metric with a different name to make sure that the filtering works correctly.
+            data.EnvironmentMetricsGauge(
+                environment=uuid.UUID(env1_id),
+                metric_name="gauge_metric2",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=5),
+                count=33,
+            ),
+        ]
+        + [
+            # Insert metric in a different environment to verify that the aggregations function respects the
+            # environment boundary.
+            data.EnvironmentMetricsGauge(
+                environment=uuid.UUID(env2_id),
+                metric_name="gauge_metric1",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=5),
+                count=44,
+            ),
+        ]
+    )
+    await data.EnvironmentMetricsTimer.insert_many(
+        [
+            # Add 60 metrics within the aggregation interval requested later on in the test case
+            # (2023-01-01 9:00 -> 2023-01-01 9:59). And one measurement at 2023-01-01 10:00 to verify that we do a correct
+            # boundary check.
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(env1_id),
+                metric_name="timer_metric1",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=i),
+                count=2,
+                # Add 0.25 to make sure we end up with a floating point number after aggregating the data.
+                value=int(i / 6) + 0.25,
+            )
+            for i in range(61)
+        ]
+        + [
+            # Add a value for a metric with a different name to make sure that the filtering works correctly.
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(env1_id),
+                metric_name="timer_metric2",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=5),
+                count=33,
+                value=66.6,
+            ),
+        ]
+        + [
+            # Insert metric in a different environment to verify that the aggregations function respects the
+            # environment boundary.
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(env2_id),
+                metric_name="timer_metric1",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=5),
+                count=44,
+                value=77.7,
+            ),
+        ]
+    )
+
+    nb_datapoints = 10
+    start_interval_plus_1h = start_interval + timedelta(hours=1)
+    result = await client.get_environment_metrics(
+        tid=env1_id,
+        metrics=["gauge_metric1", "timer_metric1"],
+        start_interval=start_interval,
+        end_interval=start_interval_plus_1h,
+        nb_datapoints=nb_datapoints,
+    )
+    assert result.code == 200, result.result
+    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_1h)
+    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
+    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert len(result.result["data"]["metrics"]) == 2
+    assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6)) / 6 + 0.5 for i in range(10)]
+    assert result.result["data"]["metrics"]["timer_metric1"] == [(sum(i for _ in range(6)) + 1.5) / (2 * 6) for i in range(10)]
+
+    # Verify behavior when no data is available in the time window
+    nb_datapoints = 2
+    start_interval_min_6_min = start_interval - timedelta(minutes=6)
+    start_interval_plus_6_min = start_interval + timedelta(minutes=6)
+    result = await client.get_environment_metrics(
+        tid=env1_id,
+        metrics=["gauge_metric1"],
+        start_interval=start_interval_min_6_min,
+        end_interval=start_interval_plus_6_min,
+        nb_datapoints=nb_datapoints,
+    )
+    assert result.code == 200, result.result
+    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval_min_6_min)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_6_min)
+    expected_timestamps = [get_as_naive_datetime(start_interval), get_as_naive_datetime(start_interval_plus_6_min)]
+    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert len(result.result["data"]["metrics"]) == 1
+    assert result.result["data"]["metrics"]["gauge_metric1"] == [None, 0.5]
+
+    # Verify behavior when partial data is available in the time window
+    nb_datapoints = 1
+    result = await client.get_environment_metrics(
+        tid=env1_id,
+        metrics=["gauge_metric1"],
+        start_interval=start_interval_min_6_min,
+        end_interval=start_interval_plus_6_min,
+        nb_datapoints=nb_datapoints,
+    )
+    assert result.code == 200, result.result
+    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval_min_6_min)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_6_min)
+    expected_timestamps = [get_as_naive_datetime(start_interval_plus_6_min)]
+    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert len(result.result["data"]["metrics"]) == 1
+    assert result.result["data"]["metrics"]["gauge_metric1"] == [0.5]
+
+
+async def test_compile_rate_metric(
+    server_with_dummy_metric_collectors,
+    client,
+    project,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
+) -> None:
+    """
+    Verify whether the compile_rate metric is aggregated correctly.
+    """
+    env1_id = await environment_creator(client, project, env_name="env1")
+    env2_id = await environment_creator(client, project, env_name="env2")
+
+    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
+    await data.EnvironmentMetricsTimer.insert_many(
+        [
+            # Add 60 metrics within the aggregation interval requested later on in the test case
+            # (2023-01-01 9:00 -> 2023-01-01 9:59). And one measurement at 2023-01-01 10:00 to verify that we do a correct
+            # boundary check.
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(env1_id),
+                metric_name="orchestrator.compile_time",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=i),
+                count=i,
+                value=float(i),
+            )
+            for i in range(61)
+        ]
+        + [
+            # Add a value for a metric with a different name to make sure that the filtering works correctly.
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(env1_id),
+                metric_name="timer_metric1",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=5),
+                count=33,
+                value=float(22),
+            ),
+        ]
+        + [
+            # Insert metric in a different environment to verify that the aggregations function respects the
+            # environment boundary.
+            data.EnvironmentMetricsTimer(
+                environment=uuid.UUID(env2_id),
+                metric_name="orchestrator.compile_time",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=5),
+                count=44,
+                value=float(211),
+            ),
+        ]
+    )
+    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
+    end_interval = start_interval + timedelta(hours=1)
+    nb_datapoints = 10
+    result = await client.get_environment_metrics(
+        tid=env1_id,
+        metrics=["orchestrator.compile_rate"],
+        start_interval=start_interval,
+        end_interval=end_interval,
+        nb_datapoints=nb_datapoints,
+    )
+    assert result.code == 200, result.result
+    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(end_interval)
+    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
+    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert len(result.result["data"]["metrics"]) == 1
+    assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [
+        sum((i * 6) + j for j in range(6)) * nb_datapoints for i in range(nb_datapoints)
+    ]
+
+
+async def test_metric_aggregation_no_date(
+    server_with_dummy_metric_collectors,
+    client,
+    project,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
+):
+    """
+    Verify the behavior of the `get_environment_metrics` endpoint when no datapoints are present in the database.
+    """
+    env1_id = await environment_creator(client, project, env_name="env1")
+
+    start_interval = datetime.now()
+    end_interval = start_interval + timedelta(hours=1)
+    nb_datapoints = 10
+    result = await client.get_environment_metrics(
+        tid=env1_id,
+        metrics=["gauge_metric1"],
+        start_interval=start_interval,
+        end_interval=end_interval,
+        nb_datapoints=nb_datapoints,
+    )
+    assert result.code == 200, result.result
+    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval
+    assert datetime.fromisoformat(result.result["data"]["end"]) == end_interval
+    expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
+    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert len(result.result["data"]["metrics"]) == 1
+    assert result.result["data"]["metrics"]["gauge_metric1"] == [None for _ in range(10)]
