@@ -30,5 +30,3 @@ async def update(connection: Connection) -> None:
         ALTER TABLE public.environmentmetricstimer ADD PRIMARY KEY (environment, timestamp, metric_name, category);
         """
     )
-
-
