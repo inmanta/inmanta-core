@@ -658,7 +658,7 @@ async def resource_action_consistency_check():
 
 def get_as_naive_datetime(timestamp: datetime) -> datetime:
     """
-    Convert the give timestamp, which is timezone aware, into a naive timestamp object.
+    Convert the give timestamp, which is timezone aware, into a naive timestamp object in UTC.
     """
     if timestamp.tzinfo is None:
         return timestamp
