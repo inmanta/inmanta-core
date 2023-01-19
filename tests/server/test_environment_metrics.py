@@ -28,7 +28,7 @@ from inmanta import const, data
 from inmanta.server import SLICE_ENVIRONMENT_METRICS, protocol
 from inmanta.server.services import environment_metrics_service
 from inmanta.server.services.environment_metrics_service import (
-    DEFAULT_GROUPED_BY,
+    DEFAULT_CATEGORY,
     AgentCountMetricsCollector,
     CompileTimeMetricsCollector,
     CompileWaitingTimeMetricsCollector,
@@ -1156,7 +1156,7 @@ async def test_get_environment_metrics_api_endpoint(
             data.EnvironmentMetricsGauge(
                 environment=uuid.UUID(env1_id),
                 metric_name="gauge_metric1",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=i),
                 # Add +3 to make sure we end up with a floating point number after aggregating the data.
                 count=int(i / 6) if i % 6 != 0 else int(i / 6) + 3,
@@ -1168,7 +1168,7 @@ async def test_get_environment_metrics_api_endpoint(
             data.EnvironmentMetricsGauge(
                 environment=uuid.UUID(env1_id),
                 metric_name="gauge_metric2",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=5),
                 count=33,
             ),
@@ -1179,7 +1179,7 @@ async def test_get_environment_metrics_api_endpoint(
             data.EnvironmentMetricsGauge(
                 environment=uuid.UUID(env2_id),
                 metric_name="gauge_metric1",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=5),
                 count=44,
             ),
@@ -1193,7 +1193,7 @@ async def test_get_environment_metrics_api_endpoint(
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env1_id),
                 metric_name="timer_metric1",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=i),
                 count=2,
                 # Add 0.25 to make sure we end up with a floating point number after aggregating the data.
@@ -1206,7 +1206,7 @@ async def test_get_environment_metrics_api_endpoint(
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env1_id),
                 metric_name="timer_metric2",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=5),
                 count=33,
                 value=66.6,
@@ -1218,7 +1218,7 @@ async def test_get_environment_metrics_api_endpoint(
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env2_id),
                 metric_name="timer_metric1",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=5),
                 count=44,
                 value=77.7,
@@ -1302,7 +1302,7 @@ async def test_compile_rate_metric(
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env1_id),
                 metric_name="orchestrator.compile_time",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=i),
                 count=i,
                 value=float(i),
@@ -1314,7 +1314,7 @@ async def test_compile_rate_metric(
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env1_id),
                 metric_name="timer_metric1",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=5),
                 count=33,
                 value=float(22),
@@ -1326,7 +1326,7 @@ async def test_compile_rate_metric(
             data.EnvironmentMetricsTimer(
                 environment=uuid.UUID(env2_id),
                 metric_name="orchestrator.compile_time",
-                grouped_by=DEFAULT_GROUPED_BY,
+                grouped_by=DEFAULT_CATEGORY,
                 timestamp=start_interval + timedelta(minutes=5),
                 count=44,
                 value=float(211),

@@ -349,7 +349,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         )
         query_for_compiler_rate = _get_sub_query(
             metric="'orchestrator.compile_rate'",
-            group_by=f"'{DEFAULT_GROUPED_BY}'",
+            group_by=f"'{DEFAULT_CATEGORY}'",
             table_name=EnvironmentMetricsTimer.table_name(),
             aggregation_function=(
                 "(sum(count)::float) / ((EXTRACT(epoch FROM ($3::timestamp - $2::timestamp)))::float / 3600)::float"
@@ -381,7 +381,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 assert isinstance(value, float) or isinstance(value, int)
                 index_in_list = bucket_nr - 1
                 assert 0 <= index_in_list < nb_datapoints
-                if grouped_by == DEFAULT_GROUPED_BY:
+                if grouped_by == DEFAULT_CATEGORY:
                     result_metrics[metric_name][index_in_list] = value
                 else:
                     if result_metrics[metric_name][index_in_list] is None:
