@@ -5071,7 +5071,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int) -> Tuple[Set[m.ResourceIdStr], Set[m.ResourceIdStr]]:
+    async def get_increment(cls, environment: uuid.UUID, version: int) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5090,10 +5090,10 @@ class ConfigurationModel(BaseDocument):
         resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
 
         # to increment
-        increment = []
-        not_increment = []
+        increment: list[abc.Mapping[str, Any]] = []
+        not_increment: list[abc.Mapping[str, Any]] = []
         # todo in this version
-        work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
+        work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
@@ -5151,15 +5151,15 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = {res["resource_id"] for res in not_increment}
+        negative: set[ResourceIdStr] = {res["resource_id"] for res in not_increment}
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = {res["resource_id"] for res in increment}  # type: Set[str]
-        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
-        send_events = []  # type: List[str]
+        outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
+        original_provides: dict[str, List[ResourceIdStr]] = defaultdict(lambda: [])
+        send_events: list[ResourceIdStr] = []
 
         # build lookup tables
         for res in resources:
@@ -5169,10 +5169,10 @@ class ConfigurationModel(BaseDocument):
                 send_events.append(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
-        work = list(outset)
-        done = set()
-        while work:
-            current = work.pop()
+        increment_work: list[ResourceIdStr] = list(outset)
+        done: set[ResourceIdStr] = set()
+        while increment_work:
+            current: ResourceIdStr = increment_work.pop()
             if current not in send_events:
                 # not sending events, so no receivers
                 continue
@@ -5182,7 +5182,7 @@ class ConfigurationModel(BaseDocument):
             done.add(current)
 
             provides = original_provides[current]
-            work.extend(provides)
+            increment_work.extend(provides)
             outset.update(provides)
             negative.difference_update(provides)
 
@@ -5444,16 +5444,18 @@ class EnvironmentMetricsGauge(BaseDocument):
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
     :param count: the counter for the metric for the given timestamp
     """
 
     environment: uuid.UUID
     metric_name: str
-    grouped_by: str
+    category: str
     timestamp: datetime.datetime
     count: int
 
-    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
 class EnvironmentMetricsTimer(BaseDocument):
@@ -5462,6 +5464,8 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
     :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
     :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
@@ -5469,12 +5473,12 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
-    grouped_by: str
+    category: str
     timestamp: datetime.datetime
     count: int
     value: float
 
-    __primary_key__ = ("environment", "metric_name", "grouped_by", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
 _classes = [

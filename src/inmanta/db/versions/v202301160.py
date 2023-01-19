@@ -14,11 +14,15 @@
     limitations under the License.
 
     Contact: code@inmanta.com
-
-
-    Tool to populate the database and dump it for database update testing
 """
 
-# The content of this file was moved to inmanta.db.util to allow it to be used from other extensions.
-# This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
+from asyncpg import Connection
+
+
+async def update(connection: Connection) -> None:
+    await connection.execute(
+        """
+ALTER TABLE public.environmentmetricsgauge RENAME COLUMN grouped_by TO category;
+ALTER TABLE public.environmentmetricstimer RENAME COLUMN grouped_by TO category;
+    """
+    )

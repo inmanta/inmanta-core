@@ -46,8 +46,8 @@ LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
 
-# The grouped_by fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
-DEFAULT_GROUPED_BY = "__None__"
+# The category fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
+DEFAULT_CATEGORY = "__None__"
 
 
 class MetricType(str, Enum):
@@ -69,9 +69,9 @@ class MetricValue:
     the Metric values as they should be returned by a MetricsCollector of type gauge
     """
 
-    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, grouped_by: Optional[str] = None) -> None:
+    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, category: Optional[str] = None) -> None:
         self.metric_name = metric_name
-        self.grouped_by = grouped_by
+        self.category = category
         self.count = count
         self.environment = environment
 
@@ -82,9 +82,9 @@ class MetricValueTimer(MetricValue):
     """
 
     def __init__(
-        self, metric_name: str, count: int, value: float, environment: uuid.UUID, grouped_by: Optional[str] = None
+        self, metric_name: str, count: int, value: float, environment: uuid.UUID, category: Optional[str] = None
     ) -> None:
-        super().__init__(metric_name, count, environment, grouped_by)
+        super().__init__(metric_name, count, environment, category)
         self.value = value
 
 
@@ -158,6 +158,10 @@ class MetricsCollector(abc.ABC):
         the database. No in-memory state is being stored by this metrics collector. The provided interval
         should be interpreted as [start_interval, end_interval[
 
+        If, at the time of collection, no metric data exists for an environment and/or category,
+        the implementation should return a meaningful default (e.g. 0 for count metrics).
+        If no meaningful default exists (e.g. for some time metrics), the data may be left out.
+
         :param start_interval: The timezone-aware start time of the metrics collection interval (inclusive).
         :param end_interval: The timezone-aware end time of the metrics collection interval (exclusive).
         :param connection: An optional connection
@@ -217,7 +221,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_gauge.append(
                     EnvironmentMetricsGauge(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by if mv.grouped_by else DEFAULT_GROUPED_BY,
+                        category=mv.category if mv.category else DEFAULT_CATEGORY,
                         timestamp=timestamp,
                         count=mv.count,
                         environment=mv.environment,
@@ -229,7 +233,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 metric_timer.append(
                     EnvironmentMetricsTimer(
                         metric_name=mv.metric_name,
-                        grouped_by=mv.grouped_by if mv.grouped_by else DEFAULT_GROUPED_BY,
+                        category=mv.category if mv.category else DEFAULT_CATEGORY,
                         timestamp=timestamp,
                         count=mv.count,
                         value=mv.value,
@@ -409,12 +413,18 @@ class ResourceCountMetricsCollector(MetricsCollector):
         self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection
     ) -> Sequence[MetricValue]:
         query: str = f"""
-            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}
-            SELECT r.environment, r.status, COUNT(*)
-            FROM latest_released_resources AS r
-            GROUP BY r.environment, r.status
+            WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, nonzero_statuses AS (
+                SELECT r.environment, r.status, COUNT(*) AS count
+                FROM latest_released_resources AS r
+                GROUP BY r.environment, r.status
+            )
+            SELECT e.id as environment, s.name as status, COALESCE(r.count, 0) as count
+            FROM {Environment.table_name()} AS e
+            CROSS JOIN unnest(enum_range(NULL::resourcestate)) AS s(name)
+            LEFT JOIN nonzero_statuses AS r
+            ON r.environment = e.id AND r.status = s.name
             ORDER BY r.environment, r.status
-        """
+            """
         metric_values: List[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:

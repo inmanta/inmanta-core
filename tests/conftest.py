@@ -108,6 +108,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.db import util as db_util
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
@@ -127,10 +128,14 @@ from packaging.version import Version
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
-    from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
     import utils
-    from db.common import PGRestore
+
+# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
+# This import statement is present to ensure backwards compatibility.
+from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
+from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
+from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -333,75 +338,16 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     await data.disconnect()
 
 
-async def postgress_get_custom_types(postgresql_client) -> List[str]:
-    # Query extracted from CLI
-    # psql -E
-    # \dT
-
-    get_custom_types = """
-    SELECT n.nspname as "Schema",
-      pg_catalog.format_type(t.oid, NULL) AS "Name",
-      pg_catalog.obj_description(t.oid, 'pg_type') as "Description"
-    FROM pg_catalog.pg_type t
-         LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-    WHERE (t.typrelid = 0 OR (SELECT c.relkind = 'c' FROM pg_catalog.pg_class c WHERE c.oid = t.typrelid))
-      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
-           AND n.nspname <> 'pg_catalog'
-          AND n.nspname <> 'information_schema'
-      AND pg_catalog.pg_type_is_visible(t.oid)
-    ORDER BY 1, 2;
-    """
-
-    types_in_db = await postgresql_client.fetch(get_custom_types)
-    type_names = [x["Name"] for x in types_in_db]
-
-    return type_names
-
-
-async def do_clean_hard(postgresql_client):
-    assert not postgresql_client.is_in_transaction()
-    await postgresql_client.reload_schema_state()
-    # query taken from : https://database.guide/3-ways-to-list-all-functions-in-postgresql/
-    functions_query = """
-SELECT routine_name
-FROM  information_schema.routines
-WHERE routine_type = 'FUNCTION'
-AND routine_schema = 'public';
-    """
-    functions_in_db = await postgresql_client.fetch(functions_query)
-    function_names = [x["routine_name"] for x in functions_in_db]
-    if function_names:
-        drop_query = "DROP FUNCTION if exists %s " % ", ".join(function_names)
-        await postgresql_client.execute(drop_query)
-
-    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    table_names = ["public." + x["table_name"] for x in tables_in_db]
-    if table_names:
-        drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
-        await postgresql_client.execute(drop_query)
-
-    type_names = await postgress_get_custom_types(postgresql_client)
-    if type_names:
-        drop_query = "DROP TYPE %s" % ", ".join(type_names)
-        await postgresql_client.execute(drop_query)
-    logger.info(
-        "Performed Hard Clean with tables: %s  types: %s  functions: %s",
-        ",".join(table_names),
-        ",".join(type_names),
-        ",".join(function_names),
-    )
-
-
 @pytest.fixture(scope="function")
 async def hard_clean_db(postgresql_client):
-    await do_clean_hard(postgresql_client)
+    await db_util.clear_database(postgresql_client)
     yield
 
 
 @pytest.fixture(scope="function")
 async def hard_clean_db_post(postgresql_client):
     yield
-    await do_clean_hard(postgresql_client)
+    await db_util.clear_database(postgresql_client)
 
 
 @pytest.fixture(scope="function")
@@ -476,7 +422,7 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
     """
 
     async def f() -> List[str]:
-        return await postgress_get_custom_types(postgresql_client)
+        return await db_util.postgres_get_custom_types(postgresql_client)
 
     return f
 
