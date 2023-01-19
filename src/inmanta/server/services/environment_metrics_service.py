@@ -329,22 +329,22 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                     AND timestamp >= $2::timestamp with time zone
                     AND timestamp < $3::timestamp with time zone
                     AND metric_name=ANY({metrics_list}::varchar[])
-                GROUP BY metric_name, grouped_by, bucket_nr
+                GROUP BY metric_name, category, bucket_nr
             """
             ).strip()
 
         query_on_gauge_table = _get_sub_query(
             metric="metric_name",
-            group_by="grouped_by",
+            group_by="category",
             table_name=EnvironmentMetricsGauge.table_name(),
             aggregation_function="(sum(count)::float)/(count(*)::float)",
             metrics_list="$5",
         )
         query_on_timer_table = _get_sub_query(
             metric="metric_name",
-            group_by="grouped_by",
+            group_by="category",
             table_name=EnvironmentMetricsTimer.table_name(),
-            aggregation_function="(sum(value)::float)/(sum(count)::float)",
+            aggregation_function="(sum(value)::float)/NULLIF(sum(count)::float, 0)",
             metrics_list="$5",
         )
         query_for_compiler_rate = _get_sub_query(
@@ -352,7 +352,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             group_by=f"'{DEFAULT_CATEGORY}'",
             table_name=EnvironmentMetricsTimer.table_name(),
             aggregation_function=(
-                "(sum(count)::float) / ((EXTRACT(epoch FROM ($3::timestamp - $2::timestamp)))::float / 3600)::float"
+                "(sum(count)::float) / ((EXTRACT(epoch FROM ($3::timestamp - $2::timestamp)))::float / 3600 / $4)::float"
             ),
             metrics_list="'{ orchestrator.compile_time }'",
         )
@@ -371,23 +371,25 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
             records = await con.fetch(query, *values)
             for r in records:
+                if r["value"] is None:
+                    continue
                 metric_name = r["metric_name"]
                 assert isinstance(metric_name, str)
-                grouped_by = r["grouped_by"]
-                assert isinstance(grouped_by, str)
+                category = r["category"]
+                assert isinstance(category, str)
                 bucket_nr = r["bucket_nr"]
                 assert isinstance(bucket_nr, int)
                 value = r["value"]
                 assert isinstance(value, float) or isinstance(value, int)
                 index_in_list = bucket_nr - 1
                 assert 0 <= index_in_list < nb_datapoints
-                if grouped_by == DEFAULT_CATEGORY:
+                if category == DEFAULT_CATEGORY:
                     result_metrics[metric_name][index_in_list] = value
                 else:
                     if result_metrics[metric_name][index_in_list] is None:
-                        result_metrics[metric_name][index_in_list] = {grouped_by: value}
+                        result_metrics[metric_name][index_in_list] = {category: value}
                     else:
-                        result_metrics[metric_name][index_in_list][grouped_by] = value
+                        result_metrics[metric_name][index_in_list][category] = value
 
         # Convert to naive timestamps
         return EnvironmentMetricsResult(
