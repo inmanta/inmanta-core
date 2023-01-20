@@ -630,7 +630,7 @@ async def test_workon_non_unique_name(
     """
     env: data.model.Environment = compiled_environments[0]
     second_factory: EnvironmentFactory = EnvironmentFactory(str(tmpdir.join("second_environment_factory")))
-    second_factory.project = data.Project(name="second_project")
+    second_factory.project_default = data.Project(name="second_project")
     new_env: data.model.Environment = (await second_factory.create_environment(name=env.name)).to_dto()
     await assert_workon_state(
         workon_bash,

@@ -367,7 +367,7 @@ async def test_get_setting_no_longer_exist(server, client, environment):
     """
     env_id = UUID(environment)
     env = await data.Environment.get_by_id(env_id)
-    project_id = env.project
+    project_id = env.project_default
     setting_db_query = (
         "UPDATE environment SET settings=jsonb_set(settings, $1::text[], "
         "to_jsonb($2::boolean), TRUE) WHERE name=$3 AND project=$4"

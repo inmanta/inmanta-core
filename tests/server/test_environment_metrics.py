@@ -1138,14 +1138,14 @@ async def test_get_environment_metrics_input_validation(server_with_dummy_metric
 async def test_get_environment_metrics_api_endpoint(
     server_with_dummy_metric_collectors,
     client,
-    project,
+    project_default,
     environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
 ):
     """
     Verify whether the get_environment_metrics() endpoint correctly aggregates the data.
     """
-    env1_id = await environment_creator(client, project, env_name="env1")
-    env2_id = await environment_creator(client, project, env_name="env2")
+    env1_id = await environment_creator(client, project_default, env_name="env1")
+    env2_id = await environment_creator(client, project_default, env_name="env2")
 
     start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
     await data.EnvironmentMetricsGauge.insert_many(
@@ -1284,14 +1284,14 @@ async def test_get_environment_metrics_api_endpoint(
 async def test_compile_rate_metric(
     server_with_dummy_metric_collectors,
     client,
-    project,
+    project_default,
     environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
 ) -> None:
     """
     Verify whether the compile_rate metric is aggregated correctly.
     """
-    env1_id = await environment_creator(client, project, env_name="env1")
-    env2_id = await environment_creator(client, project, env_name="env2")
+    env1_id = await environment_creator(client, project_default, env_name="env1")
+    env2_id = await environment_creator(client, project_default, env_name="env2")
 
     start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
     await data.EnvironmentMetricsTimer.insert_many(
@@ -1357,13 +1357,13 @@ async def test_compile_rate_metric(
 async def test_metric_aggregation_no_date(
     server_with_dummy_metric_collectors,
     client,
-    project,
+    project_default,
     environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
 ):
     """
     Verify the behavior of the `get_environment_metrics` endpoint when no datapoints are present in the database.
     """
-    env1_id = await environment_creator(client, project, env_name="env1")
+    env1_id = await environment_creator(client, project_default, env_name="env1")
 
     start_interval = datetime.now()
     end_interval = start_interval + timedelta(hours=1)
