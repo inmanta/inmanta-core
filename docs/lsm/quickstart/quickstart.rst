@@ -269,7 +269,7 @@ web-console as shown in the figure below.
     :alt: interface-ip-assignment service in service catalog
 
 Check that the router is empty
-#############################
+##############################
 
 Login into the SR Linux router named "spine" using the username "admin" and password "admin".
 

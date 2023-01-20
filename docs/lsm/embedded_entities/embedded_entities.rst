@@ -60,11 +60,11 @@ The following constraints should be satisfied for each embedded entity defined i
 * Relation attributes, where the other side is an embedded entity, should be prefixed with an underscore when the
   relation should not be included in the service definition.
 * The embedded entity must define at least one index that can be used to uniquely identify an embedded entity in a
-  relationship. More information regarding this is available in Section
-  :ref:`Attribute modifiers on a relationship<attribute_modifiers>`.
+  relationship. More information regarding this is available in section
+  :ref:`Attribute modifiers on a relationship<attribute_modifiers_on_a_relationship>`.
 * When an embedded entity is defined with the attribute modifier ``__r__``, all sub-attributes of that embedded
   entity need to have the attribute modifier set to read-only as well. More information regarding attribute modifiers
-  on embedded entities is available in Section :ref:`Attribute modifiers on a relationship<attribute_modifiers>`.
+  on embedded entities is available in section :ref:`Attribute modifiers on a relationship<attribute_modifiers_on_a_relationship>`.
 
 
 The following code snippet gives an example of a bidirectional relationship to an embedded entity. Note that the name

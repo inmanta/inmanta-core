@@ -1,0 +1,4 @@
+description: Fix documentation build issues.
+change-type: patch
+destination-branches:
+  - iso5
