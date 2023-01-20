@@ -859,7 +859,7 @@ def capture_warnings():
 
 
 @pytest.fixture
-async def project(server, client) -> AsyncIterator[str]:
+async def project_default(server, client) -> AsyncIterator[str]:
     """
     Fixture that creates a new inmanta project called env-test.
     """
@@ -911,24 +911,24 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
 
 @pytest.fixture(scope="function")
 async def environment(
-    server, client, project: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
 ) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and push_full_deploy set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    yield await environment_creator(client, project_id=project, env_name="dev", use_custom_env_settings=True)
+    yield await environment_creator(client, project_id=project_default, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="function")
 async def environment_default(
-    server, client, project: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
 ) -> AsyncIterator[str]:
     """
     Create a project and environment with default environment settings.
     This fixture returns the uuid of the environment.
     """
-    yield await environment_creator(client, project_id=project, env_name="dev", use_custom_env_settings=False)
+    yield await environment_creator(client, project_id=project_default, env_name="dev", use_custom_env_settings=False)
 
 
 @pytest.fixture(scope="function")
