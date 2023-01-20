@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Union
 import asyncpg
 
 from inmanta.data import (
+    ENVIRONMENT_METRICS_RETENTION,
     Agent,
     Compile,
     ConfigurationModel,
@@ -35,6 +36,7 @@ from inmanta.data import (
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     Resource,
+    Setting,
 )
 from inmanta.data.model import EnvironmentMetricsResult
 from inmanta.protocol import methods_v2
@@ -45,6 +47,9 @@ from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRAN
 LOGGER = logging.getLogger(__name__)
 
 COLLECTION_INTERVAL_IN_SEC = 60
+# This variable can be updated by the test suite to disable all actions done by the server on the metric-related database
+# tables.
+DISABLE_ENV_METRICS_SERVICE = False
 
 # The category fields needs a default value in the DB as it is part of the PRIMARY KEY and can therefore not be NULL.
 DEFAULT_CATEGORY = "__None__"
@@ -190,10 +195,50 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(CompileWaitingTimeMetricsCollector())
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
-        if COLLECTION_INTERVAL_IN_SEC > 0:
+        if not DISABLE_ENV_METRICS_SERVICE:
             self.schedule(
                 self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
             )
+            # Cleanup metrics once per hour
+            self.schedule(self._cleanup_old_metrics, interval=3600, initial_delay=0, cancel_on_stop=True)
+
+    async def _cleanup_old_metrics(self) -> None:
+        """
+        Clean up metrics that are older than the retention time specified in the environment_metrics_retention
+        environment setting.
+        """
+        async with Environment.get_connection() as con:
+            query = f"""
+            WITH env_and_retention_time_in_hours AS (
+                SELECT id, (CASE WHEN e.settings ? $1 THEN (e.settings->>$1)::integer ELSE $2 END) AS retention_time_in_hours
+                FROM {Environment.table_name()} AS e
+                WHERE e.halted IS FALSE
+            ), env_and_delete_before_timestamp AS (
+                SELECT e.id, ($3::timestamptz - make_interval(hours => e.retention_time_in_hours)) AS delete_before_timestamp
+                FROM env_and_retention_time_in_hours AS e
+                WHERE e.retention_time_in_hours > 0
+            ), delete_gauge AS (
+                DELETE FROM {EnvironmentMetricsGauge.table_name()} AS emg
+                WHERE EXISTS(
+                   SELECT *
+                   FROM env_and_delete_before_timestamp AS e_to_dt
+                   WHERE emg.environment=e_to_dt.id AND emg.timestamp < e_to_dt.delete_before_timestamp
+                )
+            )
+            DELETE FROM {EnvironmentMetricsTimer.table_name()} AS emt
+            WHERE EXISTS(
+                SELECT *
+                FROM env_and_delete_before_timestamp AS e_to_dt
+                WHERE emt.environment=e_to_dt.id AND emt.timestamp < e_to_dt.delete_before_timestamp
+            )
+            """
+            environment_metrics_retention_setting: Setting = Environment.get_setting_definition(ENVIRONMENT_METRICS_RETENTION)
+            values = [
+                ENVIRONMENT_METRICS_RETENTION,
+                environment_metrics_retention_setting.default,
+                datetime.now().astimezone(),
+            ]
+            await con.execute(query, *values)
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """

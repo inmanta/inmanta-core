@@ -18,7 +18,7 @@
 import uuid
 from collections import abc, defaultdict
 from collections.abc import AsyncIterator, Sequence
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, List, Optional, cast
 
 import asyncpg
@@ -53,12 +53,14 @@ async def env_metrics_service(server_config, init_dataclasses_and_load_schema) -
 
 @pytest.fixture
 def server_pre_start(server_config):
-    """This fixture is called before the server starts to disable the automatic flush_metrics done
-    by the EnvironmentMetricsService"""
-    previous = environment_metrics_service.COLLECTION_INTERVAL_IN_SEC
-    environment_metrics_service.COLLECTION_INTERVAL_IN_SEC = 0
+    """
+    This fixture is called before the server starts to disable all actions done
+    by the EnvironmentMetricsService on the metrics-related database tables.
+    """
+    old_disable_env_metrics_service = environment_metrics_service.DISABLE_ENV_METRICS_SERVICE
+    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = True
     yield
-    environment_metrics_service.COLLECTION_INTERVAL_IN_SEC = previous
+    environment_metrics_service.DISABLE_ENV_METRICS_SERVICE = old_disable_env_metrics_service
 
 
 @pytest.fixture
@@ -1382,3 +1384,65 @@ async def test_metric_aggregation_no_date(
     assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None for _ in range(10)]
+
+
+async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema) -> None:
+    """
+    Verify that the query to clean up old environment metrics is working correctly.
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    # Do cleanup operation when there are no environments
+    environment_metrics_service = EnvironmentMetricsService()
+    await environment_metrics_service._cleanup_old_metrics()
+
+    env1 = data.Environment(name="dev1", project=project.id, repo_url="", repo_branch="")
+    await env1.insert()
+    await env1.set(data.ENVIRONMENT_METRICS_RETENTION, 1)
+    env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+    await env2.set(data.ENVIRONMENT_METRICS_RETENTION, 3)
+
+    now = datetime.now().astimezone(tz=timezone.utc)
+    timestamps_metrics = [
+        now,
+        now - timedelta(minutes=30),
+        now - timedelta(hours=1, minutes=1),
+        now - timedelta(days=1),
+    ]
+    for env_id in [env1.id, env2.id]:
+        for timestamp in timestamps_metrics:
+            await data.EnvironmentMetricsGauge(
+                environment=env_id,
+                metric_name="test1",
+                category="group1",
+                timestamp=timestamp,
+                count=54,
+            ).insert(),
+            await data.EnvironmentMetricsTimer(
+                environment=env_id,
+                metric_name="test2",
+                category="group2",
+                timestamp=timestamp,
+                count=11,
+                value=22.0,
+            ).insert(),
+
+    assert len(await data.EnvironmentMetricsGauge.get_list()) == 8
+    assert len(await data.EnvironmentMetricsTimer.get_list()) == 8
+
+    # Do cleanup operation
+    environment_metrics_service = EnvironmentMetricsService()
+    await environment_metrics_service._cleanup_old_metrics()
+
+    assert len(await data.EnvironmentMetricsGauge.get_list()) == 5
+    assert len(await data.EnvironmentMetricsTimer.get_list()) == 5
+    # 2 metrics are removed from env1 per table
+    for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
+        result = await data_cls.get_list(environment=env1.id)
+        assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:2]
+    # 1 metric is removed from env2 per table
+    for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
+        result = await data_cls.get_list(environment=env2.id)
+        assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:3]

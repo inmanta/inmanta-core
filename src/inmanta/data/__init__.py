@@ -2335,6 +2335,7 @@ PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
+ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
 
 
 class Setting(object):
@@ -2607,12 +2608,29 @@ class Environment(BaseDocument):
             doc="""The number of seconds to wait before the server may attempt to do a new recompile.
                     Recompiles are triggered after facts updates for example.""",
         ),
+        ENVIRONMENT_METRICS_RETENTION: Setting(
+            name=ENVIRONMENT_METRICS_RETENTION,
+            typ="int",
+            default=8760,
+            doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
+            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            validator=convert_int,
+        ),
     }
 
     _renamed_settings_map = {
         AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
+
+    @classmethod
+    def get_setting_definition(cls, setting_name: str) -> Setting:
+        """
+        Return the definition of the setting with the given name.
+        """
+        if setting_name not in cls._settings:
+            raise KeyError()
+        return cls._settings[setting_name]
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
