@@ -14,11 +14,18 @@
     limitations under the License.
 
     Contact: code@inmanta.com
-
-
-    Tool to populate the database and dump it for database update testing
 """
+import os
+from collections import abc
 
-# The content of this file was moved to inmanta.db.util to allow it to be used from other extensions.
-# This import statement is present to ensure backwards compatibility.
-from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
+import pytest
+
+
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301170.sql"))
+async def test_migration(
+    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
+) -> None:
+    """
+    Only updated to primary key of two tables: make sure the migration script applies.
+    """
+    await migrate_db_from()

@@ -102,6 +102,11 @@ This folder contains a project.yml, which looks like this:
 
 .. code-block::
 
+   $ docker login containers.inmanta.com
+        Username: containers
+        Password: <token>
+
+        Login Succeeded
    $ sudo clab deploy -t topology.yml
 
 .. note::
@@ -179,7 +184,7 @@ The full orchestration model to assign an IP-address to an interface of a SR Lin
                             ip_prefix = self.address
                         ),
                     ),
-                ),           
+                ),
                 comanaged = false
             )
 
@@ -216,8 +221,8 @@ The full orchestration model to assign an IP-address to an interface of a SR Lin
 * Line 28 defines which implementation should be used to instantiate the `InterfaceIPAssignment` service entity.
 * Lines 30 to 65 provide the actual implementation for the `InterfaceIPAssignment` service entity. If an instance is created of the
   `InterfaceIPAssignment` service entity, this implementation will make sure that the `address` specified in the attributes of the
-  service instance, will be configured on the requested interface and SR Linux router. 
-* Lines 42 to 47 in particular, are where the resource is instantiated and assigned to the `resources` field. 
+  service instance, will be configured on the requested interface and SR Linux router.
+* Lines 42 to 47 in particular, are where the resource is instantiated and assigned to the `resources` field.
   The `resources` field should contain the list of `resources` that need to be deployed before the state of the instance can be moved from *creating* to *up*.
 * Lines 68 to 72 create a service entity binding. It associates a name and a lifecycle to the `InterfaceIPAssignment` service entity
   and registers it in the Inmanta Service Orchestrator via its northbound API. More information on service lifecycles can be
@@ -245,7 +250,7 @@ The following command executes a script to copy the required resources to a spec
 
    $ docker exec -ti -w /code clab-srlinux-inmanta-server  /code/setup.sh
 
-Afterwards, open the web-console, in this example it is on http://172.30.0.3:8888/console/. 
+Afterwards, open the web-console, in this example it is on http://172.30.0.3:8888/console/.
 
 .. image:: images/empty-service-catalog.png
     :align: center
@@ -269,7 +274,7 @@ web-console as shown in the figure below.
     :alt: interface-ip-assignment service in service catalog
 
 Check that the router is empty
-#############################
+##############################
 
 Login into the SR Linux router named "spine" using the username "admin" and password "admin".
 
@@ -279,14 +284,14 @@ Login into the SR Linux router named "spine" using the username "admin" and pass
 
 .. note::
 
-    Additional information on how to connect to these containers can be found on the :ref:`quickstart<quickstart_connecting_to_the_containers>`. 
+    Additional information on how to connect to these containers can be found on the :ref:`quickstart<quickstart_connecting_to_the_containers>`.
     In this guide we will only do certain commands to show the changes.
 
-Check the interface configuration via the following command. 
+Check the interface configuration via the following command.
 
 .. code-block::
 
-    A:spine# list interface 
+    A:spine# list interface
         interface ethernet-1/1 {
         }
         interface ethernet-1/2 {
@@ -300,7 +305,7 @@ Check the interface configuration via the following command.
                 ipv6 {
                     dhcp-client {
                     }
-                } 
+                }
             }
         }
 
@@ -327,7 +332,7 @@ state, the interface is configured successfully. Verify the configuration on the
 
 .. code-block::
 
-    A:spine# list interface 
+    A:spine# list interface
         interface ethernet-1/1 {
             subinterface 0 {
                 ipv4 {

@@ -30,7 +30,7 @@ Pull the image
     .. code-block:: console
 
         $ docker login containers.inmanta.com
-        Username: inmanta/containers
+        Username: containers
         Password: <your-entitlement-token>
 
         Login Succeeded

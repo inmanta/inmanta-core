@@ -85,6 +85,7 @@ def test_import_proxy(import_entry_point) -> None:
 def test_import_data(import_entry_point) -> None:
     assert import_entry_point("inmanta.data") == 0
     assert import_entry_point("inmanta.data.model") == 0
+    assert import_entry_point("inmanta.db.util") == 0
 
 
 def test_import_compile_data(import_entry_point) -> None:

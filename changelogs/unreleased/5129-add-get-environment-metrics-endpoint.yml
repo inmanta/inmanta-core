@@ -1,0 +1,8 @@
+---
+description: Added the `/metrics` API endpoint to retrieve aggregated metrics about an Inmanta environment from the server.
+issue-nr: 5129
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
