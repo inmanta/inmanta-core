@@ -219,18 +219,12 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 WHERE e.retention_time_in_hours > 0
             ), delete_gauge AS (
                 DELETE FROM {EnvironmentMetricsGauge.table_name()} AS emg
-                WHERE EXISTS(
-                   SELECT *
-                   FROM env_and_delete_before_timestamp AS e_to_dt
-                   WHERE emg.environment=e_to_dt.id AND emg.timestamp < e_to_dt.delete_before_timestamp
-                )
+                USING env_and_delete_before_timestamp as e_to_dt
+                WHERE emg.environment=e_to_dt.id AND emg.timestamp < e_to_dt.delete_before_timestamp
             )
             DELETE FROM {EnvironmentMetricsTimer.table_name()} AS emt
-            WHERE EXISTS(
-                SELECT *
-                FROM env_and_delete_before_timestamp AS e_to_dt
-                WHERE emt.environment=e_to_dt.id AND emt.timestamp < e_to_dt.delete_before_timestamp
-            )
+            USING env_and_delete_before_timestamp AS e_to_dt
+            WHERE emt.environment=e_to_dt.id AND emt.timestamp < e_to_dt.delete_before_timestamp
             """
             environment_metrics_retention_setting: Setting = Environment.get_setting_definition(ENVIRONMENT_METRICS_RETENTION)
             values = [
