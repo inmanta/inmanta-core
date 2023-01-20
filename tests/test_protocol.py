@@ -368,7 +368,7 @@ async def test_pydantic():
         name: str
 
     @protocol.method(path="/test", operation="PUT", client_types=["api"])
-    def test_method(project_default):
+    def test_method(project: Project):
         """
         Create a new project
         """

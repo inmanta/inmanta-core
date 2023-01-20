@@ -911,7 +911,7 @@ async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str,
 
 @pytest.fixture(scope="function")
 async def environment(
-    server, client, project_default, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
 ) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and push_full_deploy set to push_full_deploy.
@@ -922,7 +922,7 @@ async def environment(
 
 @pytest.fixture(scope="function")
 async def environment_default(
-    server, client, project_default, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
 ) -> AsyncIterator[str]:
     """
     Create a project and environment with default environment settings.

@@ -54,7 +54,7 @@ async def test_environment_update(migrate_v2_to_v3, async_finalizer, server_conf
 
     assert env1.last_version == 1569583847
 
-    result = await client.create_environment(project_id=env1.project_default, name="dev-3")
+    result = await client.create_environment(project_id=env1.project, name="dev-3")
     assert result.code == 200
 
     env3 = await data.Environment.get_by_id(result.result["environment"]["id"])
