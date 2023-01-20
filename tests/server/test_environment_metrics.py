@@ -17,10 +17,8 @@
 """
 import uuid
 from collections import abc, defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
 from collections.abc import AsyncIterator, Sequence
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, List, Optional, cast
 
 import asyncpg

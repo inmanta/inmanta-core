@@ -16,11 +16,9 @@
     Contact: code@inmanta.com
 """
 import abc
-import itertools
 import logging
 import math
 import textwrap
-import typing
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
@@ -38,7 +36,7 @@ from inmanta.data import (
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     Resource,
-    Setting
+    Setting,
 )
 from inmanta.data.model import EnvironmentMetricsResult
 from inmanta.protocol import methods_v2
@@ -240,7 +238,6 @@ class EnvironmentMetricsService(protocol.ServerSlice):
                 datetime.now().astimezone(),
             ]
             await con.execute(query, *values)
-
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """
