@@ -419,7 +419,7 @@ class EnvironmentService(protocol.ServerSlice):
             raise NotFound("The environment id does not exist.")
         original_env = env.to_dto()
 
-        project = project_id or env.project_default
+        project = project_id or env.project
 
         # check if an environment with this name is already defined in this project
         envs = await data.Environment.get_list(project=project, name=name)
