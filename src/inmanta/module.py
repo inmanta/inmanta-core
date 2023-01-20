@@ -1518,40 +1518,40 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param copyright: (Optional) Copyright holder name and date.
     :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
-      repositories. This path is not automatically included in the modulepath!
+        repositories. This path is not automatically included in the modulepath!
     :param install_mode: (Optional) This key determines what version of a module should be selected when a module
-      is downloaded. For more information see :class:`InstallMode`.
+        is downloaded. For more information see :class:`InstallMode`.
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
-      in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
-      can have the following values:
+        in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
+        can have the following values:
 
-      * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
-        git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
-        of the module to the URL.
-      * package: When the type is set to package, the URL field should contains the URL of the Python package repository.
-        The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API) compliant.
+        * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
+          git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
+          of the module to the URL.
+        * package: When the type is set to package, the URL field should contain the URL of the Python package repository.
+          The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
+          compliant.
 
-      The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
+        The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
-      project. Similar to the module, version constraints are defined using
-      `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
+        project. Similar to the module, version constraints are defined using
+        `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
     :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
-      freeze_recursive is set to false or not set, the current version of all modules imported directly in the main.cf file
-      will be set in project.yml. If it is set to true, the versions of all modules used in this project will set in
-      project.yml.
+        freeze_recursive is set to false or not set, the current version of all modules imported directly in the main.cf file
+        will be set in project.yml. If it is set to true, the versions of all modules used in this project will set in
+        project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
-      Valid values are [==, ~=, >=]. *Default is '~='*
+        Valid values are [==, ~=, >=]. *Default is '~='*
     :param relation_precedence_policy: [EXPERIMENTAL FEATURE] A list of rules that indicate the order in which the compiler
-                                       should freeze lists. The following syntax should be used to specify a rule
-                                       `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
-                                       place, the compiler will first freeze
-                                       `first-type.relation-name` and only then `then-type.relation-name`.
+        should freeze lists. The following syntax should be used to specify a rule
+        `<first-type>.<relation-name> before <then-type>.<relation-name>`. With this rule in
+        place, the compiler will first freeze `first-type.relation-name` and only then `then-type.relation-name`.
     :param strict_deps_check: Determines whether the compiler or inmanta tools that install/update module dependencies,
-                              should check the virtual environment for version conflicts in a strict way or not.
-                              A strict check means that all transitive dependencies will be checked for version conflicts
-                              and that any violation will result in an error.
-                              When a non-strict check is done, only version conflicts in a direct dependency will result
-                              in an error. All other violations will only result in a warning message.
+        should check the virtual environment for version conflicts in a strict way or not.
+        A strict check means that all transitive dependencies will be checked for version conflicts and that any violation will
+        result in an error.
+        When a non-strict check is done, only version conflicts in a direct dependency will result in an error.
+        All other violations will only result in a warning message.
     :param agent_install_dependency_modules: [EXPERIMENTAL FEATURE] If true, when a module declares Python dependencies on
         other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
         if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
