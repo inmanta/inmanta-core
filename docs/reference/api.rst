@@ -196,7 +196,7 @@ Python Environment
     :undoc-members:
 
 Variables
-----------
+---------
 
 .. autoclass:: inmanta.ast.variables.Reference
     :members: name
