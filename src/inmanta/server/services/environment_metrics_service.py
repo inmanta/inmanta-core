@@ -37,6 +37,7 @@ from inmanta.data import (
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     Resource,
+    Setting
 )
 from inmanta.server import SLICE_DATABASE, SLICE_ENVIRONMENT_METRICS, SLICE_TRANSPORT, protocol
 
@@ -189,6 +190,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         self.register_metric_collector(AgentCountMetricsCollector())
         self.register_metric_collector(CompileTimeMetricsCollector())
         if COLLECTION_INTERVAL_IN_SEC > 0:
+            # This if-statement exists to make sure that the test suite can disable all actions done by the server on the
+            # metric-related database tables.
             self.schedule(
                 self.flush_metrics, COLLECTION_INTERVAL_IN_SEC, initial_delay=COLLECTION_INTERVAL_IN_SEC, cancel_on_stop=True
             )
@@ -201,27 +204,38 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         environment setting.
         """
         async with Environment.get_connection() as con:
-            environments = await Environment.get_list(connection=con)
-            env_id_to_delete_older_than_timestamp: Dict[uuid.UUID, datetime] = {}
-            for env in environments:
-                if env.halted:
-                    continue
-                retention_time_in_hours: int = typing.cast(int, await env.get(ENVIRONMENT_METRICS_RETENTION))
-                if retention_time_in_hours <= 0:
-                    # Cleanups are disabled
-                    continue
-                delete_older_than: datetime = datetime.now().astimezone() - timedelta(hours=retention_time_in_hours)
-                env_id_to_delete_older_than_timestamp[env.id] = delete_older_than
-
-            if not env_id_to_delete_older_than_timestamp:
-                return
-            filter_condition = " OR ".join(
-                f"(environment=${(2*i)+1} AND timestamp < ${(2*i)+2})"
-                for i in range(len(env_id_to_delete_older_than_timestamp))
+            query = f"""
+            WITH env_and_retention_time_in_hours AS (
+                SELECT id, (CASE WHEN e.settings ? $1 THEN (e.settings->>$1)::integer ELSE $2 END) AS retention_time_in_hours
+                FROM {Environment.table_name()} AS e
+                WHERE e.halted IS FALSE
+            ), env_and_delete_before_timestamp AS (
+                SELECT e.id, ($3::timestamptz - make_interval(hours => e.retention_time_in_hours)) AS delete_before_timestamp
+                FROM env_and_retention_time_in_hours AS e
+                WHERE e.retention_time_in_hours > 0
+            ), delete_gauge AS (
+                DELETE FROM {EnvironmentMetricsGauge.table_name()} AS emg
+                WHERE EXISTS(
+                   SELECT *
+                   FROM env_and_delete_before_timestamp AS e_to_dt
+                   WHERE emg.environment=e_to_dt.id AND emg.timestamp < e_to_dt.delete_before_timestamp
+                )
             )
-            values = list(itertools.chain.from_iterable(env_id_to_delete_older_than_timestamp.items()))
-            await con.execute(f"DELETE FROM {EnvironmentMetricsGauge.table_name()} WHERE {filter_condition}", *values)
-            await con.execute(f"DELETE FROM {EnvironmentMetricsTimer.table_name()} WHERE {filter_condition}", *values)
+            DELETE FROM {EnvironmentMetricsTimer.table_name()} AS emt
+            WHERE EXISTS(
+                SELECT *
+                FROM env_and_delete_before_timestamp AS e_to_dt
+                WHERE emt.environment=e_to_dt.id AND emt.timestamp < e_to_dt.delete_before_timestamp
+            )
+            """
+            environment_metrics_retention_setting: Setting = Environment.get_setting_definition(ENVIRONMENT_METRICS_RETENTION)
+            values = [
+                ENVIRONMENT_METRICS_RETENTION,
+                environment_metrics_retention_setting.default,
+                datetime.now().astimezone(),
+            ]
+            await con.execute(query, *values)
+
 
     def register_metric_collector(self, metrics_collector: MetricsCollector) -> None:
         """

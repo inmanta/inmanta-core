@@ -2623,6 +2623,15 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
 
+    @classmethod
+    def get_setting_definition(cls, setting_name: str) -> Setting:
+        """
+        Return the definition of the setting with the given name.
+        """
+        if setting_name not in cls._settings:
+            raise KeyError()
+        return cls._settings[setting_name]
+
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
         Get a setting in this environment.
