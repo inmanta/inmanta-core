@@ -99,8 +99,8 @@ async def async_started_agent(server_config):
     yield a
     task.cancel()
     while not task.done():
-        # The CancelledError is only throw on the next invocation of the event loop.
-        # Wait until cancellation has finished.
+        # The CancelledError is only thrown on the next invocation of the event loop.
+        # Wait until the cancellation has finished.
         await asyncio.sleep(0)
 
 

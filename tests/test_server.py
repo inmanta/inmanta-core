@@ -308,8 +308,8 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
     await agent.add_end_point_name("vm1.dev.inmanta.com")
     await agent.add_end_point_name("vm2.dev.inmanta.com")
-    await agent.start()
     async_finalizer(agent.stop)
+    await agent.start()
     aclient = agent._client
 
     version = (await client_multi.reserve_version(environment_multi)).result["data"]
