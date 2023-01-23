@@ -98,6 +98,10 @@ async def async_started_agent(server_config):
     task = asyncio.ensure_future(a.start())
     yield a
     task.cancel()
+    while not task.done():
+        # The CancelledError is only throw on the next invocation of the event loop.
+        # Wait until cancellation has finished.
+        await asyncio.sleep(0)
 
 
 @pytest.fixture(scope="function")
