@@ -302,13 +302,14 @@ async def test_n_versions_env_setting_scope(client, server):
 
 
 @pytest.mark.slowtest
-async def test_get_resource_for_agent(server_multi, client_multi, environment_multi):
+async def test_get_resource_for_agent(server_multi, client_multi, environment_multi, async_finalizer):
     """
     Test the server to manage the updates on a model during agent deploy
     """
     agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
     await agent.add_end_point_name("vm1.dev.inmanta.com")
     await agent.add_end_point_name("vm2.dev.inmanta.com")
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -433,7 +434,6 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
-    await agent.stop()
 
 
 async def test_get_environment(client, clienthelper, server, environment):
@@ -473,11 +473,12 @@ async def test_get_environment(client, clienthelper, server, environment):
     assert len(result.result["environment"]["resources"]) == 9
 
 
-async def test_resource_update(postgresql_client, client, clienthelper, server, environment):
+async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer):
     """
     Test updating resources and logging
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -570,7 +571,6 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 10
-    await agent.stop()
 
 
 async def test_clear_environment(client, server, clienthelper, environment):
