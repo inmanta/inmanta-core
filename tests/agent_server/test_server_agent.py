@@ -1143,7 +1143,9 @@ async def test_multi_instance(resource_container, client, clienthelper, server, 
     await resource_action_consistency_check()
 
 
-async def test_cross_agent_deps(resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer):
+async def test_cross_agent_deps(
+    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer
+):
     """
     deploy a configuration model with cross host dependency
 
@@ -1970,7 +1972,9 @@ dep_states_reload = [
 
 
 @pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
-async def test_reload(server, client, clienthelper, environment, resource_container, dep_state, no_agent_backoff, async_finalizer):
+async def test_reload(
+    server, client, clienthelper, environment, resource_container, dep_state, no_agent_backoff, async_finalizer
+):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()

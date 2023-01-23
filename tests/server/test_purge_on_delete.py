@@ -45,7 +45,9 @@ async def environment(environment, client):
     yield environment
 
 
-async def test_purge_on_delete_requires(client: Client, server: Server, environment: str, clienthelper: ClientHelper, async_finalizer):
+async def test_purge_on_delete_requires(
+    client: Client, server: Server, environment: str, clienthelper: ClientHelper, async_finalizer
+):
     """
     Test purge on delete of resources and inversion of requires
     """
@@ -178,7 +180,9 @@ async def test_purge_on_delete_compile_failed_with_compile(
     assert result.result["model"]["total"] == 0
 
 
-async def test_purge_on_delete_compile_failed(client: Client, server: Server, clienthelper: ClientHelper, environment: str, async_finalizer):
+async def test_purge_on_delete_compile_failed(
+    client: Client, server: Server, clienthelper: ClientHelper, environment: str, async_finalizer
+):
     """
     Test purge on delete of resources
     """
@@ -426,7 +430,9 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     assert not file3["attributes"]["purged"]
 
 
-async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper, server: Server, environment: str, async_finalizer):
+async def test_purge_on_delete_ignore(
+    client: Client, clienthelper: ClientHelper, server: Server, environment: str, async_finalizer
+):
     """
     Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
@@ -558,7 +564,9 @@ async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper
     assert result.result["model"]["total"] == len(resources)
 
 
-async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelper, server: Server, environment: str, async_finalizer):
+async def test_disable_purge_on_delete(
+    client: Client, clienthelper: ClientHelper, server: Server, environment: str, async_finalizer
+):
     """
     Test disable purge on delete of resources
     """
