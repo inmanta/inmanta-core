@@ -5136,15 +5136,14 @@ class ConfigurationModel(BaseDocument):
                 ores = id_to_resource[res["resource_id"]]
 
                 status = ores["status"]
-                # available -> next version
-                if status in [ResourceState.available.name]:
+                # available / deploying -> next version
+                if status in [ResourceState.available.name, ResourceState.deploying.name]:
                     next.append(res)
 
                 # -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
-                    ResourceState.deploying.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
                     ResourceState.skipped.name,

@@ -354,7 +354,7 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R9", "A1 E2 D1", True)
         setup.add_resource("R10", "A1 A1 D1", False)
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
-        setup.add_resource("R14", "A1 A1 d1 D1", True)
+        setup.add_resource("R14", "A1 A1 d1 D1", False)   # issue 5434
         setup.add_resource("R15", "SU1 A1", False)
         setup.add_resource("R16", "A1 SU1 A1", True)
         setup.add_resource("R17", "D1 SU1 A1", False)
