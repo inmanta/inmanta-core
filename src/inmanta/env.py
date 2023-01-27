@@ -1144,7 +1144,9 @@ class VirtualEnv(ActiveEnv):
             if sys.platform.startswith("linux"):
                 # On linux based systems, the python version is in the path to the site packages dir:
                 if not os.path.exists(self.site_packages_dir):
-                    raise VenvActivationFailedError(msg="YOLO")
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} as {self.site_packages_dir} does not exist"
+                    )
             else:
                 # On other distributions a more costly check is required:
                 # Get version as a (major, minor) tuple for the venv and the running process
