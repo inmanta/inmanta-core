@@ -5137,7 +5137,7 @@ class ConfigurationModel(BaseDocument):
 
                 status = ores["status"]
                 # available : next version
-                if status in [ResourceState.available.name, ResourceState.deploying.name]:
+                if status == ResourceState.available.name:
                     next.append(res)
 
                 # deploying
