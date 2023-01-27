@@ -5136,9 +5136,18 @@ class ConfigurationModel(BaseDocument):
                 ores = id_to_resource[res["resource_id"]]
 
                 status = ores["status"]
-                # available / deploying -> next version
+                # available : next version
                 if status in [ResourceState.available.name, ResourceState.deploying.name]:
                     next.append(res)
+
+                # deploying
+                # same hash -> next version
+                # different hash -> increment
+                elif status in [ResourceState.deploying.name]:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
+                        next.append(res)
+                    else:
+                        increment.append(res)
 
                 # -> increment
                 elif status in [
