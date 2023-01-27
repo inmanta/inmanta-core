@@ -5,4 +5,3 @@ sections:
 destination-branches:
   - master
   - iso6
-  - iso5
