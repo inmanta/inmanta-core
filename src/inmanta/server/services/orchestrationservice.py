@@ -185,7 +185,7 @@ class PartialUpdateMerger:
         updated_resource_sets = set(s for s in resource_sets.values() if s is not None)
         if updated_resource_sets.intersection(removed_resource_sets):
             raise Exception(
-                "resource_sets contains a resource that belongs to the removed resource set: "
+                "resource_sets contains a resource that belongs to one of the removed_resource_sets: "
                 f"{updated_resource_sets.intersection(removed_resource_sets)}"
             )
         self.partial_updates = partial_updates
