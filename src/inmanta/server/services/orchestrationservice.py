@@ -229,7 +229,7 @@ class PartialUpdateMerger:
         old_data = await data.Resource.get_resources_for_version(
             environment=self.env.id,
             version=self.base_version,
-            excl=self.removed_resource_sets,
+            exclude_resource_sets=self.removed_resource_sets,
             connection=connection,
         )
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
