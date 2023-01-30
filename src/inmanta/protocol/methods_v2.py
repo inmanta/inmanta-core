@@ -33,6 +33,29 @@ from .openapi.model import OpenAPI
 
 
 @typedmethod(
+    # TODO: path + operation => DELETE /resource_set/<name>?
+    path="/version/partial",
+    operation="POST",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def resource_set_delete(
+    tid: uuid.UUID,
+    removed_resource_sets: Optional[List[str]] = None,
+# TODO: return type
+) -> None:
+    # TODO: parameters in docstring
+    """
+    Delete a resource set without triggering a compile.
+
+    The deletion is otherwise scheduled as normal in the compile queue. This prevents race conditions between the deletion
+    and any full compiles that might be in the queue.
+    """
+    # TODO implement
+
+
+@typedmethod(
     path="/version/partial",
     operation="PUT",
     arg_options=methods.ENV_OPTS,

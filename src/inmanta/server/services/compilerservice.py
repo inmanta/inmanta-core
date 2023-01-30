@@ -592,6 +592,7 @@ class CompilerService(ServerSlice):
         :return: the compile id of the requested compile and any warnings produced during the request
 
         """
+        # TODO: if this is set, skip compile under some condition
         if removed_resource_sets is None:
             removed_resource_sets = []
         if metadata is None:
