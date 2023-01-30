@@ -1,0 +1,8 @@
+---
+description: Increase the performance of the `put_partial` endpoint by not fetching resources from the database that belong to a resource set that will be removed.
+issue-nr: 4743
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"
