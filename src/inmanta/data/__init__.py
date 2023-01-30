@@ -4436,13 +4436,26 @@ class Resource(BaseDocument):
         version: int,
         agent: Optional[str] = None,
         no_obj: bool = False,
+        exclude_resource_sets: Optional[abc.Set[str]] = None,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
+        """
+        Return the resources that are present in the given environment and version.
+
+        :param environment: The environment the resources should belong to.
+        :param version: The version the resources should belong to.
+        :param agent: Is not None, only return resources for this agent.
+        :param exclude_resource_sets: If not None, only return resources that do not belong to these resource sets.
+                                      Resources without a resource set are always returned.
+        """
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
+        if exclude_resource_sets is not None:
+            filter_statement += f" AND (resource_set IS NULL OR NOT resource_set=ANY(${len(values) + 1}))"
+            values.append(exclude_resource_sets)
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources_list: Union[List[Resource], List[Dict[str, object]]] = []

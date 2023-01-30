@@ -182,6 +182,12 @@ class PartialUpdateMerger:
         :param removed_resource_sets: The resources in these resource sets should be present in the new configuration model.
         :param unknowns: The unknowns that belong to the partial model.
         """
+        updated_resource_sets = set(s for s in resource_sets.values() if s is not None)
+        if updated_resource_sets.intersection(removed_resource_sets):
+            raise Exception(
+                "resource_sets contains a resource that belongs to the removed resource set: "
+                f"{updated_resource_sets.intersection(removed_resource_sets)}"
+            )
         self.partial_updates = partial_updates
         self.resource_states = resource_states
         self.resource_sets = resource_sets
@@ -211,16 +217,20 @@ class PartialUpdateMerger:
             paired_resources.append(pair)
         return paired_resources
 
-    async def _get_base_resources(
+    async def _get_old_non_removed_resources(
         self, *, connection: asyncpg.connection.Connection
     ) -> dict[ResourceIdStr, ResourceWithResourceSet]:
         """
         Makes a call to the DB to get the resources for this instance's base version in the environment and return a dict
-        where the keys are the Ids of the resources and the values are ResourceWithResourceSet.
-        Sets the resource objects' version to the new version for the partial export.
+        where the keys are the Ids of the resources and the values are ResourceWithResourceSet. This method only returns
+        resources that do not belong to a removed resource set. The resource objects' version is set to the new version for
+        the partial export.
         """
         old_data = await data.Resource.get_resources_for_version(
-            environment=self.env.id, version=self.base_version, connection=connection
+            environment=self.env.id,
+            version=self.base_version,
+            excl=self.removed_resource_sets,
+            connection=connection,
         )
         old_resources: Dict[ResourceIdStr, ResourceWithResourceSet] = {}
         for res in old_data:
@@ -316,7 +326,9 @@ class PartialUpdateMerger:
         :return: A tuple of the resources and the resource sets. All resource version ids are set to this instance's new
             version.
         """
-        old_resources: dict[ResourceIdStr, ResourceWithResourceSet] = await self._get_base_resources(connection=connection)
+        old_resources: dict[ResourceIdStr, ResourceWithResourceSet] = await self._get_old_non_removed_resources(
+            connection=connection
+        )
         old_resource_sets: Dict[ResourceIdStr, Optional[str]] = {
             res_id: res.resource_set for res_id, res in old_resources.items()
         }
