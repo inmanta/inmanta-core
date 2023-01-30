@@ -1,0 +1,5 @@
+description: Improved exception handling during shutdown
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"
