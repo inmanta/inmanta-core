@@ -359,7 +359,18 @@ class Scheduler(object):
             for task in tasks:
                 if task not in self._await_tasks[action]:
                     task.cancel()
-        await gather(*[handle for handles in self._await_tasks.values() for handle in handles])
+
+        results = await gather(
+            *[handle for handles in self._await_tasks.values() for handle in handles], return_exceptions=True
+        )
+
+        # Log any exception that happened during shutdown
+        for result in results:
+            if isinstance(result, CancelledError):
+                # Ignore this, it is ok to leak a cancel here
+                pass
+            if isinstance(result, Exception):
+                logging.error("Exception during shutdown", exc_info=result)
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
