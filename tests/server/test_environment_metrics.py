@@ -706,9 +706,9 @@ async def test_agent_count_metric(clienthelper, client, server):
     assert all(statuses.keys() == {"paused", "up", "down"} for _, statuses in gauges_by_status.items())
     # verify counts
     assert gauges_by_status[env1.id]["paused"].count == 1
-    assert gauges_by_status[env2.id]["paused"].count == 1  # agent3 is not used by any resource so it should not be counted
+    assert gauges_by_status[env2.id]["paused"].count == 2  # agent3 is not used by any resource but it should still be counted
     # verify that all other counts are 0
-    assert sum(abs(gauge.count) for gauge in result_gauge) == 2
+    assert sum(abs(gauge.count) for gauge in result_gauge) == 3
 
 
 async def test_agent_count_metric_empty_datapoint(client, server):

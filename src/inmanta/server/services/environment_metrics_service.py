@@ -115,13 +115,13 @@ LATEST_RELEASED_RESOURCES_SUBQUERY: str = (
     LATEST_RELEASED_MODELS_SUBQUERY
     + textwrap.dedent(
         f"""
-    , latest_released_resources AS (
-        SELECT r.*
-        FROM {Resource.table_name()} AS r
-        INNER JOIN latest_released_models as cm
-            ON r.environment = cm.environment AND r.model = cm.version
-    )
-    """.strip(
+        , latest_released_resources AS (
+            SELECT r.*
+            FROM {Resource.table_name()} AS r
+            INNER JOIN latest_released_models as cm
+                ON r.environment = cm.environment AND r.model = cm.version
+        )
+        """.strip(
             "\n"
         )
     ).strip()
@@ -492,7 +492,7 @@ class AgentCountMetricsCollector(MetricsCollector):
     ) -> Sequence[MetricValue]:
         query: str = f"""
 -- fetch actual counts
-WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, agent_counts AS (
+WITH agent_counts AS (
     SELECT
         environment,
         CASE
@@ -502,12 +502,6 @@ WITH {LATEST_RELEASED_RESOURCES_SUBQUERY}, agent_counts AS (
         END AS status,
         COUNT(*)
     FROM {Agent.table_name()} AS a
-    -- only count agents that are relevant for the latest model
-    WHERE EXISTS (
-        SELECT *
-        FROM latest_released_resources AS r
-        WHERE r.environment = a.environment AND r.agent = a.name
-    )
     GROUP BY environment, status
 )
 -- inject zeroes for missing values in the environment - status matrix
