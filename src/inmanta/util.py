@@ -370,7 +370,7 @@ class Scheduler(object):
                 # Ignore this, it is ok to leak a cancel here
                 pass
             if isinstance(result, Exception):
-                logging.error("Exception during shutdown", exc_info=result)
+                LOGGER.error("Exception during shutdown", exc_info=result)
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
