@@ -5137,14 +5137,22 @@ class ConfigurationModel(BaseDocument):
 
                 status = ores["status"]
                 # available -> next version
-                if status in [ResourceState.available.name]:
+                if status == ResourceState.available.name:
                     next.append(res)
+
+                # deploying
+                # same hash -> next version
+                # different hash -> increment
+                elif status == ResourceState.deploying.name:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
+                        next.append(res)
+                    else:
+                        increment.append(res)
 
                 # -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
-                    ResourceState.deploying.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
                     ResourceState.skipped.name,
