@@ -404,7 +404,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
 
         # Initialize everything with None values
         result_metrics: Dict[str, List[Union[float, Dict[str, float], None]]] = {
-            m: [None for _ in range(nb_datapoints)] for m in metrics
+            m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
             values = [env.id, start_interval, end_interval, nb_datapoints, metrics]
