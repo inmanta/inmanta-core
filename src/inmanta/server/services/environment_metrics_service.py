@@ -402,7 +402,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             {f"UNION ALL ({query_for_compiler_rate})" if "orchestrator.compile_rate" in metrics else ""}
         """.strip()
 
-        # Initialize everything with None values
+        # Initialize everything with default values
         result_metrics: Dict[str, List[Union[float, Dict[str, float], None]]] = {
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
