@@ -1,0 +1,6 @@
+description: "Disabled pip's version warnings in tests for the inmanta-workon command"
+change-type: patch
+destination-branches:
+  - iso5
+  - iso6
+  - master
