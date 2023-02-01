@@ -205,6 +205,10 @@ function __inmanta_workon_register_deactivate {
         unset -f inmanta >/dev/null 2>&1
         # no need to restore PS1 because virtualenv_deactivate already does that
 
+        if [ -n "${INMANTA_CONFIG_ENVIRONMENT}" ] ; then
+            unset INMANTA_CONFIG_ENVIRONMENT
+        fi
+
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
             echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R\` as root." >&2
