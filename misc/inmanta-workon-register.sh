@@ -211,7 +211,7 @@ function __inmanta_workon_register_deactivate {
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
-            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R\` as root." >&2
+            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R $user '$inmanta_env_dir'\` as root." >&2
         fi
 
         if [ ! "$1" = "nondestructive" ]; then
