@@ -147,7 +147,7 @@ function __inmanta_workon_activate {
     # Check user
     current_user = $(whoami)
     if [ [ $current_user != "root" ] && [ $current_user != ${INMANTA_USER:-inmanta} ] ]; then
-        echo "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install)." >&2
+        echo "ERROR: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install)." >&2
         return 1
     fi
 
