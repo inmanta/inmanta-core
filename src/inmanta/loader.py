@@ -56,7 +56,7 @@ class SourceInfo(object):
     def __init__(self, path: str, module_name: str) -> None:
         """
         :param path: The path of the source code file
-        :param path: The name of the inmanta module
+        :param module_name: The fully qualified name of the Python module. Should be a module in the inmanta_plugins namespace.
         """
         self.path = path
         self._hash: Optional[str] = None
