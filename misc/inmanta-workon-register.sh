@@ -144,6 +144,13 @@ function __inmanta_workon_list {
 
 
 function __inmanta_workon_activate {
+    # Check user
+    current_user = $(whoami)
+    if [ [ $current_user != "root" ] && [ $current_user != ${INMANTA_USER:-inmanta} ] ]; then
+        echo "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install)." >&2
+        return 1
+    fi
+
     # Activates the environment's venv and registers the deactivate function
 
     declare env_name="$1"
@@ -170,8 +177,11 @@ function __inmanta_workon_activate {
     declare OLD_PS1="$PS1"
     source "$activate"
     export PS1="($env_name) $OLD_PS1"
+    export INMANTA_CONFIG_ENVIRONMENT=$env_id
 
     eval 'inmanta () { python3 -m inmanta.app "$@"; }' # workaround for #4259
+
+    echo "Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed."
     __inmanta_workon_register_deactivate
 }
 
@@ -197,7 +207,7 @@ function __inmanta_workon_register_deactivate {
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
-            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`find '\''$inmanta_env_dir'\'' ! -user '\''$user'\'' -exec chown '\''$user'\'':'\''$user'\'' {} \;\` as root." >&2
+            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R\` as root." >&2
         fi
 
         if [ ! "$1" = "nondestructive" ]; then
