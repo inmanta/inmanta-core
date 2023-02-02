@@ -1099,6 +1099,11 @@ version: 0.0.1dev0"""
         Turn the given current_version into a dev version with version_tag dev0 and ensure
         the version number is at least `minimal_version_bump_to_prev_release` separated
         from its predecessor in all_existing_stable_version.
+
+        Invariants:
+        1. return a dev version
+        2. this version is at least `minimal_version_bump_to_prev_release` separated from its predecessor in all_existing_stable_version
+        3. it is >= the current version
         """
         version_previous_release: Version
         try:
@@ -1107,24 +1112,63 @@ version: 0.0.1dev0"""
             # No previous release happened
             version_previous_release = Version("0.0.0")
 
+        LOGGER.debug("Previous release was %s", version_previous_release)
+
         assert version_previous_release <= current_version
         current_diff: Optional[ChangeType] = ChangeType.diff(low=version_previous_release, high=current_version)
+
+        LOGGER.debug("Different from current to previous release is %s", current_diff)
+
+        # Determine if we are already sufficiently far ahead
         if current_diff is None or minimal_version_bump_to_prev_release > current_diff:
+            LOGGER.debug(
+                "Incrementing version number because we the current difference is smaller than requested difference: %s<%s",
+                current_diff,
+                minimal_version_bump_to_prev_release,
+            )
+            # We are not sufficiently far ahead of the previous release
+            # Increment from current_version
             new_version = VersionOperation.bump_version(
                 minimal_version_bump_to_prev_release, current_version, version_tag="dev0"
             )
-            versions_between_current_and_new_version = [
-                v for v in all_existing_stable_version if current_version < v <= new_version
-            ]
-            if versions_between_current_and_new_version:
-                raise click.ClickException(
-                    f"Stable release {versions_between_current_and_new_version[0]} exists between "
-                    f"current version {current_version} and new version {new_version}"
-                )
-            else:
-                return new_version
+            # invariant 2 holds because
+            # current_version >= version_previous_release
+            # current_version + minimal_version_bump_to_prev_release >=
+            #   version_previous_release + minimal_version_bump_to_prev_release
+            # new_version-version_previous_release >= minimal_version_bump_to_prev_release
         else:
-            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
+            # We are sufficiently far ahead (invariant 2 holds)
+            if current_version.is_devrelease:
+                LOGGER.debug(
+                    "Keeping current dev version because we are sufficiently far ahead of the previous release: %s>=%s",
+                    current_diff,
+                    minimal_version_bump_to_prev_release,
+                )
+                # It is good as it is
+                new_version = current_version
+            else:
+                LOGGER.debug(
+                    "Incrementing to next dev version because we are sufficiently far ahead of the previous release: %s>=%s",
+                    current_diff,
+                    minimal_version_bump_to_prev_release,
+                )
+                # We are a normal or pre release version
+                # Adding 0.0.0.dev would make the new_version < current_version
+                # so we add 0.0.1.dev
+                new_version = VersionOperation.bump_version(ChangeType.PATCH, current_version, version_tag="dev0")
+        LOGGER.debug("New version is %s", new_version)
+
+        # Sanity checks
+        versions_between_current_and_new_version = [
+            v for v in all_existing_stable_version if current_version < v <= new_version
+        ]
+        if versions_between_current_and_new_version:
+            raise click.ClickException(
+                f"Stable release {versions_between_current_and_new_version[0]} exists between "
+                f"current version {current_version} and new version {new_version}"
+            )
+
+        return new_version
 
     def release(
         self,
