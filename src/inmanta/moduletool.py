@@ -1122,7 +1122,7 @@ version: 0.0.1dev0"""
         # Determine if we are already sufficiently far ahead
         if current_diff is None or minimal_version_bump_to_prev_release > current_diff:
             LOGGER.debug(
-                "Incrementing version number because we the current difference is smaller than requested difference: %s<%s",
+                "Incrementing version number because the current difference is smaller than requested difference: %s<%s",
                 current_diff,
                 minimal_version_bump_to_prev_release,
             )
