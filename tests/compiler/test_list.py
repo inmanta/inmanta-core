@@ -418,9 +418,7 @@ def test_emptylists(snippetcompiler):
     compiler.do_compile()
 
 
-@pytest.mark.parametrize_any(
-    "type", ["[]", "[]?"]
-)
+@pytest.mark.parametrize_any("type", ["[]", "[]?"])
 def test_653_list_attribute_unset(snippetcompiler, type: str):
     snippetcompiler.setup_for_error(
         f"""

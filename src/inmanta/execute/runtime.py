@@ -29,8 +29,8 @@ from inmanta.ast import (
     NotFoundException,
     OptionalValueException,
     RuntimeException,
+    attribute,
 )
-from inmanta.ast import attribute
 from inmanta.ast.type import Type
 from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
