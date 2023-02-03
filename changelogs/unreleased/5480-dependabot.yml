@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump openapi-spec-validator from 0.5.2 to 0.5.4
+destination-branches:
+- master
+- iso6
+sections: {}

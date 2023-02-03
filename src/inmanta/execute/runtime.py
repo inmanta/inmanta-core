@@ -18,6 +18,8 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
+import inmanta.ast.attribute  # noqa: F401 (pep8 does not recognize partially qualified access ast.attribute)
+from inmanta import ast
 from inmanta.ast import (
     AttributeException,
     CompilerException,
@@ -37,7 +39,6 @@ from inmanta.execute.tracking import Tracker
 from inmanta.execute.util import NoneValue, Unknown
 
 if TYPE_CHECKING:
-    from inmanta.ast.attribute import Attribute, RelationAttribute
     from inmanta.ast.blocks import BasicBlock
     from inmanta.ast.entity import Entity, Implementation
     from inmanta.ast.statements import RawResumer, RequiresEmitStatement, Resumer, Statement
@@ -365,8 +366,8 @@ class AttributeVariable(ResultVariable["Instance"], RelationAttributeVariable):
 
     __slots__ = ("attribute", "myself")
 
-    def __init__(self, attribute: "RelationAttribute", instance: "Instance"):
-        self.attribute: "RelationAttribute" = attribute
+    def __init__(self, attribute: "ast.attribute.RelationAttribute", instance: "Instance"):
+        self.attribute: ast.attribute.RelationAttribute = attribute
         self.myself: "Instance" = instance
         ResultVariable.__init__(self)
 
@@ -629,8 +630,8 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
 
     __slots__ = ("attribute", "myself")
 
-    def __init__(self, attribute: "RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
-        self.attribute: "RelationAttribute" = attribute
+    def __init__(self, attribute: "ast.attribute.RelationAttribute", instance: "Instance", queue: "QueueScheduler") -> None:
+        self.attribute: ast.attribute.RelationAttribute = attribute
         self.myself: "Instance" = instance
         BaseListVariable.__init__(self, queue)
 
@@ -693,9 +694,9 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
 
     __slots__ = ("attribute", "myself", "location")
 
-    def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
+    def __init__(self, attribute: "ast.attribute.Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
         self.value = None
-        self.attribute: "RelationAttribute" = attribute
+        self.attribute: ast.attribute.RelationAttribute = attribute
         self.myself: "Instance" = instance
         self.location = None
         # Only call super after initialization of the above-mentioned attributes
@@ -1248,7 +1249,7 @@ class Instance(ExecutionContext):
                 else:
                     attr = self.type.get_attribute(k)
                     assert attr is not None  # Make mypy happy
-                    if attr.is_multi():
+                    if isinstance(attr, ast.attribute.RelationAttribute) and attr.is_multi():
                         low = attr.low
                         # none for list attributes
                         # list for n-ary relations

@@ -1102,8 +1102,8 @@ version: 0.0.1dev0"""
 
         Invariants:
         1. return a dev version
-        2. this version is at least `minimal_version_bump_to_prev_release` separated
-            from its predecessor in all_existing_stable_version
+        2. this version is at least `minimal_version_bump_to_prev_release`
+            separated from its predecessor in all_existing_stable_version
         3. it is >= the current version
         """
         version_previous_release: Version
