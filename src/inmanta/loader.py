@@ -18,20 +18,21 @@
 import base64
 import hashlib
 import importlib
+import importlib.util
 import inspect
 import logging
 import os
 import pathlib
 import sys
 import types
-from collections.abc import KeysView
+from collections import abc
 from dataclasses import dataclass
-from importlib.abc import FileLoader, Finder
-from importlib.machinery import SourcelessFileLoader
+from importlib.abc import FileLoader, MetaPathFinder
+from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain, starmap
 from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
-from inmanta import const
+from inmanta import const, module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -55,7 +56,7 @@ class SourceInfo(object):
     def __init__(self, path: str, module_name: str) -> None:
         """
         :param path: The path of the source code file
-        :param path: The name of the inmanta module
+        :param module_name: The fully qualified name of the Python module. Should be a module in the inmanta_plugins namespace.
         """
         self.path = path
         self._hash: Optional[str] = None
@@ -96,17 +97,18 @@ class SourceInfo(object):
         """
         Returns an iterator over SourceInfo objects for all plugin source files in this Inmanta module (including this one).
         """
-        from inmanta.module import Project
-
-        return starmap(SourceInfo, Project.get().modules[self._get_module_name()].get_plugin_files())
+        return starmap(SourceInfo, module.Project.get().modules[self._get_module_name()].get_plugin_files())
 
     @property
     def requires(self) -> List[str]:
         """List of python requirements associated with this source file"""
-        from inmanta.module import Project
-
         if self._requires is None:
-            self._requires = Project.get().modules[self._get_module_name()].get_strict_python_requirements_as_list()
+            project: module.Project = module.Project.get()
+            mod: module.Module = project.modules[self._get_module_name()]
+            if project.metadata.agent_install_dependency_modules:
+                self._requires = mod.get_all_python_requirements_as_list()
+            else:
+                self._requires = mod.get_strict_python_requirements_as_list()
         return self._requires
 
 
@@ -215,7 +217,7 @@ class CodeLoader(object):
         self.__check_dir()
 
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir])
+        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir], prefer=True)
 
     def __check_dir(self) -> None:
         """
@@ -453,7 +455,7 @@ def convert_module_to_relative_path(full_mod_name: str) -> str:
 
 
 @stable_api
-class PluginModuleFinder(Finder):
+class PluginModuleFinder(MetaPathFinder):
     """
     Custom module finder which handles V1 Inmanta modules. V2 modules are handled using the standard Python finder. This
     finder is stored as the last entry in `meta_path`, as such that the default Python Finders detect V2 modules first.
@@ -483,12 +485,14 @@ class PluginModuleFinder(Finder):
         cls.MODULE_FINDER = None
 
     @classmethod
-    def configure_module_finder(cls, modulepaths: List[str]) -> None:
+    def configure_module_finder(cls, modulepaths: List[str], *, prefer: bool = False) -> None:
         """
         Setup a custom module loader to handle imports in .py files of the modules. This finder will be stored
-        as the last finder in sys.meta_path.
+        as the last finder in sys.meta_path, unless prefer is True. If the custom module loader has already been
+        set up, does nothing (i.e. it is not moved to the front or the back of sys.meta_path).
 
         :param modulepaths: The directories where the module finder should look for modules.
+        :param prefer: Prefer this module finder over others, putting it first in sys.meta_path.
         """
         if cls.MODULE_FINDER is not None:
             # PluginModuleFinder already present in sys.meta_path
@@ -497,10 +501,15 @@ class PluginModuleFinder(Finder):
 
         # PluginModuleFinder not yet present in sys.meta_path.
         module_finder = PluginModuleFinder(modulepaths)
-        sys.meta_path.append(module_finder)
+        if prefer:
+            sys.meta_path.insert(0, module_finder)
+        else:
+            sys.meta_path.append(module_finder)
         cls.MODULE_FINDER = module_finder
 
-    def find_module(self, fullname: str, path: Optional[str] = None) -> Optional[FileLoader]:
+    def find_spec(
+        self, fullname: str, path: Optional[abc.Sequence[str]], target: Optional[types.ModuleType] = None
+    ) -> Optional[ModuleSpec]:
         """
         :param fullname: A fully qualified import path to the module or package to be imported.
         """
@@ -509,8 +518,8 @@ class PluginModuleFinder(Finder):
             path_to_module = self._get_path_to_module(fullname)
             if path_to_module is not None:
                 if path_to_module[-4:] == ".pyc":
-                    return ByteCodePluginModuleLoader(fullname, path_to_module)
-                return PluginModuleLoader(fullname, path_to_module)
+                    return importlib.util.spec_from_loader(fullname, ByteCodePluginModuleLoader(fullname, path_to_module))
+                return importlib.util.spec_from_loader(fullname, PluginModuleLoader(fullname, path_to_module))
             else:
                 # The given module is not present in self.modulepath.
                 return None
@@ -580,7 +589,7 @@ def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
             return True
         return False
 
-    loaded_modules: KeysView[str] = sys.modules.keys()
+    loaded_modules: abc.KeysView[str] = sys.modules.keys()
     modules_to_unload: Sequence[str] = [fq_name for fq_name in loaded_modules if should_unload(fq_name)]
     for k in modules_to_unload:
         del sys.modules[k]

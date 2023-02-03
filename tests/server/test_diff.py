@@ -53,7 +53,6 @@ async def create_resource_in_multiple_versions(
 ):
     key = f"{resource_type}[{agent},path={path}]"
     for version, attributes in version_attributes_map.items():
-        attributes["requires"] = [f"{req},v={version}" for req in attributes.get("requires", [])]
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),

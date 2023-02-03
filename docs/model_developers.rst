@@ -18,4 +18,3 @@ Model developer documentation
     model_developers/model_debugging.rst
     model_developers/model_design.rst
     model_developers/resource_sets.rst
-    model_developers/*

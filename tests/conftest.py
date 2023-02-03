@@ -108,6 +108,7 @@ from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
+from inmanta.db import util as db_util
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
@@ -127,10 +128,14 @@ from packaging.version import Version
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
 if PYTEST_PLUGIN_MODE:
     from inmanta_tests import utils  # noqa: F401
-    from inmanta_tests.db.common import PGRestore  # noqa: F401
 else:
     import utils
-    from db.common import PGRestore
+
+# These elements were moved to inmanta.db.util to allow them to be used from other extensions.
+# This import statement is present to ensure backwards compatibility.
+from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
+from inmanta.db.util import clear_database as do_clean_hard  # noqa: F401
+from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_types  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +238,19 @@ def postgres_db(request: pytest.FixtureRequest):
 
 
 @pytest.fixture
+async def postgres_db_debug(postgres_db, database_name) -> abc.AsyncIterator[None]:
+    """
+    Fixture meant for debugging through manual interaction with the database. Run pytest with `-s/--capture=no`.
+    """
+    yield
+    print(
+        "Connection to DB will be kept alive for one hour. Connect with"
+        f" `psql --host localhost --port {postgres_db.port} {database_name} {postgres_db.user}`"
+    )
+    await asyncio.sleep(3600)
+
+
+@pytest.fixture
 def ensure_running_postgres_db_post(postgres_db):
     yield
     if not postgres_db.running():
@@ -320,75 +338,16 @@ async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_res
     await data.disconnect()
 
 
-async def postgress_get_custom_types(postgresql_client) -> List[str]:
-    # Query extracted from CLI
-    # psql -E
-    # \dT
-
-    get_custom_types = """
-    SELECT n.nspname as "Schema",
-      pg_catalog.format_type(t.oid, NULL) AS "Name",
-      pg_catalog.obj_description(t.oid, 'pg_type') as "Description"
-    FROM pg_catalog.pg_type t
-         LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-    WHERE (t.typrelid = 0 OR (SELECT c.relkind = 'c' FROM pg_catalog.pg_class c WHERE c.oid = t.typrelid))
-      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
-           AND n.nspname <> 'pg_catalog'
-          AND n.nspname <> 'information_schema'
-      AND pg_catalog.pg_type_is_visible(t.oid)
-    ORDER BY 1, 2;
-    """
-
-    types_in_db = await postgresql_client.fetch(get_custom_types)
-    type_names = [x["Name"] for x in types_in_db]
-
-    return type_names
-
-
-async def do_clean_hard(postgresql_client):
-    assert not postgresql_client.is_in_transaction()
-    await postgresql_client.reload_schema_state()
-    # query taken from : https://database.guide/3-ways-to-list-all-functions-in-postgresql/
-    functions_query = """
-SELECT routine_name
-FROM  information_schema.routines
-WHERE routine_type = 'FUNCTION'
-AND routine_schema = 'public';
-    """
-    functions_in_db = await postgresql_client.fetch(functions_query)
-    function_names = [x["routine_name"] for x in functions_in_db]
-    if function_names:
-        drop_query = "DROP FUNCTION if exists %s " % ", ".join(function_names)
-        await postgresql_client.execute(drop_query)
-
-    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    table_names = ["public." + x["table_name"] for x in tables_in_db]
-    if table_names:
-        drop_query = "DROP TABLE %s CASCADE" % ", ".join(table_names)
-        await postgresql_client.execute(drop_query)
-
-    type_names = await postgress_get_custom_types(postgresql_client)
-    if type_names:
-        drop_query = "DROP TYPE %s" % ", ".join(type_names)
-        await postgresql_client.execute(drop_query)
-    logger.info(
-        "Performed Hard Clean with tables: %s  types: %s  functions: %s",
-        ",".join(table_names),
-        ",".join(type_names),
-        ",".join(function_names),
-    )
-
-
 @pytest.fixture(scope="function")
 async def hard_clean_db(postgresql_client):
-    await do_clean_hard(postgresql_client)
+    await db_util.clear_database(postgresql_client)
     yield
 
 
 @pytest.fixture(scope="function")
 async def hard_clean_db_post(postgresql_client):
     yield
-    await do_clean_hard(postgresql_client)
+    await db_util.clear_database(postgresql_client)
 
 
 @pytest.fixture(scope="function")
@@ -432,6 +391,21 @@ def get_columns_in_db_table(postgresql_client):
 
 
 @pytest.fixture(scope="function")
+def get_primary_key_columns_in_db_table(postgresql_client):
+    async def _get_primary_key_columns_in_db_table(table_name: str) -> List[str]:
+        # Query taken from here: https://wiki.postgresql.org/wiki/Retrieve_primary_key_columns
+        result = await postgresql_client.fetch(
+            "SELECT a.attname FROM pg_index i "
+            "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+            "WHERE i.indrelid = '" + table_name + "'::regclass "
+            "AND i.indisprimary;"
+        )
+        return [r["attname"] for r in result]
+
+    return _get_primary_key_columns_in_db_table
+
+
+@pytest.fixture(scope="function")
 def get_tables_in_db(postgresql_client):
     async def _get_tables_in_db() -> List[str]:
         result = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
@@ -448,7 +422,7 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
     """
 
     async def f() -> List[str]:
-        return await postgress_get_custom_types(postgresql_client)
+        return await db_util.postgres_get_custom_types(postgresql_client)
 
     return f
 
@@ -884,62 +858,91 @@ def capture_warnings():
     logging.captureWarnings(False)
 
 
-async def create_environment(client, use_custom_env_settings: bool) -> str:
+@pytest.fixture
+async def project_default(server, client) -> AsyncIterator[str]:
     """
-    Create a project (env-test) and an environment (dev).
-
-    :param client: The client that should be used to create the project and environment.
-    :param use_custom_env_settings: True iff the auto_deploy features is disabled and the
-                                    agent trigger method is set to push_full_deploy.
-    :return: The uuid of the newly created environment as a string.
+    Fixture that creates a new inmanta project called env-test.
     """
     result = await client.create_project("env-test")
     assert result.code == 200
-    project_id = result.result["project"]["id"]
+    yield result.result["project"]["id"]
 
-    result = await client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
 
-    cfg_env.set(env_id)
+@pytest.fixture
+async def project_multi(server_multi, client_multi) -> AsyncIterator[str]:
+    """
+    Does the same as the project fixture, but this fixture should be used instead when the test case
+    uses the server_multi or client_multi fixture.
+    """
+    result = await client_multi.create_project("env-test")
+    assert result.code == 200
+    yield result.result["project"]["id"]
 
-    if use_custom_env_settings:
-        env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
-        await env_obj.set(data.AUTO_DEPLOY, False)
-        await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
-        await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
-        await env_obj.set(data.RECOMPILE_BACKOFF, 0)
 
-    return env_id
+@pytest.fixture
+async def environment_creator() -> AsyncIterator[Callable[[protocol.Client, str, str, bool], Awaitable[str]]]:
+    """
+    Fixture to create a new environment in a certain project.
+    """
+
+    async def _create_environment(client, project_id: str, env_name: str, use_custom_env_settings: bool = True) -> str:
+        """
+        :param client: The client that should be used to create the project and environment.
+        :param use_custom_env_settings: True iff the auto_deploy features is disabled and the
+                                        agent trigger method is set to push_full_deploy.
+        :return: The uuid of the newly created environment as a string.
+        """
+        result = await client.create_environment(project_id=project_id, name=env_name)
+        env_id = result.result["environment"]["id"]
+
+        cfg_env.set(env_id)
+
+        if use_custom_env_settings:
+            env_obj = await data.Environment.get_by_id(uuid.UUID(env_id))
+            await env_obj.set(data.AUTO_DEPLOY, False)
+            await env_obj.set(data.PUSH_ON_AUTO_DEPLOY, False)
+            await env_obj.set(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+            await env_obj.set(data.RECOMPILE_BACKOFF, 0)
+
+        return env_id
+
+    yield _create_environment
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server) -> AsyncIterator[str]:
+async def environment(
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and push_full_deploy set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client, use_custom_env_settings=True)
-    yield env_id
+    yield await environment_creator(client, project_id=project_default, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="function")
-async def environment_default(client, server) -> AsyncIterator[str]:
+async def environment_default(
+    server, client, project_default: str, environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]]
+) -> AsyncIterator[str]:
     """
     Create a project and environment with default environment settings.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client, use_custom_env_settings=False)
-    yield env_id
+    yield await environment_creator(client, project_id=project_default, env_name="dev", use_custom_env_settings=False)
 
 
 @pytest.fixture(scope="function")
-async def environment_multi(client_multi, server_multi) -> AsyncIterator[str]:
+async def environment_multi(
+    client_multi,
+    server_multi,
+    project_multi: str,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
+) -> AsyncIterator[str]:
     """
     Create a project and environment, with auto_deploy turned off and the agent trigger method set to push_full_deploy.
     This fixture returns the uuid of the environment.
     """
-    env_id = await create_environment(client_multi, use_custom_env_settings=True)
-    yield env_id
+    yield await environment_creator(client_multi, project_id=project_multi, env_name="dev", use_custom_env_settings=True)
 
 
 @pytest.fixture(scope="session")
@@ -1359,7 +1362,7 @@ def modules_dir() -> str:
 
 
 @pytest.fixture(scope="session")
-def modules_v2_dir():
+def modules_v2_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules_v2")
 
 
@@ -1386,11 +1389,15 @@ class CLI(object):
 
 
 @pytest.fixture
-def cli():
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-    o = CLI()
-    yield o
+def cli(caplog):
+    # caplog will break this code when emitting any log line to cli
+    # due to mysterious interference when juggling with sys.stdout
+    # https://github.com/pytest-dev/pytest/issues/10553
+    with caplog.at_level(logging.FATAL):
+        # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+        asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
+        o = CLI()
+        yield o
 
 
 class AsyncCleaner(object):

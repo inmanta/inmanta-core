@@ -29,7 +29,7 @@ from utils import ClientHelper, _wait_until_deployment_finishes, retry_limited
 logger = logging.getLogger("inmanta.test.dryrun")
 
 
-async def test_dryrun_and_deploy(server, client, resource_container, environment):
+async def test_dryrun_and_deploy(server, client, resource_container, environment, async_finalizer):
     """
     dryrun and deploy a configuration model
 
@@ -41,6 +41,7 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
 
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await agent.add_end_point_name("agent1")
+    async_finalizer(agent.stop)
     await agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -178,8 +179,6 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     actions = await data.ResourceAction.get_list()
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
-
-    await agent.stop()
 
 
 async def test_dryrun_failures(resource_container, server, agent, client, environment, clienthelper):

@@ -691,7 +691,7 @@ class RelationPrecedenceGraph:
         while work:
             node: RelationPrecedenceGraphNode = get_next_ready_item_in_work()
             work.remove(node)
-            if node in result:
+            if node.relation_attribute in result:
                 raise CycleInRelationPrecedencePolicyError()
             result.append(node.relation_attribute)
             work.update(node.dependents)

@@ -1,0 +1,6 @@
+description: Use a new theme for the documentation
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5

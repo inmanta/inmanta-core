@@ -418,11 +418,12 @@ def test_emptylists(snippetcompiler):
     compiler.do_compile()
 
 
-def test_653_list_attribute_unset(snippetcompiler):
+@pytest.mark.parametrize_any("type", ["[]", "[]?"])
+def test_653_list_attribute_unset(snippetcompiler, type: str):
     snippetcompiler.setup_for_error(
-        """
+        f"""
         entity Test:
-            string[] bla
+            string{type} bla
         end
 
         Test()
@@ -430,7 +431,7 @@ def test_653_list_attribute_unset(snippetcompiler):
         implement Test using std::none
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
-        " attribute bla ({dir}/main.cf:3:22) requires 1 values but only 0 are set",
+        f" attribute bla ({{dir}}/main.cf:3:{20 + len(type)}) is not set",
     )
 
 
