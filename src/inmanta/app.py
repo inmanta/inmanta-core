@@ -615,7 +615,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         dest="warnings",
         choices=["warn", "ignore", "error"],
         default="warn",
-        help="The warning behaviour of the compiler. Must be one of 'warn', 'ignore', 'error'",
+        help="The warning behaviour. Must be one of 'warn', 'ignore', 'error'",
     )
     parser.add_argument(
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False

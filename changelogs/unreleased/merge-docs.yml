@@ -1,0 +1,4 @@
+description: Merge documentation into core
+change-type: patch
+destination-branches:
+  - iso4

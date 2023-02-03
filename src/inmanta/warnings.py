@@ -25,10 +25,14 @@ from typing import Dict, List, Mapping, Optional, TextIO, Type, Union
 class InmantaWarning(Warning):
     """
     Base class for Inmanta Warnings.
+    Those warnings won't contain the python trace and are intended to be shown to end users.
     """
 
     def __init__(self, *args: object):
         Warning.__init__(self, *args)
+
+
+REGEX_INMANTA_MODULE: str = r"^(inmanta|inmanta\..*|inmanta_.*)$"
 
 
 class WarningBehaviour(Enum):
@@ -40,15 +44,19 @@ class WarningBehaviour(Enum):
 class WarningRule:
     """
     A single rule for warning handling. Describes the desired behaviour when an error occurs.
-    When type is set, the rule is only applied to subclasses of the warning type.
+
+    :param module: A regex that must match the name of the module generating the warning.
     """
 
-    def __init__(self, action: WarningBehaviour, tp: Optional[Type[InmantaWarning]] = None) -> None:
+    def __init__(self, action: WarningBehaviour, module: Optional[str] = None) -> None:
         self.action: WarningBehaviour = action
-        self.type: Type[Warning] = tp if tp is not None else InmantaWarning
+        self.module: Optional[str] = module
 
     def apply(self) -> None:
-        warnings.filterwarnings(self.action.value, category=self.type)
+        if self.module is not None:
+            warnings.filterwarnings(self.action.value, module=self.module)
+        else:
+            warnings.filterwarnings(self.action.value)
 
 
 class WarningOption:
@@ -56,10 +64,10 @@ class WarningOption:
     An option to manage warnings. Consists of a name and a range of possible values, each tied to a warning rule.
     For example, applying
     WarningOption(
-        "disable-runtime-warnings",
-        {True: WarningRule(WarningBehaviour.IGNORE, CompilerRuntimeWarning)}
+        "disable-inmanta-warnings",
+        {True: WarningRule(WarningBehaviour.IGNORE, module=REGEX_INMANTA_MODULE)}
     )
-    would add a rule to ignore CompilerRuntimeWarnings but leave other warning's behaviour as is.
+    would add a rule to ignore Inmanta warnings but leave other warning's behaviour as is.
     """
 
     def __init__(self, name: str, options: Dict[Union[str, bool], WarningRule]) -> None:
@@ -87,9 +95,9 @@ class WarningsManager:
         WarningOption(
             "default",
             {
-                "warn": WarningRule(WarningBehaviour.WARN),
-                "ignore": WarningRule(WarningBehaviour.IGNORE),
-                "error": WarningRule(WarningBehaviour.ERROR),
+                "warn": WarningRule(WarningBehaviour.WARN, module=REGEX_INMANTA_MODULE),
+                "ignore": WarningRule(WarningBehaviour.IGNORE, module=REGEX_INMANTA_MODULE),
+                "error": WarningRule(WarningBehaviour.ERROR, module=REGEX_INMANTA_MODULE),
             },
         ),
     ]
@@ -118,9 +126,9 @@ class WarningsManager:
         # Control how warnings are shown
         warnings.showwarning = cls._showwarning
         # Ignore all external warnings.
-        warnings.filterwarnings(WarningBehaviour.IGNORE.value, category=Warning)
-        # Warn all InmantaWarnings by default. Behaviour can be controlled using the config.
-        warnings.filterwarnings(WarningBehaviour.WARN.value, category=InmantaWarning)
+        warnings.filterwarnings(WarningBehaviour.IGNORE.value)
+        # Warn all Inmanta-related warnings by default. Behaviour can be controlled using the --warnings argument on the CLI.
+        warnings.filterwarnings(WarningBehaviour.WARN.value, module=REGEX_INMANTA_MODULE)
 
     @classmethod
     def _showwarning(
@@ -143,13 +151,11 @@ class WarningsManager:
         :param line: Required for compatibility but will be ignored.
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
-        text: str
-        logger: logging.Logger
         if issubclass(category, InmantaWarning):
             text = "%s: %s" % (category.__name__, message)
             logger = logging.getLogger("inmanta.warnings")
         else:
-            text = warnings.formatwarning(
+            text: str = warnings.formatwarning(
                 # ignore type check because warnings.formatwarning accepts Warning instance but it's type definition doesn't
                 message,  # type: ignore
                 category,
@@ -157,7 +163,8 @@ class WarningsManager:
                 lineno,
                 line,
             )
-            logger = logging.getLogger("py.warnings")
+            logger: logging.Logger = logging.getLogger("py.warnings")
+
         if file is not None:
             try:
                 # This code path is currently not used in our code base
@@ -168,8 +175,10 @@ class WarningsManager:
             logger.warning("%s", text)
 
 
-def warn(warning: InmantaWarning) -> None:
+def warn(*args, **kwargs) -> None:
     """
-    Warn using the supplied InmantaWarning instance.
+    A method that proxies call to `warnings.warn()`. This method is used by the test suite
+    to be able to log warnings from a module that is part of an Inmanta package. Warnings
+    created from the test suite would be considered a warnings from a third-party library.
     """
-    warnings.warn(warning)
+    warnings.warn(*args, **kwargs)

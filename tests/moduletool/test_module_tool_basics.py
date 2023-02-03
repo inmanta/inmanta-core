@@ -100,7 +100,7 @@ compiler_version: 2017.2
     assert mod.compiler_version == "2017.2"
 
 
-def test_module_corruption(modules_dir, modules_repo):
+def test_module_corruption(modules_dir: str, modules_repo: str, tmpdir):
     mod9 = make_module_simple(modules_repo, "mod9", [("mod10", None)])
     add_file(mod9, "signal", "present", "third commit", version="3.3")
     add_file(mod9, "model/b.cf", "import mod9", "fourth commit", version="4.0")
@@ -118,7 +118,7 @@ def test_module_corruption(modules_dir, modules_repo):
     commitmodule(p9, "first commit")
 
     # setup project
-    proj = install_project(modules_dir, "proj9")
+    proj = install_project(modules_dir, "proj9", tmpdir)
     app(["modules", "install"])
     print(os.listdir(proj))
 

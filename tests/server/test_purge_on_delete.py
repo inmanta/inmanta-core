@@ -22,7 +22,7 @@ from datetime import datetime
 
 import pytest
 
-from inmanta import const, data
+from inmanta import config, const, data
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters
 from inmanta.main import Client
@@ -50,6 +50,9 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
     """
     Test purge on delete of resources and inversion of requires
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client
@@ -177,6 +180,9 @@ async def test_purge_on_delete_compile_failed(client: Client, server: Server, cl
     """
     Test purge on delete of resources
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client
@@ -279,6 +285,9 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     """
     Test purge on delete of resources
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client
@@ -533,6 +542,9 @@ async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelpe
     """
     Test disable purge on delete of resources
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     await agent.start()
     aclient = agent._client

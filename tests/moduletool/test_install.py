@@ -148,8 +148,8 @@ def test_bad_dep_checkout(modules_dir, modules_repo):
         ModuleTool().execute("install", [])
 
 
-def test_master_checkout(modules_dir, modules_repo):
-    coroot = install_project(modules_dir, "masterproject")
+def test_master_checkout(modules_dir: str, modules_repo: str, tmpdir):
+    coroot = install_project(modules_dir, "masterproject", tmpdir)
 
     ModuleTool().execute("install", [])
 

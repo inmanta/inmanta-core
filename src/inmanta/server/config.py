@@ -108,7 +108,6 @@ def get_bind_port() -> int:
             warnings.warn(
                 "Ignoring the server_rest_transport.port config option since the new config options "
                 "server.bind-port/server.bind-address are used.",
-                category=DeprecationWarning,
             )
         return server_bind_port.get()
     else:

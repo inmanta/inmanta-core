@@ -1,0 +1,6 @@
+---
+description: Fix issue where the documentation of the `inmanta module freeze` command incorrectly indicates that it updates the project.yml file, while it updates the module.yml file.
+change-type: patch
+destination-branches: [master, iso5, iso4]
+sections:
+  bugfix: "{{description}}"
