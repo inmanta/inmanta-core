@@ -182,7 +182,7 @@ class DatabaseOrder:
         sort: str,
     ) -> "DatabaseOrder":
         valid_sort_pattern: Pattern[str] = re.compile(
-            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
+            f"^({'|'.join(cls.get_valid_sort_columns().keys())})\\.(asc|desc)$", re.IGNORECASE
         )
         match = valid_sort_pattern.match(sort)
         if match and len(match.groups()) == 2:
@@ -231,7 +231,7 @@ class DatabaseOrder:
         return ColumnNameStr(value_reference)
 
     def __str__(self) -> str:
-        return f"{self.order_by_column}.{self.order}"
+        return f"{self.order_by_column}.{self.order.value.lower()}"
 
     def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
         """ The type of the order by column"""
@@ -2886,7 +2886,7 @@ class Compile(BaseDocument):
     @classmethod
     async def get_next_compiles_count(cls) -> int:
         """Get the number of compiles in the queue for ALL environments"""
-        result = await cls._fetchval(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
+        result = await cls._fetchval(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled AND completed IS NULL")
         return result
 
     @classmethod
@@ -4800,15 +4800,22 @@ class ConfigurationModel(BaseDocument):
 
                 status = ores["status"]
                 # available -> next version
-                if status in [ResourceState.available.name]:
+                if status == ResourceState.available.name:
                     next.append(res)
+
+                # deploying
+                # same hash -> next version
+                # different hash -> increment
+                elif status in [ResourceState.deploying.name, ResourceState.processing_events.name]:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
+                        next.append(res)
+                    else:
+                        increment.append(res)
 
                 # -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
-                    ResourceState.deploying.name,
-                    ResourceState.processing_events.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
                     ResourceState.skipped.name,

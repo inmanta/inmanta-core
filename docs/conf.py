@@ -13,6 +13,7 @@
 # serve to show the default.
 
 import sys, os, pkg_resources, datetime
+from sphinx.errors import ConfigError
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -92,7 +93,18 @@ if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
     #    this value will be overwritten with the ISO product version.
     version = "1.0.0"
 else:
-    version = pkg_resources.get_distribution("inmanta").version
+    try:
+        version = pkg_resources.get_distribution("inmanta").version
+    except pkg_resources.DistributionNotFound:
+        raise ConfigError(
+            """
+The inmanta package is not installed. This way sphinx failed to discover the version number that should be
+displayed on the documentation pages. Either install the inmanta package or set the environment variable
+INMANTA_DONT_DISCOVER_VERSION when the version number is not important for this documentation build. The latter
+solution will set the version number to 1.0.0.
+            """
+        )
+
 # The full version, including alpha/beta/rc tags.
 release = version
 

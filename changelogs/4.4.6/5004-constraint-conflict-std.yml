@@ -1,0 +1,6 @@
+description: "adapt constraints to not conflict with those of std"
+change-type: patch
+destination-branches:
+  - iso4
+sections:
+  bugfix: "{{description}}"
