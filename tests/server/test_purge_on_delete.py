@@ -45,7 +45,9 @@ async def environment(environment, client):
     yield environment
 
 
-async def test_purge_on_delete_requires(client: Client, server: Server, environment: str, clienthelper: ClientHelper):
+async def test_purge_on_delete_requires(
+    client: Client, server: Server, environment: str, clienthelper: ClientHelper, async_finalizer
+):
     """
     Test purge on delete of resources and inversion of requires
     """
@@ -53,6 +55,7 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
     config.Config.set("config", "agent-repair-interval", "0")
 
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -145,7 +148,6 @@ async def test_purge_on_delete_requires(client: Client, server: Server, environm
 
     assert len(file2["attributes"]["requires"]) == 0
     assert file1["id"] in file2["provides"]
-    await agent.stop()
 
 
 async def test_purge_on_delete_compile_failed_with_compile(
@@ -178,7 +180,9 @@ async def test_purge_on_delete_compile_failed_with_compile(
     assert result.result["model"]["total"] == 0
 
 
-async def test_purge_on_delete_compile_failed(client: Client, server: Server, clienthelper: ClientHelper, environment: str):
+async def test_purge_on_delete_compile_failed(
+    client: Client, server: Server, clienthelper: ClientHelper, environment: str, async_finalizer
+):
     """
     Test purge on delete of resources
     """
@@ -186,6 +190,7 @@ async def test_purge_on_delete_compile_failed(client: Client, server: Server, cl
     config.Config.set("config", "agent-repair-interval", "0")
 
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -287,7 +292,7 @@ async def test_purge_on_delete_compile_failed(client: Client, server: Server, cl
     assert len(result.result["unknowns"]) == 1
 
 
-async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, server: Server, environment: str):
+async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, server: Server, environment: str, async_finalizer):
     """
     Test purge on delete of resources
     """
@@ -295,6 +300,7 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     config.Config.set("config", "agent-repair-interval", "0")
 
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -422,14 +428,16 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     assert file1["attributes"]["purged"]
     assert file2["attributes"]["purged"]
     assert not file3["attributes"]["purged"]
-    await agent.stop()
 
 
-async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper, server: Server, environment: str):
+async def test_purge_on_delete_ignore(
+    client: Client, clienthelper: ClientHelper, server: Server, environment: str, async_finalizer
+):
     """
     Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -554,10 +562,11 @@ async def test_purge_on_delete_ignore(client: Client, clienthelper: ClientHelper
     assert result.code == 200
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
-    await agent.stop()
 
 
-async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelper, server: Server, environment: str):
+async def test_disable_purge_on_delete(
+    client: Client, clienthelper: ClientHelper, server: Server, environment: str, async_finalizer
+):
     """
     Test disable purge on delete of resources
     """
@@ -565,6 +574,7 @@ async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelpe
     config.Config.set("config", "agent-repair-interval", "0")
 
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
     env = await data.Environment.get_by_id(environment)
@@ -627,5 +637,3 @@ async def test_disable_purge_on_delete(client: Client, clienthelper: ClientHelpe
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["total"] == 0
-
-    await agent.stop()

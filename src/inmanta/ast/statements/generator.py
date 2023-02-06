@@ -697,6 +697,8 @@ class Constructor(ExpressionStatement):
 
         # check if the instance already exists in the index (if there is one)
         instances: List[Instance] = []
+        # register any potential index collision
+        collisions: abc.MutableMapping[tuple[str, ...], Instance] = {}
         for index in type_class.get_indices():
             params = []
             for attr in index:
@@ -708,6 +710,7 @@ class Constructor(ExpressionStatement):
                 if obj.get_type() != type_class:
                     raise DuplicateException(self, obj, "Type found in index is not an exact match")
                 instances.append(obj)
+                collisions[tuple(index)] = obj
 
         object_instance: Instance
         graph: Optional[DataflowGraph] = resolver.dataflow_graph
@@ -719,11 +722,16 @@ class Constructor(ExpressionStatement):
                         (i.instance_node for i in instances if i.instance_node is not None),
                     )
                 )
+
             # ensure that instances are all the same objects
             first = instances[0]
             for i in instances[1:]:
                 if i != first:
-                    raise Exception("Inconsistent indexes detected!")
+                    raise IndexCollisionException(
+                        msg=("Inconsistent indexes detected!\n"),
+                        constructor=self,
+                        collisions=collisions,
+                    )
 
             object_instance = first
             self.copy_location(object_instance)
@@ -848,3 +856,20 @@ class WrappedKwargs(ExpressionStatement):
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
         return list(dct.items())
+
+
+class IndexCollisionException(RuntimeException):
+    """Exception raised when an index collision is detected"""
+
+    def __init__(
+        self,
+        msg: str,
+        collisions: abc.Mapping[tuple[str, ...], Instance],
+        constructor: Constructor,
+    ) -> None:
+        super().__init__(stmt=constructor, msg=msg)
+        self.collisions: abc.Mapping[tuple[str, ...], Instance] = collisions
+        self.constructor: Constructor = constructor
+
+    def importantance(self) -> int:
+        return 10

@@ -1,0 +1,4 @@
+---
+description: Remove predictive test selection.
+change-type: patch
+destination-branches: [master, iso6]

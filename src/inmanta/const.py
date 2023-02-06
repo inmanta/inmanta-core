@@ -328,3 +328,6 @@ class NotificationSeverity(str, Enum):
 CF_CACHE_DIR = ".cfcache"
 
 PG_ADVISORY_KEY_PUT_VERSION = 1
+
+# The filename of the changelog file in an Inmanta module
+MODULE_CHANGELOG_FILE = "CHANGELOG.md"

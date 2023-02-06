@@ -465,6 +465,9 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods_v2.environment_list)
     async def environment_list(self, details: bool = False) -> List[model.Environment]:
+        # data access framework does not support multi-column order by, but multi-environment projects are rare
+        # (and discouraged)
+        # => sort by primary column in SQL, then do full sort in Python, cheap because mostly sorted already by this point
         env_list = await data.Environment.get_list(details=details, order_by_column="project")
         return sorted((env.to_dto() for env in env_list), key=lambda e: (e.project_id, e.name, e.id))
 

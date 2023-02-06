@@ -126,6 +126,8 @@ def start_server(options: argparse.Namespace) -> None:
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
 
@@ -155,6 +157,8 @@ def start_server(options: argparse.Namespace) -> None:
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
+
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
@@ -491,7 +495,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
-    parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
+    parser.add_argument("--ssl", help="Enable SSL", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
         "-X",
@@ -583,8 +587,8 @@ def export(options: argparse.Namespace) -> None:
     if options.token is not None:
         Config.set("compiler_rest_transport", "token", options.token)
 
-    if options.ssl:
-        Config.set("compiler_rest_transport", "ssl", "true")
+    if options.ssl is not None:
+        Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)

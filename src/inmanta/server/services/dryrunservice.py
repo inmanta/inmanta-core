@@ -125,7 +125,8 @@ class DyrunService(protocol.ServerSlice):
         self, dryrun_id: uuid.UUID, resources: List[data.Resource], diff_status: Optional[ResourceDiffStatus] = None
     ):
         for res in resources:
-            parsed_id = Id.parse_id(res.resource_version_id)
+            parsed_id = Id.parse_id(res.resource_id)
+            parsed_id.set_version(res.model)
             payload = {
                 "changes": {},
                 "id_fields": {
@@ -135,10 +136,10 @@ class DyrunService(protocol.ServerSlice):
                     "attribute_value": parsed_id.attribute_value,
                     "version": res.model,
                 },
-                "id": res.resource_version_id,
+                "id": parsed_id.resource_version_str(),
             }
             payload = {**payload, "diff_status": diff_status} if diff_status else payload
-            await data.DryRun.update_resource(dryrun_id, res.resource_version_id, payload)
+            await data.DryRun.update_resource(dryrun_id, parsed_id.resource_version_str(), payload)
 
     @handle(methods_v2.dryrun_trigger, env="tid")
     async def dryrun_trigger(self, env: data.Environment, version: int) -> uuid.UUID:

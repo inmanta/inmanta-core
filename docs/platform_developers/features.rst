@@ -5,6 +5,7 @@ A default Inmanta install comes with all features enabled by default. :inmanta.c
 to a yaml file that enables or disables features. The format of this file is:
 
 .. code-block:: yaml
+
     slices:
         slice_name:
             feature_name: bool

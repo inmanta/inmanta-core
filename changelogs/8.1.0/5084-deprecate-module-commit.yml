@@ -1,0 +1,7 @@
+description: "Deprecated the `inmanta module commit` command"
+change-type: patch
+sections:
+  deprecation-note: "The `inmanta module commit` command has been deprecated in favor of the `inmanta module release` command."
+destination-branches:
+  - iso6
+  - master

@@ -25,6 +25,7 @@ import shutil
 import uuid
 from collections import abc
 from dataclasses import dataclass
+from datetime import timezone
 from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
 import pytest
@@ -623,18 +624,18 @@ async def resource_action_consistency_check():
         - both methods are in use (i.e. the queries return at least one record)
     """
 
-    async with data.ResourceAction.get_connection() as postgresql_client:
+    async def get_data(postgresql_client):
         post_ra_one = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resourceaction as ra
+            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
                     INNER JOIN public.resource as r
-                    ON r.resource_version_id = ANY(ra.resource_version_ids)
+                    ON r.resource_id || ',v=' || r.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
             """
         )
-        all_ra_set = {(r[0], r[1], r[2]) for r in post_ra_one}
+        post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
         post_ra_two = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resource as r
+            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resource as r
                     INNER JOIN public.resourceaction_resource as jt
                          ON r.environment = jt.environment
                         AND r.resource_id = jt.resource_id
@@ -643,6 +644,22 @@ async def resource_action_consistency_check():
                         ON ra.action_id = jt.resource_action_id
             """
         )
-        assert all_ra_set == {(r[0], r[1], r[2]) for r in post_ra_two}
+        post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
+        return post_ra_one_set, post_ra_two_set
 
-        assert all_ra_set
+    # The above-mentioned queries have to be executed with at least the repeatable_read isolation level.
+    # Otherwise it might happen that a repair run adds more resource actions between the execution of both queries.
+    (post_ra_one_set, post_ra_two_set) = await data.ResourceAction.execute_in_retryable_transaction(
+        get_data, tx_isolation_level="repeatable_read"
+    )
+    assert post_ra_one_set == post_ra_two_set
+    assert post_ra_one_set
+
+
+def get_as_naive_datetime(timestamp: datetime) -> datetime:
+    """
+    Convert the give timestamp, which is timezone aware, into a naive timestamp object in UTC.
+    """
+    if timestamp.tzinfo is None:
+        return timestamp
+    return timestamp.astimezone(timezone.utc).replace(tzinfo=None)

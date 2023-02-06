@@ -28,6 +28,7 @@ import utils
 from inmanta import config, const, data
 from inmanta.agent.agent import Agent
 from inmanta.const import ResourceAction, ResourceState
+from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
@@ -199,7 +200,7 @@ class MultiVersionSetup(object):
 
         # increments are complements, without the undeployables
         assert {
-            resource["id"]
+            Id.parse_id(resource["id"]).resource_str()
             for resource in self.versions[version]
             if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]
         } == set(pos).union(set(neg))
@@ -353,7 +354,7 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
         setup.add_resource("R9", "A1 E2 D1", True)
         setup.add_resource("R10", "A1 A1 D1", False)
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
-        setup.add_resource("R14", "A1 A1 d1 D1", True)
+        setup.add_resource("R14", "A1 A1 d1 D1", False)  # issue 5434
         setup.add_resource("R15", "SU1 A1", False)
         setup.add_resource("R16", "A1 SU1 A1", True)
         setup.add_resource("R17", "D1 SU1 A1", False)
