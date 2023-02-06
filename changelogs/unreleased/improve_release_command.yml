@@ -1,0 +1,6 @@
+description: Support `inmanta module release` options `-c`, `--patch`, `--minor`, `--major` without `--dev`
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement:  "{{description}}"
+
