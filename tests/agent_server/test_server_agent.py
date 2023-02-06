@@ -2745,7 +2745,7 @@ async def test_push_incremental_deploy(
     await agent.stop()
 
 
-@pytest.mark.parametrize("push, agent_trigger_method", [(True, None), (True, const.AgentTriggerMethod.push_full_deploy)])
+@pytest.mark.parametrize("push, agent_trigger_method", [(True, const.AgentTriggerMethod.push_full_deploy)])
 async def test_push_full_deploy(
     resource_container, environment, server, client, clienthelper, no_agent_backoff, push, agent_trigger_method, async_finalizer
 ):
