@@ -1184,7 +1184,7 @@ async def test_compileservice_auto_recompile_wait(
 
         LogSequence(caplog, allow_errors=False).contains(
             "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
-        ).contains("inmanta.server.services.compilerservice", expected_log_level, expected_log_message,).contains(
+        ).contains("inmanta.server.services.compilerservice", expected_log_level, expected_log_message).contains(
             "inmanta.server.services.compilerservice", logging.DEBUG, "Running recompile without waiting"
         )
 
