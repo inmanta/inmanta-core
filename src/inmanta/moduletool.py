@@ -912,7 +912,6 @@ version: 0.0.1dev0"""
         names: Sequence[str] = sorted(project.modules.keys())
         specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
-
             mod: Module = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
@@ -1523,7 +1522,6 @@ build-backend = "setuptools.build_meta"
 
 
 class V2ModuleBuilder:
-
     DISABLE_ISOLATED_ENV_BUILDER_CACHE: bool = False
 
     def __init__(self, module_path: str) -> None:
@@ -1668,7 +1666,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
         result: Set[str] = set()
-        for (dirpath, dirnames, filenames) in os.walk(directory):
+        for dirpath, dirnames, filenames in os.walk(directory):
             if should_ignore(os.path.basename(dirpath)):
                 # ignore whole subdirectory
                 continue

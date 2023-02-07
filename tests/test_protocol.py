@@ -151,7 +151,6 @@ async def test_sync_client_files(client):
 
 
 async def test_client_files_stat(client):
-
     file_names = []
     i = 0
     while i < 10:
@@ -456,7 +455,6 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
 
         @protocol.handle(test_method2)
         async def test_method2i(self, project: List[Project]) -> ReturnValue[List[Project]]:
-
             return ReturnValue(response=project)
 
     rs = Server()
@@ -1336,7 +1334,6 @@ async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db
     class TestServer(ServerSlice):
         @protocol.handle(test_method)
         async def test_methodY(self) -> ReturnValue[str]:  # NOQA
-
             return ReturnValue(response=html_content, content_type=HTML_CONTENT_WITH_UTF8_CHARSET)
 
     rs = Server()

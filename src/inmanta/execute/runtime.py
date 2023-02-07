@@ -1015,7 +1015,6 @@ Typeorvalue = Union[Type, ResultVariable]
 
 
 class Resolver(object):
-
     __slots__ = ("namespace", "dataflow_graph")
 
     def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
@@ -1080,7 +1079,6 @@ class VariableResolver(Resolver):
 
 
 class NamespaceResolver(Resolver):
-
     __slots__ = ("parent", "root")
 
     def __init__(self, parent: Resolver, lecial_root: Namespace) -> None:
@@ -1103,7 +1101,6 @@ class NamespaceResolver(Resolver):
 
 
 class ExecutionContext(Resolver):
-
     __slots__ = ("block", "slots", "resolver")
 
     def __init__(self, block: "BasicBlock", resolver: Resolver):
@@ -1275,9 +1272,8 @@ class Instance(ExecutionContext):
         print("------------ ")
         print(str(self))
         print("------------ ")
-        for (n, v) in self.slots.items():
+        for n, v in self.slots.items():
             if v.can_get():
-
                 value = v.value
                 print("%s\t\t%s" % (n, value))
             else:

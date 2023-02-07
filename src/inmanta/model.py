@@ -102,7 +102,6 @@ class Attribute(object):
 
     @staticmethod
     def from_dict(ctx: JsonType) -> None:
-
         return Attribute(
             mytype=ctx["type"],
             nullable=ctx["nullable"],
@@ -163,7 +162,6 @@ class ReferenceValue(Value):
     """
 
     def __init__(self, reference):
-
         self.reference = reference
 
     def to_dict(self) -> JsonType:

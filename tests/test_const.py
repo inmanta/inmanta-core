@@ -28,7 +28,6 @@ from inmanta.const import (
 
 
 def test_action_set_consistency():
-
     undep = set(UNDEPLOYABLE_STATES)
     transient = set(TRANSIENT_STATES)
     not_done = set(NOT_DONE_STATES)
