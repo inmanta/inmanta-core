@@ -20,7 +20,7 @@ pyformance==0.4
 PyJWT==2.6.0
 python-dateutil==2.8.2
 pyyaml==6.0
-setuptools==67.1.0
+setuptools==67.2.0
 texttable==1.6.7
 tornado==6.2
 toml==0.10.2
