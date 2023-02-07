@@ -286,6 +286,7 @@ def clear_environment(id: uuid.UUID):
 
     :raises NotFound: The given environment doesn't exist.
     :raises Forbidden: The given environment is protected.
+
     """
 
 
@@ -302,7 +303,7 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
     """
     Send a heartbeat to the server
 
-    :paran sid: The session ID used by this agent at this moment
+    :param sid: The session ID used by this agent at this moment
     :param tid: The environment this node and its agents belongs to
     :param endpoint_names: The names of the endpoints on this node
     :param nodename: The name of the node from which the heart beat comes
@@ -971,10 +972,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
     Get the state for this agent.
 
-    returns a map
-    {
-     enabled: bool
-    }
+    :return: A map with key enabled and value a boolean.
     """
 
 

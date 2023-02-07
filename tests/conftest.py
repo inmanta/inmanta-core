@@ -233,6 +233,19 @@ def postgres_db(request: pytest.FixtureRequest):
 
 
 @pytest.fixture
+async def postgres_db_debug(postgres_db, database_name) -> abc.AsyncIterator[None]:
+    """
+    Fixture meant for debugging through manual interaction with the database. Run pytest with `-s/--capture=no`.
+    """
+    yield
+    print(
+        "Connection to DB will be kept alive for one hour. Connect with"
+        f" `psql --host localhost --port {postgres_db.port} {database_name} {postgres_db.user}`"
+    )
+    await asyncio.sleep(3600)
+
+
+@pytest.fixture
 def ensure_running_postgres_db_post(postgres_db):
     yield
     if not postgres_db.running():
@@ -1389,11 +1402,15 @@ class CLI(object):
 
 
 @pytest.fixture
-def cli():
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-    o = CLI()
-    yield o
+def cli(caplog):
+    # caplog will break this code when emitting any log line to cli
+    # due to mysterious interference when juggling with sys.stdout
+    # https://github.com/pytest-dev/pytest/issues/10553
+    with caplog.at_level(logging.FATAL):
+        # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
+        asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
+        o = CLI()
+        yield o
 
 
 class AsyncCleaner(object):
