@@ -62,6 +62,11 @@ class EnvironmentFactory:
         self._ready = True
 
     async def create_environment(self, main: str = "", *, name: Optional[str] = None) -> data.Environment:
+        """
+        A new environment is created on the server each time this method is invoked, but all these environments
+        use the same source directory on disk. It's the responsibility of the user to make sure that no concurrent
+        compilation are done of each of these environments.
+        """
         await self.setup()
         branch: str = name if name is not None else str(uuid.uuid4())
         subprocess.check_output(["git", "checkout", "-b", branch], cwd=self.src_dir)
