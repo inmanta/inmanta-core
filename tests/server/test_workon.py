@@ -18,11 +18,11 @@
 import asyncio
 import asyncio.subprocess
 import getpass
-import itertools
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 import uuid
 from collections import abc
@@ -168,29 +168,33 @@ async def simple_environments(client: protocol.Client) -> abc.AsyncIterator[abc.
 
 
 @pytest.fixture
-async def compiled_environments(
-    client: protocol.Client, environment_factory: EnvironmentFactory
-) -> abc.AsyncIterator[abc.Sequence[data.model.Environment]]:
+async def compiled_environments(client: protocol.Client) -> abc.AsyncIterator[abc.Sequence[data.model.Environment]]:
     """
     Initialize some environments with an empty main.cf and trigger a single compile.
     """
-    nb_environments: int = 3
-    environments: abc.Sequence[data.model.Environment] = [
-        (await environment_factory.create_environment(name=f"env-{i}")).to_dto() for i in range(nb_environments)
-    ]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        nb_environments: int = 3
+        environments: abc.Sequence[data.model.Environment] = [
+            (
+                await EnvironmentFactory(os.path.join(tmpdirname, f"env-{i}"), project_name=f"project-{i}").create_environment(
+                    name=f"env-{i}"
+                )
+            ).to_dto()
+            for i in range(nb_environments)
+        ]
 
-    for env in environments:
-        result: protocol.Result = await client.notify_change(env.id)
-        assert result.code == 200
+        for env in environments:
+            result: protocol.Result = await client.notify_change(env.id)
+            assert result.code == 200
 
-    async def all_compiles_done() -> bool:
-        return all(
-            result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
-        )
+        async def all_compiles_done() -> bool:
+            return all(
+                result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
+            )
 
-    await utils.retry_limited(all_compiles_done, 15)
+        await utils.retry_limited(all_compiles_done, 15)
 
-    yield environments
+        yield environments
 
 
 def test_workon_source_check() -> None:
@@ -647,7 +651,10 @@ async def test_workon_non_unique_name(
                 [
                     [project_name, str(env.project_id), env.name, str(env.id)]
                     for (project_name, env) in sorted(
-                        (("second_project", new_env), *zip(itertools.repeat("test"), compiled_environments)),
+                        (
+                            ("second_project", new_env),
+                            *zip((f"project-{i}" for i in range(len(compiled_environments))), compiled_environments),
+                        ),
                         key=lambda t: (t[1].project_id, t[1].name, t[1].id),
                     )
                 ],
