@@ -37,10 +37,10 @@ async def environment_factory(tmpdir) -> abc.AsyncIterator["EnvironmentFactory"]
 
 
 class EnvironmentFactory:
-    def __init__(self, dir: str) -> None:
+    def __init__(self, dir: str, project_name: str = "test") -> None:
         self.src_dir: str = os.path.join(dir, "src")
         self.libs_dir: str = os.path.join(self.src_dir, "libs")
-        self.project: data.Project = data.Project(name="test")
+        self.project: data.Project = data.Project(name=project_name)
         self._ready: bool = False
 
     async def setup(self) -> None:
