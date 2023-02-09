@@ -17,7 +17,9 @@
 """
 import collections.abc
 import logging
-from typing import List, Optional
+from collections import abc
+from dataclasses import dataclass
+from typing import List, NamedTuple, Optional
 
 from asyncpg import Connection
 
@@ -161,3 +163,72 @@ AND routine_schema = 'public';
         ",".join(type_names),
         ",".join(function_names),
     )
+
+
+class ColumnDefinition(NamedTuple):
+    """
+    :param name: The name of the column.
+    :param is_list: A boolean that indicates whether this column has the type list.
+    :param default: The default value of this column. Or None, when this column doesn't have a default value.
+    """
+
+    name: str
+    is_list: bool = False
+    default: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class EnumUpdateDefinition:
+    """
+    A definition on how an existing enum in the database has to be updated.
+
+    :param name: The name of the enumeration.
+    :param values: The values the enum should have after the update.
+    :param deleted_values: A dictionary that indicates which elements are deleted from the existing enum and how
+                           they should be migrated. The key of the dictionary is the name of the removed enum value
+                           and the value of the dictionary is the value it should be replaced with or None if the new value
+                           should be NULL.
+    :param columns: A dictionary that indicates which columns of which tables are using the enum.
+                    The key of the dictionary contains the name of the table.
+    """
+
+    name: str
+    values: abc.Sequence[str]
+    deleted_values: abc.Mapping[str, Optional[str]]
+    columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]]
+
+
+async def replace_enum_type(new_type: EnumUpdateDefinition, *, connection: Connection) -> None:
+    """
+    Completely replaces an enum type with a new definition with the same name.
+
+    :param new_type: The definition of the new type. Assumed to be an internal construct, this method is not safe against
+                     injections via this object's attributes.
+    """
+    temp_name: str = f"_old_{new_type.name}"
+    await connection.execute(
+        f"""
+        ALTER TYPE {new_type.name} RENAME TO {temp_name};
+        CREATE TYPE {new_type.name} AS ENUM(%s);
+        """
+        % (", ".join(f"'{v}'" for v in new_type.values))
+    )
+    for table, columns in new_type.columns.items():
+        for column, is_list, default in columns:
+            for old_value, new_value in new_type.deleted_values.items():
+                await connection.execute(f"UPDATE {table} SET {column}=$1 WHERE {column}=$2", new_value, old_value)
+            await connection.execute(f"ALTER TABLE {table} ALTER COLUMN {column} DROP DEFAULT")
+            if is_list:
+                # can't cast directly between enums -> go via varchar
+                await connection.execute(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {new_type.name}[]"
+                    f"USING {column}::varchar[]::{new_type.name}[]"
+                )
+            else:
+                # can't cast directly between enums -> go via varchar
+                await connection.execute(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} TYPE {new_type.name} USING {column}::varchar::{new_type.name}"
+                )
+            if default:
+                await connection.execute(f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT '{default}'")
+    await connection.execute(f"DROP TYPE {temp_name}")
