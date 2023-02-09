@@ -730,8 +730,8 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
-    await a.start()
     async_finalizer(a.stop)
+    await a.start()
 
     # Wait until session is created
     await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
@@ -763,6 +763,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
     await a.start()
+    async_finalizer(a.stop)
 
     # Verify that session creation fails and server state is stays consistent
     await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)

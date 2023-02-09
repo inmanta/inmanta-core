@@ -73,12 +73,15 @@ class EnvironmentFactory:
         return environment
 
     def write_main(self, main: str, environment: Optional[data.Environment] = None) -> None:
+        self.write_file(path="main.cf", content=main, environment=environment)
+
+    def write_file(self, path: str, content: str, environment: Optional[data.Environment] = None) -> None:
         if environment is not None:
             subprocess.check_output(["git", "checkout", environment.repo_branch], cwd=self.src_dir)
-        with open(os.path.join(self.src_dir, "main.cf"), "w", encoding="utf-8") as fd:
-            fd.write(main)
-        subprocess.check_output(["git", "add", "main.cf"], cwd=self.src_dir)
-        subprocess.check_output(["git", "commit", "-m", "write main.cf", "--allow-empty"], cwd=self.src_dir)
+        with open(os.path.join(self.src_dir, path), "w", encoding="utf-8") as fd:
+            fd.write(content)
+        subprocess.check_output(["git", "add", path], cwd=self.src_dir)
+        subprocess.check_output(["git", "commit", "-m", f"write {path}", "--allow-empty"], cwd=self.src_dir)
 
     def add_v1_module(self, module_name: str, *, plugin_code: str, template_dir: str) -> None:
         utils.v1_module_from_template(
