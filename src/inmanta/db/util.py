@@ -194,8 +194,8 @@ class EnumUpdateDefinition:
 
     name: str
     values: abc.Sequence[str]
-    deleted_values: abc.Mapping[str, Optional[str]]  # deleted values mapped to new value if any currently exist
-    columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]]  # columns with defaults
+    deleted_values: abc.Mapping[str, Optional[str]]
+    columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]]
 
 
 async def replace_enum_type(new_type: EnumUpdateDefinition, *, connection: Connection) -> None:
