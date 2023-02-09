@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 import collections.abc
-from collections import abc
 import logging
-from typing import List, Optional, NamedTuple
+from collections import abc
 from dataclasses import dataclass
+from typing import List, NamedTuple, Optional
 
 from asyncpg import Connection
 
