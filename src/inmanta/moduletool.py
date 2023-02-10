@@ -700,19 +700,19 @@ When a development release is done using the --dev option, this command:
         release.add_argument(
             "--major",
             dest="major",
-            help="Do a major version bump compared to the previous stable release. Ignored when --dev is not set.",
+            help="Do a major version bump compared to the previous stable release.",
             action="store_true",
         )
         release.add_argument(
             "--minor",
             dest="minor",
-            help="Do a minor version bump compared to the previous stable release. Ignored when --dev is not set.",
+            help="Do a minor version bump compared to the previous stable release.",
             action="store_true",
         )
         release.add_argument(
             "--patch",
             dest="patch",
-            help="Do a patch version bump compared to the previous stable release. Ignored when --dev is not set.",
+            help="Do a patch version bump compared to the previous stable release.",
             action="store_true",
         )
         release.add_argument("-m", "--message", help="Commit message")
@@ -720,7 +720,7 @@ When a development release is done using the --dev option, this command:
             "-c",
             "--changelog-message",
             help="This changelog message will be written to the changelog file. If the -m option is not provided, "
-            "this message will also be used as the commit message. This option is ignored when --dev is not provided.",
+            "this message will also be used as the commit message.",
         )
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
@@ -912,7 +912,6 @@ version: 0.0.1dev0"""
         names: Sequence[str] = sorted(project.modules.keys())
         specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
-
             mod: Module = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
@@ -1099,6 +1098,12 @@ version: 0.0.1dev0"""
         Turn the given current_version into a dev version with version_tag dev0 and ensure
         the version number is at least `minimal_version_bump_to_prev_release` separated
         from its predecessor in all_existing_stable_version.
+
+        Invariants:
+        1. return a dev version
+        2. this version is at least `minimal_version_bump_to_prev_release`
+            separated from its predecessor in all_existing_stable_version
+        3. it is >= the current version
         """
         version_previous_release: Version
         try:
@@ -1107,24 +1112,63 @@ version: 0.0.1dev0"""
             # No previous release happened
             version_previous_release = Version("0.0.0")
 
+        LOGGER.debug("Previous release was %s", version_previous_release)
+
         assert version_previous_release <= current_version
         current_diff: Optional[ChangeType] = ChangeType.diff(low=version_previous_release, high=current_version)
+
+        LOGGER.debug("Different from current to previous release is %s", current_diff)
+
+        # Determine if we are already sufficiently far ahead
         if current_diff is None or minimal_version_bump_to_prev_release > current_diff:
+            LOGGER.debug(
+                "Incrementing version number because the current difference is smaller than requested difference: %s<%s",
+                current_diff,
+                minimal_version_bump_to_prev_release,
+            )
+            # We are not sufficiently far ahead of the previous release
+            # Increment from current_version
             new_version = VersionOperation.bump_version(
                 minimal_version_bump_to_prev_release, current_version, version_tag="dev0"
             )
-            versions_between_current_and_new_version = [
-                v for v in all_existing_stable_version if current_version < v <= new_version
-            ]
-            if versions_between_current_and_new_version:
-                raise click.ClickException(
-                    f"Stable release {versions_between_current_and_new_version[0]} exists between "
-                    f"current version {current_version} and new version {new_version}"
-                )
-            else:
-                return new_version
+            # invariant 2 holds because
+            # current_version >= version_previous_release
+            # current_version + minimal_version_bump_to_prev_release >=
+            #   version_previous_release + minimal_version_bump_to_prev_release
+            # new_version-version_previous_release >= minimal_version_bump_to_prev_release
         else:
-            return VersionOperation.set_version_tag(current_version, version_tag="dev0")
+            # We are sufficiently far ahead (invariant 2 holds)
+            if current_version.is_devrelease:
+                LOGGER.debug(
+                    "Keeping current dev version because we are sufficiently far ahead of the previous release: %s>=%s",
+                    current_diff,
+                    minimal_version_bump_to_prev_release,
+                )
+                # It is good as it is
+                new_version = current_version
+            else:
+                LOGGER.debug(
+                    "Incrementing to next dev version because we are sufficiently far ahead of the previous release: %s>=%s",
+                    current_diff,
+                    minimal_version_bump_to_prev_release,
+                )
+                # We are a normal or pre release version
+                # Adding 0.0.0.dev would make the new_version < current_version
+                # so we add 0.0.1.dev
+                new_version = VersionOperation.bump_version(ChangeType.PATCH, current_version, version_tag="dev0")
+        LOGGER.debug("New version is %s", new_version)
+
+        # Sanity checks
+        versions_between_current_and_new_version = [
+            v for v in all_existing_stable_version if current_version < v <= new_version
+        ]
+        if versions_between_current_and_new_version:
+            raise click.ClickException(
+                f"Stable release {versions_between_current_and_new_version[0]} exists between "
+                f"current version {current_version} and new version {new_version}"
+            )
+
+        return new_version
 
     def release(
         self,
@@ -1134,48 +1178,66 @@ version: 0.0.1dev0"""
         minor: bool = False,
         major: bool = False,
         changelog_message: Optional[str] = None,
-        add_new_version_to_changelog: bool = False,
     ) -> None:
         """
         Execute the release command.
-
-        :param add_new_version_to_changelog: Indicate that the new version has to be added to the changelog instead of
-                                             bumping the current version. This is used by the recursive call to prevent
-                                             bumping the latest stable release.
         """
+
+        # Validate patch, minor, major
         nb_version_bump_arguments_set = sum([patch, minor, major])
         if nb_version_bump_arguments_set > 1:
             raise click.UsageError("Only one of --patch, --minor and --major can be set at the same time.")
+
+        # Make module
         module_dir = os.path.abspath(os.getcwd())
         module: Module[ModuleMetadata] = self.construct_module(project=DummyProject(), path=module_dir)
         if not gitprovider.is_git_repository(repo=module_dir):
             raise click.ClickException(f"Directory {module_dir} is not a git repository.")
+
+        # Validate current state of the module
         current_version: Version = module.version
         if current_version.epoch != 0:
             raise click.ClickException("Version with an epoch value larger than zero are not supported by this tool.")
         gitprovider.fetch(module_dir)
+
+        # Get history
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
+
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
         changelog: Optional[ModuleChangelog] = (
             ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
         )
-        if dev:
-            requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+
+        requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+        if not requested_version_bump and dev:
+            # Dev always bumps
+            requested_version_bump = ChangeType.PATCH
+
+        if requested_version_bump:
             new_version: Version = self._get_dev_version_with_minimal_distance_to_previous_stable_release(
-                current_version, stable_releases, requested_version_bump if requested_version_bump else ChangeType.PATCH
+                current_version, stable_releases, requested_version_bump
             )
+        else:
+            # Never happens for dev release
+            new_version = current_version
+
+        if not changelog and changelog_message:
+            changelog = ModuleChangelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
+        elif changelog:
+            if current_version.is_devrelease:
+                # Update the existing dev version to the new dev version
+                changelog.rewrite_version_in_changelog_header(old_version=current_version, new_version=new_version)
+            else:
+                changelog.add_section_for_version(current_version, new_version)
+
+            if changelog_message:
+                changelog.add_changelog_entry(current_version, new_version, changelog_message)
+
+        if dev:
             assert new_version.dev is not None and new_version.dev == 0
             new_base_version_str, version_tag = str(new_version).rsplit(".", maxsplit=1)
             module.rewrite_version(new_version=new_base_version_str, version_tag=version_tag)
-            if not changelog and changelog_message:
-                changelog = ModuleChangelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
-            elif changelog:
-                if add_new_version_to_changelog:
-                    changelog.add_section_for_version(current_version, new_version)
-                else:
-                    changelog.rewrite_version_in_changelog_header(old_version=current_version, new_version=new_version)
-                if changelog_message:
-                    changelog.add_changelog_entry(current_version, new_version, changelog_message)
+            # If no changes, commit will not happen
             gitprovider.commit(
                 repo=module_dir,
                 message=changelog_message if changelog_message else message if message else f"Bump version to {new_version}",
@@ -1184,9 +1246,7 @@ version: 0.0.1dev0"""
                 raise_exc_when_nothing_to_commit=False,
             )
         else:
-            if nb_version_bump_arguments_set > 0:
-                LOGGER.warning("Performing a stable release. The --patch, --minor and --major arguments will be ignored.")
-            release_tag: Version = VersionOperation.set_version_tag(current_version, version_tag="")
+            release_tag: Version = VersionOperation.set_version_tag(new_version, version_tag="")
             if release_tag in stable_releases:
                 raise click.ClickException(f"A Git version tag already exists for version {release_tag}")
             module.rewrite_version(new_version=str(release_tag), version_tag="")
@@ -1201,9 +1261,7 @@ version: 0.0.1dev0"""
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
             # bump to the next dev version
-            self.release(
-                dev=True, message="Bump version to next development version", patch=True, add_new_version_to_changelog=True
-            )
+            self.release(dev=True, message="Bump version to next development version", patch=True)
 
 
 class ModuleChangelog:
@@ -1268,15 +1326,16 @@ class ModuleChangelog:
         """
         return "# Changelog"
 
+    def regex_for_changelog_line(self, version: Version) -> re.Pattern[str]:
+        return re.compile(rf"(^#{{1,2}} [vV]?{re.escape(version.base_version)}[^\n]*$)", re.MULTILINE)
+
     def _add_changelog_section(self, content_changelog: str, old_version: Version, new_version: Version) -> str:
         """
         Add a new section for the given new_version to the changelog, given the current content of the changelog file.
         """
         header_for_new_version: str = self._get_header_for_version(new_version)
         # Try to insert the section before the section of the previous version if such a section exists
-        regex_header_previous_version: re.Pattern[str] = re.compile(
-            rf"(^{re.escape(f'## v{old_version.base_version}')}[^\n]*$)", re.MULTILINE
-        )
+        regex_header_previous_version: re.Pattern[str] = self.regex_for_changelog_line(old_version)
         new_content_changelog = regex_header_previous_version.sub(
             repl=f"{header_for_new_version}\n\n\n\\g<1>",
             string=content_changelog,
@@ -1314,7 +1373,7 @@ class ModuleChangelog:
         Return True iff this changelog contains a section of the given version.
         """
         with open(self.path_changelog_file, "r", encoding="utf-8") as fh:
-            regex_version_header: re.Pattern[str] = re.compile(rf"^{re.escape(f'## v{version.base_version} - ')}", re.MULTILINE)
+            regex_version_header: re.Pattern[str] = self.regex_for_changelog_line(version)
             content = fh.read()
             return regex_version_header.search(content) is not None
 
@@ -1463,7 +1522,6 @@ build-backend = "setuptools.build_meta"
 
 
 class V2ModuleBuilder:
-
     DISABLE_ISOLATED_ENV_BUILDER_CACHE: bool = False
 
     def __init__(self, module_path: str) -> None:
@@ -1608,7 +1666,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
         result: Set[str] = set()
-        for (dirpath, dirnames, filenames) in os.walk(directory):
+        for dirpath, dirnames, filenames in os.walk(directory):
             if should_ignore(os.path.basename(dirpath)):
                 # ignore whole subdirectory
                 continue

@@ -345,7 +345,7 @@ def test_add_changelog_entry(tmpdir, modules_dir: str, monkeypatch, initial_chan
     v1_module_from_template(
         source_dir=os.path.join(modules_dir, "minimalv1module"),
         dest_dir=path_module,
-        new_version=Version("1.0.1"),
+        new_version=Version("1.0.1.dev"),
         new_name=module_name,
     )
     gitprovider.git_init(repo=path_module)

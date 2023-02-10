@@ -249,7 +249,6 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
 
 
 async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_table, hard_clean_db, hard_clean_db_post):
-
     db_schema = schema.DBSchema("test_dbschema_update_db_schema", inmanta.db.versions, postgresql_client)
     await db_schema.ensure_self_update()
 
@@ -382,7 +381,6 @@ def test_dbschema_get_dct_with_update_functions():
 async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, hard_clean_db):
     async with postgresql_pool.acquire() as postgresql_client:
         async with postgresql_pool.acquire() as postgresql_client2:
-
             # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
             corev: Set[int] = await get_core_versions(postgresql_client)
 

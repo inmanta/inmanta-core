@@ -1,0 +1,6 @@
+change-type: patch
+description: Improve log message on VenvActivationFailedError
+destination-branches:
+- master
+- iso6
+- iso5

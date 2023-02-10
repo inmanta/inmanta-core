@@ -18,7 +18,8 @@ requires = [
     "jinja2~=3.0",
     "more-itertools>=8,<10",
     "netifaces~=0.11",
-    "packaging>=21.3,<24.0",
+    # leave upper bound floating for fast-moving and extremely stable packaging
+    "packaging>=21.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
@@ -42,7 +43,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "8.1.0"
+version = "8.3.0"
 
 setup(
     version=version,

@@ -706,9 +706,9 @@ async def test_agent_count_metric(clienthelper, client, server):
     assert all(statuses.keys() == {"paused", "up", "down"} for _, statuses in gauges_by_status.items())
     # verify counts
     assert gauges_by_status[env1.id]["paused"].count == 1
-    assert gauges_by_status[env2.id]["paused"].count == 1  # agent3 is not used by any resource so it should not be counted
+    assert gauges_by_status[env2.id]["paused"].count == 2  # agent3 is not used by any resource but it should still be counted
     # verify that all other counts are 0
-    assert sum(abs(gauge.count) for gauge in result_gauge) == 2
+    assert sum(abs(gauge.count) for gauge in result_gauge) == 3
 
 
 async def test_agent_count_metric_empty_datapoint(client, server):
@@ -1335,6 +1335,7 @@ async def test_compile_rate_metric(
             ),
         ]
     )
+
     start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=0).astimezone()
     end_interval = start_interval + timedelta(hours=1)
     nb_datapoints = 10
@@ -1354,6 +1355,25 @@ async def test_compile_rate_metric(
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [
         sum((i * 6) + j for j in range(6)) * nb_datapoints for i in range(nb_datapoints)
     ]
+
+    # The value 0 should be returned when no data is available
+    start_interval = datetime(year=2023, month=1, day=2, hour=9, minute=0).astimezone()
+    end_interval = start_interval + timedelta(hours=1)
+    nb_datapoints = 10
+    result = await client.get_environment_metrics(
+        tid=env1_id,
+        metrics=["orchestrator.compile_rate"],
+        start_interval=start_interval,
+        end_interval=end_interval,
+        nb_datapoints=nb_datapoints,
+    )
+    assert result.code == 200
+    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(end_interval)
+    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
+    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert len(result.result["data"]["metrics"]) == 1
+    assert all(m == 0 for m in result.result["data"]["metrics"]["orchestrator.compile_rate"])
 
 
 async def test_metric_aggregation_no_date(
