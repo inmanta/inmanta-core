@@ -145,8 +145,8 @@ function __inmanta_workon_list {
 
 function __inmanta_workon_activate {
     # Check user
-    current_user = $(whoami)
-    if [ [ $current_user != "root" ] && [ $current_user != ${INMANTA_USER:-inmanta} ] ]; then
+    declare current_user=$(whoami)
+    if [[ "${current_user}" != "root" && "${current_user}" != ${INMANTA_USER:-inmanta} ]]; then
         echo "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install)." >&2
     fi
 
@@ -174,13 +174,20 @@ function __inmanta_workon_activate {
     declare -F deactivate > /dev/null && deactivate
     # store PS1 before sourcing activate because we don't care about virtualenv's modifications
     declare OLD_PS1="$PS1"
+
+    # store INMANTA_CONFIG_ENVIRONMENT before activation
+    if [ -n "${INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
+        _OLD_INMANTA_CONFIG_ENVIRONMENT="${INMANTA_CONFIG_ENVIRONMENT:-}"
+    fi
+    export INMANTA_CONFIG_ENVIRONMENT=$env_id
+
     source "$activate"
     export PS1="($env_name) $OLD_PS1"
-    export INMANTA_CONFIG_ENVIRONMENT=$env_id
+
 
     eval 'inmanta () { python3 -m inmanta.app "$@"; }' # workaround for #4259
 
-    echo "Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed."
+    echo "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed." >&2
     __inmanta_workon_register_deactivate
 }
 
@@ -204,13 +211,19 @@ function __inmanta_workon_register_deactivate {
         unset -f inmanta >/dev/null 2>&1
         # no need to restore PS1 because virtualenv_deactivate already does that
 
-        if [ -n "${INMANTA_CONFIG_ENVIRONMENT}" ] ; then
+        if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
+            # Nested environment case: reset INMANTA_CONFIG_ENVIRONMENT to outer env
+            INMANTA_CONFIG_ENVIRONMENT="${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}"
+            export INMANTA_CONFIG_ENVIRONMENT
+            unset _OLD_INMANTA_CONFIG_ENVIRONMENT
+        else
+            # Outermost environment case: simply unset INMANTA_CONFIG_ENVIRONMENT
             unset INMANTA_CONFIG_ENVIRONMENT
         fi
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
-            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R $user '$inmanta_env_dir'\` as root." >&2
+            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R $user:$user '$inmanta_env_dir'\` as root." >&2
         fi
 
         if [ ! "$1" = "nondestructive" ]; then
