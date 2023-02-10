@@ -4562,7 +4562,7 @@ class ConfigurationModel(BaseDocument):
     def to_dict(self) -> JsonType:
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
-        dct["done"] = self._done
+        dct["done"] = self.done
         return dct
 
     @classmethod
