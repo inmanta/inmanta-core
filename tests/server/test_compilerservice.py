@@ -732,6 +732,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # 5 in the queue, 1 running
     assert compilerslice._queue_count_cache == 5
 
+    async def has_matching_compile_report(first_compile_id: uuid.UUID, second_compile_id: uuid.UUID) -> bool:
+        return await compilerslice.get_report(first_compile_id) == await compilerslice.get_report(second_compile_id)
+
     # finish a compile and wait for service to take on next
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
@@ -746,7 +749,9 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
 
-    assert await compilerslice.get_report(compile_id2) == await compilerslice.get_report(compile_id4)
+    # The "halted" field of a compile report is set asynchronously by a background task.
+    # Use try_limited to prevent a race condition.
+    await retry_limited(lambda: has_matching_compile_report(compile_id2, compile_id4), timeout=10)
     # 2 in the queue, 1 running
     assert compilerslice._queue_count_cache == 2
 
@@ -763,8 +768,8 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     while env.id in compilerslice._recompiles:
         await asyncio.sleep(0.2)
 
-    assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id5)
-    assert await compilerslice.get_report(compile_id3) == await compilerslice.get_report(compile_id6)
+    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id5), timeout=10)
+    await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
 
     # 0 in the queue, 0 running
     assert compilerslice._queue_count_cache == 0
