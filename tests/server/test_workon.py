@@ -207,8 +207,9 @@ def test_workon_source_check() -> None:
     )
     assert process.returncode == 1
     assert process.stdout == ""
-    assert process.stderr.strip() == (
-        f"ERROR: This script is meant to be sourced rather than executed directly: `source '{WORKON_REGISTER}'`"
+    assert (
+        process.stderr.strip()
+        == f"ERROR: This script is meant to be sourced rather than executed directly: `source '{WORKON_REGISTER}'`"
     )
 
 
@@ -313,8 +314,9 @@ async def test_workon_list_no_api(
     """
     result: CliResult = await workon_bash("inmanta-workon --list")
     assert result.exit_code == 0, (result.stderr, result.stdout)
-    assert result.stderr.strip() == (
-        "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+    assert (
+        result.stderr.strip()
+        == "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
     )
     assert result.stdout.strip() == "\n".join(sorted(str(env.id) for env in compiled_environments))
 
@@ -346,14 +348,16 @@ async def test_workon_list_no_api_no_environments(
     result: CliResult = await workon_bash("inmanta-workon --list")
     if server_dir_exists:
         assert result.exit_code == 0, (result.stderr, result.stdout)
-        assert result.stderr.strip() == (
-            "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+        assert (
+            result.stderr.strip()
+            == "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
         )
         assert result.stdout == ""
     else:
         assert result.exit_code == 0
-        assert result.stderr.strip() == (
-            "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+        assert (
+            result.stderr.strip()
+            == "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
             "\n"
             f"WARNING: no environments directory found at '{tmpdir}/doesnotexist/server/environments'. This is expected if no"
             " environments have been compiled yet. Otherwise, make sure you use this function on the server host."
@@ -374,8 +378,8 @@ async def test_workon_list_invalid_config(
     workon_workdir.join(".inmanta.cfg").write("this is not compatible with the cfg format")
     result: CliResult = await workon_bash("inmanta-workon --list")
     assert result.exit_code == 1, (result.stderr, result.stdout)
-    assert result.stderr.strip() == (
-        "ERROR: Failed to determine server bind port. Is the server config valid?"
+    assert (
+        result.stderr.strip() == "ERROR: Failed to determine server bind port. Is the server config valid?"
         "\n"
         "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
         "\n"
@@ -487,14 +491,20 @@ async def test_workon(
         workon_bash,
         str(compiled_environments[0].id),
         expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
-        expect_stderr="WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.\n",
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
     # by name
     await assert_workon_state(
         workon_bash,
         compiled_environments[1].name,
         expected_dir=workon_environments_dir.join(str(compiled_environments[1].id)),
-        expect_stderr="WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.\n",
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
     # .env dir missing
     env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id))
@@ -591,7 +601,10 @@ async def test_workon_broken_cli(
         workon_bash,
         str(compiled_environments[0].id),
         expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
-        expect_stderr="WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.\n",
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
     # by name
     await assert_workon_state(
@@ -709,7 +722,10 @@ async def test_workon_compile(
         expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr="WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.\n",
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
 
 
@@ -734,7 +750,10 @@ async def test_workon_deactivate(
         expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr="WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.",
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed."
+        ),
     )
     # ownership warning on deactivate
     await assert_workon_state(
@@ -747,9 +766,11 @@ async def test_workon_deactivate(
         invert_python_assert=True,
         invert_ps1_assert=True,
         expect_stderr=(
-            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install).\n"
-            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.\n"
-            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `chown -R root:root '{env_dir}'` as root."
+            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be"
+            " able to run pip install or inmanta project install).\nWARNING: Make sure you exit the current environment by"
+            " running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks"
+            " are performed.\nWARNING: Some files in the environment are not owned by the root user. To fix this, run `chown"
+            f" -R root:root '{env_dir}'` as root."
         ),
     )
     # ownership warning on activation of a different environment
@@ -778,14 +799,19 @@ async def test_workon_deactivate(
         invert_ps1_assert=True,  # see mock PS1 in post_activate script
         # expect warnings for env 0 and env 1 but not for env 2 because it is still active
         expect_stderr=(
-            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install).\n"
-            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.\n"
-            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install).\n"
-            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `chown -R root:root '{env_dir}'` as root.\n"
-            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.\n"
-            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be able to run pip install or inmanta project install).\n"
-            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `chown -R root:root '{env1_dir}'` as root.\n"
-            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed."
+            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be"
+            " able to run pip install or inmanta project install).\nWARNING: Make sure you exit the current environment by"
+            " running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks"
+            " are performed.\nWARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write"
+            " access (to be able to run pip install or inmanta project install).\nWARNING: Some files in the environment are"
+            f" not owned by the root user. To fix this, run `chown -R root:root '{env_dir}'` as root.\nWARNING: Make sure you"
+            " exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This"
+            " ensures the proper permission checks are performed.\nWARNING: The inmanta-workon tool should be run as either"
+            " root or the inmanta user to have write access (to be able to run pip install or inmanta project"
+            " install).\nWARNING: Some files in the environment are not owned by the root user. To fix this, run `chown -R"
+            f" root:root '{env1_dir}'` as root.\nWARNING: Make sure you exit the current environment by running the"
+            " 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are"
+            " performed."
         ),
     )
 
@@ -834,7 +860,10 @@ async def test_workon_sets_inmanta_config_environment(
         expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr="WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.",
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed."
+        ),
     )
 
 
@@ -880,5 +909,8 @@ async def test_workon_sets_inmanta_config_environment_empty_outer(
         expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
-        expect_stderr="WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are performed.",
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed."
+        ),
     )
