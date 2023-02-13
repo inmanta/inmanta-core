@@ -212,18 +212,17 @@ function __inmanta_workon_register_deactivate {
         # no need to restore PS1 because virtualenv_deactivate already does that
 
         if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
-            # Nested environment case: reset INMANTA_CONFIG_ENVIRONMENT to outer env
+            # Another env was active prior to inmanta-workon call: restore INMANTA_CONFIG_ENVIRONMENT to its old value
             INMANTA_CONFIG_ENVIRONMENT="${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}"
             export INMANTA_CONFIG_ENVIRONMENT
             unset _OLD_INMANTA_CONFIG_ENVIRONMENT
         else
-            # Outermost environment case: simply unset INMANTA_CONFIG_ENVIRONMENT
             unset INMANTA_CONFIG_ENVIRONMENT
         fi
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
-            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R $user:$user '$inmanta_env_dir'\` as root." >&2
+            echo "WARNING: Some files in the environment are not owned by the $user user. To fix this, run \`chown -R $user:$user '\''$inmanta_env_dir'\''\` as root." >&2
         fi
 
         if [ ! "$1" = "nondestructive" ]; then
