@@ -1,0 +1,6 @@
+description: Minor improvements to the inmanta-workon command.
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
