@@ -471,6 +471,7 @@ class Constructor(ExpressionStatement):
     __slots__ = (
         "class_type",
         "__attributes",
+        "__attribute_locations",
         "__wrapped_kwarg_attributes",
         "location",
         "type",
@@ -492,6 +493,7 @@ class Constructor(ExpressionStatement):
         super().__init__()
         self.class_type = class_type
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
+        self.__attribute_locations: Dict[str, LocatableString] = {}
         self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
@@ -560,7 +562,7 @@ class Constructor(ExpressionStatement):
         for k, v in all_attributes.items():
             attribute = self.type.get_attribute(k)
             if attribute is None:
-                raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                raise TypingException(self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name()))
             if k not in inindex:
                 self._indirect_attributes[k] = v
             else:
@@ -776,6 +778,7 @@ class Constructor(ExpressionStatement):
         name = str(lname)
         if name not in self.__attributes:
             self.__attributes[name] = value
+            self.__attribute_locations[name] = lname
             self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
             self.anchors.extend(value.get_anchors())
         else:
