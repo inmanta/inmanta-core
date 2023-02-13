@@ -109,7 +109,6 @@ class ConflictingRequirements(CompilerException):
     """
 
     def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
-
         CompilerException.__init__(self, msg=message)
         self.conflicts = conflicts
 

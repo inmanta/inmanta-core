@@ -302,7 +302,6 @@ class GradualSetAttributeHelper(ResultCollector[T]):
 
 
 class SetAttributeHelper(ExecutionUnit):
-
     __slots__ = ("stmt", "instance", "attribute_name")
 
     def __init__(

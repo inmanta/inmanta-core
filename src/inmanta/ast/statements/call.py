@@ -262,7 +262,6 @@ class PluginFunction(Function):
 
 
 class FunctionUnit(Waiter):
-
     __slots__ = ("result", "base_requires", "function", "resolver")
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:

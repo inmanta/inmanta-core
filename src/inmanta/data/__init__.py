@@ -3333,7 +3333,7 @@ class Agent(BaseDocument):
                                            primary. If the session id is None, the Agent doesn't have a primary anymore.
         :param now: Timestamp of this failover
         """
-        for (endpoint, sid) in endpoints_with_new_primary:
+        for endpoint, sid in endpoints_with_new_primary:
             # Lock mode is required because we will update in this transaction
             # Deadlocks with cleanup otherwise
             agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
@@ -4910,7 +4910,7 @@ class ConfigurationModel(BaseDocument):
     def to_dict(self) -> JsonType:
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
-        dct["done"] = self._done
+        dct["done"] = self.done
         return dct
 
     @classmethod
