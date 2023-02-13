@@ -2471,11 +2471,11 @@ class Environment(BaseDocument):
         ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
             name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
             typ="enum",
-            default=const.AgentTriggerMethod.push_full_deploy.name,
+            default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use. "
-            f"If {PUSH_ON_AUTO_DEPLOY} is enabled, "
-            f"{AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} overrides this setting",
+            doc="The agent trigger method to use when no specific method is specified in the API call. "
+            "This determines the behavior of the 'Promote' button. "
+            f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
