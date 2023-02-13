@@ -27,16 +27,6 @@ from inmanta.server import protocol as server_protocol
 
 LOGGER = logging.getLogger(__name__)
 
-# TODO: Add support for username in header and auth through reverse proxy
-# TODO: Invalid usernames: login, password
-# TODO: add disable to user
-# TODO: add user details (name, email, ...)
-# TODO: add access to environments
-# TODO: populate from external (header, oidc, ...)
-# TODO: Add roles that list access per API endpoint
-# TODO: add roles that also constrain on arguments, for example only one lsm service
-# TODO: how do we logout? A token blacklist
-
 
 class UserService(server_protocol.ServerSlice):
     """Slice for managing users"""
