@@ -562,7 +562,9 @@ class Constructor(ExpressionStatement):
         for k, v in all_attributes.items():
             attribute = self.type.get_attribute(k)
             if attribute is None:
-                raise TypingException(self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                raise TypingException(
+                    self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
+                )
             if k not in inindex:
                 self._indirect_attributes[k] = v
             else:
