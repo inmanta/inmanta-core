@@ -250,3 +250,25 @@ implement A using std::none
         """,
         """Syntax error: The use of default constructors is no longer supported ({dir}/main.cf:2:9)""",
     )
+
+
+def test_multi_line_constructor(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity ManyFields:
+    string a
+    string b
+    string c
+end
+
+implement ManyFields using std::none
+
+ManyFields(
+    a = "A",
+    b = "B",
+    c = "C",
+    d = "D",
+)
+""",
+        """no attribute d on type __config__::ManyFields (reported in d ({dir}/main.cf:14:5))""",  # noqa: E501
+    )
