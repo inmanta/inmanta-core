@@ -158,7 +158,7 @@ class RESTHandler(tornado.web.RequestHandler):
                 self.respond({"message": "Unable to decode request body"}, {}, 400)
 
             except exceptions.BaseHttpException as e:
-                LOGGER.warning("Got %d status code: %s", e.to_status(), e.to_body())
+                LOGGER.warning("Received an exception with status code %d and message %s", e.to_status(), e.to_body())
                 self.respond(e.to_body(), {}, e.to_status())
 
             except CancelledError:
