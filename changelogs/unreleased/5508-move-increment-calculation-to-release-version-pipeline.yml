@@ -1,0 +1,6 @@
+description: Move increment calculation to release_version pipeline.
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
