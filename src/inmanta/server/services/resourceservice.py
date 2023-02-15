@@ -307,16 +307,7 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = self._increment_cache.get(env.id, None)
-        if increment is None:
-            lock = self._increment_cache_locks[env.id]
-            async with lock:
-                increment = self._increment_cache.get(env.id, None)
-                if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version)
-                    self._increment_cache[env.id] = increment
-
-        increment_ids, neg_increment = increment
+        increment_ids, neg_increment = await self._get_increment(env, version)
 
         # set already done to deployed
         now = datetime.datetime.now().astimezone()
@@ -325,31 +316,7 @@ class ResourceService(protocol.ServerSlice):
             idr = Id.parse_id(res)
             return idr.get_agent_name() == agent
 
-        neg_increment_version_ids: list[ResourceVersionIdStr] = [
-            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in neg_increment if on_agent(res_id)
-        ]
-
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_utc_isoformat(now),
-            "args": [],
-        }
-        await self.resource_action_update(
-            env,
-            neg_increment_version_ids,
-            action_id=uuid.uuid4(),
-            started=now,
-            finished=now,
-            status=const.ResourceState.deployed,
-            # does this require a different ResourceAction?
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[logline],
-            change=const.Change.nochange,
-            send_events=False,
-            keep_increment_cache=True,
-        )
+        await self._mark_deployed(env, neg_increment, now, on_agent, version)
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
@@ -389,6 +356,44 @@ class ResourceService(protocol.ServerSlice):
             await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+
+    async def _mark_deployed(self, env, neg_increment, now, on_agent, version):
+        neg_increment_version_ids: list[ResourceVersionIdStr] = [
+            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in neg_increment if on_agent(res_id)
+        ]
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": util.datetime_utc_isoformat(now),
+            "args": [],
+        }
+        await self.resource_action_update(
+            env,
+            neg_increment_version_ids,
+            action_id=uuid.uuid4(),
+            started=now,
+            finished=now,
+            status=const.ResourceState.deployed,
+            # does this require a different ResourceAction?
+            action=const.ResourceAction.deploy,
+            changes={},
+            messages=[logline],
+            change=const.Change.nochange,
+            send_events=False,
+            keep_increment_cache=True,
+        )
+
+    async def _get_increment(self, env, version):
+        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = self._increment_cache.get(env.id, None)
+        if increment is None:
+            lock = self._increment_cache_locks[env.id]
+            async with lock:
+                increment = self._increment_cache.get(env.id, None)
+                if increment is None:
+                    increment = await data.ConfigurationModel.get_increment(env.id, version)
+                    self._increment_cache[env.id] = increment
+        increment_ids, neg_increment = increment
+        return increment_ids, neg_increment
 
     @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
     async def resource_deploy_done(

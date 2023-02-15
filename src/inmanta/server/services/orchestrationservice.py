@@ -26,7 +26,7 @@ import asyncpg
 import asyncpg.connection
 import pydantic
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.const import ResourceState
 from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE, InvalidSort
 from inmanta.data.dataview import DesiredStateVersionView
@@ -889,7 +889,6 @@ class OrchestrationService(protocol.ServerSlice):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
 
         if model.total == 0:
             await model.mark_done(connection=connection)
@@ -935,6 +934,13 @@ class OrchestrationService(protocol.ServerSlice):
                     send_events=False,
                     connection=connection,
                 )
+
+        increment_ids, neg_increment = await self.resource_service._get_increment(env, version_id)
+
+        await self.resource_service._mark_deployed(env, neg_increment, now, lambda x: True, version_id)
+
+        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
