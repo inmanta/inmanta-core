@@ -1,6 +1,7 @@
-description: Move increment calculation to release_version pipeline.
-change-type: patch
+description: Move increment calculation to release_version pipeline to prevent resource state change outside of the agent's deploy lock.
+change-type: minor
 destination-branches:
   - master
   - iso6
-  - iso5
+sections:
+  bugfix: "{{description}}"
