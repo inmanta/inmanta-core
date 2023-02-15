@@ -889,10 +889,6 @@ class OrchestrationService(protocol.ServerSlice):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        if model.total == 0:
-            await model.mark_done(connection=connection)
-            return 200, {"model": model}
-
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
         now = datetime.datetime.now().astimezone()
@@ -942,6 +938,10 @@ class OrchestrationService(protocol.ServerSlice):
         await self.resource_service._mark_deployed(env, neg_increment, now, lambda x: True, version_id)
 
         await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+
+        if model.total == 0:
+            await model.mark_done(connection=connection)
+            return 200, {"model": model}
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
