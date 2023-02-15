@@ -935,8 +935,9 @@ class OrchestrationService(protocol.ServerSlice):
                     connection=connection,
                 )
 
-        increment_ids, neg_increment = await self.resource_service._get_increment(env, version_id)
+        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.resource_service._get_increment(env, version_id)
 
+        increment_ids, neg_increment = increments
         await self.resource_service._mark_deployed(env, neg_increment, now, lambda x: True, version_id)
 
         await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)

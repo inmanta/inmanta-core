@@ -21,7 +21,7 @@ import logging
 import os
 import uuid
 from collections import abc, defaultdict
-from typing import Any, Dict, List, Optional, Sequence, Union, cast
+from typing import Any, Dict, List, Optional, Sequence, Union, cast, Callable
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
@@ -307,7 +307,8 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increment_ids, neg_increment = await self._get_increment(env, version)
+        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self._get_increment(env, version)
+        increment_ids, neg_increment = increments
 
         # set already done to deployed
         now = datetime.datetime.now().astimezone()
@@ -357,7 +358,7 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
-    async def _mark_deployed(self, env, neg_increment, now, on_agent, version):
+    async def _mark_deployed(self, env: data.Environment, neg_increment: abc.Set[ResourceIdStr], now: datetime.datetime, on_agent: Callable[[ResourceIdStr], bool], version: int) -> None:
         neg_increment_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in neg_increment if on_agent(res_id)
         ]
@@ -383,7 +384,7 @@ class ResourceService(protocol.ServerSlice):
             keep_increment_cache=True,
         )
 
-    async def _get_increment(self, env, version):
+    async def _get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
         increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = self._increment_cache.get(env.id, None)
         if increment is None:
             lock = self._increment_cache_locks[env.id]
