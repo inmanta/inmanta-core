@@ -399,9 +399,7 @@ class ResourceService(protocol.ServerSlice):
             keep_increment_cache=True,
         )
 
-    async def get_increment(
-        self, env: data.Environment, version: int
-    ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+    async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
         In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
