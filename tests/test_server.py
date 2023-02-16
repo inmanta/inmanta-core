@@ -215,7 +215,6 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
 
     await retry_limited(wait_for_setting, 10)
 
-
     for _ in range(n_versions_to_create):
         version = (await client.reserve_version(env_1_id)).result["data"]
 
