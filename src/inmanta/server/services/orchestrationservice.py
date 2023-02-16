@@ -35,8 +35,8 @@ from inmanta.data.model import (
     PromoteTriggerMethod,
     ResourceDiff,
     ResourceIdStr,
-    ResourceVersionIdStr,
     ResourceMinimal,
+    ResourceVersionIdStr,
 )
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
@@ -68,6 +68,7 @@ class PartialUpdateMerger:
     Class that contains the functionality to merge the shared resources and resources present in a resource set that is updated
     by the partial compile together with the resources from the corresponding resources sets in the old version of the model.
     """
+
     def __init__(
         self,
         env_id: uuid.UUID,
@@ -103,18 +104,18 @@ class PartialUpdateMerger:
         rids_in_partial_compile: abc.Set[ResourceIdStr],
         updated_resource_sets: abc.Set[str],
         deleted_resource_sets: abc.Set[str],
-        connection: Optional[asyncpg.connection.Connection] = None
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> "PartialUpdateMerger":
         """
         This method is used to work around the limitation that no async calls can be done in a constructor.
         """
-        updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource] = (
-            await data.Resource.get_resources_in_resource_sets_incl_shared_resources(
-                environment=env_id,
-                version=base_version,
-                resource_sets=updated_resource_sets,
-                connection=connection,
-            )
+        updated_and_shared_resources_old: abc.Mapping[
+            ResourceIdStr, data.Resource
+        ] = await data.Resource.get_resources_in_resource_sets_incl_shared_resources(
+            environment=env_id,
+            version=base_version,
+            resource_sets=updated_resource_sets,
+            connection=connection,
         )
         rids_deleted_resource_sets: abc.Set[ResourceIdStr] = await data.Resource.get_rids_in_resource_sets(
             environment=env_id,
@@ -164,9 +165,7 @@ class PartialUpdateMerger:
                 raise BadRequest(f"A partial compile cannot migrate resource {res.resource_id} to another resource set.")
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
-                raise BadRequest(
-                    f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile"
-                )
+                raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
 
     def _merge_shared_resources(self, shared_resources_new: Dict[ResourceIdStr, data.Resource]) -> abc.Sequence[data.Resource]:
         """
@@ -228,7 +227,8 @@ class PartialUpdateMerger:
         :param new_deps: The set of dependencies present in the shared resource that is part of the partial compile.
         """
         old_deps_cleaned: abc.Set[ResourceIdStr] = {
-            dep for dep in old_deps
+            dep
+            for dep in old_deps
             # * Remove the dependencies to resources in the updated resources set. Those dependencies will be present in
             #   new_deps.
             # * Remove dependencies to resources in a deleted resource set. Those resource won't exist in the new version
@@ -245,7 +245,8 @@ class PartialUpdateMerger:
         of the partial compile.
         """
         old_unresolved_unknowns_to_keep = [
-            uk.copy(self.version) for uk in await data.UnknownParameter.get_unknowns_to_copy_in_partial_compile(
+            uk.copy(self.version)
+            for uk in await data.UnknownParameter.get_unknowns_to_copy_in_partial_compile(
                 environment=self.env_id,
                 source_version=self.base_version,
                 updated_resource_sets=self.updated_resource_sets,
@@ -600,7 +601,9 @@ class OrchestrationService(protocol.ServerSlice):
             Id.set_version_in_id(rid, version) for rid in rid_to_resource.keys()
         )
         if is_partial_update:
-            rids_unchanged_resource_sets: abc.Set[ResourceIdStr] = await data.Resource.copy_resources_from_unchanged_resource_set(
+            rids_unchanged_resource_sets: abc.Set[
+                ResourceIdStr
+            ] = await data.Resource.copy_resources_from_unchanged_resource_set(
                 environment=env.id,
                 source_version=partial_base_version,
                 destination_version=version,
