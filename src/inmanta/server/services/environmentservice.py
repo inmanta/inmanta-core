@@ -306,7 +306,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.list_settings, env="tid")
     async def list_settings(self, env: data.Environment) -> Apireturn:
-        settings = {k: env.settings[k] for k in env.settings.keys() if k in data.Environment._settings.keys()}
+        settings = {k: env.settings[k] for k in sorted(env.settings.keys()) if k in data.Environment._settings.keys()}
         return 200, {"settings": settings, "metadata": data.Environment._settings}
 
     @handle(methods.set_setting, env="tid", key="id")
@@ -532,7 +532,7 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods_v2.environment_settings_list, env="tid")
     async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
         return model.EnvironmentSettingsReponse(
-            settings=env.settings, definition={k: v.to_dto() for k, v in data.Environment._settings.items()}
+            settings=dict(sorted(env.settings.items())), definition={k: v.to_dto() for k, v in sorted(data.Environment._settings.items())}
         )
 
     @handle(methods_v2.environment_settings_set, env="tid", key="id")

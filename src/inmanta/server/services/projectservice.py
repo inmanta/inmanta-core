@@ -133,10 +133,10 @@ class ProjectService(protocol.ServerSlice):
     async def project_list(self, environment_details: bool = False) -> List[model.Project]:
         project_list = []
 
-        for project in await data.Project.get_list():
+        for project in await data.Project.get_list(order_by_column="id", order="ASC"):
             project_model = project.to_dto()
             project_model.environments = [
-                e.to_dto() for e in await data.Environment.get_list(project=project.id, details=environment_details)
+                e.to_dto() for e in await data.Environment.get_list(project=project.id, details=environment_details, order_by_column="id", order="ASC")
             ]
 
             project_list.append(project_model)
