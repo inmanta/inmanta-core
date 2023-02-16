@@ -4,4 +4,4 @@ destination-branches:
   - master
   - iso6
 sections:
-  bugfix: "{{description}}"
+  bugfix: "Fix race condition that causes the deployment of a resource to fail with the error message: 'Fetching resource events only makes sense when the resource is currently deploying'. This issue happens in rare situations and the orchestrator will automatically recover from it during the next deployment."
