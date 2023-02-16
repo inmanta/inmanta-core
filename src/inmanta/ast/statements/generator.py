@@ -36,8 +36,9 @@ from inmanta.ast import (
     NotFoundException,
     Range,
     RuntimeException,
+    TypeNotFoundException,
     TypeReferenceAnchor,
-    TypingException, TypeNotFoundException,
+    TypingException,
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
@@ -526,19 +527,39 @@ class Constructor(ExpressionStatement):
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
             type_hint = self.type.get_attribute(k).get_type().get_base_type()
-            v.normalize(lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None)
+            v.normalize(
+                lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
+            )
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        # Type hint handling
         try:
+            # First normal resolution
             mytype: "Entity" = self.namespace.get_type(self.class_type)
         except TypeNotFoundException:
-            if lhs_attribute.type_hint:
-                mytype = lhs_attribute.type_hint
+            # Do we have hint context?
+            # We only work with unqualified names for hinting
+            if lhs_attribute.type_hint and not "::" in str(self.class_type):
+                # Find all correct types with the matching unqualified name
+                candidates = [
+                    entity
+                    for entity in chain([lhs_attribute.type_hint], lhs_attribute.type_hint.get_all_child_entities())
+                    if entity.name == str(self.class_type)
+                ]
+
+                if len(candidates) > 1:
+                    # To many options, should alert the user, as inheritance may cause this to break a working model due to dependency update
+                    print("Could not hint")
+                elif len(candidates) == 1:
+                    # One, nice
+                    mytype = candidates[0]
+                else:
+                    # None, pretend nothing happened, reraise original exception
+                    raise
             else:
                 raise
-
 
         self.type = mytype
 
