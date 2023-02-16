@@ -669,7 +669,7 @@ class AgentManager(ServerSlice, SessionListener):
     ) -> data.Agent:
         """
         This method creates a new agent (agent in the model) in the database.
-        If an active agent instance exists for the given agent, it is marked as a the
+        If an active agent instance exists for the given agent, it is marked as the
         primary instance for that agent in the database.
 
         Note: This method must be called under session lock

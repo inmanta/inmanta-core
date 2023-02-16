@@ -2942,6 +2942,57 @@ class UnknownParameter(BaseDocument):
             resolved=self.resolved,
         )
 
+    @classmethod
+    async def get_unknowns_to_copy_in_partial_compile(
+        cls,
+        environment: uuid.UUID,
+        source_version: int,
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
+        rids_in_partial_compile: abc.Set[ResourceIdStr],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> List["UnknownParameter"]:
+        """
+        Returns a subset of the unknowns in source_version of environment. It returns the unknowns that:
+            * Are not associated with a resource
+            * Are associated with a resource that:
+               - doesn't belong to the resource set updated_resource_sets and deleted_resource_sets
+               - and, doesn't have a resource_id in rids_in_partial_compile (An unknown might belong to a shared resource that
+                 is not exported by the partial compile)
+        """
+        query = f"""
+                -- Get unknowns that don't belong to a resource
+                (
+                    SELECT *
+                    FROM {cls.table_name()} AS u1
+                    WHERE u1.environment=$1 AND u1.version=$2 AND (u1.resource_id IS NULL OR u1.resource_id='')
+                )
+                UNION
+                -- Get unknowns that belong to a resource
+                (
+                    SELECT u2.*
+                    FROM {cls.table_name()} AS u2
+                       INNER JOIN {Resource.table_name()} AS r
+                       ON u2.environment=r.environment AND u2.version=r.model AND u2.resource_id=r.resource_id
+                    WHERE
+                        u2.environment=$1
+                        AND u2.version=$2
+                        AND u2.resolved IS FALSE
+                        AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
+                        AND NOT r.resource_id=ANY($4)
+                )
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(
+                query,
+                environment,
+                source_version,
+                list(updated_resource_sets | deleted_resource_sets),
+                list(rids_in_partial_compile),
+            )
+            return [cls(from_postgres=True, **uk) for uk in result]
+
 
 class AgentProcess(BaseDocument):
     """
@@ -4728,6 +4779,99 @@ class Resource(BaseDocument):
             results[row["status"]] = row["count"]
         return m.ResourceDeploySummary.create_from_db_result(results)
 
+    @classmethod
+    async def copy_resources_from_unchanged_resource_set(
+        cls,
+        environment: uuid.UUID,
+        source_version: int,
+        destination_version: int,
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> abc.Set[m.ResourceIdStr]:
+        query = f"""
+            INSERT INTO {cls.table_name()}(
+                environment,
+                model,
+                resource_id,
+                resource_type,
+                resource_id_value,
+                agent,
+                status,
+                attributes,
+                attribute_hash,
+                resource_set,
+                provides
+            )(
+                SELECT
+                    r.environment,
+                    $3,
+                    r.resource_id,
+                    r.resource_type,
+                    r.resource_id_value,
+                    r.agent,
+                    (
+                        CASE WHEN r.status='undefined'::resourcestate
+                        THEN 'undefined'::resourcestate
+                        ELSE 'available'::resourcestate
+                        END
+                    ) AS status,
+                    jsonb_set(r.attributes, '{{"version"}}'::text[], to_jsonb($3::integer)) AS attributes,
+                    r.attribute_hash,
+                    r.resource_set,
+                    r.provides
+                FROM {cls.table_name()} AS r
+                WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
+            )
+            RETURNING resource_id
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(
+                query,
+                environment,
+                source_version,
+                destination_version,
+                updated_resource_sets | deleted_resource_sets,
+            )
+            return {record["resource_id"] for record in result}
+
+    @classmethod
+    async def get_rids_in_resource_sets(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        resource_sets: abc.Set[str],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> abc.Set[m.ResourceIdStr]:
+        query = f"""
+            SELECT r.resource_id
+            FROM {cls.table_name()} AS r
+            WHERE r.environment=$1 AND r.model=$2 AND r.resource_set=ANY($3)
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(query, environment, version, resource_sets)
+            return {record["resource_id"] for record in result}
+
+    @classmethod
+    async def get_resources_in_resource_sets_incl_shared_resources(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        resource_sets: abc.Set[str],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> abc.Mapping[ResourceIdStr, "Resource"]:
+        query = f"""
+            SELECT *
+            FROM {cls.table_name()} AS r
+            WHERE r.environment=$1 AND r.model=$2 AND (r.resource_set IS NULL OR r.resource_set=ANY($3))
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(query, environment, version, resource_sets)
+            return {r["resource_id"]: cls(from_postgres=True, **r) for r in result}
+
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
@@ -4747,6 +4891,11 @@ class Resource(BaseDocument):
     async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
         self.make_hash()
         await super(Resource, self).update_fields(connection=connection, **kwargs)
+
+    def get_requires(self) -> abc.Sequence[ResourceIdStr]:
+        if "requires" not in self.attributes:
+            return []
+        return list(self.attributes["requires"])
 
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
@@ -4826,6 +4975,118 @@ class ConfigurationModel(BaseDocument):
         if self.deployed:
             return self.total
         return self._done
+
+    @classmethod
+    async def create(
+        cls,
+        env_id: uuid.UUID,
+        version: int,
+        total: int,
+        version_info: Optional[JsonType],
+        undeployable: abc.Sequence[ResourceIdStr],
+        skipped_for_undeployable: abc.Sequence[ResourceIdStr],
+        partial_base: Optional[int] = None,
+        rids_in_partial_compile: Optional[abc.Set[ResourceIdStr]] = None,
+        connection: Optional[Connection] = None,
+    ) -> "ConfigurationModel":
+        rids_in_partial_compile = rids_in_partial_compile if rids_in_partial_compile is not None else set()
+        now = datetime.datetime.now().astimezone()
+        if partial_base is None:
+            cm = ConfigurationModel(
+                environment=env_id,
+                version=version,
+                date=now,
+                total=total,
+                version_info=version_info,
+                undeployable=undeployable,
+                skipped_for_undeployable=skipped_for_undeployable,
+            )
+            await cm.insert(connection=connection)
+        else:
+            # A partial compile was done. Create the new version of the ConfigurationModel based on the partial_base version.
+            query = f"""
+                WITH rids_undeployable AS (
+                    SELECT DISTINCT unnest(c1.undeployable) AS rid
+                    FROM {cls.table_name()} AS c1
+                    WHERE c1.environment=$1 AND c1.version=$8
+                ),
+                rids_skipped_for_undeployable AS (
+                    SELECT DISTINCT unnest(c2.skipped_for_undeployable) AS rid
+                    FROM {cls.table_name()} AS c2
+                    WHERE c2.environment=$1 AND c2.version=$8
+                )
+                INSERT INTO {cls.table_name()}(
+                    environment,
+                    version,
+                    date,
+                    total,
+                    version_info,
+                    undeployable,
+                    skipped_for_undeployable,
+                    partial_base
+                ) VALUES(
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    (
+                        SELECT array_agg(rid)
+                        FROM (
+                            (
+                                SELECT rid
+                                FROM rids_undeployable AS undepl
+                                WHERE NOT undepl.rid=ANY($9)
+                            )
+                            UNION
+                            (
+                                SELECT DISTINCT rid FROM unnest($6::varchar[]) AS undeploy_filtered_new(rid)
+                            )
+                        ) AS undeploy_filtered_old
+                    ),
+                    (
+                        SELECT array_agg(rid)
+                        FROM (
+                            (
+                                SELECT skipped.rid
+                                FROM rids_skipped_for_undeployable AS skipped
+                                WHERE NOT skipped.rid=ANY($9)
+                            )
+                            UNION
+                            (
+                                SELECT DISTINCT rid FROM unnest($7::varchar[]) AS undeploy_filtered_new(rid)
+                            )
+                        ) AS skipped_filtered_old
+                    ),
+                    $8
+                )
+                RETURNING
+                    environment,
+                    version,
+                    date,
+                    total,
+                    version_info,
+                    undeployable,
+                    skipped_for_undeployable,
+                    partial_base,
+                    released,
+                    deployed,
+                    result
+            """
+            result = await connection.fetchrow(
+                query,
+                env_id,
+                version,
+                now,
+                total,
+                cls._get_value(version_info),
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                list(rids_in_partial_compile),
+            )
+            cm = cls(from_postgres=True, **result)
+        return cm
 
     @classmethod
     async def _get_status_field(cls, environment: uuid.UUID, values: str) -> Dict[str, str]:
@@ -5245,6 +5506,19 @@ class ConfigurationModel(BaseDocument):
             values=values,
         )
         return query_builder.build()
+
+    async def recalculate_total(self) -> None:
+        query = f"""
+            UPDATE {self.table_name()} AS c_outer
+            SET total=(
+                SELECT COUNT(*)
+                FROM {self.table_name()} AS c INNER JOIN {Resource.table_name()} AS r
+                     ON c.environment = r.environment AND c.version=r.model
+                WHERE c.environment=$1 AND c.version=$2
+            )
+            WHERE c_outer.environment=$1 AND c_outer.version=$2
+        """
+        await self._execute_query(query, self.environment, self.version)
 
 
 class Code(BaseDocument):

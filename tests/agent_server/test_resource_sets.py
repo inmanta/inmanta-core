@@ -424,8 +424,8 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 400
     assert result.result["message"] == (
-        "Invalid request: A partial compile cannot migrate resource "
-        "test::Resource[agent1,key=key1],v=2 to another resource set"
+        "Invalid request: A partial compile cannot migrate resources "
+        "['test::Resource[agent1,key=key1]'] to another resource set"
     )
 
 
@@ -477,7 +477,7 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
 
     assert result.code == 400
     assert result.result["message"] == (
-        "Invalid request: Resource (test::Resource[agent1,key=key1],v=2) without a "
+        "Invalid request: Resource (test::Resource[agent1,key=key1]) without a "
         "resource set cannot be updated via a partial compile"
     )
 
@@ -766,6 +766,9 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         removed_resource_sets=["set-c"],
     )
 
+    for r in await data.Resource.get_list(environment=environment):
+        print(r.to_dict())
+
     assert result.code == 200, result.result
     resource_list = sorted(
         await data.Resource.get_resources_in_latest_version(uuid.UUID(environment)),
@@ -990,8 +993,9 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
     )
 
     assert result.code == 400
-    assert result.result["message"] == (
-        "Invalid request: Invalid resource id in resource set: " "Invalid id for resource hello"
+    assert (
+        "The following resource ids provided in the resource_sets parameter are not present in the resources list: hello"
+        in result.result["message"]
     )
 
 
