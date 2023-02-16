@@ -209,9 +209,12 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     assert result.code == 200
 
     # Check value was set
-    result = await client.get_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
-    assert result.code == 200
-    assert result.result["value"] == n_versions_to_keep
+    async def wait_for_setting() -> bool:
+        result = await client.get_setting(tid=env_1_id, id=data.AVAILABLE_VERSIONS_TO_KEEP)
+        return result.code == 200 and result.result["value"] == n_versions_to_keep
+
+    await retry_limited(wait_for_setting, 10)
+
 
     for _ in range(n_versions_to_create):
         version = (await client.reserve_version(env_1_id)).result["data"]
