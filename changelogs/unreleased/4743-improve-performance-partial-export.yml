@@ -1,0 +1,8 @@
+---
+description: Improve the performance of the `put_partial` endpoint
+issue-nr: 4743
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
