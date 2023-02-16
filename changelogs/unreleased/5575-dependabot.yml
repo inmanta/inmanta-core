@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump pydantic from 1.10.4 to 1.10.5
+destination-branches:
+- master
+- iso6
+sections: {}
