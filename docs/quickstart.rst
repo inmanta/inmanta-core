@@ -136,7 +136,7 @@ In order to connect to `SR Linux` containers, there are two options:
     docker exec -it clab-srlinux-leaf2 sr_cli
 
 
-2. Using SSH (username and password is `admin`):
+2. Using SSH (username and password is `NokiaSrl1!`):
 
 .. code-block:: sh
 
