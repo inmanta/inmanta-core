@@ -1,1 +1,7 @@
 import mod2
+
+
+entity B extends A:
+
+end
+

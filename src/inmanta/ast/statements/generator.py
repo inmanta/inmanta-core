@@ -37,7 +37,7 @@ from inmanta.ast import (
     Range,
     RuntimeException,
     TypeReferenceAnchor,
-    TypingException,
+    TypingException, TypeNotFoundException,
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.blocks import BasicBlock
@@ -525,12 +525,21 @@ class Constructor(ExpressionStatement):
         for k, v in self.__attributes.items():
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
-            v.normalize(lhs_attribute=AttributeAssignmentLHS(self._self_ref, k) if k not in index_attributes else None)
+            type_hint = self.type.get_attribute(k).get_type().get_base_type()
+            v.normalize(lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None)
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        mytype: "Entity" = self.namespace.get_type(self.class_type)
+        try:
+            mytype: "Entity" = self.namespace.get_type(self.class_type)
+        except TypeNotFoundException:
+            if lhs_attribute.type_hint:
+                mytype = lhs_attribute.type_hint
+            else:
+                raise
+
+
         self.type = mytype
 
         inindex: abc.MutableSet[str] = set()
