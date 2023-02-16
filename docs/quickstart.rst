@@ -256,7 +256,7 @@ Let's have a look at the partial configuration model:
         mgmt_ip = "172.30.0.210",
         yang_credentials = yang::Credentials(
             username = "admin",
-            password = "admin"
+            password = "NokiaSrl1!"
         )
     )
 
