@@ -5073,19 +5073,22 @@ class ConfigurationModel(BaseDocument):
                     deployed,
                     result
             """
-            result = await connection.fetchrow(
-                query,
-                env_id,
-                version,
-                now,
-                total,
-                cls._get_value(version_info),
-                undeployable,
-                skipped_for_undeployable,
-                partial_base,
-                list(rids_in_partial_compile),
-            )
-            cm = cls(from_postgres=True, **result)
+            async with cls.get_connection(connection) as con:
+                result = await con.fetchrow(
+                    query,
+                    env_id,
+                    version,
+                    now,
+                    total,
+                    cls._get_value(version_info),
+                    undeployable,
+                    skipped_for_undeployable,
+                    partial_base,
+                    list(rids_in_partial_compile),
+                )
+                # Make mypy happy
+                assert result is not None
+                cm = cls(from_postgres=True, **result)
         return cm
 
     @classmethod

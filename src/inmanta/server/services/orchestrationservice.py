@@ -213,7 +213,7 @@ class PartialUpdateMerger:
         :param old: The shared resource present in the old version of the model.
         :param new: The shared resource part of the incremental compile.
         """
-        new.provides = self._merge_dependencies_shared_resource(old.provides, new.provides)
+        new.provides = list(self._merge_dependencies_shared_resource(old.provides, new.provides))
         new.attributes["requires"] = self._merge_dependencies_shared_resource(old.get_requires(), new.get_requires())
         return new
 
@@ -601,6 +601,8 @@ class OrchestrationService(protocol.ServerSlice):
             Id.set_version_in_id(rid, version) for rid in rid_to_resource.keys()
         )
         if is_partial_update:
+            # Make mypy happy
+            assert partial_base_version is not None
             rids_unchanged_resource_sets: abc.Set[
                 ResourceIdStr
             ] = await data.Resource.copy_resources_from_unchanged_resource_set(
@@ -782,6 +784,9 @@ class OrchestrationService(protocol.ServerSlice):
                 "Type validation failed for resources argument. "
                 f"Expected an argument of type List[Dict[str, Any]] but received {resources}"
             )
+        else:
+            # Make mypy happy
+            resources = cast(List[JsonType], resources)
 
         # validate resources before any side effects take place
         for r in resources:
@@ -789,7 +794,7 @@ class OrchestrationService(protocol.ServerSlice):
             if rid.get_version() != 0:
                 raise BadRequest("Resources for partial export should not contain version information")
 
-        rid_to_resource = self._create_dao_resources_from_api_resources(
+        rid_to_resource: Dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
             env_id=env.id,
             resources=resources,
             resource_state=resource_state,
@@ -812,9 +817,9 @@ class OrchestrationService(protocol.ServerSlice):
                 version: int = await env.get_next_version(connection=con)
 
                 # set version on input resources
-                for r in rid_to_resource.values():
-                    r.attributes["version"] = version
-                    r.model = version
+                for res in rid_to_resource.values():
+                    res.attributes["version"] = version
+                    res.model = version
 
                 current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(
                     env.id, limit=1
