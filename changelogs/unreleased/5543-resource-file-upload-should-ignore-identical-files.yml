@@ -1,4 +1,4 @@
-description: The stat_file API endpoint now returns a set of files instead of a list.
+description: The stat_file API endpoint now returns a list with no duplicates.
 change-type: patch
 destination-branches:
   - master
