@@ -87,24 +87,23 @@ async def test_project_api_v2_project_list_ordering(client_v2):
     Check that they are ordered by ascending (project_id, environment_id)
     """
 
-    project_environments_map: Dict[uuid.UUID, List[uuid.UUID]] = defaultdict(lambda: [])
+    project_environments_map: Dict[str, List[str]] = defaultdict(lambda: [])
 
     for project_n in range(3):
-        result = await client_v2.project_create(f"test-project-{project_n}")
+        project_name: str = f"test-project-{project_n}"
+        result = await client_v2.project_create(project_name)
         assert result.code == 200
         assert "data" in result.result
         assert "id" in result.result["data"]
 
         project_id: uuid.UUID = result.result["data"]["id"]
-        project_environments_map[project_id] = []
+        project_environments_map[project_name] = []
 
         for environment_n in range(3):
-            result = await client_v2.environment_create(project_id=project_id, name=f"test-env-{environment_n}")
+            env_name: str = f"test-env-{environment_n}"
+            result = await client_v2.environment_create(project_id=project_id, name=env_name)
             assert result.code == 200
-            assert "data" in result.result
-            assert "id" in result.result["data"]
-            env_id: uuid.UUID = result.result["data"]["id"]
-            project_environments_map[project_id].append(env_id)
+            project_environments_map[project_name].append(env_name)
 
     result = await client_v2.project_list()
     assert result.code == 200
@@ -114,12 +113,12 @@ async def test_project_api_v2_project_list_ordering(client_v2):
         assert len(result.result["data"][i]["environments"]) == 3
 
     # Make sure results are sorted according to project id...
-    assert sorted(project_environments_map.keys()) == [result.result["data"][i]["id"] for i in range(3)]
+    assert sorted(project_environments_map.keys()) == [result.result["data"][i]["name"] for i in range(3)]
 
     # ... and according env id within each project
     for project_n, key_value_pair in enumerate(sorted(project_environments_map.items())):
         project_id, env_id_list = key_value_pair
-        assert sorted(env_id_list) == [env["id"] for env in result.result["data"][project_n]["environments"]]
+        assert sorted(env_id_list) == [env["name"] for env in result.result["data"][project_n]["environments"]]
 
 
 async def test_project_api_v2(client_v2):
