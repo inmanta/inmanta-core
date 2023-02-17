@@ -19,7 +19,7 @@ import base64
 import difflib
 import logging
 import os
-from typing import Iterable, List, cast
+from typing import Iterable, List, cast, Set
 
 from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
@@ -127,15 +127,16 @@ class FileService(protocol.ServerSlice):
         """
         return 200, {"files": self.stat_file_internal(files)}
 
-    def stat_file_internal(self, files: Iterable[str]) -> List[str]:
+    def stat_file_internal(self, files: Iterable[str]) -> Set[str]:
         """
         Return which files in the list don't exist on the server
         """
-        response: List[str] = []
+        response: Set[str] = set()
+
         for f in files:
             f_path = os.path.join(self.server_slice._server_storage["files"], f)
             if not os.path.exists(f_path):
-                response.append(f)
+                response.add(f)
 
         return response
 
