@@ -62,3 +62,22 @@ implement One using std::none
         """,
     )
     (_, scopes) = compiler.do_compile()
+
+
+
+def test_basic_type_hint_attribute_collision(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import elaboratev1module
+
+entity A:
+    int ref
+end
+
+One(ref=A())
+
+implement elaboratev1module::A using std::none
+implement One using std::none
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
