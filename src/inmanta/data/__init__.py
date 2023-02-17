@@ -2887,6 +2887,7 @@ class Parameter(BaseDocument):
             query += " AND metadata @> $" + str(query_param_index) + "::jsonb"
             dict_value = {key: value}
             values.append(cls._get_value(dict_value))
+        query += "ORDER BY id"
         result = await cls.select_query(query, values)
         return result
 
