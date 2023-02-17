@@ -84,7 +84,7 @@ async def test_project_api_v1(client):
 async def test_project_api_v2_project_list_ordering(client_v2):
     """
     Creates a few projects with several environments each.
-    Check that they are ordered by ascending (project_id, environment_id)
+    Check that they are ordered by ascending (project_name, environment_name)
     """
 
     project_environments_map: Dict[str, List[str]] = defaultdict(lambda: [])
