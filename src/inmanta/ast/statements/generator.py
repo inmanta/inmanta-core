@@ -581,7 +581,14 @@ class Constructor(ExpressionStatement):
                     mytype = next(iter(candidates))
                 else:
                     # None, pretend nothing happened, reraise original exception
-                    raise
+                    if resolver_failure is not None:
+                        raise resolver_failure
+                    else:
+                        raise TypingException(
+                            self,
+                            f"Can not assign a value of type {local_type.type_string()} "
+                            f"to a variable of type {lhs_attribute.type_hint.type_string()}",
+                        )
         else:
             if local_type is not None:
                 mytype = local_type
