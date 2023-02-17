@@ -4,3 +4,5 @@ destination-branches:
   - master
   - iso6
   - iso5
+sections:
+  bugfix: "{{description}}"
