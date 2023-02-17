@@ -724,7 +724,6 @@ When a development release is done using the --dev option, this command:
         )
         commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
-
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
         Add a module dependency to an Inmanta module or project.
@@ -1223,7 +1222,6 @@ version: 0.0.1dev0"""
         else:
             # Never happens for dev release
             new_version = current_version
-
 
         if not changelog and changelog_message:
             changelog = ModuleChangelog.create_changelog_file(path_changelog_file, new_version, changelog_message)
