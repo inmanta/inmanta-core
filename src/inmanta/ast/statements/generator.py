@@ -24,6 +24,7 @@ from collections import abc
 from itertools import chain
 from typing import Dict, Iterator, List, Optional, Set, Tuple
 
+import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -68,7 +69,6 @@ from inmanta.execute.runtime import (
 )
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
-import inmanta.ast.entity
 
 try:
     from typing import TYPE_CHECKING
@@ -525,6 +525,7 @@ class Constructor(ExpressionStatement):
         )
 
     def _normalize_rhs(self, index_attributes: abc.Set[str]) -> None:
+        assert self.type is not None  # Make mypy happy
         for k, v in self.__attributes.items():
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
@@ -538,8 +539,8 @@ class Constructor(ExpressionStatement):
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # Type hint handling
 
-        resolver_failure: TypeNotFoundException = None
-        local_type: "Entity" = None
+        resolver_failure: Optional[TypeNotFoundException] = None
+        local_type: "Optional[Entity]" = None
 
         try:
             # First normal resolution
@@ -549,14 +550,15 @@ class Constructor(ExpressionStatement):
 
         # Do we have hint context?
         # We only work with unqualified names for hinting
-        if (
-            lhs_attribute is not None
-            and lhs_attribute.type_hint is not None
-        ):
+        if lhs_attribute is not None and lhs_attribute.type_hint is not None:
             if not isinstance(lhs_attribute.type_hint, inmanta.ast.entity.Entity):
                 # This is a type error, we are a contructor for and entity but we should not be!
-                raise TypingException(self, f"Can not assign a value of type {self.class_type} to a variable of type {lhs_attribute.type_hint.type_string()}")
-            elif not "::" in str(self.class_type):
+                raise TypingException(
+                    self,
+                    f"Can not assign a value of type {self.class_type} "
+                    f"to a variable of type {lhs_attribute.type_hint.type_string()}",
+                )
+            elif "::" not in str(self.class_type):
                 # We can do type hinting here
                 type_hint = lhs_attribute.type_hint
                 # Consider the hint type
@@ -572,7 +574,7 @@ class Constructor(ExpressionStatement):
                 }
 
                 if len(candidates) > 1:
-                    # To many options, should alert the user, as inheritance may cause this to break a working model due to dependency update
+                    # To many options, inheritance may cause this to break a working model due to dependency update
                     raise AmbiguousTypeException(self.class_type, list(candidates))
                 elif len(candidates) == 1:
                     # One, nice
@@ -727,7 +729,7 @@ class Constructor(ExpressionStatement):
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
         return late_args
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
         """
         Evaluate this statement.
         """

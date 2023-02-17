@@ -32,6 +32,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.entity import Entity
     from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
@@ -638,11 +639,12 @@ class TypeNotFoundException(RuntimeException):
 class AmbiguousTypeException(TypeNotFoundException):
     """Exception raised when a type is referenced that does not exist"""
 
-    def __init__(self, type: LocatableString, candidates: List["Type"]) -> None:
+    def __init__(self, type: LocatableString, candidates: List["Entity"]) -> None:
         RuntimeException.__init__(
             self,
             stmt=None,
-            msg="Could not determine namespace for type %s. %d possible candidates exists: [%s]. To resolve this, use the fully qualified name instead of the short name."
+            msg="Could not determine namespace for type %s. %d possible candidates exists: [%s]."
+            " To resolve this, use the fully qualified name instead of the short name."
             % (type, len(candidates), ", ".join(sorted(x.get_full_name() for x in candidates))),
         )
         self.candidates = candidates

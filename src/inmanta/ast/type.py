@@ -93,12 +93,12 @@ class Type(Locatable):
         """
         return True
 
-    def type_string(self) ->str:
+    def type_string(self) -> str:
         """
         Returns the type string as expressed in the Inmanta :term:`DSL`, if this type can be expressed in the :term:`DSL`.
         Otherwise returns None.
         """
-        return None
+        raise NotImplementedError()
 
     def type_string_internal(self) -> str:
         """
@@ -167,9 +167,9 @@ class NullableType(Type):
     def _wrap_type_string(self, string: str) -> str:
         return "%s?" % string
 
-    def type_string(self) -> Optional[str]:
-        base_type_string: Optional[str] = self.element_type.type_string()
-        return None if base_type_string is None else self._wrap_type_string(base_type_string)
+    def type_string(self) -> str:
+        base_type_string: str = self.element_type.type_string()
+        return self._wrap_type_string(base_type_string)
 
     def type_string_internal(self) -> str:
         return self._wrap_type_string(self.element_type.type_string_internal())
@@ -390,6 +390,9 @@ class List(Type):
     def type_string_internal(self) -> str:
         return "List"
 
+    def type_string(self) -> str:
+        return "list"
+
     def get_location(self) -> Location:
         return None
 
@@ -422,9 +425,9 @@ class TypedList(List):
     def _wrap_type_string(self, string: str) -> str:
         return "%s[]" % string
 
-    def type_string(self) -> Optional[str]:
-        element_type_string: Optional[str] = self.element_type.type_string()
-        return None if element_type_string is None else self._wrap_type_string(element_type_string)
+    def type_string(self) -> str:
+        element_type_string: str = self.element_type.type_string()
+        return self._wrap_type_string(element_type_string)
 
     def type_string_internal(self) -> str:
         return self._wrap_type_string(self.element_type.type_string_internal())
@@ -497,6 +500,9 @@ class Dict(Type):
 
     def type_string_internal(self) -> str:
         return "Dict"
+
+    def type_string(self) -> str:
+        return "dict"
 
     def get_location(self) -> Location:
         return None
@@ -573,6 +579,9 @@ class Union(Type):
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join((t.type_string_internal() for t in self.types))
 
+    def type_string(self) -> str:
+        return "[" + ", ".join(t.type_string() for t in self.types) + "]"
+
 
 @stable_api
 class Literal(Union):
@@ -586,6 +595,9 @@ class Literal(Union):
 
     def type_string_internal(self) -> str:
         return "Literal"
+
+    def type_string(self) -> str:
+        return "literal"
 
 
 @stable_api
