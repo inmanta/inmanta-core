@@ -2966,7 +2966,11 @@ class UnknownParameter(BaseDocument):
                 (
                     SELECT *
                     FROM {cls.table_name()} AS u1
-                    WHERE u1.environment=$1 AND u1.version=$2 AND (u1.resource_id IS NULL OR u1.resource_id='')
+                    WHERE
+                        u1.environment=$1
+                        AND u1.version=$2
+                        AND u1.resolved IS FALSE
+                        AND (u1.resource_id IS NULL OR u1.resource_id='')
                 )
                 UNION
                 -- Get unknowns that belong to a resource
@@ -2980,7 +2984,7 @@ class UnknownParameter(BaseDocument):
                         AND u2.version=$2
                         AND u2.resolved IS FALSE
                         AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
-                        AND NOT r.resource_id=ANY($4)
+                        AND u2.resource_id IS NOT NULL AND u2.resource_id!='' AND NOT r.resource_id=ANY($4)
                 )
         """
         async with cls.get_connection(connection) as con:
@@ -4578,6 +4582,30 @@ class Resource(BaseDocument):
 
         return cls(**attr)
 
+    def copy_for_partial_compile(self, new_version: int) -> "Resource":
+        """
+        Create a new resource dao instance from this dao instance.
+        The new instance will have the given version.
+        """
+        attributes_with_version_update = self.attributes.copy()
+        attributes_with_version_update["version"] = new_version
+        new_resource_state = ResourceState.undefined if self.status is ResourceState.undefined else ResourceState.available
+        return Resource(
+            environment=self.environment,
+            model=new_version,
+            resource_id=self.resource_id,
+            resource_type=self.resource_type,
+            resource_id_value=self.resource_id_value,
+            agent=self.agent,
+            last_deploy=None,
+            attributes=attributes_with_version_update,
+            attribute_hash=self.attribute_hash,
+            status=new_resource_state,
+            last_non_deploying_status=const.NonDeployingResourceState[new_resource_state.name],
+            resource_set=self.resource_set,
+            provides=self.provides,
+        )
+
     @classmethod
     async def get_deleted_resources(
         cls,
@@ -4790,6 +4818,10 @@ class Resource(BaseDocument):
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> abc.Set[m.ResourceIdStr]:
+        """
+        Copy the resources that belong to an unchanged resource set of a partial compile,
+        from source_version to destination_version. This method doesn't copy shared resources.
+        """
         query = f"""
             INSERT INTO {cls.table_name()}(
                 environment,
@@ -4837,40 +4869,32 @@ class Resource(BaseDocument):
             return {record["resource_id"] for record in result}
 
     @classmethod
-    async def get_rids_in_resource_sets(
+    async def get_resources_in_resource_sets(
         cls,
         environment: uuid.UUID,
         version: int,
         resource_sets: abc.Set[str],
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> abc.Set[m.ResourceIdStr]:
-        query = f"""
-            SELECT r.resource_id
-            FROM {cls.table_name()} AS r
-            WHERE r.environment=$1 AND r.model=$2 AND r.resource_set=ANY($3)
-        """
-        async with cls.get_connection(connection) as con:
-            result = await con.fetch(query, environment, version, resource_sets)
-            return {record["resource_id"] for record in result}
-
-    @classmethod
-    async def get_resources_in_resource_sets_incl_shared_resources(
-        cls,
-        environment: uuid.UUID,
-        version: int,
-        resource_sets: abc.Set[str],
+        include_shared_resources: bool = False,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> abc.Mapping[ResourceIdStr, "Resource"]:
+        """
+        Returns the resource in the given environment and version that belong to any of the given resource sets.
+        This method also returns the resources in the share resource set iff the include_shared_resources boolean
+        is set to True.
+        """
+        if include_shared_resources:
+            resource_set_filter_statement = "(r.resource_set IS NULL OR r.resource_set=ANY($3))"
+        else:
+            resource_set_filter_statement = "r.resource_set=ANY($3)"
         query = f"""
             SELECT *
             FROM {cls.table_name()} AS r
-            WHERE r.environment=$1 AND r.model=$2 AND (r.resource_set IS NULL OR r.resource_set=ANY($3))
+            WHERE r.environment=$1 AND r.model=$2 AND {resource_set_filter_statement}
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetch(query, environment, version, resource_sets)
-            return {r["resource_id"]: cls(from_postgres=True, **r) for r in result}
+            return {record["resource_id"]: cls(from_postgres=True, **record) for record in result}
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
@@ -4893,6 +4917,9 @@ class Resource(BaseDocument):
         await super(Resource, self).update_fields(connection=connection, **kwargs)
 
     def get_requires(self) -> abc.Sequence[ResourceIdStr]:
+        """
+        Returns the content of the requires field in the attributes.
+        """
         if "requires" not in self.attributes:
             return []
         return list(self.attributes["requires"])
@@ -4977,7 +5004,7 @@ class ConfigurationModel(BaseDocument):
         return self._done
 
     @classmethod
-    async def create(
+    async def create_and_insert(
         cls,
         env_id: uuid.UUID,
         version: int,
@@ -4989,6 +5016,11 @@ class ConfigurationModel(BaseDocument):
         rids_in_partial_compile: Optional[abc.Set[ResourceIdStr]] = None,
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
+        """
+        Create a new ConfigurationModel instance and insert it into the database. When partial_base is provided,
+        the new ConfigururationModel will contain all the undeployables and skipped_for_undeployables present
+        in the partial_base version that are not part of the partial compile, i.e. not present in rids_in_partial_compile.
+        """
         rids_in_partial_compile = rids_in_partial_compile if rids_in_partial_compile is not None else set()
         now = datetime.datetime.now().astimezone()
         if partial_base is None:
@@ -5005,12 +5037,12 @@ class ConfigurationModel(BaseDocument):
         else:
             # A partial compile was done. Create the new version of the ConfigurationModel based on the partial_base version.
             query = f"""
-                WITH rids_undeployable AS (
+                WITH rids_undeployable_base_version AS (
                     SELECT DISTINCT unnest(c1.undeployable) AS rid
                     FROM {cls.table_name()} AS c1
                     WHERE c1.environment=$1 AND c1.version=$8
                 ),
-                rids_skipped_for_undeployable AS (
+                rids_skipped_for_undeployable_base_version AS (
                     SELECT DISTINCT unnest(c2.skipped_for_undeployable) AS rid
                     FROM {cls.table_name()} AS c2
                     WHERE c2.environment=$1 AND c2.version=$8
@@ -5033,30 +5065,35 @@ class ConfigurationModel(BaseDocument):
                     (
                         SELECT array_agg(rid)
                         FROM (
+                            -- Undeployables in previous version of the model that are not part of the partial compile.
                             (
                                 SELECT rid
-                                FROM rids_undeployable AS undepl
+                                FROM rids_undeployable_base_version AS undepl
                                 WHERE NOT undepl.rid=ANY($9)
                             )
                             UNION
+                            -- Undeployables part of the partial compile.
                             (
                                 SELECT DISTINCT rid FROM unnest($6::varchar[]) AS undeploy_filtered_new(rid)
                             )
-                        ) AS undeploy_filtered_old
+                        ) AS all_undeployable
                     ),
                     (
                         SELECT array_agg(rid)
                         FROM (
+                            -- skipped_for_undeployables in previous version of the model that are not part of the partial
+                            -- compile.
                             (
                                 SELECT skipped.rid
-                                FROM rids_skipped_for_undeployable AS skipped
+                                FROM rids_skipped_for_undeployable_base_version AS skipped
                                 WHERE NOT skipped.rid=ANY($9)
                             )
                             UNION
+                            -- Skipped_for_undeployables part of the partial compile.
                             (
-                                SELECT DISTINCT rid FROM unnest($7::varchar[]) AS undeploy_filtered_new(rid)
+                                SELECT DISTINCT rid FROM unnest($7::varchar[]) AS skipped_filtered_new(rid)
                             )
-                        ) AS skipped_filtered_old
+                        ) AS all_skipped
                     ),
                     $8
                 )
@@ -5510,7 +5547,11 @@ class ConfigurationModel(BaseDocument):
         )
         return query_builder.build()
 
-    async def recalculate_total(self) -> None:
+    async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Make the total field of this ConfigurationModel in-line with the number
+        of resources that are associated with it.
+        """
         query = f"""
             UPDATE {self.table_name()} AS c_outer
             SET total=(
@@ -5520,8 +5561,12 @@ class ConfigurationModel(BaseDocument):
                 WHERE c.environment=$1 AND c.version=$2
             )
             WHERE c_outer.environment=$1 AND c_outer.version=$2
+            RETURNING total
         """
-        await self._execute_query(query, self.environment, self.version)
+        new_total = await self._fetchval(query, self.environment, self.version, connection=connection)
+        if new_total is None:
+            raise KeyError(f"Configurationmodel {self.version} in environment {self.environment} was deleted.")
+        self.total = new_total
 
 
 class Code(BaseDocument):

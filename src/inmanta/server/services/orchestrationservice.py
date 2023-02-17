@@ -65,8 +65,8 @@ PERFORM_CLEANUP: bool = True
 
 class PartialUpdateMerger:
     """
-    Class that contains the functionality to merge the shared resources and resources present in a resource set that is updated
-    by the partial compile together with the resources from the corresponding resources sets in the old version of the model.
+    Class that contains the functionality to merge the shared resources and resources, present in a resource set that is updated
+    by the partial compile, together with the resources from the corresponding resources sets in the old version of the model.
     """
 
     def __init__(
@@ -80,6 +80,18 @@ class PartialUpdateMerger:
         updated_and_shared_resources_old: abc.Mapping[ResourceIdStr, data.Resource],
         rids_deleted_resource_sets: abc.Set[ResourceIdStr],
     ) -> None:
+        """
+        :param env_id: The id of the environment for which a partial compile is being done.
+        :param base_version: The source version on which the partial compile in based.
+        :param version: The version of the new configuration model created by this partial compile.
+        :param rids_in_partial_compile: The ids of the resource that are part of the partial compile.
+        :param updated_resource_sets: The names of the resource sets that are updated by the partial compile.
+        :param deleted_resource_sets: The names of the resource sets that are deleted by the partial compile.
+        :param updated_and_shared_resources_old: A dictionary that contains all the resources in base_version that belong
+                                                 to a resource set in updated_resource_sets or to the shared resource set.
+        :param rids_deleted_resource_sets: The ids of the resources that in base_version that are deleted by this partial
+                                           compile.
+        """
         self.env_id = env_id
         self.base_version = base_version
         self.version = version
@@ -107,21 +119,28 @@ class PartialUpdateMerger:
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> "PartialUpdateMerger":
         """
-        This method is used to work around the limitation that no async calls can be done in a constructor.
+        A replacement constructor method for this class. This method is used to work around the limitation that no async
+        calls can be done in a constructor. See docstring real constructor for meaning of arguments.
         """
         updated_and_shared_resources_old: abc.Mapping[
             ResourceIdStr, data.Resource
-        ] = await data.Resource.get_resources_in_resource_sets_incl_shared_resources(
+        ] = await data.Resource.get_resources_in_resource_sets(
             environment=env_id,
             version=base_version,
             resource_sets=updated_resource_sets,
+            include_shared_resources=True,
             connection=connection,
         )
-        rids_deleted_resource_sets: abc.Set[ResourceIdStr] = await data.Resource.get_rids_in_resource_sets(
-            environment=env_id,
-            version=base_version,
-            resource_sets=deleted_resource_sets,
-            connection=connection,
+        rids_deleted_resource_sets: abc.Set[ResourceIdStr] = set(
+            rid
+            for rid in (
+                await data.Resource.get_resources_in_resource_sets(
+                    environment=env_id,
+                    version=base_version,
+                    resource_sets=deleted_resource_sets,
+                    connection=connection,
+                )
+            ).keys()
         )
         return PartialUpdateMerger(
             env_id,
@@ -189,20 +208,7 @@ class PartialUpdateMerger:
             else:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
-                attributes_copy = res_old.attributes.copy()
-                attributes_copy["version"] = self.version
-                res = data.Resource(
-                    environment=self.env_id,
-                    model=self.version,
-                    resource_id=res_old.resource_id,
-                    resource_type=res_old.resource_type,
-                    resource_id_value=res_old.resource_id_value,
-                    agent=res_old.agent,
-                    attributes=attributes_copy,
-                    attribute_hash=res_old.attribute_hash,
-                    resource_set=res_old.resource_set,
-                    provides=res_old.provides,
-                )
+                res = res_old.copy_for_partial_compile(new_version=self.version)
             result.append(res)
         return result
 
@@ -395,9 +401,10 @@ class OrchestrationService(protocol.ServerSlice):
         resources: List[JsonType],
         resource_state: Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         resource_sets: Dict[ResourceIdStr, Optional[str]],
+        set_version: Optional[int] = None,
     ) -> Dict[ResourceIdStr, data.Resource]:
         """
-        Convert the resources as sent to the put_version or put_partial endpoint to dao Resource objects.
+        Convert the resources sent to the put_version or put_partial endpoint to dao Resource objects.
         """
         rid_to_resource = {}
         # The content of the requires attribute for all the resources
@@ -419,6 +426,12 @@ class OrchestrationService(protocol.ServerSlice):
                 if field != "id":
                     attributes[field] = value
             res_obj.attributes = attributes
+            res_obj.make_hash()
+
+            # Update the version fields
+            if set_version is not None:
+                res_obj.attributes["version"] = set_version
+                res_obj.model = set_version
 
             # find cross agent dependencies
             agent = res_obj.agent
@@ -458,16 +471,17 @@ class OrchestrationService(protocol.ServerSlice):
                 f" {all_requires - rids}"
             )
 
-        for res in rid_to_resource.values():
-            res.make_hash()
-
         return rid_to_resource
 
     def _get_skipped_for_undeployable(
         self, resources: abc.Sequence[data.Resource], undeployable_ids: abc.Sequence[ResourceIdStr]
     ) -> abc.Sequence[ResourceIdStr]:
         """
-        Get the list of skipped for undeployable resources given the list of undeployable resources and the provides tree.
+        Return the resources that are skipped_for_undeployable given the full set of resources and
+        the resource ids of the resources that are undeployable.
+
+        :param resources: All resources in the model.
+        :param undeployable_ids: The ids of the resource that are undeployable.
         """
         # Build up provides tree
         provides_tree: Dict[ResourceIdStr, List[ResourceIdStr]] = defaultdict(lambda: [])
@@ -501,6 +515,10 @@ class OrchestrationService(protocol.ServerSlice):
         connection: asyncpg.connection.Connection,
     ) -> None:
         is_partial_update = partial_base_version is not None
+
+        if resource_sets is None:
+            resource_sets = {}
+
         if removed_resource_sets is None:
             removed_resource_sets = []
 
@@ -519,12 +537,9 @@ class OrchestrationService(protocol.ServerSlice):
                     f"(version: {version})"
                 )
 
-        if not resource_sets:
-            resource_sets = {}
-
-        for res_set in resource_sets.keys():
+        for rid_name in resource_sets.keys():
             try:
-                Id.parse_id(res_set)
+                Id.parse_id(rid_name)
             except Exception as e:
                 raise BadRequest("Invalid resource id in resource set: %s" % str(e))
 
@@ -581,7 +596,7 @@ class OrchestrationService(protocol.ServerSlice):
             res.resource_id for res in rid_to_resource.values() if res.status in const.UNDEPLOYABLE_STATES
         ]
         try:
-            cm = await data.ConfigurationModel.create(
+            cm = await data.ConfigurationModel.create_and_insert(
                 env_id=env.id,
                 version=version,
                 total=len(rid_to_resource),
@@ -623,7 +638,7 @@ class OrchestrationService(protocol.ServerSlice):
             all_resource_version_ids |= {Id.set_version_in_id(rid, version) for rid in rids_unchanged_resource_sets}
 
         await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
-        await cm.recalculate_total()
+        await cm.recalculate_total(connection=connection)
 
         await data.UnknownParameter.insert_many(unknowns, connection=connection)
 
@@ -670,9 +685,13 @@ class OrchestrationService(protocol.ServerSlice):
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
             await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
-    def _create_unknown_from_dct(
+    def _create_unknown_parameter_daos_from_api_unknowns(
         self, env_id: uuid.UUID, version: int, unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None
     ) -> List[data.UnknownParameter]:
+        """
+        Create UnknownParameter dao's from the unknowns dictionaries passed through the put_version() and put_partial API
+        endpoint.
+        """
         if not unknowns:
             return []
         result = []
@@ -732,7 +751,7 @@ class OrchestrationService(protocol.ServerSlice):
         if not compiler_version:
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 
-        unknowns_objs = self._create_unknown_from_dct(env.id, version, unknowns)
+        unknowns_objs = self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
         rid_to_resource = self._create_dao_resources_from_api_resources(
             env_id=env.id,
             resources=resources,
@@ -794,13 +813,6 @@ class OrchestrationService(protocol.ServerSlice):
             if rid.get_version() != 0:
                 raise BadRequest("Resources for partial export should not contain version information")
 
-        rid_to_resource: Dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
-            env_id=env.id,
-            resources=resources,
-            resource_state=resource_state,
-            resource_sets=resource_sets,
-        )
-
         intersection: set[str] = set(resource_sets.values()).intersection(set(removed_resource_sets))
         if intersection:
             raise BadRequest(
@@ -816,17 +828,20 @@ class OrchestrationService(protocol.ServerSlice):
                 # Only request a new version once the resource lock has been acquired to ensure a monotonic version history
                 version: int = await env.get_next_version(connection=con)
 
-                # set version on input resources
-                for res in rid_to_resource.values():
-                    res.attributes["version"] = version
-                    res.model = version
-
                 current_versions: abc.Sequence[data.ConfigurationModel] = await data.ConfigurationModel.get_versions(
                     env.id, limit=1
                 )
                 if not current_versions:
                     raise BadRequest("A partial export requires a base model but no versions have been exported yet.")
                 base_version: int = current_versions[0].version
+
+                rid_to_resource: Dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
+                    env_id=env.id,
+                    resources=resources,
+                    resource_state=resource_state,
+                    resource_sets=resource_sets,
+                    set_version=version,
+                )
 
                 updated_resource_sets: abc.Set[str] = set(sr_name for sr_name in resource_sets.values() if sr_name is not None)
                 partial_update_merger = await PartialUpdateMerger.create(
@@ -844,7 +859,7 @@ class OrchestrationService(protocol.ServerSlice):
                 await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
-                    unknowns_in_partial_compile=self._create_unknown_from_dct(env.id, version, unknowns)
+                    unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
                 )
 
                 await self._put_version(

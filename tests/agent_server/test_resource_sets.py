@@ -766,9 +766,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
         removed_resource_sets=["set-c"],
     )
 
-    for r in await data.Resource.get_list(environment=environment):
-        print(r.to_dict())
-
     assert result.code == 200, result.result
     resource_list = sorted(
         await data.Resource.get_resources_in_latest_version(uuid.UUID(environment)),
