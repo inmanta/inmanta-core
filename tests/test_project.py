@@ -19,9 +19,9 @@ import base64
 import logging
 import os
 import uuid
-from pathlib import Path
-from typing import Dict, cast, List
 from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, cast
 
 import pytest
 
@@ -79,6 +79,7 @@ async def test_project_api_v1(client):
     # get non existing environment
     response = await client.get_environment(uuid.uuid4())
     assert response.code == 404
+
 
 async def test_project_api_v2_project_list_ordering(client_v2):
     """

@@ -532,7 +532,8 @@ class EnvironmentService(protocol.ServerSlice):
     @handle(methods_v2.environment_settings_list, env="tid")
     async def environment_settings_list(self, env: data.Environment) -> model.EnvironmentSettingsReponse:
         return model.EnvironmentSettingsReponse(
-            settings=dict(sorted(env.settings.items())), definition={k: v.to_dto() for k, v in sorted(data.Environment._settings.items())}
+            settings=dict(sorted(env.settings.items())),
+            definition={k: v.to_dto() for k, v in sorted(data.Environment._settings.items())},
         )
 
     @handle(methods_v2.environment_settings_set, env="tid", key="id")
