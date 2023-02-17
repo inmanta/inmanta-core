@@ -1,0 +1,4 @@
+---
+description: cleanup old agents from the agent table in db
+change-type: patch
+destination-branches: [master, iso6, iso5]
