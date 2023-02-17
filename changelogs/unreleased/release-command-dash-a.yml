@@ -1,0 +1,8 @@
+description: Added `-a` option to `inmanta release` command to commit all pending changes.
+issue-nr: 2508
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: "The `inmanta release` command will no longer do `git -a` by default, add the `-a` option to get the old behavior "
+
