@@ -23,7 +23,6 @@ import pytest
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301170.sql"))
 async def test_migration(
-    postgresql_client,
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
     """
