@@ -1479,7 +1479,7 @@ async def test_cleanup_old_agents(server):
         paused=False,
         id_primary=None,
     ).insert()
-    # agent with "agent1" as name but being present in the agent_map an in another env will not get purged:
+    # agent with "agent1" as name but being present in the agent_map and in another env will not get purged:
     await data.Agent(
         environment=env2.id,
         name="agent1",
