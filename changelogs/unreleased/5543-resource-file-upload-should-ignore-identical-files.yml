@@ -1,0 +1,6 @@
+description: The stat_file API endpoint now returns a set of files instead of a list.
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
