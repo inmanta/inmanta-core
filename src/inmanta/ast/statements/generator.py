@@ -27,6 +27,7 @@ from typing import Dict, Iterator, List, Optional, Set, Tuple
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
+    AmbiguousTypeException,
     AttributeReferenceAnchor,
     DuplicateException,
     Locatable,
@@ -67,6 +68,7 @@ from inmanta.execute.runtime import (
 )
 from inmanta.execute.tracking import ImplementsTracker
 from inmanta.execute.util import Unknown
+import inmanta.ast.entity
 
 try:
     from typing import TYPE_CHECKING
@@ -535,31 +537,54 @@ class Constructor(ExpressionStatement):
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # Type hint handling
+
+        resolver_failure: TypeNotFoundException = None
+        local_type: "Entity" = None
+
         try:
             # First normal resolution
-            mytype: "Entity" = self.namespace.get_type(self.class_type)
-        except TypeNotFoundException:
-            # Do we have hint context?
-            # We only work with unqualified names for hinting
-            if lhs_attribute.type_hint and not "::" in str(self.class_type):
+            local_type = self.namespace.get_type(self.class_type)
+        except TypeNotFoundException as e:
+            resolver_failure = e
+
+        # Do we have hint context?
+        # We only work with unqualified names for hinting
+        if (
+            lhs_attribute is not None
+            and lhs_attribute.type_hint is not None
+        ):
+            if not isinstance(lhs_attribute.type_hint, inmanta.ast.entity.Entity):
+                # This is a type error, we are a contructor for and entity but we should not be!
+                raise TypingException(self, f"Can not assign a value of type {self.class_type} to a variable of type {lhs_attribute.type_hint.type_string()}")
+            elif not "::" in str(self.class_type):
+                # We can do type hinting here
+                type_hint = lhs_attribute.type_hint
+                # Consider the hint type
+                base_types = [type_hint]
+                # Consider the local type
+                if local_type is not None and local_type.is_subclass(type_hint):
+                    base_types.append(local_type)
                 # Find all correct types with the matching unqualified name
-                candidates = [
+                candidates = {
                     entity
-                    for entity in chain([lhs_attribute.type_hint], lhs_attribute.type_hint.get_all_child_entities())
+                    for entity in chain(base_types, type_hint.get_all_child_entities())
                     if entity.name == str(self.class_type)
-                ]
+                }
 
                 if len(candidates) > 1:
                     # To many options, should alert the user, as inheritance may cause this to break a working model due to dependency update
-                    print("Could not hint")
+                    raise AmbiguousTypeException(self.class_type, list(candidates))
                 elif len(candidates) == 1:
                     # One, nice
-                    mytype = candidates[0]
+                    mytype = next(iter(candidates))
                 else:
                     # None, pretend nothing happened, reraise original exception
                     raise
+        else:
+            if local_type is not None:
+                mytype = local_type
             else:
-                raise
+                raise resolver_failure
 
         self.type = mytype
 

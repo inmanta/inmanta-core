@@ -205,7 +205,7 @@ class RequiresEmitStatement(DynamicStatement):
 class AttributeAssignmentLHS:
     instance: "Reference"
     attribute: str
-    type_hint: Optional["Entity"] = None
+    type_hint: Optional["Type"] = None
 
 
 class ExpressionStatement(RequiresEmitStatement):

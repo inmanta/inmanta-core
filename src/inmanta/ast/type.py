@@ -93,7 +93,7 @@ class Type(Locatable):
         """
         return True
 
-    def type_string(self) -> Optional[str]:
+    def type_string(self) ->str:
         """
         Returns the type string as expressed in the Inmanta :term:`DSL`, if this type can be expressed in the :term:`DSL`.
         Otherwise returns None.
@@ -143,6 +143,9 @@ class NamedType(Type, Named):
     def get_double_defined_exception(self, other: "NamedType") -> "DuplicateException":
         """produce an error message for this type"""
         raise DuplicateException(self, other, "Type %s is already defined" % (self.get_full_name()))
+
+    def type_string(self) -> str:
+        return self.get_full_name()
 
 
 @stable_api
@@ -642,7 +645,7 @@ class ConstraintType(NamedType):
 
         return True
 
-    def type_string(self):
+    def type_string(self) -> str:
         return "%s::%s" % (self.namespace, self.name)
 
     def type_string_internal(self) -> str:
