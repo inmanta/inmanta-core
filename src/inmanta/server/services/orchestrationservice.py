@@ -384,6 +384,39 @@ class OrchestrationService(protocol.ServerSlice):
                 for v in delete_list:
                     await version_dict[v].delete_cascade()
 
+        # Cleanup old agents from agent table in db
+        async with data.Agent.get_connection() as con:
+            await con.execute(
+                """
+-- Delete all records from the agent table where the (environment, name) pair
+-- is not in the set of (environment, name) pairs returned by the subquery.
+DELETE FROM public.agent
+WHERE (environment, name) NOT IN (
+    SELECT DISTINCT environment_id as environment, agent as name
+    FROM (
+        -- agent is in the agent map
+        SELECT e.id as environment_id, map.key as agent
+        FROM environment e
+        CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
+
+        -- Union with the set of (environment, name) pairs for all agents that
+        -- have a primary ID set (that are not down)
+        UNION ALL
+        SELECT environment as environment_id, name as agent
+        FROM agent
+        WHERE id_primary IS not NULL
+
+        -- Union with the set of (environment, name) pairs for all resources
+        -- and associated agents for each environment. (that are used by a version)
+        UNION ALL
+        SELECT r.environment, r.agent
+        FROM public.resource r
+        JOIN public.configurationmodel c ON r.environment = c.environment AND r.model = c.version
+        GROUP BY r.environment, r.agent
+    ) combined_results
+)"""
+            )
+
     @handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
