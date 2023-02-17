@@ -112,10 +112,10 @@ async def test_project_api_v2_project_list_ordering(client_v2):
     for i in range(3):
         assert len(result.result["data"][i]["environments"]) == 3
 
-    # Make sure results are sorted according to project id...
+    # Make sure results are sorted according to project name...
     assert sorted(project_environments_map.keys()) == [result.result["data"][i]["name"] for i in range(3)]
 
-    # ... and according env id within each project
+    # ... and according to env name within each project
     for project_n, key_value_pair in enumerate(sorted(project_environments_map.items())):
         project_id, env_id_list = key_value_pair
         assert sorted(env_id_list) == [env["name"] for env in result.result["data"][project_n]["environments"]]
