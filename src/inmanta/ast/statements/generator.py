@@ -529,6 +529,9 @@ class Constructor(ExpressionStatement):
         for k, v in self.__attributes.items():
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
+            attr = self.type.get_attribute(k)
+            if attr is None:
+                breakpoint()
             type_hint = self.type.get_attribute(k).get_type().get_base_type()
             v.normalize(
                 lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
@@ -589,6 +592,11 @@ class Constructor(ExpressionStatement):
                             f"Can not assign a value of type {local_type.type_string()} "
                             f"to a variable of type {lhs_attribute.type_hint.type_string()}",
                         )
+            else:
+                if local_type is not None:
+                    mytype = local_type
+                else:
+                    raise resolver_failure
         else:
             if local_type is not None:
                 mytype = local_type
