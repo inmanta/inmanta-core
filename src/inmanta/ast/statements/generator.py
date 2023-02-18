@@ -531,8 +531,10 @@ class Constructor(ExpressionStatement):
             # (index attributes need to be resolved before the instance can be constructed)
             attr = self.type.get_attribute(k)
             if attr is None:
-                breakpoint()
-            type_hint = self.type.get_attribute(k).get_type().get_base_type()
+                raise TypingException(
+                    self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
+                )
+            type_hint = attr.get_type().get_base_type()
             v.normalize(
                 lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
             )
