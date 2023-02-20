@@ -3361,9 +3361,7 @@ class Agent(BaseDocument):
     @classmethod
     async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         query = """
--- Delete all records from the agent table where the (environment, name) pair
--- is not in the set of (environment, name) pairs returned by the subquery.
-DELETE FROM public.agent
+DELETE FROM public.agent AS a
 WHERE (environment, name) NOT IN (
     SELECT DISTINCT environment_id as environment, agent as name
     FROM (
@@ -3371,22 +3369,17 @@ WHERE (environment, name) NOT IN (
         SELECT e.id as environment_id, map.key as agent
         FROM environment e
         CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
+    ) in_agent_map
+)
+AND id_primary IS NULL
+AND NOT EXISTS (
+    SELECT 1
+    FROM resource AS re
+    WHERE a.environment=re.environment
+    AND a.name=re.agent
+);
 
-        -- Union with the set of (environment, name) pairs for all agents that
-        -- have a primary ID set (that are not down)
-        UNION
-        SELECT environment as environment_id, name as agent
-        FROM agent
-        WHERE id_primary IS not NULL
-
-        -- Union with the set of (environment, name) pairs for all resources
-        -- and associated agents for each environment. (that are used by a version)
-        UNION
-        SELECT DISTINCT r.environment, r.agent
-        FROM public.configurationmodel c
-        JOIN public.resource r ON c.environment = r.environment AND c.version = r.model
-    ) combined_results
-)"""
+"""
         await cls._execute_query(query, connection=connection)
 
 
