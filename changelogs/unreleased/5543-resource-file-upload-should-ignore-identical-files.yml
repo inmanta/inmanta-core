@@ -5,4 +5,4 @@ destination-branches:
   - iso6
   - iso5
 sections:
-  bugfix: "{{description}}"
+  bugfix: "Fix issue that may cause the first export for an environment to fail when files with identical content are present."
