@@ -22,4 +22,3 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     # Add index to avoid a sequential scan in agent.clean_up()
     await connection.execute("CREATE INDEX ON public.agent (environment, agent)")
-
