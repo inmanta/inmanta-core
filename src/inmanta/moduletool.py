@@ -722,7 +722,7 @@ When a development release is done using the --dev option, this command:
             help="This changelog message will be written to the changelog file. If the -m option is not provided, "
             "this message will also be used as the commit message.",
         )
-        commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+        release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
