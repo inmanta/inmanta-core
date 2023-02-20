@@ -26,6 +26,6 @@ async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
     """
-    Only updated to primary key of two tables: make sure the migration script applies.
+    Only an index was added: make sure the migration script applies.
     """
     await migrate_db_from()
