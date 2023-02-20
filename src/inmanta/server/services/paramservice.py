@@ -280,7 +280,7 @@ class ParameterService(protocol.ServerSlice):
 
     @handle(methods_v2.get_facts, env="tid")
     async def get_facts(self, env: data.Environment, rid: ResourceIdStr) -> List[Fact]:
-        params = await data.Parameter.get_list(environment=env.id, resource_id=rid)
+        params = await data.Parameter.get_list(environment=env.id, resource_id=rid, order_by_column="name")
         dtos = [param.as_fact() for param in params]
         return dtos
 
