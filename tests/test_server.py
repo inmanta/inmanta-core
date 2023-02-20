@@ -1491,9 +1491,12 @@ async def test_cleanup_old_agents(server):
     assert len(agents_before_purge) == 6
 
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
-    agents_after_purge = await data.Agent.get_list()
+    agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
     assert len(agents_after_purge) == 4
-    assert any(agent.name == "agent2" and agent.environment == env1.id for agent in agents_after_purge)
-    assert any(agent.name == "agent3" and agent.environment == env1.id for agent in agents_after_purge)
-    assert any(agent.name == "agent4" and agent.environment == env1.id for agent in agents_after_purge)
-    assert any(agent.name == "agent1" and agent.environment == env2.id for agent in agents_after_purge)
+    expected_agents_after_purge = [
+        (env1.id, "agent2"),
+        (env1.id, "agent3"),
+        (env1.id, "agent4"),
+        (env2.id, "agent1"),
+    ]
+    assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
