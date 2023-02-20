@@ -2958,7 +2958,7 @@ class UnknownParameter(BaseDocument):
             * Are not associated with a resource
             * Are associated with a resource that:
                - doesn't belong to the resource set updated_resource_sets and deleted_resource_sets
-               - and, doesn't have a resource_id in rids_in_partial_compile (An unknown might belong to a shared resource that
+               - and doesn't have a resource_id in rids_in_partial_compile (An unknown might belong to a shared resource that
                  is not exported by the partial compile)
         """
         query = f"""
