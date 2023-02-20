@@ -1244,7 +1244,7 @@ version: 0.0.1dev0"""
                 repo=module_dir,
                 message=changelog_message if changelog_message else message if message else f"Bump version to {new_version}",
                 commit_all=commit_all,
-                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
         else:
@@ -1258,7 +1258,7 @@ version: 0.0.1dev0"""
                 repo=module_dir,
                 message=message if message else f"Release version {module.metadata.get_full_version()}",
                 commit_all=commit_all,
-                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
