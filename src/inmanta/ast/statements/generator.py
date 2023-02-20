@@ -626,7 +626,7 @@ class Constructor(ExpressionStatement):
                 }
                 if len(candidates) > 1:
                     # To many options, inheritance may cause this to break a working model due to dependency update
-                    raise AmbiguousTypeException(self.class_type, list(candidates))
+                    raise AmbiguousTypeException(self.class_type, sorted(candidates))
                 elif len(candidates) == 1:
                     # One, nice
                     return next(iter(candidates))
