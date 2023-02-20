@@ -1409,8 +1409,9 @@ async def test_redirect_dashboard_to_console(server, path):
 
 async def test_cleanup_old_agents(server):
     """
-    This test is testing the functionality of cleaning up old agents in the database. The test creates 2 environments and adds agents with various
-    properties (some used in a version, some in the agent map, and some with the primary ID set), and then tests that
+    This test is testing the functionality of cleaning up old agents in the database.
+    The test creates 2 environments and adds agents with various properties (some used in a version,
+    some in the agent map, and some with the primary ID set), and then tests that
     the cleanup function correctly removes only the agents that meet the criteria for deletion.
     """
 
