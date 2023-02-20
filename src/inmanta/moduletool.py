@@ -722,6 +722,7 @@ When a development release is done using the --dev option, this command:
             help="This changelog message will be written to the changelog file. If the -m option is not provided, "
             "this message will also be used as the commit message.",
         )
+        release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
@@ -1177,6 +1178,7 @@ version: 0.0.1dev0"""
         patch: bool = False,
         minor: bool = False,
         major: bool = False,
+        commit_all: bool = False,
         changelog_message: Optional[str] = None,
     ) -> None:
         """
@@ -1241,8 +1243,8 @@ version: 0.0.1dev0"""
             gitprovider.commit(
                 repo=module_dir,
                 message=changelog_message if changelog_message else message if message else f"Bump version to {new_version}",
-                commit_all=True,
-                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
+                commit_all=commit_all,
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
         else:
@@ -1255,8 +1257,8 @@ version: 0.0.1dev0"""
             gitprovider.commit(
                 repo=module_dir,
                 message=message if message else f"Release version {module.metadata.get_full_version()}",
-                commit_all=True,
-                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
+                commit_all=commit_all,
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
