@@ -109,7 +109,6 @@ class ConflictingRequirements(CompilerException):
     """
 
     def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
-
         CompilerException.__init__(self, msg=message)
         self.conflicts = conflicts
 
@@ -1142,6 +1141,11 @@ class VirtualEnv(ActiveEnv):
         if os.path.isdir(self.env_path) and os.listdir(self.env_path):
             # Make sure the venv hosts the same python version as the running process
             if sys.platform.startswith("linux"):
+                # Check if the python binary exists in the environment's bin directory
+                if not os.path.exists(self.python_path):
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} as no Python installation exists."
+                    )
                 # On linux based systems, the python version is in the path to the site packages dir:
                 if not os.path.exists(self.site_packages_dir):
                     raise VenvActivationFailedError(

@@ -1,0 +1,4 @@
+description: Adds the agent count metric.
+issue-nr: 5127
+change-type: minor
+destination-branches: [master, iso6]

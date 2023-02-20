@@ -300,7 +300,6 @@ async def test_filter_validation(server, client, filter, expected_status, env_wi
 
 
 async def test_log_without_kwargs(server, client, environment: str):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,
@@ -357,7 +356,6 @@ async def test_log_without_kwargs(server, client, environment: str):
 
 
 async def test_log_nested_kwargs(server, client, environment: str):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,

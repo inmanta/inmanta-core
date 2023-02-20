@@ -154,7 +154,6 @@ def test_rewrite(tmpdir, module_type: Type[module.Module]):
 
     def metadata_contents(version: str, version_tag: str = "") -> str:
         if v1:
-
             return f"""
 name: mod
 license: ASL

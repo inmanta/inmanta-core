@@ -1,3 +1,5 @@
+.. _partial_compile:
+
 ****************
 Partial compiles
 ****************
@@ -7,6 +9,14 @@ Partial compiles
     This is an advanced feature, targeted at mature models that have the need to scale beyond their current capabilities.
     Care should be taken to :ref:`implement this safely<partial-compiles-guidelines>`, and the user should be aware of
     :ref:`its limitations<partial-compiles-limitations>`.
+
+
+.. only:: iso
+
+    .. note::
+
+        For partial compiles through LSM, see :ref:`its documentation<partial_compile_lsm>` on how to manage resource sets for an
+        LSM service in addition to the documentation below.
 
 Small updates to large models can be compiled quickly using partial compiles. We merely recompile a tiny, independent portion of the model, as opposed to doing it for the entire model.
 A ``resource set`` is made up of the resources in a specific portion of the model.

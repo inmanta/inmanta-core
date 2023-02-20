@@ -189,7 +189,7 @@ server_purge_version_interval = Option(
     "purge-versions-interval",
     3600,
     """The number of seconds between version purging,
-                                          see :inmanta.config:option:`server.available-versions-to-keep`""",
+                                          see :inmanta.environment-settings:setting:`available_versions_to_keep`.""",
     is_time,
 )
 
@@ -198,7 +198,7 @@ server_compiler_report_retention = Option(
     "compiler-report-retention",
     604800,
     """The server regularly cleans up old compiler reports.
-    This options specifies the number of seconds to keep old compiler reports for. The default is seven days""",
+    This options specifies the number of seconds to keep old compiler reports for. The default is seven days.""",
     is_time,
 )
 

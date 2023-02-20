@@ -196,7 +196,7 @@ Python Environment
     :undoc-members:
 
 Variables
-----------
+---------
 
 .. autoclass:: inmanta.ast.variables.Reference
     :members: name
@@ -328,6 +328,11 @@ Data
 .. autodata:: inmanta.data.model.ResourceIdStr
 
 .. autodata:: inmanta.data.model.ResourceVersionIdStr
+
+.. autoclass:: inmanta.db.util.PGRestore
+    :show-inheritance:
+
+.. autofunction:: inmanta.db.util.clear_database
 
 
 Domain conversion

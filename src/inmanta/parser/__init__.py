@@ -19,7 +19,7 @@
 from typing import Optional
 
 import inmanta.ast.export as ast_export
-from inmanta.ast import CompilerException, LocatableString, Range
+from inmanta.ast import CompilerException, LocatableString, Location, Range
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -28,7 +28,7 @@ from inmanta.warnings import InmantaWarning
 class ParserException(CompilerException):
     """Exception occurring during the parsing of the code"""
 
-    def __init__(self, location: Range, value: object, msg: Optional[str] = None) -> None:
+    def __init__(self, location: Location, value: object, msg: Optional[str] = None) -> None:
         if msg is None:
             msg = "Syntax error at token %s" % value
         else:
@@ -46,7 +46,7 @@ class ParserException(CompilerException):
 class ParserWarning(InmantaWarning, ParserException):
     """Warning occurring during the parsing of the code"""
 
-    def __init__(self, location: Range, value: object, msg: str) -> None:
+    def __init__(self, location: Location, value: object, msg: str) -> None:
         InmantaWarning.__init__(self)
         ParserException.__init__(self, location, value, msg)
         # Override parent message since it's not an error

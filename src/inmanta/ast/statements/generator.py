@@ -471,6 +471,7 @@ class Constructor(ExpressionStatement):
     __slots__ = (
         "class_type",
         "__attributes",
+        "__attribute_locations",
         "__wrapped_kwarg_attributes",
         "location",
         "type",
@@ -492,6 +493,7 @@ class Constructor(ExpressionStatement):
         super().__init__()
         self.class_type = class_type
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
+        self.__attribute_locations: Dict[str, LocatableString] = {}
         self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
@@ -520,7 +522,7 @@ class Constructor(ExpressionStatement):
         )
 
     def _normalize_rhs(self, index_attributes: abc.Set[str]) -> None:
-        for (k, v) in self.__attributes.items():
+        for k, v in self.__attributes.items():
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
             v.normalize(lhs_attribute=AttributeAssignmentLHS(self._self_ref, k) if k not in index_attributes else None)
@@ -557,10 +559,12 @@ class Constructor(ExpressionStatement):
 
         self._normalize_rhs(inindex)
 
-        for (k, v) in all_attributes.items():
+        for k, v in all_attributes.items():
             attribute = self.type.get_attribute(k)
             if attribute is None:
-                raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                raise TypingException(
+                    self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
+                )
             if k not in inindex:
                 self._indirect_attributes[k] = v
             else:
@@ -605,7 +609,7 @@ class Constructor(ExpressionStatement):
         if graph is not None:
             node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
             # TODO: also add wrapped_kwargs
-            for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
+            for k, v in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
                 node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
         return requires
@@ -623,7 +627,7 @@ class Constructor(ExpressionStatement):
         # kwargs
         kwarg_attrs: dict[str, object] = {}
         for kwargs in self.wrapped_kwargs:
-            for (k, v) in kwargs.execute(requires, resolver, queue):
+            for k, v in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
                     raise RuntimeException(
                         self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
@@ -776,6 +780,7 @@ class Constructor(ExpressionStatement):
         name = str(lname)
         if name not in self.__attributes:
             self.__attributes[name] = value
+            self.__attribute_locations[name] = lname
             self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
             self.anchors.extend(value.get_anchors())
         else:

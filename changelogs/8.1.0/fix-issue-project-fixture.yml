@@ -1,0 +1,4 @@
+---
+description: "Fixes an issue with the project fixture by renaming it as there already exists a fixture with this name in pytest_inmanta"
+change-type: patch
+destination-branches: [master, iso6]

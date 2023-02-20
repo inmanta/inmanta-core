@@ -889,12 +889,6 @@ class OrchestrationService(protocol.ServerSlice):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
-
-        if model.total == 0:
-            await model.mark_done(connection=connection)
-            return 200, {"model": model}
-
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
         now = datetime.datetime.now().astimezone()
@@ -935,6 +929,21 @@ class OrchestrationService(protocol.ServerSlice):
                     send_events=False,
                     connection=connection,
                 )
+
+        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.resource_service.get_increment(
+            env, version_id
+        )
+
+        increment_ids, neg_increment = increments
+        await self.resource_service.mark_deployed(env, neg_increment, now, version_id)
+
+        # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
+        # This has to be done after the resources outside of the increment have been marked as deployed.
+        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+
+        if model.total == 0:
+            await model.mark_done(connection=connection)
+            return 200, {"model": model}
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents

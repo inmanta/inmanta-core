@@ -199,9 +199,21 @@
     from an arbitrary location in a nested dictionary-based data structure.
 
 
-    Partial Compile
-    ------------------
-    To enable the partial compiles on the server, the ``lsm_partial_compile`` environment setting should be set to true (by default it is set to false).
-    For more information about how to use partial compiles, refer to :ref:`Partial compiles<partial_compile>`.
-    The ``owned_resources`` attribute of a ``ServiceEntity`` instance should contain all the resources that are exclusively used by this service instance and no others.
-    This is used to determine the resources for the resource set of the service (see the :ref:`Modeling guidelines<partial-compiles-guidelines>`).
+    .. _partial_compile_lsm:
+
+    Partial Compiles
+    ----------------
+    Partial compiles are an advanced feature that allow increased scaling in the number of services. Instead of triggering
+    compiles for the full model whenever a service instance is created, updated or has a state transfer, only the part of the
+    model relevant for that service instance is recompiled.
+
+    LSM expands on the normal :ref:`resources set based partial compiles<partial_compile>` by automatically creating a single
+    resource set for each service instance. To add resources to the instance's resource set, simply add them to its
+    ``owned_resources`` relation and make sure to select the ``parents`` implementation for your service entities. LSM will then
+    make sure to populate the resource set and to correctly trigger related compiles and exports.
+
+    For a more generic introduction to partial compiles (without lsm), including resource set semantics, modelling guidelines
+    and how to approach testing, refer to the generic :ref:`partial compiles<partial_compile>` section.
+
+    Finally, to enable lsm's partial compiles on the server, set the :inmanta.environment-settings:setting:`lsm_partial_compile`
+    environment setting to true.

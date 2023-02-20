@@ -1,0 +1,6 @@
+description: Improved performance of ResourceCountMetricsCollector query
+change-type: patch
+issue-nr: 5348
+destination-branches:
+  - master
+  - iso6

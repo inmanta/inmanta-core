@@ -1,0 +1,7 @@
+description: improved partial compile documentation for LSM
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - master
+  - iso6

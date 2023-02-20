@@ -337,7 +337,6 @@ VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNon
 
 
 class MethodArgumentsBaseModel(pydantic.BaseModel):
-
     _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
         validator_timezone_aware_timestamps
     )
@@ -689,7 +688,6 @@ class MethodProperties(object):
 
     @property
     def timeout(self) -> Optional[int]:
-
         return self._timeout
 
     @property

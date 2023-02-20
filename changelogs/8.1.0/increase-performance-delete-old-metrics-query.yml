@@ -1,0 +1,6 @@
+---
+description: Increase the performance of the query to delete old metrics.
+issue-nr: 5130
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]

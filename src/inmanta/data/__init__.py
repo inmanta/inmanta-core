@@ -33,6 +33,7 @@ from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Dict,
     Generic,
@@ -58,6 +59,7 @@ import pydantic
 import pydantic.tools
 import typing_inspect
 from asyncpg import Connection
+from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
 import inmanta.const as const
@@ -1238,6 +1240,7 @@ class DocumentMeta(type):
 
 
 TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
+TransactionResult = TypeVar("TransactionResult")
 
 
 @stable_api
@@ -2186,6 +2189,31 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return result
 
+    @classmethod
+    async def execute_in_retryable_transaction(
+        cls,
+        fnc: Callable[[Connection], Awaitable[TransactionResult]],
+        tx_isolation_level: Optional[str] = None,
+    ) -> TransactionResult:
+        """
+        Execute the queries in fnc using the transaction isolation level `tx_isolation_level` and return the
+        result returned by fnc. This method performs retries when the transaction is aborted due to a
+        serialization error.
+        """
+        async with cls.get_connection() as postgresql_client:
+            attempt = 1
+            while True:
+                try:
+                    async with postgresql_client.transaction(isolation=tx_isolation_level):
+                        return await fnc(postgresql_client)
+                except SerializationError:
+                    if attempt > 3:
+                        raise Exception("Failed to execute transaction after 3 attempts.")
+                    else:
+                        # Exponential backoff
+                        await asyncio.sleep(pow(10, attempt) / 1000)
+                        attempt += 1
+
 
 class Project(BaseDocument):
     """
@@ -2307,6 +2335,7 @@ PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
+ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
 
 
 class Setting(object):
@@ -2442,11 +2471,11 @@ class Environment(BaseDocument):
         ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
             name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
             typ="enum",
-            default=const.AgentTriggerMethod.push_full_deploy.name,
+            default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use. "
-            f"If {PUSH_ON_AUTO_DEPLOY} is enabled, "
-            f"{AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} overrides this setting",
+            doc="The agent trigger method to use when no specific method is specified in the API call. "
+            "This determines the behavior of the 'Promote' button. "
+            f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
@@ -2579,12 +2608,29 @@ class Environment(BaseDocument):
             doc="""The number of seconds to wait before the server may attempt to do a new recompile.
                     Recompiles are triggered after facts updates for example.""",
         ),
+        ENVIRONMENT_METRICS_RETENTION: Setting(
+            name=ENVIRONMENT_METRICS_RETENTION,
+            typ="int",
+            default=8760,
+            doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
+            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            validator=convert_int,
+        ),
     }
 
     _renamed_settings_map = {
         AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
+
+    @classmethod
+    def get_setting_definition(cls, setting_name: str) -> Setting:
+        """
+        Return the definition of the setting with the given name.
+        """
+        if setting_name not in cls._settings:
+            raise KeyError()
+        return cls._settings[setting_name]
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
@@ -2841,6 +2887,7 @@ class Parameter(BaseDocument):
             query += " AND metadata @> $" + str(query_param_index) + "::jsonb"
             dict_value = {key: value}
             values.append(cls._get_value(dict_value))
+        query += " ORDER BY name"
         result = await cls.select_query(query, values)
         return result
 
@@ -3287,7 +3334,7 @@ class Agent(BaseDocument):
                                            primary. If the session id is None, the Agent doesn't have a primary anymore.
         :param now: Timestamp of this failover
         """
-        for (endpoint, sid) in endpoints_with_new_primary:
+        for endpoint, sid in endpoints_with_new_primary:
             # Lock mode is required because we will update in this transaction
             # Deadlocks with cleanup otherwise
             agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
@@ -4864,7 +4911,7 @@ class ConfigurationModel(BaseDocument):
     def to_dict(self) -> JsonType:
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
-        dct["done"] = self._done
+        dct["done"] = self.done
         return dct
 
     @classmethod
@@ -5043,7 +5090,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int) -> Tuple[Set[m.ResourceIdStr], Set[m.ResourceIdStr]]:
+    async def get_increment(cls, environment: uuid.UUID, version: int) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5062,10 +5109,10 @@ class ConfigurationModel(BaseDocument):
         resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
 
         # to increment
-        increment = []
-        not_increment = []
+        increment: list[abc.Mapping[str, Any]] = []
+        not_increment: list[abc.Mapping[str, Any]] = []
         # todo in this version
-        work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
+        work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
@@ -5076,7 +5123,7 @@ class ConfigurationModel(BaseDocument):
 
         for version in versions:
             # todo in next version
-            next = []
+            next: list[abc.Mapping[str, object]] = []
 
             vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
@@ -5091,14 +5138,22 @@ class ConfigurationModel(BaseDocument):
 
                 status = ores["status"]
                 # available -> next version
-                if status in [ResourceState.available.name]:
+                if status == ResourceState.available.name:
                     next.append(res)
+
+                # deploying
+                # same hash -> next version
+                # different hash -> increment
+                elif status == ResourceState.deploying.name:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
+                        next.append(res)
+                    else:
+                        increment.append(res)
 
                 # -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
-                    ResourceState.deploying.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
                     ResourceState.skipped.name,
@@ -5123,15 +5178,15 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = {res["resource_id"] for res in not_increment}
+        negative: set[ResourceIdStr] = {res["resource_id"] for res in not_increment}
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = {res["resource_id"] for res in increment}  # type: Set[str]
-        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
-        send_events = []  # type: List[str]
+        outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
+        original_provides: dict[str, List[ResourceIdStr]] = defaultdict(lambda: [])
+        send_events: list[ResourceIdStr] = []
 
         # build lookup tables
         for res in resources:
@@ -5141,10 +5196,10 @@ class ConfigurationModel(BaseDocument):
                 send_events.append(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
-        work = list(outset)
-        done = set()
-        while work:
-            current = work.pop()
+        increment_work: list[ResourceIdStr] = list(outset)
+        done: set[ResourceIdStr] = set()
+        while increment_work:
+            current: ResourceIdStr = increment_work.pop()
             if current not in send_events:
                 # not sending events, so no receivers
                 continue
@@ -5154,7 +5209,7 @@ class ConfigurationModel(BaseDocument):
             done.add(current)
 
             provides = original_provides[current]
-            work.extend(provides)
+            increment_work.extend(provides)
             outset.update(provides)
             negative.difference_update(provides)
 
@@ -5416,15 +5471,18 @@ class EnvironmentMetricsGauge(BaseDocument):
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
     :param timestamp: The timestamps at which a new record is created
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
     :param count: the counter for the metric for the given timestamp
     """
 
     environment: uuid.UUID
     metric_name: str
+    category: str
     timestamp: datetime.datetime
     count: int
 
-    __primary_key__ = ("environment", "metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
 class EnvironmentMetricsTimer(BaseDocument):
@@ -5433,6 +5491,8 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     :param environment: the environment to which this metric is related
     :param metric_name: The name of the metric
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
     :param timestamp: The timestamps at which a new record is created
     :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
     :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
@@ -5440,11 +5500,12 @@ class EnvironmentMetricsTimer(BaseDocument):
 
     environment: uuid.UUID
     metric_name: str
+    category: str
     timestamp: datetime.datetime
     count: int
     value: float
 
-    __primary_key__ = ("environment", "metric_name", "timestamp")
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
 class User(BaseDocument):

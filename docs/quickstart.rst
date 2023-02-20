@@ -95,6 +95,7 @@ Go to the `SR Linux` folder and then `containerlab` to spin-up the containers:
 .. code-block:: sh
 
     cd examples/Networking/SR\ Linux/containerlab
+    sudo docker pull ghcr.io/nokia/srlinux:latest
     sudo clab deploy -t topology.yml
 
 `Containerlab` will spin-up:
@@ -135,7 +136,7 @@ In order to connect to `SR Linux` containers, there are two options:
     docker exec -it clab-srlinux-leaf2 sr_cli
 
 
-2. Using SSH (username and password is `admin`):
+2. Using SSH (username `admin` and password `NokiaSrl1!`):
 
 .. code-block:: sh
 
@@ -255,7 +256,7 @@ Let's have a look at the partial configuration model:
         mgmt_ip = "172.30.0.210",
         yang_credentials = yang::Credentials(
             username = "admin",
-            password = "admin"
+            password = "NokiaSrl1!"
         )
     )
 

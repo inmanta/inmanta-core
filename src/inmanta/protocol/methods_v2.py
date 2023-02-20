@@ -101,7 +101,7 @@ def project_delete(id: uuid.UUID) -> None:
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_list(environment_details: bool = False) -> List[model.Project]:
     """
-    Returns a list of projects
+    Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
     :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
@@ -318,7 +318,7 @@ def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent
 )
 def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
     """
-    List the settings in the current environment
+    List the settings in the current environment ordered by name alphabetically.
     """
 
 
@@ -440,21 +440,22 @@ def get_agents(
 ) -> List[model.Agent]:
     """
     Get all of the agents in the given environment
-    :param tid: The id of the environment the agents should belong to
-    :param limit: Limit the number of agents that are returned
+
+    :param tid: The id of the environment the agents should belong to.
+    :param limit: Limit the number of agents that are returned.
     :param start: The lower limit for the order by column (exclusive).
     :param first_id: The name to use as a continuation token for paging, in combination with the 'start' value,
-            because the order by column might contain non-unique values
+        because the order by column might contain non-unique values.
     :param last_id: The name to use as a continuation token for paging, in combination with the 'end' value,
-            because the order by column might contain non-unique values
-                Only one of 'start' and 'end' should be specified at the same time.
+        because the order by column might contain non-unique values.
+        Only one of 'start' and 'end' should be specified at the same time.
     :param end: The upper limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
+        Only one of 'start' and 'end' should be specified at the same time.
     :param filter: Filter the list of returned agents.
-                Filtering by 'name', 'process_name' and 'status' is supported.
+        Filtering by 'name', 'process_name' and 'status' is supported.
     :param sort: Return the results sorted according to the parameter value.
-                Sorting by 'name', 'process_name', 'status', 'paused' and 'last_failover' is supported.
-                The following orders are supported: 'asc', 'desc'
+        Sorting by 'name', 'process_name', 'status', 'paused' and 'last_failover' is supported.
+        The following orders are supported: 'asc', 'desc'
     :return: A list of all matching agents
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
@@ -764,42 +765,48 @@ def resource_logs(
     sort: str = "timestamp.desc",
 ) -> List[model.ResourceLog]:
     """
-    Get the logs of a specific resource
+    Get the logs of a specific resource.
+
     :param tid: The id of the environment this resource belongs to
     :param rid: The id of the resource
     :param limit: Limit the number of instances that are returned
-    :param start: The lower limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
-    :param end: The upper limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
+    :param start: The lower limit for the order by column (exclusive). Only one of 'start' and 'end' should be specified at
+        the same time.
+    :param end: The upper limit for the order by column (exclusive). Only one of 'start' and 'end' should be specified at the
+        same time.
     :param filter: Filter the list of returned logs.
-                Filters should be specified with the syntax `?filter.<filter_key>=value`,
-                for example `?filter.minimal_log_level=INFO`
-                It's also possible to provide multiple values for the same filter, in this case resources are returned,
-                if they match any of these filter values.
-                For example: `?filter.action=pull&filter.action=deploy` returns logs with either of the actions
-                pull or deploy.
-                Multiple different filters narrow the results however (they are treated as an 'AND' operator).
-                For example `filter.minimal_log_level=INFO&filter.action=deploy` returns logs
-                with 'deploy' action, where the 'log_level' is at least 'INFO'.
-                The following options are available:
-                action: filter by the action of the log
-                timestamp: return the logs matching the timestamp constraints. Valid constraints are of the form
-                    "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
-                    in UTC timezone. For example:
-                    `?filter.timestamp=ge:2021-08-18T09:21:30.568353&filter.timestamp=lt:2021-08-18T10:21:30.568353`.
-                    Multiple constraints can be specified, in which case only log messages that match all constraints will be
-                    returned.
-                message: filter by the content of the log messages. Partial matches are allowed. (case-insensitive)
-                minimal_log_level: filter by the log level of the log messages. The filter specifies the minimal level,
-                so messages with either this level, or a higher severity level are going to be included in the result.
-                For example, for `filter.minimal_log_level=INFO`, the log messages with level `INFO, WARNING, ERROR, CRITICAL`
-                all match the query.
-    :param sort: Return the results sorted according to the parameter value.
-                It should follow the pattern `<attribute_to_sort_by>.<order>`, for example `timestamp.desc`
-                (case insensitive).
-                The only sorting by `timestamp` is supported.
-                The following orders are supported: 'asc', 'desc'
+        Filters should be specified with the syntax `?filter.<filter_key>=value`, for example `?filter.minimal_log_level=INFO`.
+        It's also possible to provide multiple values for the same filter, in this case resources are returned, if they match
+        any of these filter values.
+
+        For example: `?filter.action=pull&filter.action=deploy` returns logs with either of the actions pull or deploy.
+        Multiple different filters narrow the results however (they are treated as an 'AND' operator).
+        For example `filter.minimal_log_level=INFO&filter.action=deploy` returns logs with 'deploy' action, where the
+        'log_level' is at least 'INFO'.
+
+        The following options are available:
+            * action: filter by the action of the log
+
+            * timestamp: return the logs matching the timestamp constraints. Valid constraints are of the form
+              "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
+              in UTC timezone.
+
+            For example: `?filter.timestamp=ge:2021-08-18T09:21:30.568353&filter.timestamp=lt:2021-08-18T10:21:30.568353`.
+            Multiple constraints can be specified, in which case only log messages that match all constraints will be
+            returned.
+
+            * message: filter by the content of the log messages. Partial matches are allowed. (case-insensitive)
+
+            * minimal_log_level: filter by the log level of the log messages. The filter specifies the minimal level,
+              so messages with either this level, or a higher severity level are going to be included in the result.
+
+            For example, for `filter.minimal_log_level=INFO`, the log messages with level `INFO, WARNING, ERROR, CRITICAL`
+            all match the query.
+
+    :param sort: Return the results sorted according to the parameter value. It should follow the pattern
+        `<attribute_to_sort_by>.<order>`, for example `timestamp.desc` (case insensitive). Only sorting by `timestamp` is
+        supported. The following orders are supported: 'asc', 'desc'
+
     :return: A list of all matching resource logs
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
@@ -811,7 +818,7 @@ def resource_logs(
 )
 def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Fact]:
     """
-    Get the facts related to a specific resource
+    Get the facts related to a specific resource. The results are sorted alphabetically by name.
     :param tid: The id of the environment
     :param rid: Id of the resource
     :return: The facts related to this resource
@@ -849,7 +856,8 @@ def get_compile_reports(
     sort: str = "requested.desc",
 ) -> List[model.CompileReport]:
     """
-    Get the compile reports from an environment
+    Get the compile reports from an environment.
+
     :param tid: The id of the environment
     :param limit: Limit the number of instances that are returned
     :param first_id: The id to use as a continuation token for paging, in combination with the 'start' value,
@@ -874,6 +882,7 @@ def get_compile_reports(
                 success: whether the compile was successful or not
                 started: whether the compile has been started or not
                 completed: whether the compile has been completed or not
+
                 requested: return the logs matching the timestamp constraints. Valid constraints are of the form
                     "<lt|le|gt|ge>:<x>". The expected format is YYYY-MM-DDTHH:mm:ss.ssssss, so an ISO-8601 datetime string,
                     in UTC timezone. Specifying microseconds is optional. For example:
@@ -911,7 +920,8 @@ def list_desired_state_versions(
     sort: str = "version.desc",
 ) -> List[model.DesiredStateVersion]:
     """
-    Get the desired state versions from an environment
+    Get the desired state versions from an environment.
+
     :param tid: The id of the environment
     :param limit: Limit the number of versions that are returned
     :param start: The lower limit for the order by column (exclusive).
@@ -940,7 +950,8 @@ def promote_desired_state_version(
     tid: uuid.UUID, version: int, trigger_method: Optional[model.PromoteTriggerMethod] = None
 ) -> None:
     """
-    Promote a desired state version, making it the active version in the environment
+    Promote a desired state version, making it the active version in the environment.
+
     :param tid: The id of the environment
     :param version: The number of the version to promote
     :param trigger_method: If set to 'push_incremental_deploy' or 'push_full_deploy',
@@ -970,7 +981,8 @@ def get_resources_in_version(
     sort: str = "resource_type.desc",
 ) -> List[model.VersionedResource]:
     """
-    Get the resources that belong to a specific version
+    Get the resources that belong to a specific version.
+
     :param tid: The id of the environment
     :param version: The version number
     :param limit: Limit the number of resources that are returned
@@ -1063,24 +1075,26 @@ def get_parameters(
 ) -> List[model.Parameter]:
     """
     List the parameters in an environment
+
     :param tid: The id of the environment
     :param limit: Limit the number of parameters that are returned
     :param first_id: The parameter id to use as a continuation token for paging, in combination with the 'start' value,
-            because the order by column might contain non-unique values
+        because the order by column might contain non-unique values
     :param last_id: The parameter id to use as a continuation token for paging, in combination with the 'end' value,
-            because the order by column might contain non-unique values
-    :param start: The lower limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
-    :param end: The upper limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
+        because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive). Only one of 'start' and 'end' should be specified at the
+        same time.
+    :param end: The upper limit for the order by column (exclusive). Only one of 'start' and 'end' should be specified at the
+        same time.
     :param filter: Filter the list of returned parameters.
-                The following options are available:
-                name: filter by the name of the parameter
-                source: filter by the source of the parameter
-                updated: filter by the updated time of the parameter
+
+        The following options are available:
+            * name: filter by the name of the parameter
+            * source: filter by the source of the parameter
+            * updated: filter by the updated time of the parameter
     :param sort: Return the results sorted according to the parameter value.
-                The following sorting attributes are supported: 'name', 'source', 'updated'.
-                The following orders are supported: 'asc', 'desc'
+        The following sorting attributes are supported: 'name', 'source', 'updated'.
+        The following orders are supported: 'asc', 'desc'
     :return: A list of all matching parameters
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
@@ -1105,7 +1119,8 @@ def get_all_facts(
     sort: str = "name.asc",
 ) -> List[model.Fact]:
     """
-    List the facts in an environment
+    List the facts in an environment.
+
     :param tid: The id of the environment
     :param limit: Limit the number of facts that are returned
     :param first_id: The fact id to use as a continuation token for paging, in combination with the 'start' value,
@@ -1198,7 +1213,8 @@ def list_notifications(
     sort: str = "created.desc",
 ) -> List[model.Notification]:
     """
-    List the notifications in an environment
+    List the notifications in an environment.
+
     :param tid: The id of the environment
     :param limit: Limit the number of notifications that are returned
     :param first_id: The notification id to use as a continuation token for paging, in combination with the 'start' value,
@@ -1286,6 +1302,31 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
     :param version: The id of the model version
     :param resource_type: The type name of the resource
     :raises NotFound: Raised when the version or type is not found
+    """
+
+
+@typedmethod(
+    path="/metrics",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def get_environment_metrics(
+    tid: uuid.UUID,
+    metrics: List[str],
+    start_interval: datetime.datetime,
+    end_interval: datetime.datetime,
+    nb_datapoints: int,
+) -> model.EnvironmentMetricsResult:
+    """
+    Obtain metrics about the given environment for the given time interval.
+
+    :param tid: The id of the environment for which the metrics have to be collected.
+    :param metrics: List of names of metrics that have to be returned.
+    :param start_interval: The start of the time window for which the metrics should be returned.
+    :param end_interval: The end of the time window for which the metrics should be returned.
+    :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
     """
 
 

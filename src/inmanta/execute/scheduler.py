@@ -212,7 +212,7 @@ class Scheduler(object):
             k for k in [t.register_types() for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None
         ]
 
-        for (name, type_symbol) in newtypes:
+        for name, type_symbol in newtypes:
             types_and_impl[name] = type_symbol
 
         # now that we have objects for all types, populate them
@@ -691,7 +691,7 @@ class RelationPrecedenceGraph:
         while work:
             node: RelationPrecedenceGraphNode = get_next_ready_item_in_work()
             work.remove(node)
-            if node in result:
+            if node.relation_attribute in result:
                 raise CycleInRelationPrecedencePolicyError()
             result.append(node.relation_attribute)
             work.update(node.dependents)
