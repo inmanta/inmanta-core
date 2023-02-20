@@ -1290,7 +1290,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Return the name of the collection
         """
-        return f"public.{cls.__name__.lower()}"
+        return cls.__name__.lower()
 
     @classmethod
     def get_field_metadata(cls) -> Dict[str, Field]:
