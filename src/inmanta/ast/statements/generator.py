@@ -585,7 +585,7 @@ class Constructor(ExpressionStatement):
             chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
 
-    def _resolve_type(self, lhs_attribute: Optional[AttributeAssignmentLHS]) -> Entity:
+    def _resolve_type(self, lhs_attribute: Optional[AttributeAssignmentLHS]) -> "Entity":
         """Type hint handling"""
 
         # First normal resolution
@@ -593,7 +593,9 @@ class Constructor(ExpressionStatement):
         local_type: "Optional[Entity]" = None
         try:
             tp = self.namespace.get_type(self.class_type)
-            assert isinstance(tp, Entity), "Should not happen because all entity types start with a capital letter"
+            assert isinstance(
+                tp, inmanta.ast.entity.Entity
+            ), "Should not happen because all entity types start with a capital letter"
             local_type = tp
         except TypeNotFoundException as e:
             resolver_failure = e
