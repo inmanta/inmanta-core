@@ -401,6 +401,56 @@ attribute names as keys and the desired values as values. For example:
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
 
+
+Refering to instances
+++++++++++++++++++++++
+
+When referring to entities in the same module, a parent model or std, short names can be used
+
+Following code blocks are equivalent and both valid
+
+.. code-block:: inmanta
+
+    std::Host("test")
+
+.. code-block:: inmanta
+
+    Host("test")
+
+
+When constructing entities from other modules, the fully qualified name must be used
+
+.. code-block:: inmanta
+
+   import srlinux
+   import srlinux::interface
+
+   interface = srlinux::Interface(
+        subinterface = srlinux::interface::Subinterface(
+        )
+    )
+
+When nesting constructors, short names can be used for the nested constructors, because their types can be inferred
+
+.. code-block:: inmanta
+
+   import srlinux
+   import srlinux::interface
+
+   interface = srlinux::Interface( # This type is qualified
+        subinterface = Subinterface( # This type is inferred
+        )
+    )
+
+However, when relying on type inference,
+1. avoid creating sibling types with the same name, but different fully qualified name, as they may become indistinguishable, breaking the inference on existing models.
+
+    1. if multiple types exist with the same name, and one is in scope, that one is selected (i.e it is defined in this module, a parent module or `std`)
+    2. if multiple types exist with that are all out of scope, inference fails
+
+2. make sure the type you want to infer is imported somewhere in the model. Otherwise the compiler will not find it.
+
+
 Refinements
 ===========
 
