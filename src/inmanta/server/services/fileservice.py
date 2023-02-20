@@ -131,7 +131,9 @@ class FileService(protocol.ServerSlice):
         """
         Return which files in the list don't exist on the server
         """
-        response: Dict[str, object] = {}
+        # A dict is used here instead of a set to have efficient set-like behaviour while preserving insertion order. Only its
+        # keys are relevant.
+        response: dict[str, object] = {}
 
         for f in files:
             f_path = os.path.join(self.server_slice._server_storage["files"], f)
