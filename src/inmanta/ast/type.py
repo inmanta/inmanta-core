@@ -96,7 +96,6 @@ class Type(Locatable):
     def type_string(self) -> str:
         """
         Returns the type string as expressed in the Inmanta :term:`DSL`, if this type can be expressed in the :term:`DSL`.
-        Otherwise returns None.
         """
         raise NotImplementedError()
 

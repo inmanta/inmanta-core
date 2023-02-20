@@ -402,7 +402,7 @@ attribute names as keys and the desired values as values. For example:
     f1 = File(host=h1, **file1_config)
 
 
-Refering to instances
+Referring to instances
 ++++++++++++++++++++++
 
 When referring to entities in the same module, a parent model or std, short names can be used
