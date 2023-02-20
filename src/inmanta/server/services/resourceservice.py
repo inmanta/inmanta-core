@@ -408,6 +408,7 @@ class ResourceService(protocol.ServerSlice):
         :param env: The environment to consider.
         :parma version: The version of the model to consider.
         """
+
         def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
             """
             Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
