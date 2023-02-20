@@ -597,7 +597,7 @@ class Literal(Union):
         return "Literal"
 
     def type_string(self) -> str:
-        return "literal"
+        return "Literal"
 
 
 @stable_api
