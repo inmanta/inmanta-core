@@ -3371,14 +3371,15 @@ WHERE (environment, name) NOT IN (
         CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
     ) in_agent_map
 )
+-- have no primary ID set (that are down)
 AND id_primary IS NULL
+-- not used by any version
 AND NOT EXISTS (
     SELECT 1
     FROM resource AS re
     WHERE a.environment=re.environment
     AND a.name=re.agent
 );
-
 """
         await cls._execute_query(query, connection=connection)
 
