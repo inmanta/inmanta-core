@@ -101,7 +101,7 @@ def project_delete(id: uuid.UUID) -> None:
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_list(environment_details: bool = False) -> List[model.Project]:
     """
-    Returns a list of projects
+    Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
     :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
@@ -318,7 +318,7 @@ def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent
 )
 def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
     """
-    List the settings in the current environment
+    List the settings in the current environment ordered by name alphabetically.
     """
 
 
@@ -818,7 +818,7 @@ def resource_logs(
 )
 def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Fact]:
     """
-    Get the facts related to a specific resource
+    Get the facts related to a specific resource. The results are sorted alphabetically by name.
     :param tid: The id of the environment
     :param rid: Id of the resource
     :return: The facts related to this resource
