@@ -3367,7 +3367,7 @@ WHERE (environment, name) NOT IN (
     FROM (
         -- agent is in the agent map
         SELECT e.id as environment_id, map.key as agent
-        FROM environment e
+        FROM public.environment e
         CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
     ) in_agent_map
 )
@@ -3376,7 +3376,7 @@ AND id_primary IS NULL
 -- not used by any version
 AND NOT EXISTS (
     SELECT 1
-    FROM resource AS re
+    FROM public.resource AS re
     WHERE a.environment=re.environment
     AND a.name=re.agent
 );
