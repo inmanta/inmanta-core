@@ -19,8 +19,9 @@ import base64
 import logging
 import os
 import uuid
+from collections import defaultdict
 from pathlib import Path
-from typing import Dict, cast
+from typing import Dict, List, cast
 
 import pytest
 
@@ -78,6 +79,46 @@ async def test_project_api_v1(client):
     # get non existing environment
     response = await client.get_environment(uuid.uuid4())
     assert response.code == 404
+
+
+async def test_project_api_v2_project_list_ordering(client_v2):
+    """
+    Creates a few projects with several environments each.
+    Check that they are ordered by ascending (project_name, environment_name)
+    """
+
+    project_environments_map: Dict[str, List[str]] = defaultdict(lambda: [])
+
+    for project_n in range(3):
+        project_name: str = f"test-project-{project_n}"
+        result = await client_v2.project_create(project_name)
+        assert result.code == 200
+        assert "data" in result.result
+        assert "id" in result.result["data"]
+
+        project_id: uuid.UUID = result.result["data"]["id"]
+        project_environments_map[project_name] = []
+
+        for environment_n in range(3):
+            env_name: str = f"test-env-{environment_n}"
+            result = await client_v2.environment_create(project_id=project_id, name=env_name)
+            assert result.code == 200
+            project_environments_map[project_name].append(env_name)
+
+    result = await client_v2.project_list()
+    assert result.code == 200
+    assert "data" in result.result
+    assert len(result.result["data"]) == 3
+    for i in range(3):
+        assert len(result.result["data"][i]["environments"]) == 3
+
+    # Make sure results are sorted according to project name...
+    assert sorted(project_environments_map.keys()) == [result.result["data"][i]["name"] for i in range(3)]
+
+    # ... and according to env name within each project
+    for project_n, key_value_pair in enumerate(sorted(project_environments_map.items())):
+        project_id, env_id_list = key_value_pair
+        assert sorted(env_id_list) == [env["name"] for env in result.result["data"][project_n]["environments"]]
 
 
 async def test_project_api_v2(client_v2):
