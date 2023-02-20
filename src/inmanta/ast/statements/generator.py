@@ -527,14 +527,14 @@ class Constructor(ExpressionStatement):
     def _normalize_rhs(self, index_attributes: abc.Set[str]) -> None:
         assert self.type is not None  # Make mypy happy
         for k, v in self.__attributes.items():
-            # don't notify the rhs for index attributes because it won't be able to resolve the reference
-            # (index attributes need to be resolved before the instance can be constructed)
             attr = self.type.get_attribute(k)
             if attr is None:
                 raise TypingException(
                     self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
                 )
             type_hint = attr.get_type().get_base_type()
+            # don't notify the rhs for index attributes because it won't be able to resolve the reference
+            # (index attributes need to be resolved before the instance can be constructed)
             v.normalize(
                 lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
             )
