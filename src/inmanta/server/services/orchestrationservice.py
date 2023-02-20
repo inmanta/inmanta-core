@@ -409,10 +409,9 @@ WHERE (environment, name) NOT IN (
         -- Union with the set of (environment, name) pairs for all resources
         -- and associated agents for each environment. (that are used by a version)
         UNION ALL
-        SELECT r.environment, r.agent
-        FROM public.resource r
-        JOIN public.configurationmodel c ON r.environment = c.environment AND r.model = c.version
-        GROUP BY r.environment, r.agent
+        SELECT DISTINCT r.environment, r.agent
+        FROM public.configurationmodel c
+        JOIN public.resource r ON c.environment = r.environment AND c.version = r.model
     ) combined_results
 )"""
             )
