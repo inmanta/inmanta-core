@@ -542,70 +542,7 @@ class Constructor(ExpressionStatement):
             wrapped_kwargs.normalize()
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        # Type hint handling
-
-        resolver_failure: Optional[TypeNotFoundException] = None
-        local_type: "Optional[Entity]" = None
-
-        try:
-            # First normal resolution
-            local_type = self.namespace.get_type(self.class_type)
-        except TypeNotFoundException as e:
-            resolver_failure = e
-
-        # Do we have hint context?
-        # We only work with unqualified names for hinting
-        if lhs_attribute is not None and lhs_attribute.type_hint is not None:
-            if not isinstance(lhs_attribute.type_hint, inmanta.ast.entity.Entity):
-                # This is a type error, we are a contructor for and entity but we should not be!
-                raise TypingException(
-                    self,
-                    f"Can not assign a value of type {self.class_type} "
-                    f"to a variable of type {lhs_attribute.type_hint.type_string()}",
-                )
-            elif "::" not in str(self.class_type):
-                # We can do type hinting here
-                type_hint = lhs_attribute.type_hint
-                # Consider the hint type
-                base_types = [type_hint]
-                # Consider the local type
-                if local_type is not None and local_type.is_subclass(type_hint):
-                    base_types.append(local_type)
-                # Find all correct types with the matching unqualified name
-                candidates = {
-                    entity
-                    for entity in chain(base_types, type_hint.get_all_child_entities())
-                    if entity.name == str(self.class_type)
-                }
-
-                if len(candidates) > 1:
-                    # To many options, inheritance may cause this to break a working model due to dependency update
-                    raise AmbiguousTypeException(self.class_type, list(candidates))
-                elif len(candidates) == 1:
-                    # One, nice
-                    mytype = next(iter(candidates))
-                else:
-                    # None, pretend nothing happened, reraise original exception
-                    if resolver_failure is not None:
-                        raise resolver_failure
-                    else:
-                        raise TypingException(
-                            self,
-                            f"Can not assign a value of type {local_type.type_string()} "
-                            f"to a variable of type {lhs_attribute.type_hint.type_string()}",
-                        )
-            else:
-                if local_type is not None:
-                    mytype = local_type
-                else:
-                    raise resolver_failure
-        else:
-            if local_type is not None:
-                mytype = local_type
-            else:
-                raise resolver_failure
-
-        self.type = mytype
+        self.type = self._resolve_type(lhs_attribute)
 
         inindex: abc.MutableSet[str] = set()
 
@@ -647,6 +584,70 @@ class Constructor(ExpressionStatement):
         self._own_eager_promises = list(
             chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
+
+    def _resolve_type(self, lhs_attribute: Optional[AttributeAssignmentLHS]) -> Entity:
+        """Type hint handling"""
+
+        # First normal resolution
+        resolver_failure: Optional[TypeNotFoundException] = None
+        local_type: "Optional[Entity]" = None
+        try:
+            tp = self.namespace.get_type(self.class_type)
+            assert isinstance(tp, Entity), "Should not happen because all entity types start with a capital letter"
+            local_type = tp
+        except TypeNotFoundException as e:
+            resolver_failure = e
+
+        # Do we have hint context?
+        # We only work with unqualified names for hinting
+        if lhs_attribute is not None and lhs_attribute.type_hint is not None:
+            # We can do type hinting here
+            type_hint = lhs_attribute.type_hint
+            if not isinstance(type_hint, inmanta.ast.entity.Entity):
+                # This is a type error, we are a constructor for an entity but we should not be!
+                raise TypingException(
+                    self,
+                    f"Can not assign a value of type {self.class_type} "
+                    f"to a variable of type {lhs_attribute.type_hint.type_string()}",
+                )
+            elif local_type is not None and local_type.is_subclass(type_hint):
+                # we have a local match, use that to prevent breaking existing code
+                return local_type
+            elif "::" not in str(self.class_type):
+                # Consider the hint type
+                base_types = [type_hint]
+                # Find all correct types with the matching unqualified name
+                candidates = {
+                    entity
+                    for entity in chain(base_types, type_hint.get_all_child_entities())
+                    if entity.name == str(self.class_type)
+                }
+                if len(candidates) > 1:
+                    # To many options, inheritance may cause this to break a working model due to dependency update
+                    raise AmbiguousTypeException(self.class_type, list(candidates))
+                elif len(candidates) == 1:
+                    # One, nice
+                    return next(iter(candidates))
+                else:
+                    # None, pretend nothing happened, reraise original exception
+                    if resolver_failure is not None:
+                        raise resolver_failure
+                    else:
+                        raise TypingException(
+                            self,
+                            f"Can not assign a value of type {local_type.type_string()} "
+                            f"to a variable of type {lhs_attribute.type_hint.type_string()}",
+                        )
+            else:
+                if local_type is not None:
+                    return local_type
+                else:
+                    raise resolver_failure
+        else:
+            if local_type is not None:
+                return local_type
+            else:
+                raise resolver_failure
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(
