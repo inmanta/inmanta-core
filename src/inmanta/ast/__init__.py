@@ -640,12 +640,13 @@ class AmbiguousTypeException(TypeNotFoundException):
     """Exception raised when a type is referenced that does not exist"""
 
     def __init__(self, type: LocatableString, candidates: List["Entity"]) -> None:
+        candidates = sorted(candidates, key=lambda x: x.get_full_name())
         RuntimeException.__init__(
             self,
             stmt=None,
             msg="Could not determine namespace for type %s. %d possible candidates exists: [%s]."
             " To resolve this, use the fully qualified name instead of the short name."
-            % (type, len(candidates), ", ".join(sorted(x.get_full_name() for x in candidates))),
+            % (type, len(candidates), ", ".join([x.get_full_name() for x in candidates])),
         )
         self.candidates = candidates
         self.type = type
