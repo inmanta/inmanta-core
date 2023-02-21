@@ -20,7 +20,7 @@ import datetime
 import logging
 import os
 import uuid
-from collections import defaultdict, abc
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from asyncpg.connection import Connection
