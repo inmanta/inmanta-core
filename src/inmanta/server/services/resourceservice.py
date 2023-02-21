@@ -116,7 +116,8 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
-        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
+        # Dict: environment_id: (model_version, increment, negative_increment)
+        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[int, Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -143,7 +144,6 @@ class ResourceService(protocol.ServerSlice):
     def clear_env_cache(self, env: data.Environment) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
-        # ??? del self._increment_cache[env.id]
 
     @staticmethod
     def get_resource_action_log_file(environment: uuid.UUID) -> str:
