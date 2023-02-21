@@ -1289,11 +1289,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return cls._connection_pool.acquire()
 
     @classmethod
-    def table_name(cls) -> str:
+    def table_name(cls, include_schema=True) -> str:
         """
         Return the name of the collection
         """
-        return f"public.{cls.__name__.lower()}"
+        if include_schema:
+            return f"public.{cls.__name__.lower()}"
+        else:
+            return cls.__name__.lower()
 
     @classmethod
     def get_field_metadata(cls) -> Dict[str, Field]:
@@ -1618,7 +1621,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
-            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
+            await con.copy_records_to_table(table_name=cls.table_name(False), columns=columns, records=records)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
