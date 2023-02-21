@@ -76,7 +76,7 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
     assert response.code == 200
     assert response.result["data"]
 
-    token = response.result["data"]
+    token = response.result["data"]["token"]
     config.Config.set("client_rest_transport", "token", token)
 
     auth_client = protocol.Client("client")

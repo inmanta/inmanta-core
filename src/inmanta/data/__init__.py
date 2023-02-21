@@ -5514,8 +5514,9 @@ class EnvironmentMetricsTimer(BaseDocument):
 class User(BaseDocument):
     """A user that can authenticate against inmanta"""
 
-    __primary_key__ = ("username",)
+    __primary_key__ = ("id",)
 
+    id: uuid.UUID
     username: str
     password_hash: Optional[str] = None
     auth_method: str
