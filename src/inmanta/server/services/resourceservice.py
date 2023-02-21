@@ -20,7 +20,7 @@ import datetime
 import logging
 import os
 import uuid
-from collections import defaultdict
+from collections import defaultdict, abc
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from asyncpg.connection import Connection
@@ -307,16 +307,7 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increment = self._increment_cache.get(env.id, None)
-        if increment is None:
-            lock = self._increment_cache_locks[env.id]
-            async with lock:
-                increment = self._increment_cache.get(env.id, None)
-                if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version)
-                    self._increment_cache[env.id] = increment
-
-        increment_ids, neg_increment = increment
+        increment_ids, neg_increment = await self.get_increment(env, version)
 
         # set already done to deployed
         now = datetime.datetime.now().astimezone()
@@ -387,48 +378,9 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
-    async def mark_deployed(
-        self,
-        env: data.Environment,
-        resources_id: abc.Set[ResourceIdStr],
-        timestamp: datetime.datetime,
-        version: int,
-        filter: Callable[[ResourceIdStr], bool] = lambda x: True,
-    ) -> None:
-        """
-        Set the status of the provided resources as deployed
-        :param env: Environment to consider.
-        :param resources_id: Set of resources to mark as deployed.
-        :param timestamp: Timestamp for the log message and the resource action entry.
-        :param version: Version of the resources to consider.
-        :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
-        """
-        resources_version_ids: list[ResourceVersionIdStr] = [
-            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
-        ]
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_utc_isoformat(timestamp),
-            "args": [],
-        }
-        await self.resource_action_update(
-            env,
-            resources_version_ids,
-            action_id=uuid.uuid4(),
-            started=timestamp,
-            finished=timestamp,
-            status=const.ResourceState.deployed,
-            # does this require a different ResourceAction?
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[logline],
-            change=const.Change.nochange,
-            send_events=False,
-            keep_increment_cache=True,
-        )
-
-    async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+    async def get_increment(
+        self, env: data.Environment, version: int
+    ) -> Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
         In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
@@ -438,7 +390,7 @@ class ResourceService(protocol.ServerSlice):
         :parma version: The version of the model to consider.
         """
 
-        def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
+        def _get_cache_entry() -> Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]:
             """
             Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
             or None if no such cache entry exists.
@@ -453,7 +405,7 @@ class ResourceService(protocol.ServerSlice):
                 return None
             return incr, neg_incr
 
-        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
+        increment: Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]] = _get_cache_entry()
         if increment is None:
             lock = self._increment_cache_locks[env.id]
             async with lock:
