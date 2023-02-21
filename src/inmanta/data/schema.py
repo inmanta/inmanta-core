@@ -120,6 +120,7 @@ class DBSchema(object):
         async with self.connection.transaction():
             # lock table
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
+            table_name_without_schema = SCHEMA_VERSION_TABLE.split(".")[1]
             # get legacy column, under lock => if column no longer exists -> other process has already performed migration
             legacy_column: Optional[Record] = await self.connection.fetchrow(
                 """
@@ -129,9 +130,10 @@ class DBSchema(object):
                     WHERE table_name=$1 AND column_name=$2
                 )
                 """,
-                SCHEMA_VERSION_TABLE,
+                table_name_without_schema,
                 "current_version",
             )
+
             if legacy_column is None:
                 raise Exception("Failed to query existence of legacy column, this should not happen.")
             if legacy_column["exists"]:
