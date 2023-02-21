@@ -446,7 +446,7 @@ However, when relying on type inference,
 1. avoid creating sibling types with the same name, but different fully qualified name, as they may become indistinguishable, breaking the inference on existing models.
 
     1. if multiple types exist with the same name, and one is in scope, that one is selected (i.e it is defined in this module, a parent module or `std`)
-    2. if multiple types exist with that are all out of scope, inference fails
+    2. if multiple types exist that are all out of scope, inference fails
 
 2. make sure the type you want to infer is imported somewhere in the model. Otherwise the compiler will not find it.
 
