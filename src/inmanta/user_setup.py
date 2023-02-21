@@ -51,7 +51,7 @@ def validate_server_setup() -> None:
             "The option auth in the server section should be enabled."
         )
 
-    click.echo(f"Server authentication:                                  {click.style('enabled', fg='green')}")
+    click.echo(f"{'Server authentication: '<50}{click.style('enabled', fg='green')}")
 
     # make sure the method is set to database
     if server_config.server_auth_method.get() != "database":
@@ -60,7 +60,7 @@ def validate_server_setup() -> None:
             "section is set to database"
         )
 
-    click.echo(f"Server authentication method:                          {click.style('database', fg='green')}")
+    click.echo(f"{'Server authentication method: '<50}{click.style('database', fg='green')}")
 
     # make sure there is auth config that supports signing tokens
     cfg = config.AuthJWTConfig.get_sign_config()
@@ -77,7 +77,7 @@ def validate_server_setup() -> None:
 
         raise click.ClickException("Make sure signing configuration is added to the config. See the documentation for details.")
 
-    click.echo(f"Authentication signing config:                          {click.style('enabled', fg='green')}")
+    click.echo(f"{'Authentication signing config: '<50}{click.style('enabled', fg='green')}")
 
     # TODO: verify web-console config (if any)
 
@@ -123,7 +123,7 @@ async def do_user_setup() -> None:
         # insert the user
         user = data.User(
             username=username,
-            password=pw_hash.decode(),
+            password_hash=pw_hash.decode(),
             enabled=True,
             auth_method="password",
         )

@@ -54,7 +54,7 @@ class UserService(server_protocol.ServerSlice):
         # insert the user
         user = data.User(
             username=username,
-            password=pw_hash.decode(),
+            password_hash=pw_hash.decode(),
             enabled=True,
             auth_method="password",
         )
@@ -80,7 +80,7 @@ class UserService(server_protocol.ServerSlice):
         pw_hash = nacl.pwhash.str(password.encode())
 
         # insert the user
-        await user.update_fields(password=pw_hash.decode())
+        await user.update_fields(password_hash=pw_hash.decode())
 
     @protocol.handle(protocol.methods_v2.login)
     async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
@@ -89,11 +89,11 @@ class UserService(server_protocol.ServerSlice):
         if not user:
             raise exceptions.UnauthorizedException()
 
-        if not user.password:
+        if not user.password_hash:
             raise exceptions.UnauthorizedException()
 
         try:
-            nacl.pwhash.verify(user.password.encode(), password.encode())
+            nacl.pwhash.verify(user.password_hash.encode(), password.encode())
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException()
 

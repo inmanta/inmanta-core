@@ -5517,7 +5517,7 @@ class User(BaseDocument):
     __primary_key__ = ("username",)
 
     username: str
-    password: Optional[str] = None
+    password_hash: Optional[str] = None
     auth_method: str
     enabled: bool
 

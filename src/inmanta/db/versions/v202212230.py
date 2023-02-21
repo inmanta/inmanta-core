@@ -22,11 +22,12 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     schema = """
     CREATE TABLE IF NOT EXISTS public.user(
-        username VARCHAR NOT NULL,
-        password VARCHAR NOT NULL,
+        user_id uuid DEFAULT uuid_generate_v4 (),
+        username VARCHAR NOT NULL UNIQUE ,
+        password_hash VARCHAR NOT NULL,
         auth_method VARCHAR NOT NULL,
         enabled boolean NOT NULL,
-        PRIMARY KEY (username)
+        PRIMARY KEY (user_id)
     );
     """
 
