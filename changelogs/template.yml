@@ -1,13 +1,13 @@
 description: Added unicode support to templates
 issue-nr: >"fill in"
-change-type: patch
+change-type: >"fill in"
 destination-branches: [master, iso6, iso5]
 sections:
   feature: "{{description}}"
-  minor-improvement: "Performance of template processing has been improved"
-  bugfix: "Fixed encoding bug #2362"
-  known-issue: "4 byte unicode character are not supported"
-  upgrade-note: "Back up your database prior to this update"
-  deprecation-note: "Tengwar glyphs are no longer supported"
-  other-note: "note"
+  minor-improvement: "{{description}}"
+  bugfix: "{{description}}"
+  known-issue: "{{description}}"
+  upgrade-note: "{{description}}"
+  deprecation-note: "{{description}}"
+  other-note: "{{description}}"
 
