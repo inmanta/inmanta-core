@@ -103,7 +103,8 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
-        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
+        # Dict: environment_id: (model_version, increment, negative_increment)
+        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[int, Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -130,7 +131,6 @@ class ResourceService(protocol.ServerSlice):
     def clear_env_cache(self, env: data.Environment) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
-        # ??? del self._increment_cache[env.id]
 
     @staticmethod
     def get_resource_action_log_file(environment: uuid.UUID) -> str:
@@ -386,6 +386,82 @@ class ResourceService(protocol.ServerSlice):
             await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+
+    async def mark_deployed(
+        self,
+        env: data.Environment,
+        resources_id: abc.Set[ResourceIdStr],
+        timestamp: datetime.datetime,
+        version: int,
+        filter: Callable[[ResourceIdStr], bool] = lambda x: True,
+    ) -> None:
+        """
+        Set the status of the provided resources as deployed
+        :param env: Environment to consider.
+        :param resources_id: Set of resources to mark as deployed.
+        :param timestamp: Timestamp for the log message and the resource action entry.
+        :param version: Version of the resources to consider.
+        :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
+        """
+        resources_version_ids: list[ResourceVersionIdStr] = [
+            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
+        ]
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": util.datetime_utc_isoformat(timestamp),
+            "args": [],
+        }
+        await self.resource_action_update(
+            env,
+            resources_version_ids,
+            action_id=uuid.uuid4(),
+            started=timestamp,
+            finished=timestamp,
+            status=const.ResourceState.deployed,
+            # does this require a different ResourceAction?
+            action=const.ResourceAction.deploy,
+            changes={},
+            messages=[logline],
+            change=const.Change.nochange,
+            send_events=False,
+            keep_increment_cache=True,
+        )
+
+    async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+        """
+        Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
+        In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
+        version, per environment.
+
+        :param env: The environment to consider.
+        :parma version: The version of the model to consider.
+        """
+
+        def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
+            """
+            Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
+            or None if no such cache entry exists.
+            """
+            cache_entry = self._increment_cache.get(env.id, None)
+            if cache_entry is None:
+                # No cache entry found
+                return None
+            (version_cache_entry, incr, neg_incr) = cache_entry
+            if version_cache_entry != version:
+                # Cache entry exists for another version
+                return None
+            return incr, neg_incr
+
+        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
+        if increment is None:
+            lock = self._increment_cache_locks[env.id]
+            async with lock:
+                increment = _get_cache_entry()
+                if increment is None:
+                    increment = await data.ConfigurationModel.get_increment(env.id, version)
+                    self._increment_cache[env.id] = (version, *increment)
+        return increment
 
     @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
     async def resource_deploy_done(
