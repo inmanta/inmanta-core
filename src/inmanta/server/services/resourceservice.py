@@ -320,16 +320,7 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increment = self._increment_cache.get(env.id, None)
-        if increment is None:
-            lock = self._increment_cache_locks[env.id]
-            async with lock:
-                increment = self._increment_cache.get(env.id, None)
-                if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version)
-                    self._increment_cache[env.id] = increment
-
-        increment_ids, neg_increment = increment
+        increment_ids, neg_increment = self.get_increment(env, version)
 
         # set already done to deployed
         now = datetime.datetime.now().astimezone()
@@ -401,6 +392,44 @@ class ResourceService(protocol.ServerSlice):
             await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+
+    async def get_increment(
+        self, env: data.Environment, version: int
+    ) -> Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]:
+        """
+        Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
+        In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
+        version, per environment.
+        :param env: The environment to consider.
+        :parma version: The version of the model to consider.
+        """
+
+        def _get_cache_entry() -> Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]:
+            """
+            Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
+            or None if no such cache entry exists.
+            """
+            cache_entry = self._increment_cache.get(env.id, None)
+            if cache_entry is None:
+                # No cache entry found
+                return None
+            (version_cache_entry, incr, neg_incr) = cache_entry
+            if version_cache_entry != version:
+                # Cache entry exists for another version
+                return None
+            return incr, neg_incr
+
+        increment: Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]] = _get_cache_entry()
+        if increment is None:
+            lock = self._increment_cache_locks[env.id]
+            async with lock:
+                increment = _get_cache_entry()
+                if increment is None:
+                    increment = await data.ConfigurationModel.get_increment(env.id, version)
+                    # Make mypy happy
+                    assert increment is not None
+                    self._increment_cache[env.id] = (version, increment[0], list(increment[1]))
+        return increment
 
     @protocol.handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
