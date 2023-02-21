@@ -412,7 +412,9 @@ class ResourceService(protocol.ServerSlice):
                 increment = _get_cache_entry()
                 if increment is None:
                     increment = await data.ConfigurationModel.get_increment(env.id, version)
-                    self._increment_cache[env.id] = (version, *increment)
+                    # Make mypy happy
+                    assert increment is not None
+                    self._increment_cache[env.id] = (version, increment[0], list(increment[1]))
         return increment
 
     @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
