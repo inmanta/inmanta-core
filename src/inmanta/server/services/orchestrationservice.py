@@ -394,16 +394,6 @@ class OrchestrationService(protocol.ServerSlice):
 
         LOGGER.debug("Successfully stored version %d", version)
 
-    async def _trigger_auto_deploy(
-        self,
-        env: data.Environment,
-        version: int,
-    ) -> None:
-        """
-        Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
-        to commit. If not respected, the auto deploy might work on stale data, likely resulting in resources hanging in the
-        deploying state.
-        """
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)

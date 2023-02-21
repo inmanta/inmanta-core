@@ -320,7 +320,7 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increment_ids, neg_increment = self.get_increment(env, version)
+        increment_ids, neg_increment = await self.get_increment(env, version)
 
         # set already done to deployed
         now = datetime.datetime.now().astimezone()
@@ -428,7 +428,7 @@ class ResourceService(protocol.ServerSlice):
                     increment = await data.ConfigurationModel.get_increment(env.id, version)
                     # Make mypy happy
                     assert increment is not None
-                    self._increment_cache[env.id] = (version, increment[0], list(increment[1]))
+                    self._increment_cache[env.id] = (version, *increment)
         return increment
 
     @protocol.handle(methods.resource_action_update, env="tid")
