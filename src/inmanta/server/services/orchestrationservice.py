@@ -394,8 +394,6 @@ class OrchestrationService(protocol.ServerSlice):
 
         LOGGER.debug("Successfully stored version %d", version)
 
-        self.resource_service.clear_env_cache(env)
-
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
