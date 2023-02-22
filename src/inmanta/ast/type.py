@@ -590,9 +590,6 @@ class Literal(Union):
     def type_string_internal(self) -> str:
         return "Literal"
 
-    def type_string(self) -> str:
-        return "Literal"
-
 
 @stable_api
 class ConstraintType(NamedType):
