@@ -431,6 +431,11 @@ class AuthJWTConfig(object):
     validate_cert: bool
 
     @classmethod
+    def reset(cls):
+        cls.sections = {}
+        cls.issuers = {}
+
+    @classmethod
     def list(cls) -> List[str]:
         """
         Return a list of all defined auth jwt configurations. This method will load new sections if they were added

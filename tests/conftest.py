@@ -18,6 +18,7 @@
 import warnings
 
 import toml
+from inmanta.config import AuthJWTConfig
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -512,6 +513,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
     compiler.Finalizers.reset_finalizers()
+    AuthJWTConfig.reset()
 
 
 @pytest.fixture()
