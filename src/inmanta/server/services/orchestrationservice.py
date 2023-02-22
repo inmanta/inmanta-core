@@ -157,6 +157,9 @@ class PartialUpdateMerger:
         self, updated_and_shared_resources: abc.Sequence[data.Resource]
     ) -> Dict[ResourceIdStr, data.Resource]:
         """
+         Separates named resource sets from the shared resource set and expands the shared set with the shared resources in
+         the previous model version.
+
         :param updated_and_shared_resources: The resources that are part of the partial compile.
         :returns: The subset of resources in the new version of the configuration model that belong to the shared resource set
                   or a resource set that is updated by this partial compile.
@@ -514,6 +517,17 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
+        """
+        :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
+                                When a partial compile is done, it should contain all the resources that belong to the
+                                updated resource sets or the shared resource sets.
+        :param unknowns: This parameter should contain all the unknowns for all the resources in the new version of the model.
+                         So also the unknowns for the resources that don't belong to an updated resource set when a partial
+                         compile is done.
+
+        The resource sets defined in the removed_resource_sets argument should be overlap with the resource sets present in the
+        resource_sets argument.
+        """
         is_partial_update = partial_base_version is not None
 
         if resource_sets is None:
@@ -599,6 +613,8 @@ class OrchestrationService(protocol.ServerSlice):
             cm = await data.ConfigurationModel.create_and_insert(
                 env_id=env.id,
                 version=version,
+                # When a partial compile is done, the total will be updated in cm.recalculate_total()
+                # with all the resources that belong to a resource set that was not updated.
                 total=len(rid_to_resource),
                 version_info=version_info,
                 undeployable=undeployable_ids,
@@ -612,7 +628,7 @@ class OrchestrationService(protocol.ServerSlice):
         except asyncpg.exceptions.UniqueViolationError:
             raise ServerError("The given version is already defined. Versions should be unique.")
 
-        all_resource_version_ids: abc.Set[ResourceVersionIdStr] = set(
+        all_resource_version_ids: set[ResourceVersionIdStr] = set(
             Id.set_version_in_id(rid, version) for rid in rid_to_resource.keys()
         )
         if is_partial_update:
@@ -854,6 +870,7 @@ class OrchestrationService(protocol.ServerSlice):
                     connection=con,
                 )
 
+                # add shared resources
                 merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
 
                 await data.Code.copy_versions(env.id, base_version, version, connection=con)
