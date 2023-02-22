@@ -168,17 +168,18 @@ class PartialUpdateMerger:
         updated_resources = {r.resource_id: r for r in updated_and_shared_resources if r.resource_set is not None}
         shared_resources_merged = {r.resource_id: r for r in self._merge_shared_resources(shared_resources)}
         result = {**updated_resources, **shared_resources_merged}
-        self._validate_constraints(list(result.values()))
+        self._validate_constraints(result)
         return result
 
-    def _validate_constraints(self, new_updated_and_shared_resources: abc.Sequence[data.Resource]) -> None:
+    def _validate_constraints(self, new_updated_and_shared_resources: Dict[ResourceIdStr, data.Resource]) -> None:
         """
         Validate whether the new updated and shared resources that results from the merging the old version of the model
         with resources of the partial compile, are compliant with the constraints of a partial compile.
 
         :param new_updated_and_shared_resources: The resources that have to be validated.
         """
-        for res in new_updated_and_shared_resources:
+        rids_new_updated_and_shared_resources: abc.Set[ResourceIdStr] = set(new_updated_and_shared_resources.keys())
+        for res_id, res in new_updated_and_shared_resources.items():
             if res.resource_id not in self.updated_and_shared_resources_old:
                 continue
             matching_resource_old_model = self.updated_and_shared_resources_old[res.resource_id]
@@ -188,6 +189,20 @@ class PartialUpdateMerger:
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
                 raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
+
+            for req in res.get_requires():
+                if req not in rids_new_updated_and_shared_resources:
+                    raise BadRequest(
+                        f"Resource {res_id} has a requires dependency on resource {req}, but that latter doesn't belong to"
+                        f" the shared resource set or a resource that that was updated by this partial compile."
+                    )
+
+            for provide in res.provides:
+                if provide not in rids_new_updated_and_shared_resources:
+                    raise BadRequest(
+                        f"Resource {res_id} has a provides dependency on resource {provide}, but the latter doesn't belong to"
+                        f" the shared resource set or a resource that that was updated by this partial compile."
+                    )
 
     def _merge_shared_resources(self, shared_resources_new: Dict[ResourceIdStr, data.Resource]) -> abc.Sequence[data.Resource]:
         """
