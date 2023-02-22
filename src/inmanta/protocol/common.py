@@ -980,10 +980,7 @@ def shorten(msg: str, max_len: int = 10) -> str:
 def encode_token(
     client_types: List[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
 ) -> str:
-    print("--------------------------------------")
-    print("client_types: " + str(client_types))
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
-    print("cfg_client_types: " + str(cfg.client_types))
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
 
