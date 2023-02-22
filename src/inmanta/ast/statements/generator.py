@@ -610,7 +610,7 @@ class Constructor(ExpressionStatement):
                 raise TypingException(
                     self,
                     f"Can not assign a value of type {self.class_type} "
-                    f"to a variable of type {lhs_attribute.type_hint.type_string()}",
+                    f"to a variable of type {str(lhs_attribute.type_hint)}",
                 )
             elif local_type is not None and local_type.is_subclass(type_hint):
                 # we have a local match, use that to prevent breaking existing code
@@ -637,18 +637,20 @@ class Constructor(ExpressionStatement):
                     else:
                         raise TypingException(
                             self,
-                            f"Can not assign a value of type {local_type.type_string()} "
-                            f"to a variable of type {lhs_attribute.type_hint.type_string()}",
+                            f"Can not assign a value of type {str(local_type)} "
+                            f"to a variable of type {str(lhs_attribute.type_hint)}",
                         )
             else:
                 if local_type is not None:
                     return local_type
                 else:
+                    assert resolver_failure is not None  # make mypy happy
                     raise resolver_failure
         else:
             if local_type is not None:
                 return local_type
             else:
+                assert resolver_failure is not None  # make mypy happy
                 raise resolver_failure
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
