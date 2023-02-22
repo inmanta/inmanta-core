@@ -48,7 +48,7 @@ from inmanta.execute.runtime import (
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
-    from inmanta.ast.type import NamedType  # noqa: F401
+    from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
 
 
@@ -205,6 +205,7 @@ class RequiresEmitStatement(DynamicStatement):
 class AttributeAssignmentLHS:
     instance: "Reference"
     attribute: str
+    type_hint: Optional["Type"] = None
 
 
 class ExpressionStatement(RequiresEmitStatement):
