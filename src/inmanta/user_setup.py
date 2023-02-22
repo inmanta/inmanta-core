@@ -129,7 +129,7 @@ async def do_user_setup() -> None:
         )
         await user.insert()
 
-        click.echo(f"User {username}:                                             {click.style('created', fg='green')}")
+        click.echo(f"{'User %s: ' %username <50}{click.style('created', fg='green')}")
     finally:
         if connection is not None:
             await data.disconnect()

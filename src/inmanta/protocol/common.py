@@ -452,7 +452,6 @@ class MethodProperties(object):
 
     @property
     def enforce_auth(self) -> bool:
-        """Do we enforce authentication?"""
         return self._enforce_auth
 
     def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
