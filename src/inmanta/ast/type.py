@@ -144,6 +144,9 @@ class NamedType(Type, Named):
         """produce an error message for this type"""
         raise DuplicateException(self, other, "Type %s is already defined" % (self.get_full_name()))
 
+    def type_string(self) -> str:
+        return self.get_full_name()
+
 
 @stable_api
 class NullableType(Type):
@@ -420,7 +423,7 @@ class TypedList(List):
         return "%s[]" % string
 
     def type_string(self) -> Optional[str]:
-        element_type_string: Optional[str] = self.element_type.type_string()
+        element_type_string = self.element_type.type_string()
         return None if element_type_string is None else self._wrap_type_string(element_type_string)
 
     def type_string_internal(self) -> str:
@@ -494,6 +497,9 @@ class Dict(Type):
 
     def type_string_internal(self) -> str:
         return "Dict"
+
+    def type_string(self) -> str:
+        return "dict"
 
     def get_location(self) -> Location:
         return None
@@ -642,7 +648,7 @@ class ConstraintType(NamedType):
 
         return True
 
-    def type_string(self):
+    def type_string(self) -> str:
         return "%s::%s" % (self.namespace, self.name)
 
     def type_string_internal(self) -> str:

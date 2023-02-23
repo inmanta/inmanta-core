@@ -384,6 +384,9 @@ class OrchestrationService(protocol.ServerSlice):
                 for v in delete_list:
                     await version_dict[v].delete_cascade()
 
+        # Cleanup old agents from agent table in db
+        await data.Agent.clean_up()
+
     @handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
@@ -686,8 +689,6 @@ class OrchestrationService(protocol.ServerSlice):
             await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
-
-        self.resource_service.clear_env_cache(env)
 
     async def _trigger_auto_deploy(
         self,

@@ -2,3 +2,7 @@ import mod1
 import std
 
 std::print("Hello world")
+
+entity A:
+
+end

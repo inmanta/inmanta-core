@@ -3362,6 +3362,31 @@ class Agent(BaseDocument):
         """
         await cls._execute_query(query, connection=connection)
 
+    @classmethod
+    async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        query = """
+DELETE FROM public.agent AS a
+WHERE (environment, name) NOT IN (
+    SELECT DISTINCT environment_id as environment, agent as name
+    FROM (
+        -- agent is in the agent map
+        SELECT e.id as environment_id, map.key as agent
+        FROM public.environment e
+        CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
+    ) in_agent_map
+)
+-- have no primary ID set (that are down)
+AND id_primary IS NULL
+-- not used by any version
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.resource AS re
+    WHERE a.environment=re.environment
+    AND a.name=re.agent
+);
+"""
+        await cls._execute_query(query, connection=connection)
+
 
 @stable_api
 class Report(BaseDocument):

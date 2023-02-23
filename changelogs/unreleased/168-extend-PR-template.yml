@@ -1,0 +1,4 @@
+---
+description: Extend the PR template checklist with a note regarding fixing race conditions in the stable branches as well.
+change-type: patch
+destination-branches: [master, iso6, iso5]
