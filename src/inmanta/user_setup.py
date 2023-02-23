@@ -98,6 +98,7 @@ async def get_database_connection() -> asyncpg.Pool:
         server_config.db_name.get(),
         database_username,
         database_password,
+        False,
         connection_pool_min_size=connection_pool_min_size,
         connection_pool_max_size=connection_pool_max_size,
         connection_timeout=connection_timeout,
@@ -111,8 +112,11 @@ async def do_user_setup() -> None:
         connection = await get_database_connection()
         DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
         schema_up_to_date = await DBschema.is_DB_schema_up_to_date()
-        if not schema_up_to_date:
-            raise Exception("The DB schema is not up to date. Please migrate your DB to the latest version and try again.")
+        if schema_up_to_date:
+            click.echo(f"{'DB up to date' : <50}{click.style('yes', fg='green')}")
+        else:
+            click.echo(f"{'DB up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}")
+            return
         users = await data.User.get_list()
 
         if len(users):

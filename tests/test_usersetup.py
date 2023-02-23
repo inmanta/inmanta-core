@@ -17,12 +17,11 @@
 """
 import asyncio
 import os
-import subprocess
 
-import pytest
 from click import testing
 
 from inmanta import data
+from inmanta.db.util import PGRestore
 from inmanta.user_setup import cmd, get_database_connection
 
 
@@ -74,35 +73,29 @@ def setup_config(tmpdir, postgres_db, database_name):
     os.chdir(tmpdir)
 
 
-def restore_database_dump(database_name, dump_file_path):
-    """
-    Restores an old database dump
-    """
-    cmd = f"psql {database_name} < {dump_file_path}"
-    subprocess.call(cmd, shell=True)
-
-
-async def test_user_setup(tmpdir, postgres_db, database_name, init_dataclasses_and_load_schema):
+async def test_user_setup(tmpdir, postgres_db, database_name):
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()
     await cli.run("new_user", "password")
+
+    connection = await get_database_connection()
 
     users = await data.User.get_list()
     assert len(users) == 1
     assert users[0].username == "new_user"
 
+    # todo comment
+    if connection is not None:
+        await data.disconnect()
 
-async def test_user_setup_schema_outdated(tmpdir, postgres_db, database_name):
+
+async def test_user_setup_schema_outdated(tmpdir, postgres_db, database_name, postgresql_client):
     setup_config(tmpdir, postgres_db, database_name)
 
     dump_path = os.path.join(os.path.dirname(__file__), "db/migration_tests/dumps/v202211230.sql")
-    restore_database_dump(
-        database_name,
-        dump_path,
-    )
+    with open(dump_path, "r") as fh:
+        await PGRestore(fh.readlines(), postgresql_client).run()
 
     cli = CLI_user_setup()
-    try:
-        await cli.run("new_user", "password")
-    except Exception as e:
-        print(e)
+    result = await cli.run("new_user", "password")
+    assert "please migrate your DB to the latest version" in result.output
