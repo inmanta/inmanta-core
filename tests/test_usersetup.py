@@ -78,13 +78,16 @@ async def test_user_setup(tmpdir, postgres_db, database_name):
     cli = CLI_user_setup()
     await cli.run("new_user", "password")
 
+    # setup_config() writes a config to a config file. The cli.run() will load this config and use it.
+    # We need the config to be loaded before we connect to the DB. this is why we can't use the
+    # init_dataclasses_and_load_schema and why we open (and close) a connection ourself.
+    # cli.run() calls cmd which will open and close a connection in the same way.
     connection = await get_database_connection()
 
     users = await data.User.get_list()
     assert len(users) == 1
     assert users[0].username == "new_user"
 
-    # todo comment
     if connection is not None:
         await data.disconnect()
 
