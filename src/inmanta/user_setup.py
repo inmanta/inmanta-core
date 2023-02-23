@@ -51,7 +51,7 @@ def validate_server_setup() -> None:
             "The option auth in the server section should be enabled."
         )
 
-    click.echo(f"{'Server authentication: '<50}{click.style('enabled', fg='green')}")
+    click.echo(f"{'Server authentication: ' : <50}{click.style('enabled', fg='green')}")
 
     # make sure the method is set to database
     if server_config.server_auth_method.get() != "database":
@@ -60,7 +60,7 @@ def validate_server_setup() -> None:
             "section is set to database"
         )
 
-    click.echo(f"{'Server authentication method: '<50}{click.style('database', fg='green')}")
+    click.echo(f"{'Server authentication method: ' : <50}{click.style('database', fg='green')}")
 
     # make sure there is auth config that supports signing tokens
     cfg = config.AuthJWTConfig.get_sign_config()
@@ -77,7 +77,7 @@ def validate_server_setup() -> None:
 
         raise click.ClickException("Make sure signing configuration is added to the config. See the documentation for details.")
 
-    click.echo(f"{'Authentication signing config: '<50}{click.style('enabled', fg='green')}")
+    click.echo(f"{'Authentication signing config: ' : <50}{click.style('enabled', fg='green')}")
 
     # TODO: verify web-console config (if any)
 
@@ -108,7 +108,7 @@ async def do_user_setup() -> None:
     connection = None
     try:
         connection = await get_database_connection()
-        users = await data.User.get_list()
+        users = await data.User.get_list(connection=connection)
 
         if len(users):
             raise click.ClickException(
@@ -127,7 +127,7 @@ async def do_user_setup() -> None:
             enabled=True,
             auth_method="password",
         )
-        await user.insert()
+        await user.insert(connection=connection)
 
         click.echo(f"{'User %s: ' %username <50}{click.style('created', fg='green')}")
     finally:
@@ -140,11 +140,16 @@ async def do_user_setup() -> None:
 @click.command(help="Do the initial user setup")
 @click.option("--reset", help="Reset the password to recover a lost password", is_flag=True)
 def cmd(reset: bool) -> None:
-    # validate the setup so that we can setup a new user
-    validate_server_setup()
-
+    try:
+        # validate the setup so that we can setup a new user
+        validate_server_setup()
+    except Exception as e:
+        print(e)
     # check if there are already users
+
     asyncio.run(do_user_setup())
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(do_user_setup())
 
 
 def main() -> None:
