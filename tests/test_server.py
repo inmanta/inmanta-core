@@ -33,7 +33,7 @@ from inmanta import const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
-from inmanta.data.model import AttributeStateChange, LogLine
+from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import (
@@ -1405,6 +1405,101 @@ async def test_redirect_dashboard_to_console(server, path):
     )
     response = await http_client.fetch(request, raise_error=False)
     assert result_url == response.effective_url
+
+
+async def test_cleanup_old_agents(server):
+    """
+    This test is testing the functionality of cleaning up old agents in the database.
+    The test creates 2 environments and adds agents with various properties (some used in a version,
+    some in the agent map, and some with the primary ID set), and then tests that
+    the cleanup function correctly removes only the agents that meet the criteria for deletion.
+    """
+
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
+    await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
+
+    process_sid = uuid.uuid4()
+    await data.AgentProcess(hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()).insert()
+
+    id_primary = uuid.uuid4()
+    await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env1.id).insert()
+
+    version = 1
+    await data.ConfigurationModel(
+        environment=env1.id,
+        version=version,
+        date=datetime.now(),
+        total=1,
+        released=True,
+        version_info={},
+    ).insert()
+
+    path = "/etc/file1"
+    resource_id = f"std::File[agent4,path={path}]"
+
+    await data.Resource.new(
+        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"path": path}
+    ).insert()
+
+    # should get purged
+    await data.Agent(
+        environment=env1.id,
+        name="agent1",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # should not get purged as the id_primary is set -> not down
+    await data.Agent(environment=env1.id, name="agent2", paused=False, id_primary=id_primary).insert()
+    # should not get purged as it is in the agent map
+    await data.Agent(
+        environment=env1.id,
+        name="agent3",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # should not get purged as it is used in a version of the ConfigurationModel
+    await data.Agent(
+        environment=env1.id,
+        name="agent4",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # agent with "agent2" as name but in another env will get purged:
+    await data.Agent(
+        environment=env2.id,
+        name="agent2",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # agent with "agent1" as name but being present in the agent_map and in another env will not get purged:
+    await data.Agent(
+        environment=env2.id,
+        name="agent1",
+        paused=False,
+        id_primary=None,
+    ).insert()
+
+    agents_before_purge = await data.Agent.get_list()
+    assert len(agents_before_purge) == 6
+
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+    agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
+    assert len(agents_after_purge) == 4
+    expected_agents_after_purge = [
+        (env1.id, "agent2"),
+        (env1.id, "agent3"),
+        (env1.id, "agent4"),
+        (env2.id, "agent1"),
+    ]
+    assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
 
 
 async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper) -> None:

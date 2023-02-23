@@ -1,0 +1,6 @@
+---
+description: Fix race condition in incremental deploy calculation where a newly released version uses an increment that is calculated from an old model version.
+change-type: patch
+destination-branches: [master, iso6, iso5, iso4]
+sections:
+  bugfix: "{{description}}"

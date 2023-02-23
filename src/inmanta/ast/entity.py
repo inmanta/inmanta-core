@@ -215,6 +215,12 @@ class Entity(NamedType):
             parents.extend(entity.get_all_parent_entities())
         return set(parents)
 
+    def get_all_child_entities(self) -> "Set[Entity]":
+        children = [x for x in self.child_entities]
+        for entity in self.child_entities:
+            children.extend(entity.get_all_child_entities())
+        return set(children)
+
     def get_all_attribute_names(self) -> "List[str]":
         """
         Return a list of all attribute names, including parents
