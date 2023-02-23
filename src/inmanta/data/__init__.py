@@ -2958,35 +2958,20 @@ class UnknownParameter(BaseDocument):
         Returns a subset of the unknowns in source_version of environment. It returns the unknowns that:
             * Are not associated with a resource
             * Are associated with a resource that:
-               - doesn't belong to the resource set updated_resource_sets and deleted_resource_sets
-               - and, doesn't have a resource_id in rids_in_partial_compile (An unknown might belong to a shared resource that
+               - don't belong to the resource set updated_resource_sets and deleted_resource_sets
+               - and, don't have a resource_id in rids_in_partial_compile (An unknown might belong to a shared resource that
                  is not exported by the partial compile)
         """
         query = f"""
-                -- Get unknowns that don't belong to a resource
-                (
-                    SELECT *
-                    FROM {cls.table_name()} AS u1
-                    WHERE
-                        u1.environment=$1
-                        AND u1.version=$2
-                        AND u1.resolved IS FALSE
-                        AND (u1.resource_id IS NULL OR u1.resource_id='')
-                )
-                UNION
-                -- Get unknowns that belong to a resource
-                (
-                    SELECT u2.*
-                    FROM {cls.table_name()} AS u2
-                       INNER JOIN {Resource.table_name()} AS r
-                       ON u2.environment=r.environment AND u2.version=r.model AND u2.resource_id=r.resource_id
-                    WHERE
-                        u2.environment=$1
-                        AND u2.version=$2
-                        AND u2.resolved IS FALSE
-                        AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
-                        AND u2.resource_id IS NOT NULL AND u2.resource_id!='' AND NOT r.resource_id=ANY($4)
-                )
+            SELECT u.*
+            FROM {cls.table_name()} AS u LEFT JOIN {Resource.table_name()} AS r
+                ON u.environment=r.environment AND u.version=r.model AND u.resource_id=r.resource_id
+            WHERE
+                u.environment=$1
+                AND u.version=$2
+                AND u.resolved IS FALSE
+                AND (r.resource_id IS NULL OR NOT r.resource_id=ANY($4))
+                AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetch(
