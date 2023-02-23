@@ -15,42 +15,94 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import os
+import subprocess
 
-import inmanta
-from inmanta.server import protocol
-from inmanta.user_setup import cmd
+import pytest
+from click import testing
+
+from inmanta import data
+from inmanta.user_setup import cmd, get_database_connection
 
 
-async def test_user_setup(server: protocol.Server, tmpdir, postgres_db, database_name, cli):
+class CLI_user_setup(object):
+    async def run(self, username, password, *args, **kwargs):
+        # set column width very wide so lines are not wrapped
+        os.environ["COLUMNS"] = "1000"
+        runner = testing.CliRunner(mix_stderr=False)
+
+        def invoke():
+            return runner.invoke(cli=cmd, input=f"{username}\n{password}")
+
+        result = await asyncio.get_event_loop().run_in_executor(None, invoke)
+        # reset to default again
+        del os.environ["COLUMNS"]
+        return result
+
+
+def setup_config(tmpdir, postgres_db, database_name):
+    """
+    set up the needed config to use usersetup
+    """
     dot_inmanta_cfg_file = os.path.join(tmpdir, ".inmanta.cfg")
     with open(dot_inmanta_cfg_file, "w", encoding="utf-8") as f:
         f.write(
             f"""
-[server]
-auth=true
-auth_method=database
+    [server]
+    auth=true
+    auth_method=database
 
-[auth_jwt_default]
-algorithm=HS256
-sign=true
-client_types=agent,compiler,api
-key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
-expire=0
-issuer=https://localhost:8888/
-audience=https://localhost:8888/
+    [auth_jwt_default]
+    algorithm=HS256
+    sign=true
+    client_types=agent,compiler,api
+    key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+    expire=0
+    issuer=https://localhost:8888/
+    audience=https://localhost:8888/
 
-[database]
-name={database_name}
-host=localhost
-port={str(postgres_db.port)}
-username={postgres_db.user}
-password={postgres_db.password}
-connection_timeout=3
-        """
+    [database]
+    name={database_name}
+    host=localhost
+    port={str(postgres_db.port)}
+    username={postgres_db.user}
+    password={postgres_db.password}
+    connection_timeout=3
+            """
         )
     os.chdir(tmpdir)
 
-    result = await cli.run(cmd, cli=inmanta.user_setup)
 
-    print(result)
+def restore_database_dump(database_name, dump_file_path):
+    """
+    Restores an old database dump
+    """
+    cmd = f"psql {database_name} < {dump_file_path}"
+    subprocess.call(cmd, shell=True)
+
+
+async def test_user_setup(tmpdir, postgres_db, database_name, init_dataclasses_and_load_schema):
+    setup_config(tmpdir, postgres_db, database_name)
+    cli = CLI_user_setup()
+    await cli.run("new_user", "password")
+
+    users = await data.User.get_list()
+    assert len(users) == 1
+    assert users[0].username == "new_user"
+
+
+async def test_user_setup_schema_outdated(tmpdir, postgres_db, database_name):
+    setup_config(tmpdir, postgres_db, database_name)
+
+    dump_path = os.path.join(os.path.dirname(__file__), "db/migration_tests/dumps/v202211230.sql")
+    restore_database_dump(
+        database_name,
+        dump_path,
+    )
+
+    cli = CLI_user_setup()
+    try:
+        await cli.run("new_user", "password")
+    except Exception as e:
+        print(e)

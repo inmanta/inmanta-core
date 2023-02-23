@@ -303,3 +303,11 @@ class DBSchema(object):
         version = [make_version(name, mod) for name, mod in filtered_modules]
 
         return sorted(version, key=lambda x: x.version)
+
+    async def is_DB_schema_up_to_date(self) -> bool:
+        installed_versions = await self.get_installed_versions()
+        update_functions = self._get_update_functions()
+        for function in update_functions:
+            if function.version not in installed_versions:
+                return False
+        return True

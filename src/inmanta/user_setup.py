@@ -24,6 +24,7 @@ import click
 
 import nacl.pwhash
 from inmanta import config, data
+from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.server import config as server_config
 
 
@@ -108,7 +109,11 @@ async def do_user_setup() -> None:
     connection = None
     try:
         connection = await get_database_connection()
-        users = await data.User.get_list(connection=connection)
+        DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
+        schema_up_to_date = await DBschema.is_DB_schema_up_to_date()
+        if not schema_up_to_date:
+            raise Exception("The DB schema is not up to date. Please migrate your DB to the latest version and try again.")
+        users = await data.User.get_list()
 
         if len(users):
             raise click.ClickException(
@@ -127,9 +132,9 @@ async def do_user_setup() -> None:
             enabled=True,
             auth_method="password",
         )
-        await user.insert(connection=connection)
+        await user.insert()
 
-        click.echo(f"{'User %s: ' %username <50}{click.style('created', fg='green')}")
+        click.echo(f"{'User %s: ' %username : <50}{click.style('created', fg='green')}")
     finally:
         if connection is not None:
             await data.disconnect()
@@ -140,16 +145,10 @@ async def do_user_setup() -> None:
 @click.command(help="Do the initial user setup")
 @click.option("--reset", help="Reset the password to recover a lost password", is_flag=True)
 def cmd(reset: bool) -> None:
-    try:
-        # validate the setup so that we can setup a new user
-        validate_server_setup()
-    except Exception as e:
-        print(e)
+    # validate the setup so that we can setup a new user
+    validate_server_setup()
     # check if there are already users
-
     asyncio.run(do_user_setup())
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(do_user_setup())
 
 
 def main() -> None:
