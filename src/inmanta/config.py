@@ -431,7 +431,7 @@ class AuthJWTConfig(object):
     validate_cert: bool
 
     @classmethod
-    def reset(cls):
+    def reset(cls) -> None:
         cls.sections = {}
         cls.issuers = {}
 

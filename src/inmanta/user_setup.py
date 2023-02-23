@@ -83,7 +83,7 @@ def validate_server_setup() -> None:
     # TODO: verify web-console config (if any)
 
 
-async def get_database_connection() -> asyncpg.Pool:
+async def get_database_connection() -> asyncpg.pool.Pool:
     database_host = server_config.db_host.get()
     database_port = server_config.db_port.get()
 

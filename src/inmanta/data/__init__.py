@@ -1289,7 +1289,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return cls._connection_pool.acquire()
 
     @classmethod
-    def table_name(cls, include_schema=True) -> str:
+    def table_name(cls, include_schema: bool = True) -> str:
         """
         Return the name of the collection
         """
