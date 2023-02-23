@@ -1506,7 +1506,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     assert len(result) == 3
     assert sorted([r["agent"] for r in result]) == ["agent1", "agent1", "agent2"]
     for r in result:
-        assert len(r["attributes"]) == 1
+        assert len(r["attributes"]) == 2  # path and version attribute
 
 
 async def test_escaped_resources(init_dataclasses_and_load_schema):

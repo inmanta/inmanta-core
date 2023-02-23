@@ -430,6 +430,13 @@ class OrchestrationService(protocol.ServerSlice):
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
         cross_agent_dep: list[tuple[data.Resource, Id]] = []
         for res_dict in resources:
+            # Verify that the version field and the version in the resource version id field match
+            version_part_of_resource_id = Id.parse_id(res_dict["id"]).version
+            if "version" in res_dict and res_dict["version"] != version_part_of_resource_id:
+                raise BadRequest(
+                    f"Invalid resource: The version in the id field ({res_dict['id']}) doesn't match the version in the"
+                    f" version field ({res_dict['version']})."
+                )
             res_obj = data.Resource.new(env_id, res_dict["id"])
             # Populate status field
             if res_obj.resource_id in resource_state:
@@ -441,14 +448,13 @@ class OrchestrationService(protocol.ServerSlice):
             # Populate attributes field of resources
             attributes = {}
             for field, value in res_dict.items():
-                if field != "id":
+                if field not in {"id", "version"}:
                     attributes[field] = value
             res_obj.attributes = attributes
             res_obj.make_hash()
 
             # Update the version fields
             if set_version is not None:
-                res_obj.attributes["version"] = set_version
                 res_obj.model = set_version
 
             # find cross agent dependencies
@@ -537,11 +543,32 @@ class OrchestrationService(protocol.ServerSlice):
                                 When a partial compile is done, it should contain all the resources that belong to the
                                 updated resource sets or the shared resource sets.
         :param unknowns: This parameter should contain all the unknowns for all the resources in the new version of the model.
-                         So also the unknowns for the resources that don't belong to an updated resource set when a partial
-                         compile is done.
+                         Also the unknowns for resources that are not present in rid_to_resource.
+        :param partial_base_version: When a partial compile is done, this parameter contains the version of the
+                                     configurationmodel this partial compile was based on. Otherwise this parameter should be
+                                     None.
+        :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
+                                      sets that are removed by the partial compile. When no resource sets are removed by
+                                      a partial compile or when a full compile is done, this parameter can be set to None.
 
-        The resource sets defined in the removed_resource_sets argument should be overlap with the resource sets present in the
-        resource_sets argument.
+        Pre-conditions:
+            * The requires and provides relationships of the resources in rid_to_resource must to be set correctly.
+            * When a partial compile was done, all resources in rid_to_resource must meet the constraints of a partial compile.
+            * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets present
+              in the resource_sets argument.
+
+        This method adds resources to the model that are no longer present in the new version of the model and had the
+        purge_on_delete flag set to true. This method makes sure that the requires and provides relationships of these
+        additional resources are set correctly. This dependency wiring is also safe for a partial compile because
+        a partial compile cannot delete shared resources and because resources that belong to a non-shared resource set cannot
+        reference resources in another non-shared resource set. That way all dependencies of the deleted resources are present
+        in the rid_to_resource parameter.
+
+        When a partial compile is done, the undeployable and skipped_for_undeployable resources of a configurationmodel are
+        copied from the old version to the new version. This operation is safe because the only resources missing from
+        rid_to_resource are resources that belong to an unchanged, non-shared resource set. Those resources can only have
+        cross resource set dependencies in a non-shared resource set and the latter resource set cannot be changed by a partial
+        compile.
         """
         is_partial_update = partial_base_version is not None
 
@@ -624,75 +651,78 @@ class OrchestrationService(protocol.ServerSlice):
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.status in const.UNDEPLOYABLE_STATES
         ]
-        try:
-            cm = await data.ConfigurationModel.create_and_insert(
-                env_id=env.id,
-                version=version,
-                # When a partial compile is done, the total will be updated in cm.recalculate_total()
-                # with all the resources that belong to a resource set that was not updated.
-                total=len(rid_to_resource),
-                version_info=version_info,
-                undeployable=undeployable_ids,
-                skipped_for_undeployable=sorted(
-                    self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
-                ),
-                partial_base=partial_base_version,
-                rids_in_partial_compile=set(rid_to_resource.keys()) if partial_base_version else None,
-                connection=connection,
-            )
-        except asyncpg.exceptions.UniqueViolationError:
-            raise ServerError("The given version is already defined. Versions should be unique.")
-
-        all_resource_version_ids: set[ResourceVersionIdStr] = set(
-            Id.set_version_in_id(rid, version) for rid in rid_to_resource.keys()
-        )
-        if is_partial_update:
-            # Make mypy happy
-            assert partial_base_version is not None
-            rids_unchanged_resource_sets: abc.Set[
-                ResourceIdStr
-            ] = await data.Resource.copy_resources_from_unchanged_resource_set(
-                environment=env.id,
-                source_version=partial_base_version,
-                destination_version=version,
-                updated_resource_sets=set(sr for sr in resource_sets.values() if sr is not None),
-                deleted_resource_sets=set(removed_resource_sets),
-                connection=connection,
-            )
-            resources_that_moved_resource_sets = rids_unchanged_resource_sets & set(rid_to_resource.keys())
-            if resources_that_moved_resource_sets:
-                raise BadRequest(
-                    f"A partial compile cannot migrate resources {list(resources_that_moved_resource_sets)} to another resource"
-                    " set"
+        async with connection.transaction():
+            try:
+                cm = await data.ConfigurationModel.create_and_insert(
+                    env_id=env.id,
+                    version=version,
+                    # When a partial compile is done, the total will be updated in cm.recalculate_total()
+                    # with all the resources that belong to a resource set that was not updated.
+                    total=len(rid_to_resource),
+                    version_info=version_info,
+                    undeployable=undeployable_ids,
+                    skipped_for_undeployable=sorted(
+                        self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
+                    ),
+                    partial_base=partial_base_version,
+                    rids_in_partial_compile=set(rid_to_resource.keys()) if partial_base_version else None,
+                    connection=connection,
                 )
+            except asyncpg.exceptions.UniqueViolationError:
+                raise ServerError("The given version is already defined. Versions should be unique.")
 
-            all_resource_version_ids |= {Id.set_version_in_id(rid, version) for rid in rids_unchanged_resource_sets}
-
-        await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
-        await cm.recalculate_total(connection=connection)
-
-        await data.UnknownParameter.insert_many(unknowns, connection=connection)
-
-        for res in rid_to_resource.values():
-            await self.agentmanager_service.ensure_agent_registered(env, res.agent, connection=connection)
-
-        # Don't log ResourceActions without resource_version_ids, because
-        # no API call exists to retrieve them.
-        if all_resource_version_ids:
-            now = datetime.datetime.now().astimezone()
-            log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-            self.resource_service.log_resource_action(env.id, list(all_resource_version_ids), logging.INFO, now, log_line.msg)
-            ra = data.ResourceAction(
-                environment=env.id,
-                version=version,
-                resource_version_ids=all_resource_version_ids,
-                action_id=uuid.uuid4(),
-                action=const.ResourceAction.store,
-                started=started,
-                finished=now,
-                messages=[log_line],
+            all_resource_version_ids: set[ResourceVersionIdStr] = set(
+                Id.set_version_in_id(rid, version) for rid in rid_to_resource.keys()
             )
-            await ra.insert(connection=connection)
+            if is_partial_update:
+                # Make mypy happy
+                assert partial_base_version is not None
+                rids_unchanged_resource_sets: abc.Set[
+                    ResourceIdStr
+                ] = await data.Resource.copy_resources_from_unchanged_resource_set(
+                    environment=env.id,
+                    source_version=partial_base_version,
+                    destination_version=version,
+                    updated_resource_sets=set(sr for sr in resource_sets.values() if sr is not None),
+                    deleted_resource_sets=set(removed_resource_sets),
+                    connection=connection,
+                )
+                resources_that_moved_resource_sets = rids_unchanged_resource_sets & set(rid_to_resource.keys())
+                if resources_that_moved_resource_sets:
+                    raise BadRequest(
+                        f"A partial compile cannot migrate resources {list(resources_that_moved_resource_sets)} to another"
+                        " resource set"
+                    )
+
+                all_resource_version_ids |= {Id.set_version_in_id(rid, version) for rid in rids_unchanged_resource_sets}
+
+            await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
+            await cm.recalculate_total(connection=connection)
+
+            await data.UnknownParameter.insert_many(unknowns, connection=connection)
+
+            for res in rid_to_resource.values():
+                await self.agentmanager_service.ensure_agent_registered(env, res.agent, connection=connection)
+
+            # Don't log ResourceActions without resource_version_ids, because
+            # no API call exists to retrieve them.
+            if all_resource_version_ids:
+                now = datetime.datetime.now().astimezone()
+                log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
+                self.resource_service.log_resource_action(
+                    env.id, list(all_resource_version_ids), logging.INFO, now, log_line.msg
+                )
+                ra = data.ResourceAction(
+                    environment=env.id,
+                    version=version,
+                    resource_version_ids=all_resource_version_ids,
+                    action_id=uuid.uuid4(),
+                    action=const.ResourceAction.store,
+                    started=started,
+                    finished=now,
+                    messages=[log_line],
+                )
+                await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
 
@@ -769,7 +799,7 @@ class OrchestrationService(protocol.ServerSlice):
         unknowns: List[Dict[str, PrimitiveTypes]],
         version_info: JsonType,
         compiler_version: Optional[str] = None,
-        resource_sets: Dict[ResourceIdStr, Optional[str]] = {},
+        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -779,6 +809,9 @@ class OrchestrationService(protocol.ServerSlice):
                              "source": str
                             }
         """
+        if resource_sets is None:
+            resource_sets = {}
+
         if not compiler_version:
             raise BadRequest("Older compiler versions are no longer supported, please update your compiler")
 

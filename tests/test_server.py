@@ -1405,3 +1405,62 @@ async def test_redirect_dashboard_to_console(server, path):
     )
     response = await http_client.fetch(request, raise_error=False)
     assert result_url == response.effective_url
+
+
+async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper) -> None:
+    """
+    Due to a bug, the version of a resource was always included in the attribute dictionary.
+    This issue has been patched in the database, but at the API boundary we still serve the version
+    field in the attributes dictionary for backwards compatibility. This test verifies that behavior.
+    """
+    version = await clienthelper.get_version()
+    resource_id = "test::Resource[agent1,key=key1]"
+    resources = [
+        {
+            "id": f"{resource_id},v={version}",
+            "att": "val",
+            "version": version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+    attributes_on_api = {k: v for k, v in resources[0].items() if k != "id"}
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
+    # Verify that the version field is not present in the attributes dictionary in the database.
+    result = await data.Resource.get_list()
+    assert len(result) == 1
+    resource_dao = result[0]
+    assert "version" not in resource_dao.attributes
+
+    # Ensure that the serialization of the resource DAO contains the version field in the attributes dictionary
+    resource_dto = resource_dao.to_dto()
+    assert resource_dto.attributes["version"] == version
+    resource_dct = resource_dao.to_dict()
+    assert resource_dct["attributes"]["version"] == version
+
+    # Retrieve the resource via the API and ensure that the version field is present in the attributes dictionary
+    result = await client.resource_history(environment, resource_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["attributes"] == attributes_on_api
+
+    result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == attributes_on_api
+
+    result = await client.resource_details(tid=environment, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == attributes_on_api

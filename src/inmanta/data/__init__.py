@@ -4293,6 +4293,11 @@ class Resource(BaseDocument):
             record["attributes"]["requires"] = [
                 resources.Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]
             ]
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in record["attributes"]:
+            record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     @classmethod
@@ -4587,8 +4592,6 @@ class Resource(BaseDocument):
         Create a new resource dao instance from this dao instance.
         The new instance will have the given version.
         """
-        attributes_with_version_update = self.attributes.copy()
-        attributes_with_version_update["version"] = new_version
         new_resource_state = ResourceState.undefined if self.status is ResourceState.undefined else ResourceState.available
         return Resource(
             environment=self.environment,
@@ -4598,7 +4601,7 @@ class Resource(BaseDocument):
             resource_id_value=self.resource_id_value,
             agent=self.agent,
             last_deploy=None,
-            attributes=attributes_with_version_update,
+            attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
             status=new_resource_state,
             last_non_deploying_status=const.NonDeployingResourceState[new_resource_state.name],
@@ -4717,8 +4720,9 @@ class Resource(BaseDocument):
 
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
-        first.model as first_model, latest.resource_id as latest_resource_id, latest.resource_type,
-        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status
+        first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
+        latest.resource_type, latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes,
+        latest.status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
@@ -4744,6 +4748,11 @@ class Resource(BaseDocument):
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
         attributes = json.loads(record["attributes"])
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in attributes:
+            attributes["version"] = record["latest_model"]
         requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
 
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
@@ -4849,7 +4858,12 @@ class Resource(BaseDocument):
                         ELSE 'available'::resourcestate
                         END
                     ) AS status,
-                    jsonb_set(r.attributes, '{{"version"}}'::text[], to_jsonb($3::integer)) AS attributes,
+                    (
+                        CASE WHEN r.attributes ? 'version'
+                        THEN jsonb_set(r.attributes, '{{"version"}}'::text[], to_jsonb($3::integer))
+                        ELSE r.attributes
+                        END
+                    ) AS attributes,
                     r.attribute_hash,
                     r.resource_set,
                     r.provides
@@ -4936,6 +4950,12 @@ class Resource(BaseDocument):
         if "requires" in self.attributes:
             version = self.model
             attributes["requires"] = [resources.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
+
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in self.attributes:
+            attributes["version"] = self.model
 
         return m.Resource(
             environment=self.environment,

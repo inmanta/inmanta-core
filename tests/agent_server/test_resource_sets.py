@@ -776,7 +776,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[0].attributes == {
         "key": "key1",
         "value": "100",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -784,7 +783,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[1].attributes == {
         "key": "key2",
         "value": "200",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -792,7 +790,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[2].attributes == {
         "key": "key3",
         "value": "3",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -800,7 +797,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[3].attributes == {
         "key": "key4",
         "value": "4",
-        "version": 2,
         "purged": False,
         "requires": ["test::Resource[agent1,key=key3]"],
         "send_event": False,
@@ -808,7 +804,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[4].attributes == {
         "key": "key5",
         "value": "5",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -816,7 +811,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[5].attributes == {
         "key": "key6",
         "value": "6",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -824,7 +818,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[6].attributes == {
         "key": "key9",
         "value": "900",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -832,7 +825,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[7].attributes == {
         "key": "key91",
         "value": "910",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -840,7 +832,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[8].attributes == {
         "key": "key92",
         "value": "920",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,

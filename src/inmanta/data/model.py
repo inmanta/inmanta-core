@@ -23,7 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import Extra, validator
+from pydantic import Extra, root_validator, validator
 from pydantic.fields import ModelField
 
 import inmanta
@@ -489,6 +489,16 @@ class VersionedResourceDetails(ResourceDetails):
 
     resource_version_id: ResourceVersionIdStr
     version: int
+
+    @root_validator
+    @classmethod
+    def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in v["attributes"]:
+            v["attributes"]["version"] = v["version"]
+        return v
 
 
 class ReleasedResourceDetails(ResourceDetails):
