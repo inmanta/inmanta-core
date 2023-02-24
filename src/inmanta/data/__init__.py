@@ -4600,7 +4600,7 @@ class Resource(BaseDocument):
 
     def copy_for_partial_compile(self, new_version: int) -> "Resource":
         """
-        Create a new resource dao instance from this dao instance.
+        Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
         The new instance will have the given version.
         """
         new_resource_state = ResourceState.undefined if self.status is ResourceState.undefined else ResourceState.available
