@@ -92,7 +92,9 @@ async def test_user_setup(tmpdir, postgres_db, database_name):
         await data.disconnect()
 
 
-async def test_user_setup_schema_outdated(tmpdir, postgres_db, database_name, postgresql_client):
+async def test_user_setup_schema_outdated(
+    tmpdir, postgres_db, database_name, postgresql_client, hard_clean_db, hard_clean_db_post
+):
     setup_config(tmpdir, postgres_db, database_name)
 
     dump_path = os.path.join(os.path.dirname(__file__), "db/migration_tests/dumps/v202211230.sql")
