@@ -3134,7 +3134,7 @@ class AgentInstance(BaseDocument):
                 {cls.table_name()}
                 (id, tid, process, name, expired)
                 VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name(False)}_unique DO UPDATE
+                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
                 SET expired = null
                 ;
                 """,

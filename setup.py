@@ -27,6 +27,7 @@ requires = [
     "pydantic~=1.0,!=1.9.0a1",
     "pyformance~=0.4",
     "PyJWT~=2.0",
+    "pynacl==1.5.0",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
     "texttable~=1.0",
