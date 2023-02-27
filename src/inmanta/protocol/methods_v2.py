@@ -1336,6 +1336,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
 
     :param username: The user to login
     :param password: The password of this user
+    :raises NotFound: Raised when the user does not exist
     :raises UnauthorizedException: Raised when the login failed.
     """
 
