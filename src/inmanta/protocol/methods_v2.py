@@ -1370,6 +1370,7 @@ def add_user(username: str, password: str) -> model.User:
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
 def set_password(username: str, password: str) -> None:
     """Change the password of a user
+
     :param username: The username of the new user
     :param password: The password of this new user
     :raises NotFound: Raised when the user does not exist
