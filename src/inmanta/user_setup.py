@@ -78,7 +78,7 @@ def validate_server_setup() -> None:
 
         raise click.ClickException("Make sure signing configuration is added to the config. See the documentation for details.")
 
-    click.echo(f"{'Authentication signing config: ' : <50}{click.style('enabled', fg='green')}")
+    click.echo(f"{'Authentication signing config: ' : <50}{click.style('found', fg='green')}")
 
     # TODO: verify web-console config (if any)
 
@@ -98,7 +98,7 @@ async def get_database_connection() -> asyncpg.pool.Pool:
         server_config.db_name.get(),
         database_username,
         database_password,
-        False,
+        create_db_schema=False,
         connection_pool_min_size=connection_pool_min_size,
         connection_pool_max_size=connection_pool_max_size,
         connection_timeout=connection_timeout,
@@ -113,9 +113,9 @@ async def do_user_setup() -> None:
         DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
         schema_up_to_date = await DBschema.is_DB_schema_up_to_date()
         if schema_up_to_date:
-            click.echo(f"{'DB up to date' : <50}{click.style('yes', fg='green')}")
+            click.echo(f"{'DB schema up to date' : <50}{click.style('yes', fg='green')}")
         else:
-            click.echo(f"{'DB up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}")
+            click.echo(f"{'DB schema up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}")
             return
         users = await data.User.get_list()
 

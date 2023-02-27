@@ -82,3 +82,4 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
     auth_client = protocol.Client("client")
     response = await auth_client.list_users()
     assert response.code == 200
+    assert response.result["data"][0]["username"] == "admin"
