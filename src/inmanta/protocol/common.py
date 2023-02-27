@@ -987,7 +987,7 @@ def encode_token(
     for ct in client_types:
         if ct not in cfg.client_types:
             raise Exception(
-                f"The signing config does not support the requested client type {ct}. " f"Only {cfg.client_types} are allowed."
+                f"The signing config does not support the requested client type {ct}. Only {cfg.client_types} are allowed."
             )
 
     payload: Dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}

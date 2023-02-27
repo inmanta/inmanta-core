@@ -1333,8 +1333,10 @@ def get_environment_metrics(
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """Login a new user. When the login succeeds an authentication header is returned with the Bearer token set.
+
     :param username: The user to login
     :param password: The password of this user
+    :raises NotFound: Raised when the user does not exist
     :raises UnauthorizedException: Raised when the login failed.
     """
 
@@ -1342,12 +1344,14 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_users() -> List[model.User]:
     """List all users
+
     :return: A list of all users"""
 
 
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
-    """Delete a user from the system with given username
+    """Delete a user from the system with given username.
+
     :param username: The username to delete
     :raises NotFound: Raised when the user does not exist
     """
@@ -1356,6 +1360,7 @@ def delete_user(username: str) -> None:
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
 def add_user(username: str, password: str) -> model.User:
     """Add a new user to the system
+
     :param username: The username of the new user
     :param password: The password of this new user
     :raises Conflict: Raised when there is already a user with this user_name
@@ -1365,6 +1370,7 @@ def add_user(username: str, password: str) -> model.User:
 @typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
 def set_password(username: str, password: str) -> None:
     """Change the password of a user
+
     :param username: The username of the new user
     :param password: The password of this new user
     :raises NotFound: Raised when the user does not exist
