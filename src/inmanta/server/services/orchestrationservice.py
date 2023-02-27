@@ -425,7 +425,13 @@ class OrchestrationService(protocol.ServerSlice):
         set_version: Optional[int] = None,
     ) -> Dict[ResourceIdStr, data.Resource]:
         """
-        Convert the resources sent to the put_version or put_partial endpoint to dao Resource objects.
+        This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
+        The resulting resource objects will have their provides set up correctly for cross agent dependencies
+        and the version field of these resources will be set to set_version if provided.
+
+        An exception will be raised when the one of the following constraints is not satisfied:
+            * A resource present in the resource_sets parameter is not present in the resources dictionary.
+            * The dependency graph of the provided resources is not closed.
         """
         rid_to_resource = {}
         # The content of the requires attribute for all the resources
