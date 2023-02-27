@@ -3128,7 +3128,7 @@ class AgentInstance(BaseDocument):
         """
         if not endpoints:
             return
-
+        # TODO (table_name())
         async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""

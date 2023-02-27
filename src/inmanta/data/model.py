@@ -724,11 +724,16 @@ class EnvironmentMetricsResult(BaseModel):
     metrics: Dict[str, List[Optional[Union[float, Dict[str, float]]]]]
 
 
+class AuthMethod(str, Enum):
+    DATABASE = "database"
+    OIDC = "oidc"
+
+
 class User(BaseModel):
     """A user"""
 
     username: str
-    auth_method: str
+    auth_method: AuthMethod
     enabled: bool
 
 
