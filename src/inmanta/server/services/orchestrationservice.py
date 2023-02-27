@@ -89,7 +89,7 @@ class PartialUpdateMerger:
         :param deleted_resource_sets: The names of the resource sets that are deleted by the partial compile.
         :param updated_and_shared_resources_old: A dictionary that contains all the resources in base_version that belong
                                                  to a resource set in updated_resource_sets or to the shared resource set.
-        :param rids_deleted_resource_sets: The ids of the resources that in base_version that are deleted by this partial
+        :param rids_deleted_resource_sets: The ids of the resources that are in the base_version and that are deleted by this partial
                                            compile.
         """
         self.env_id = env_id
