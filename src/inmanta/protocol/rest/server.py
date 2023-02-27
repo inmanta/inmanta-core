@@ -67,7 +67,7 @@ class RESTHandler(tornado.web.RequestHandler):
             return None
 
         parts = headers["Authorization"].split(" ")
-        if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
+        if len(parts) != 2 or parts[0].lower() != "bearer":
             LOGGER.warning(
                 "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)", headers["Authorization"]
             )
