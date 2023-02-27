@@ -1343,6 +1343,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
 def list_users() -> List[model.User]:
     """List all users
+
     :return: A list of all users"""
 
 
