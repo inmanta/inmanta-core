@@ -1349,7 +1349,8 @@ def list_users() -> List[model.User]:
 
 @typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
 def delete_user(username: str) -> None:
-    """Delete a user from the system with given username
+    """Delete a user from the system with given username.
+
     :param username: The username to delete
     :raises NotFound: Raised when the user does not exist
     """
