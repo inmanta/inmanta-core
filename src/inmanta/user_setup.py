@@ -98,7 +98,7 @@ async def get_database_connection() -> asyncpg.pool.Pool:
         server_config.db_name.get(),
         database_username,
         database_password,
-        False,
+        create_db_schema=False,
         connection_pool_min_size=connection_pool_min_size,
         connection_pool_max_size=connection_pool_max_size,
         connection_timeout=connection_timeout,
