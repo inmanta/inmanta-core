@@ -304,9 +304,12 @@ class DBSchema(object):
 
         return sorted(version, key=lambda x: x.version)
 
-    async def is_DB_schema_up_to_date(self) -> bool:
-        installed_versions = await self.get_installed_versions()
-        update_functions = self._get_update_functions()
+    async def is_db_schema_up_to_date(self) -> bool:
+        """
+        returns True if all the available migration scripts have been applied to the DB, else returns false.
+        """
+        installed_versions: Set[int] = await self.get_installed_versions()
+        update_functions: List[Version] = self._get_update_functions()
         for function in update_functions:
             if function.version not in installed_versions:
                 return False

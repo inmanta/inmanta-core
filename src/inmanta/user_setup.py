@@ -111,7 +111,7 @@ async def do_user_setup() -> None:
     try:
         connection = await get_database_connection()
         DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
-        schema_up_to_date = await DBschema.is_DB_schema_up_to_date()
+        schema_up_to_date = await DBschema.is_db_schema_up_to_date()
         if schema_up_to_date:
             click.echo(f"{'DB schema up to date' : <50}{click.style('yes', fg='green')}")
         else:
