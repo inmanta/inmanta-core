@@ -1360,6 +1360,7 @@ def delete_user(username: str) -> None:
 @typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
 def add_user(username: str, password: str) -> model.User:
     """Add a new user to the system
+
     :param username: The username of the new user
     :param password: The password of this new user
     :raises Conflict: Raised when there is already a user with this user_name
