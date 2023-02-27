@@ -306,8 +306,5 @@ class DBSchema(object):
 
     async def is_DB_schema_up_to_date(self) -> bool:
         installed_versions = await self.get_installed_versions()
-        update_functions = self._get_update_functions()
-        for function in update_functions:
-            if function.version not in installed_versions:
-                return False
-        return True
+        latest_available_version = max(v.version for v in self._get_update_functions())
+        return latest_available_version in installed_versions
