@@ -115,7 +115,9 @@ async def do_user_setup() -> None:
         if schema_up_to_date:
             click.echo(f"{'DB schema up to date' : <50}{click.style('yes', fg='green')}")
         else:
-            click.echo(f"{'DB schema up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}")
+            click.echo(
+                f"{'DB schema up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}"
+            )
             return
         users = await data.User.get_list()
 

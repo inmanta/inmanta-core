@@ -1621,7 +1621,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
-            await con.copy_records_to_table(table_name=cls.table_name(include_schema=False), columns=columns, records=records, schema_name="public")
+            await con.copy_records_to_table(
+                table_name=cls.table_name(include_schema=False), columns=columns, records=records, schema_name="public"
+            )
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
