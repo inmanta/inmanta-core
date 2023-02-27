@@ -70,7 +70,7 @@ from crontab import CronTab
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
+from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -3128,7 +3128,7 @@ class AgentInstance(BaseDocument):
         """
         if not endpoints:
             return
-        # TODO (table_name())
+        # TODO florent
         async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""
@@ -5550,7 +5550,7 @@ class User(BaseDocument):
     enabled: bool
 
     def to_dao(self) -> m.User:
-        return m.User(username=self.username, enabled=self.enabled, auth_method=self.auth_method)
+        return m.User(username=self.username, enabled=self.enabled, auth_method=AuthMethod(self.auth_method))
 
 
 _classes = [
