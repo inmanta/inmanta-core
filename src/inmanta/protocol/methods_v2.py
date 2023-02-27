@@ -1333,6 +1333,7 @@ def get_environment_metrics(
 @typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
 def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
     """Login a new user. When the login succeeds an authentication header is returned with the Bearer token set.
+
     :param username: The user to login
     :param password: The password of this user
     :raises UnauthorizedException: Raised when the login failed.
