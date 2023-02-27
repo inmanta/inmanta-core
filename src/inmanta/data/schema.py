@@ -306,11 +306,8 @@ class DBSchema(object):
 
     async def is_db_schema_up_to_date(self) -> bool:
         """
-        returns True if all the available migration scripts have been applied to the DB, else returns false.
+        returns True if the latest migration scripts have been applied, else return false.
         """
-        installed_versions: Set[int] = await self.get_installed_versions()
-        update_functions: List[Version] = self._get_update_functions()
-        for function in update_functions:
-            if function.version not in installed_versions:
-                return False
-        return True
+        installed_versions = await self.get_installed_versions()
+        latest_available_version = max(v.version for v in self._get_update_functions())
+        return latest_available_version in installed_versions
