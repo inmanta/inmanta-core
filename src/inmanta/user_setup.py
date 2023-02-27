@@ -113,9 +113,9 @@ async def do_user_setup() -> None:
         DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
         schema_up_to_date = await DBschema.is_DB_schema_up_to_date()
         if schema_up_to_date:
-            click.echo(f"{'DB up to date' : <50}{click.style('yes', fg='green')}")
+            click.echo(f"{'DB schema up to date' : <50}{click.style('yes', fg='green')}")
         else:
-            click.echo(f"{'DB up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}")
+            click.echo(f"{'DB schema up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}")
             return
         users = await data.User.get_list()
 
