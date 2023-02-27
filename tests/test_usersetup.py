@@ -22,7 +22,7 @@ from click import testing
 
 from inmanta import data
 from inmanta.db.util import PGRestore
-from inmanta.user_setup import cmd, get_database_connection
+from inmanta.user_setup import cmd, get_connection_pool
 
 
 class CLI_user_setup(object):
@@ -78,18 +78,19 @@ async def test_user_setup(tmpdir, postgres_db, database_name):
     cli = CLI_user_setup()
     await cli.run("new_user", "password")
 
-    # setup_config() writes a config to a config file. The cli.run() will load this config and use it.
-    # We need the config to be loaded before we connect to the DB. this is why we can't use the
-    # init_dataclasses_and_load_schema and why we open (and close) a connection ourself.
-    # cli.run() calls cmd which will open and close a connection in the same way.
-    connection = await get_database_connection()
+    try:
+        # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
+        # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
+        # fixture, will be no longer active.
+        connection = await get_connection_pool()
 
-    users = await data.User.get_list()
-    assert len(users) == 1
-    assert users[0].username == "new_user"
+        users = await data.User.get_list()
+        assert len(users) == 1
+        assert users[0].username == "new_user"
 
-    if connection is not None:
-        await data.disconnect()
+    finally:
+        if connection is not None:
+            await data.disconnect()
 
 
 async def test_user_setup_schema_outdated(
@@ -103,4 +104,5 @@ async def test_user_setup_schema_outdated(
 
     cli = CLI_user_setup()
     result = await cli.run("new_user", "password")
-    assert "please migrate your DB to the latest version" in result.output
+    assert "no: please make sure your DB version and software version are aligned" in result.output
+    assert result.exit_code != 0

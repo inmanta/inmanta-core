@@ -3128,7 +3128,6 @@ class AgentInstance(BaseDocument):
         """
         if not endpoints:
             return
-        # TODO florent
         async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""
@@ -3136,7 +3135,7 @@ class AgentInstance(BaseDocument):
                 {cls.table_name()}
                 (id, tid, process, name, expired)
                 VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
+                ON CONFLICT ON CONSTRAINT {cls.table_name(include_schema=False)}_unique DO UPDATE
                 SET expired = null
                 ;
                 """,
@@ -5545,7 +5544,7 @@ class User(BaseDocument):
 
     id: uuid.UUID
     username: str
-    password_hash: Optional[str] = None
+    password_hash: str
     auth_method: str
     enabled: bool
 

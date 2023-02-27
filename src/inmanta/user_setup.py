@@ -28,13 +28,17 @@ from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.server import config as server_config
 
 
+class ConnectionPoolException(Exception):
+    """Exception that is raised it the connection to the connection pool fails"""
+
+
 def generate_signing_config() -> str:
     hostname = socket.gethostname()
     return f"""[auth_jwt_default]
 algorithm=HS256
 sign=true
 client_types=agent,compiler,api
-key={secrets.token_urlsafe(32)}
+key={secrets.token_urlsafe()}
 expire=0
 issuer=https://{hostname}:{server_config.server_bind_port.get()}/
 audience=https://{hostname}:{server_config.server_bind_port.get()}/
@@ -67,15 +71,8 @@ def validate_server_setup() -> None:
     cfg = config.AuthJWTConfig.get_sign_config()
     if cfg is None:
         click.echo("Error: No signing config available in the configuration.")
-
-        value = None
-        while value not in ["yes", "no"]:
-            value = click.prompt("Do you want to generate a new configuration? yes/no")
-
-        if value == "yes":
-            click.echo("Add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:\n")
-            click.echo(generate_signing_config())
-
+        click.echo("To use a new config, add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:\n")
+        click.echo(generate_signing_config())
         raise click.ClickException("Make sure signing configuration is added to the config. See the documentation for details.")
 
     click.echo(f"{'Authentication signing config: ' : <50}{click.style('found', fg='green')}")
@@ -83,42 +80,50 @@ def validate_server_setup() -> None:
     # TODO: verify web-console config (if any)
 
 
-async def get_database_connection() -> asyncpg.pool.Pool:
-    database_host = server_config.db_host.get()
-    database_port = server_config.db_port.get()
+async def get_connection_pool() -> asyncpg.pool.Pool:
+    """
+    connect to a connection pool. It is the responsibility of the caller to close the return connection pool
+    """
+    try:
+        database_host = server_config.db_host.get()
+        database_port = server_config.db_port.get()
 
-    database_username = server_config.db_username.get()
-    database_password = server_config.db_password.get()
-    connection_pool_min_size = server_config.db_connection_pool_min_size.get()
-    connection_pool_max_size = server_config.db_connection_pool_max_size.get()
-    connection_timeout = server_config.db_connection_timeout.get()
-    return await data.connect(
-        database_host,
-        database_port,
-        server_config.db_name.get(),
-        database_username,
-        database_password,
-        create_db_schema=False,
-        connection_pool_min_size=connection_pool_min_size,
-        connection_pool_max_size=connection_pool_max_size,
-        connection_timeout=connection_timeout,
-    )
+        database_username = server_config.db_username.get()
+        database_password = server_config.db_password.get()
+        connection_pool_min_size = server_config.db_connection_pool_min_size.get()
+        connection_pool_max_size = server_config.db_connection_pool_max_size.get()
+        connection_timeout = server_config.db_connection_timeout.get()
+        return await data.connect(
+            database_host,
+            database_port,
+            server_config.db_name.get(),
+            database_username,
+            database_password,
+            create_db_schema=False,
+            connection_pool_min_size=connection_pool_min_size,
+            connection_pool_max_size=connection_pool_max_size,
+            connection_timeout=connection_timeout,
+        )
+    except Exception:
+        raise ConnectionPoolException
 
 
 async def do_user_setup() -> None:
     """Perform the user setup that requires the database interaction"""
     connection = None
     try:
-        connection = await get_database_connection()
+        click.echo(f"Trying to connect to DB: {server_config.db_host.get()}")
+        connection = await get_connection_pool()
         DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
         schema_up_to_date = await DBschema.is_db_schema_up_to_date()
         if schema_up_to_date:
             click.echo(f"{'DB schema up to date' : <50}{click.style('yes', fg='green')}")
         else:
             click.echo(
-                f"{'DB schema up to date' : <50}{click.style('no: please migrate your DB to the latest version', fg='red')}"
+                f"{'DB schema up to date' : <50}"
+                f"{click.style('no: please make sure your DB version and software version are aligned', fg='red')}"
             )
-            return
+            raise click.ClickException("The database version and software version are not aligned")
         users = await data.User.get_list()
 
         if len(users):
@@ -136,11 +141,15 @@ async def do_user_setup() -> None:
             username=username,
             password_hash=pw_hash.decode(),
             enabled=True,
-            auth_method="password",
+            auth_method="database",
         )
         await user.insert()
 
         click.echo(f"{'User %s: ' %username : <50}{click.style('created', fg='green')}")
+    except ConnectionPoolException as e:
+        click.echo(f"{'Connection to database {server_config.db_host.get()}' : <50}" f"{click.style('failed', fg='red')}")
+        raise e
+
     finally:
         if connection is not None:
             await data.disconnect()
@@ -148,7 +157,7 @@ async def do_user_setup() -> None:
     click.echo("Make sure to (re)start the orchestrator to activate all changes.")
 
 
-@click.command(help="Do the initial user setup")
+@click.command(help="Do the initial user setup. This command should be executed on the orchestrator and not remotely.")
 @click.option("--reset", help="Reset the password to recover a lost password", is_flag=True)
 def cmd(reset: bool) -> None:
     # validate the setup so that we can setup a new user

@@ -56,7 +56,7 @@ class UserService(server_protocol.ServerSlice):
             username=username,
             password_hash=pw_hash.decode(),
             enabled=True,
-            auth_method="password",
+            auth_method="database",
         )
         await user.insert()
         return user.to_dao()
@@ -71,6 +71,8 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.set_password)
     async def set_password(self, username: str, password: str) -> None:
+        if not password or len(password) < 8:
+            raise exceptions.BadRequest("the password should be at least 8 characters long")
         # check if the user already exists
         user = await data.User.get_one(username=username)
         if not user:
@@ -86,8 +88,8 @@ class UserService(server_protocol.ServerSlice):
     async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
         # check if the user exists
         user = await data.User.get_one(username=username)
-        if not user:
-            raise exceptions.UnauthorizedException()
+        if not user or not user.enabled:
+            raise exceptions.UnauthorizedException("User does not exist or is disabled")
 
         if not user.password_hash:
             raise exceptions.UnauthorizedException()

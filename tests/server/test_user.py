@@ -41,6 +41,7 @@ async def test_create_user(server: protocol.Server, client: endpoints.Client) ->
     assert response.result["data"]
     assert "token" in response.result["data"]
     assert "user" in response.result["data"]
+    assert "expiry" in response.result["data"]
     assert response.result["data"]["user"]["username"] == "admin"
 
     response = await client.login("admin", "wrong")
@@ -71,6 +72,10 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
 
     response = await client.list_users()
     assert response.code == 401
+
+    response = await client.login("user_does_not_exist", "test")
+    assert response.code == 401
+    assert response.result["message"] == "Access to this resource is unauthorized: User does not exist or is disabled"
 
     response = await client.login("admin", "test")
     assert response.code == 200
