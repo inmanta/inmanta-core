@@ -78,7 +78,7 @@ def validate_server_setup() -> None:
 
         raise click.ClickException("Make sure signing configuration is added to the config. See the documentation for details.")
 
-    click.echo(f"{'Authentication signing config: ' : <50}{click.style('enabled', fg='green')}")
+    click.echo(f"{'Authentication signing config: ' : <50}{click.style('found', fg='green')}")
 
     # TODO: verify web-console config (if any)
 
