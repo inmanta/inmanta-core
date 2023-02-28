@@ -77,8 +77,8 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
     assert response.code == 401
 
     response = await client.login("user_does_not_exist", "test1234")
-    assert response.code == 401
-    assert response.result["message"] == "Access to this resource is unauthorized: User does not exist or is disabled"
+    assert response.code == 404
+    assert response.result["message"] == "Request or referenced resource does not exist: User does not exist or is disabled"
 
     response = await client.login("admin", "wrong")
     assert response.code == 401
