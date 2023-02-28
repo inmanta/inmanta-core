@@ -21,11 +21,13 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
+    CREATE TYPE auth_method AS ENUM('database', 'oidc');
+
     CREATE TABLE IF NOT EXISTS public.user(
         id uuid PRIMARY KEY,
         username VARCHAR NOT NULL UNIQUE ,
         password_hash VARCHAR NOT NULL,
-        auth_method VARCHAR NOT NULL,
+        auth_method auth_method NOT NULL,
         enabled boolean NOT NULL
     );
     """
