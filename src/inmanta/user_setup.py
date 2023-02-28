@@ -49,35 +49,45 @@ def validate_server_setup() -> None:
     """Validate the server configuration so that authentication is setup correctly."""
     config.Config.load_config()
 
-    # make sure auth is on
-    if not server_config.server_enable_auth.get():
-        raise click.ClickException(
-            "Server authentication should be enabled before running the initial user setup. "
-            "The option auth in the server section should be enabled."
+    value = None
+    while value not in ["yes", "no"]:
+        value = click.prompt(
+            "This command should be execute locally on the orchestrator you want to configure. Are you "
+            "running this command locally?"
         )
+    if value == "yes":
+        # make sure auth is on
+        if not server_config.server_enable_auth.get():
+            raise click.ClickException(
+                "Server authentication should be enabled before running the initial user setup. "
+                "The option auth in the server section should be enabled."
+            )
 
-    click.echo(f"{'Server authentication: ' : <50}{click.style('enabled', fg='green')}")
+        click.echo(f"{'Server authentication: ' : <50}{click.style('enabled', fg='green')}")
 
-    # make sure the method is set to database
-    if server_config.server_auth_method.get() != "database":
-        raise click.ClickException(
-            "The server authentication method should be set to database to continue. Make sure auth_method in the server "
-            "section is set to database"
-        )
+        # make sure the method is set to database
+        if server_config.server_auth_method.get() != "database":
+            raise click.ClickException(
+                "The server authentication method should be set to database to continue. Make sure auth_method in the server "
+                "section is set to database"
+            )
 
-    click.echo(f"{'Server authentication method: ' : <50}{click.style('database', fg='green')}")
+        click.echo(f"{'Server authentication method: ' : <50}{click.style('database', fg='green')}")
 
-    # make sure there is auth config that supports signing tokens
-    cfg = config.AuthJWTConfig.get_sign_config()
-    if cfg is None:
-        click.echo("Error: No signing config available in the configuration.")
-        click.echo("To use a new config, add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:\n")
-        click.echo(generate_signing_config())
-        raise click.ClickException("Make sure signing configuration is added to the config. See the documentation for details.")
+        # make sure there is auth config that supports signing tokens
+        cfg = config.AuthJWTConfig.get_sign_config()
+        if cfg is None:
+            click.echo("Error: No signing config available in the configuration.")
+            click.echo("To use a new config, add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:\n")
+            click.echo(generate_signing_config())
+            raise click.ClickException(
+                "Make sure signing configuration is added to the config. See the documentation for details."
+            )
 
-    click.echo(f"{'Authentication signing config: ' : <50}{click.style('found', fg='green')}")
+        click.echo(f"{'Authentication signing config: ' : <50}{click.style('found', fg='green')}")
 
-    # TODO: verify web-console config (if any)
+    else:
+        raise click.ClickException("The user setup was aborted as it was not executed locally on the orchestrator")
 
 
 async def get_connection_pool() -> asyncpg.pool.Pool:
@@ -127,9 +137,7 @@ async def do_user_setup() -> None:
         users = await data.User.get_list()
 
         if len(users):
-            raise click.ClickException(
-                "There are already users in the database. If you want to reset the password, use the --reset option."
-            )
+            raise click.ClickException("There are already users in the database")
 
         username = click.prompt("What username do you want to use?", default="admin")
         password = click.prompt("What password do you want to use?", hide_input=True)
@@ -158,8 +166,7 @@ async def do_user_setup() -> None:
 
 
 @click.command(help="Do the initial user setup. This command should be executed on the orchestrator and not remotely.")
-@click.option("--reset", help="Reset the password to recover a lost password", is_flag=True)
-def cmd(reset: bool) -> None:
+def cmd() -> None:
     # validate the setup so that we can setup a new user
     validate_server_setup()
     # check if there are already users

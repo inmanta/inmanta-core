@@ -17,6 +17,8 @@
 """
 import logging
 
+import asyncpg
+
 import nacl.exceptions
 import nacl.pwhash
 from inmanta import const, data, protocol
@@ -43,22 +45,23 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.add_user)
     async def add_user(self, username: str, password: str) -> model.User:
-        # check if the user already exists
-        existing = await data.User.get_one(username=username)
-        if existing:
-            raise exceptions.Conflict(f"A user with name {username} already exists.")
+        if not password or len(password) < 8:
+            raise exceptions.BadRequest("the password should be at least 8 characters long")
 
         # hash the password
         pw_hash = nacl.pwhash.str(password.encode())
 
         # insert the user
-        user = data.User(
-            username=username,
-            password_hash=pw_hash.decode(),
-            enabled=True,
-            auth_method="database",
-        )
-        await user.insert()
+        try:
+            user = data.User(
+                username=username,
+                password_hash=pw_hash.decode(),
+                enabled=True,
+                auth_method="database",
+            )
+            await user.insert()
+        except asyncpg.UniqueViolationError:
+            raise exceptions.Conflict(f"A user with name {username} already exists.")
         return user.to_dao()
 
     @protocol.handle(protocol.methods_v2.delete_user)
@@ -99,7 +102,6 @@ class UserService(server_protocol.ServerSlice):
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException()
 
-        # TODO: set an expire
         token = common.encode_token([str(const.ClientType.api.value)], expire=None)
         return common.ReturnValue(
             status_code=200,
