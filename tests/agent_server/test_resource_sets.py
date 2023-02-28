@@ -1373,3 +1373,329 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key1]"], "unknown_1", "test::Resource[agent1,key=key1]")
     assert_unknown(unknowns_by_rid[""], "unknown_3", "")
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key5]"], "unknown_5", "test::Resource[agent1,key=key5]")
+
+
+async def test_put_partial_dep_on_shared_set_removed(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that the put_partial endpoint correctly updates the provides relationship when a resource A from a specific
+    resource set depends on a resource B from the shared resource set and resource A is removed by a partial compile.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent2,key=key2]"
+    rid3 = "test::Resource[agent2,key=key3]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v={version}"],
+        },
+        {
+            "key": "key3",
+            "version": version,
+            "id": f"{rid3},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-a"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+        rid3: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "key3",
+            "version": 0,
+            "id": f"{rid3},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid3: "set-a"}
+    resource_states = {rid3: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    resources_in_model = await data.Resource.get_list(model=2)
+    assert len(resources_in_model) == 2
+    rid_to_resource = {res.resource_id: res for res in resources_in_model}
+    assert rid_to_resource[rid1].provides == []
+
+
+async def test_put_partial_dep_on_specific_set_removed(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that the put_partial endpoint correctly updates the requires/provides relationship when a resource A from the shared
+    resource set depends on a resource B from a specific resource set and this dependency is removed by a partial compile.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent2,key=key2]"
+    rid3 = "test::Resource[agent2,key=key3]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid2},v={version}"],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key3",
+            "version": version,
+            "id": f"{rid3},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-b"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+        rid3: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a"}
+    resource_states = {rid2: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    resources_in_model = await data.Resource.get_list(model=2)
+    assert len(resources_in_model) == 3
+    rid_to_resource = {res.resource_id: res for res in resources_in_model}
+    assert rid_to_resource[rid1].attributes["requires"] == []
+    assert rid_to_resource[rid2].provides == []
+
+
+async def test_put_partial_dep_on_non_existing_resource(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that an exception is raised when a resource passed to the put_partial endpoint has a dependency on a
+    non-existing resource. This situation cannot happen when the interaction between the client and the server happens
+    via the compiler/exporter, but we verify the behavior here to check the safety of the API endpoint.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent1,key=key2]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v={version}"],
+        },
+    ]
+    resource_sets = {rid2: "set-a"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    rid3 = "test::Resource[agent1,key=key3]"
+    resources_partial = [
+        {
+            "key": "key1",
+            "version": 0,
+            "id": f"{rid1},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v=0"],
+        },
+        {
+            "key": "key3",
+            "version": 0,
+            "id": f"{rid3},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=non_existing_resource]"],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-a"}
+    resource_states = {rid2: const.ResourceState.available, rid3: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 400
+    assert (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=non_existing_resource]'}" in result.result["message"]
+    )
+
+
+async def test_put_partial_inter_set_dependency(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that an exception is raised when the resources passed to the put_partial endpoint define a dependency
+    on a resource in another resource set. This situation cannot happen when the interaction between the client and
+    the server happens via the compiler/exporter, but we verify the behavior here to check the safety of the API endpoint.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent1,key=key2]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid1: "set-a", rid2: "set-b"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v=0"],
+        },
+    ]
+    resource_sets = {rid2: "set-a"}
+    resource_states = {rid2: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 400
+    assert (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=key1]'}" in result.result["message"]
+    )

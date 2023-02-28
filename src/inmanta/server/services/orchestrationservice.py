@@ -227,8 +227,34 @@ class PartialUpdateMerger:
                 # Old shared resource not referenced by partial compile
                 res_old = self.shared_resources_old[rid_shared_resource]
                 res = res_old.copy_for_partial_compile(new_version=self.version)
+                res = self._clean_requires_provides_old_shared_resource(res)
             result.append(res)
         return result
+
+    def _should_keep_dependency_old_shared_resources(self, rid_dependency: ResourceIdStr) -> bool:
+        """
+        Return True iff the given dependency present in a shared resource from the base version should be retained
+        in the new version of the model.
+        """
+        if rid_dependency in self.rids_deleted_resource_sets:
+            # Resource belongs to a deleted resource set
+            return False
+        if rid_dependency in self.non_shared_resources_in_partial_update_old:
+            # If this dependency is still present in the new version of the model, this dependency
+            # will be present in the resources that are part of the partial compile.
+            return False
+        return True
+
+    def _clean_requires_provides_old_shared_resource(self, resource: data.Resource) -> data.Resource:
+        """
+        Cleanup the requires/provides relationship for shared resources that are not present in the partial compile
+        and that were copied from the old version of the model.
+        """
+        resource.attributes["requires"] = [
+            rid for rid in resource.attributes["requires"] if self._should_keep_dependency_old_shared_resources(rid)
+        ]
+        resource.provides = [rid for rid in resource.provides if self._should_keep_dependency_old_shared_resources(rid)]
+        return resource
 
     def _merge_requires_and_provides_of_shared_resource(self, old: data.Resource, new: data.Resource) -> data.Resource:
         """
@@ -251,13 +277,7 @@ class PartialUpdateMerger:
         :param new_deps: The set of dependencies present in the shared resource that is part of the partial compile.
         """
         old_deps_cleaned: abc.Set[ResourceIdStr] = {
-            dep
-            for dep in old_deps
-            # * Remove the dependencies to resources in the updated resources set. Those dependencies will be present in
-            #   new_deps.
-            # * Remove dependencies to resources in a deleted resource set. Those resource won't exist in the new version
-            #   of the model.
-            if dep not in self.non_shared_resources_in_partial_update_old and dep not in self.rids_deleted_resource_sets
+            dep for dep in old_deps if self._should_keep_dependency_old_shared_resources(dep)
         }
         return list(old_deps_cleaned | set(new_deps))
 
