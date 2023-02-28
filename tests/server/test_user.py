@@ -15,8 +15,7 @@
 
     Contact: code@inmanta.com
 """
-import nacl
-from inmanta import config, data
+from inmanta import config
 from inmanta.protocol import endpoints
 from inmanta.server import SLICE_USER, protocol
 
