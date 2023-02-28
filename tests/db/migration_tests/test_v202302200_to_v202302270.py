@@ -22,14 +22,14 @@ from typing import Awaitable, Callable, List
 import pytest
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202301190.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202302200.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     get_tables_in_db: Callable[[], Awaitable[List[str]]],
     get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
 ) -> None:
     """
-    Only an index was added: make sure the migration script applies.
+    verify that the auth_method enum and the user tabled are added.
     """
     tables = await get_tables_in_db()
     assert "auth_method" not in (await get_custom_postgresql_types())
