@@ -16,23 +16,30 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import concurrent
+import logging
 import os
+import subprocess
 
 from click import testing
 
-from inmanta import data
+from inmanta import config, data
 from inmanta.db.util import PGRestore
+from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.protocol import SliceStartupException
 from inmanta.user_setup import cmd, get_connection_pool
+
+logger = logging.getLogger(__name__)
 
 
 class CLI_user_setup(object):
-    async def run(self, username, password, *args, **kwargs):
+    async def run(self, run_locally, username, password, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner(mix_stderr=False)
 
         def invoke():
-            return runner.invoke(cli=cmd, input=f"{username}\n{password}")
+            return runner.invoke(cli=cmd, input=f"{run_locally}\n{username}\n{password}")
 
         result = await asyncio.get_event_loop().run_in_executor(None, invoke)
         # reset to default again
@@ -73,17 +80,32 @@ def setup_config(tmpdir, postgres_db, database_name):
     os.chdir(tmpdir)
 
 
-async def test_user_setup(tmpdir, postgres_db, database_name):
+async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post):
+    ibl = InmantaBootloader()
+    # we need the server to start so that all the migrations scripts are applied, but the server needs to be shut down
+    # so that the connection is free and that user_setup can use it.
+    try:
+        await ibl.start()
+        await ibl.stop(timeout=15)
+    except SliceStartupException as e:
+        port = config.Config.get("server", "bind-port")
+        output = subprocess.check_output(["ss", "-antp"])
+        output = output.decode("utf-8")
+        logger.debug(f"Port: {port}")
+        logger.debug(f"Port usage: \n {output}")
+        raise e
+    except concurrent.futures.TimeoutError:
+        logger.exception("Timeout during stop of the server in teardown")
+
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()
-    await cli.run("yes", "new_user", "password")
-
+    result = await cli.run("yes", "new_user", "password")
+    assert result.exit_code == 0
     try:
         # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
         # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
         # fixture, will be no longer active.
         connection = await get_connection_pool()
-
         users = await data.User.get_list()
         assert len(users) == 1
         assert users[0].username == "new_user"
