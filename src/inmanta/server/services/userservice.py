@@ -92,7 +92,7 @@ class UserService(server_protocol.ServerSlice):
         # check if the user exists
         user = await data.User.get_one(username=username)
         if not user or not user.enabled:
-            raise exceptions.UnauthorizedException("User does not exist or is disabled")
+            raise exceptions.NotFound("User does not exist or is disabled")
 
         if not user.password_hash:
             raise exceptions.UnauthorizedException()
