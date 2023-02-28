@@ -76,7 +76,7 @@ def setup_config(tmpdir, postgres_db, database_name):
 async def test_user_setup(tmpdir, postgres_db, database_name):
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()
-    await cli.run("new_user", "password")
+    await cli.run("yes", "new_user", "password")
 
     try:
         # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
@@ -103,6 +103,6 @@ async def test_user_setup_schema_outdated(
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     cli = CLI_user_setup()
-    result = await cli.run("new_user", "password")
+    result = await cli.run("yes", "new_user", "password")
     assert "no: please make sure your DB version and software version are aligned" in result.output
     assert result.exit_code != 0
