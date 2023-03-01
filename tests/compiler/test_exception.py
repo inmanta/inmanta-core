@@ -292,8 +292,7 @@ def test_reference_nonexisting_namespace(snippetcompiler, namespace: str) -> Non
             f"Could not find namespace {namespace}. Try importing it with `import {namespace}`"
             f" (reported in {namespace}::x ({snippetcompiler.project_dir}/main.cf:1:1))"
         ),
-    ) as exc_info:
-        project: module.Project = snippetcompiler.project
+    ):
         comp: compiler.Compiler = compiler.Compiler()
         sched: scheduler.Scheduler = scheduler.Scheduler()
 
