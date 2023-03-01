@@ -630,53 +630,6 @@ class OrchestrationService(protocol.ServerSlice):
 
         started = datetime.datetime.now().astimezone()
 
-        # detect failed compiles
-        def safe_get(input: object, key: str, default: object) -> object:
-            if not isinstance(input, dict):
-                return default
-            if key not in input:
-                return default
-            return input[key]
-
-        metadata: object = safe_get(version_info, const.EXPORT_META_DATA, {})
-        compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
-        failed = compile_state == const.Compilestate.failed
-
-        # Add purge-on-delete resources
-        if not failed and (await env.get(PURGE_ON_DELETE)):
-            # search for deleted resources (purge_on_delete)
-            resources_to_purge: List[data.Resource] = await data.Resource.get_deleted_resources(
-                env.id, version, list(rid_to_resource.keys()), connection=connection
-            )
-
-            previous_requires = {}
-            for res in resources_to_purge:
-                LOGGER.warning("Purging %s, purged resource based on %s", res.resource_id, res.resource_version_id)
-
-                attributes = res.attributes.copy()
-                attributes["purged"] = True
-                attributes["requires"] = []
-                res_obj = data.Resource.new(
-                    env.id,
-                    resource_version_id=ResourceVersionIdStr("%s,v=%s" % (res.resource_id, version)),
-                    attributes=attributes,
-                )
-
-                previous_requires[res_obj.resource_id] = res.attributes["requires"]
-                rid_to_resource[res_obj.resource_id] = res_obj
-
-            # invert dependencies on purges
-            for res_id, requires in previous_requires.items():
-                res_obj = rid_to_resource[res_id]
-                for require in requires:
-                    req_id = Id.parse_id(require)
-
-                    if req_id.resource_str() in rid_to_resource:
-                        req_res = rid_to_resource[req_id.resource_str()]
-
-                        req_res.attributes["requires"].append(res_obj.resource_version_id)
-                        res_obj.provides.append(req_res.resource_id)
-
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.status in const.UNDEPLOYABLE_STATES
         ]
@@ -700,9 +653,7 @@ class OrchestrationService(protocol.ServerSlice):
             except asyncpg.exceptions.UniqueViolationError:
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
-            all_resource_version_ids: set[ResourceVersionIdStr] = set(
-                Id.set_version_in_id(rid, version) for rid in rid_to_resource.keys()
-            )
+            all_ids: set[Id] = set(Id.parse_id(rid, version) for rid in rid_to_resource.keys())
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
@@ -722,8 +673,18 @@ class OrchestrationService(protocol.ServerSlice):
                         f"A partial compile cannot migrate resources {list(resources_that_moved_resource_sets)} to another"
                         " resource set"
                     )
+                all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets}
 
-                all_resource_version_ids |= {Id.set_version_in_id(rid, version) for rid in rids_unchanged_resource_sets}
+            purge_on_delete_resources: Dict[ResourceIdStr, data.Resource] = await self._get_resources_for_purge_on_delete(
+                env=env,
+                version=version,
+                rid_to_resource=rid_to_resource,
+                all_resource_ids=[i.resource_str() for i in all_ids],
+                version_info=version_info,
+                connection=connection,
+            )
+            rid_to_resource.update(purge_on_delete_resources)
+            all_ids |= {Id.parse_id(rid, version) for rid in purge_on_delete_resources.keys()}
 
             await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
             await cm.recalculate_total(connection=connection)
@@ -736,16 +697,15 @@ class OrchestrationService(protocol.ServerSlice):
 
             # Don't log ResourceActions without resource_version_ids, because
             # no API call exists to retrieve them.
-            if all_resource_version_ids:
+            all_rvids = [i.resource_version_str() for i in all_ids]
+            if all_rvids:
                 now = datetime.datetime.now().astimezone()
                 log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-                self.resource_service.log_resource_action(
-                    env.id, list(all_resource_version_ids), logging.INFO, now, log_line.msg
-                )
+                self.resource_service.log_resource_action(env.id, list(all_rvids), logging.INFO, now, log_line.msg)
                 ra = data.ResourceAction(
                     environment=env.id,
                     version=version,
-                    resource_version_ids=all_resource_version_ids,
+                    resource_version_ids=all_rvids,
                     action_id=uuid.uuid4(),
                     action=const.ResourceAction.store,
                     started=started,
@@ -755,6 +715,83 @@ class OrchestrationService(protocol.ServerSlice):
                 await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
+
+    async def _get_resources_for_purge_on_delete(
+        self,
+        env: data.Environment,
+        version: int,
+        rid_to_resource: Dict[ResourceIdStr, data.Resource],
+        all_resource_ids: abc.Sequence[ResourceIdStr],
+        version_info: Optional[JsonType] = None,
+        *,
+        connection: asyncpg.connection.Connection,
+    ) -> Dict[ResourceIdStr, data.Resource]:
+        """
+        Return a dictionary of resources that were present in the old version of the model but that no longer exist in this
+        version (in rid_to_resource) and had the purge_on_delete flag set to true. The returned resources will have the purged
+        attribute set to True and their requires/provides relationships inverted.
+
+        :param env: The environment we are discovering purged resources for.
+        :param version: The new version of the configuration model in which the purge_on_delete resources should be added.
+        :param rid_to_resource: When a full compile is done, this dictionary contains an entry for all resources that are
+                                part of the full compile. When a partial compile is done, this dictionary contains an entry
+                                for each resource in the new version of the model that belongs to an updated or shared
+                                resource set.
+        :param all_resource_ids: All the resource ids of all the resources present in the new version of the model. When
+                                 a partial compile is done, this sequence also includes the resource ids of resources that were
+                                 not updated by the partial compile.
+        """
+
+        def safe_get(input: object, key: str, default: object) -> object:
+            if not isinstance(input, dict):
+                return default
+            if key not in input:
+                return default
+            return input[key]
+
+        rid_to_resource = dict(rid_to_resource)
+
+        # detect failed compiles
+        metadata: object = safe_get(version_info, const.EXPORT_META_DATA, {})
+        compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
+        failed = compile_state == const.Compilestate.failed
+
+        result = {}
+        if not failed and (await env.get(PURGE_ON_DELETE)):
+            # search for deleted resources (purge_on_delete)
+            resources_to_purge: List[data.Resource] = await data.Resource.get_deleted_resources(
+                env.id, version, all_resource_ids, connection=connection
+            )
+
+            previous_requires = {}
+            for res in resources_to_purge:
+                LOGGER.warning("Purging %s, purged resource based on %s", res.resource_id, res.resource_version_id)
+
+                attributes = res.attributes.copy()
+                attributes["purged"] = True
+                attributes["requires"] = []
+                res_obj = data.Resource.new(
+                    env.id,
+                    resource_version_id=ResourceVersionIdStr("%s,v=%s" % (res.resource_id, version)),
+                    attributes=attributes,
+                )
+
+                previous_requires[res_obj.resource_id] = res.attributes["requires"]
+                rid_to_resource[res_obj.resource_id] = res_obj
+                result[res_obj.resource_id] = res_obj
+
+            # invert dependencies on purges
+            for res_id, requires in previous_requires.items():
+                res_obj = rid_to_resource[res_id]
+                for require in requires:
+                    req_id = Id.parse_id(require)
+
+                    if req_id.resource_str() in rid_to_resource:
+                        req_res = rid_to_resource[req_id.resource_str()]
+                        req_res.attributes["requires"].append(res_obj.resource_id)
+                        if res_obj.agent != req_res.agent:
+                            res_obj.provides.append(req_res.resource_id)
+        return result
 
     async def _trigger_auto_deploy(
         self,
