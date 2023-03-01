@@ -22,12 +22,21 @@ import asyncpg
 import nacl.exceptions
 import nacl.pwhash
 from inmanta import const, data, protocol
-from inmanta.data import model
+from inmanta.data import AuthMethod, model
 from inmanta.protocol import common, exceptions
 from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
+from inmanta.server import config as server_config
 from inmanta.server import protocol as server_protocol
 
 LOGGER = logging.getLogger(__name__)
+
+
+def verify_authentication_enabled() -> None:
+    """raises an UnauthorizedException exception if server authentication is not enabled"""
+    if not server_config.server_enable_auth.get():
+        raise exceptions.UnauthorizedException(
+            "Server authentication should be enabled. To setup the initial user use the user_setup tool."
+        )
 
 
 class UserService(server_protocol.ServerSlice):
@@ -48,6 +57,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.add_user)
     async def add_user(self, username: str, password: str) -> model.User:
+        verify_authentication_enabled()
         if not password or len(password) < 8:
             raise exceptions.BadRequest("the password should be at least 8 characters long")
 
@@ -59,7 +69,7 @@ class UserService(server_protocol.ServerSlice):
             user = data.User(
                 username=username,
                 password_hash=pw_hash.decode(),
-                auth_method="database",
+                auth_method=AuthMethod.DATABASE.value,
             )
             await user.insert()
         except asyncpg.UniqueViolationError:
@@ -68,6 +78,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.delete_user)
     async def delete_user(self, username: str) -> None:
+        verify_authentication_enabled()
         user = await data.User.get_one(username=username)
         if user is None:
             raise exceptions.NotFound(f"User with name {username} does not exist.")
@@ -76,6 +87,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.set_password)
     async def set_password(self, username: str, password: str) -> None:
+        verify_authentication_enabled()
         if not password or len(password) < 8:
             raise exceptions.BadRequest("the password should be at least 8 characters long")
         # check if the user already exists
@@ -91,6 +103,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.login)
     async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
+        verify_authentication_enabled()
         # check if the user exists
         user = await data.User.get_one(username=username)
         if not user or not user.password_hash:

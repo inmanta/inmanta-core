@@ -15,69 +15,87 @@
 
     Contact: code@inmanta.com
 """
-from inmanta import config
-from inmanta.protocol import endpoints
+
+import pytest
+
+from inmanta import config, const
+from inmanta.protocol import common, endpoints
 from inmanta.server import SLICE_USER, protocol
 
 
-async def test_create_and_delete_user(server: protocol.Server, client: endpoints.Client) -> None:
+@pytest.fixture
+def server_pre_start(server_config):
+    """This fixture is called by the server. Override this fixture to influence server config"""
+    config.Config.set("server", "auth", "true")
+    config.Config.set("server", "auth_method", "database")
+    config.Config.set("auth_jwt_default", "algorithm", "HS256")
+    config.Config.set("auth_jwt_default", "sign", "true")
+    config.Config.set("auth_jwt_default", "client_types", "agent,compiler,api")
+    config.Config.set("auth_jwt_default", "key", "eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM")
+    config.Config.set("auth_jwt_default", "expire", "0")
+    config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
+    config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
+
+
+@pytest.fixture
+def auth_client():
+    token = common.encode_token([str(const.ClientType.api.value)], expire=None)
+    config.Config.set("client_rest_transport", "token", token)
+    auth_client = protocol.Client("client")
+    return auth_client
+
+
+async def test_create_and_delete_user(server: protocol.Server, auth_client: endpoints.Client) -> None:
     """test operations on users and login without testing the actual auth"""
     assert server.get_slice(SLICE_USER)
-
-    response = await client.list_users()
+    response = await auth_client.list_users()
     assert response.code == 200
     assert not response.result["data"]
 
     # Try adding a user with a password that is too short
-    response = await client.add_user("admin", "test")
+    response = await auth_client.add_user("admin", "test")
     assert response.code == 400
     assert response.result["message"] == "Invalid request: the password should be at least 8 characters long"
 
-    response = await client.add_user("admin", "test1234")
+    response = await auth_client.add_user("admin", "test1234")
     assert response.code == 200
 
-    response = await client.list_users()
+    response = await auth_client.list_users()
     assert response.code == 200
     assert response.result["data"]
     assert response.result["data"][0]["username"] == "admin"
 
     # Try adding a user with the same username
-    response = await client.add_user("admin", "test12345")
+    response = await auth_client.add_user("admin", "test12345")
     assert response.code == 409
     assert (
         response.result["message"] == "Request conflicts with the current state of the resource: A user with name admin "
         "already exists."
     )
 
-    response = await client.delete_user("admin")
+    response = await auth_client.delete_user("admin")
     assert response.code == 200
 
-    response = await client.list_users()
+    response = await auth_client.list_users()
     assert response.code == 200
     assert not response.result["data"]
 
 
-async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
+async def test_login(server: protocol.Server, client: endpoints.Client, auth_client: endpoints.Client) -> None:
     """Test the built-in user authentication"""
-    response = await client.list_users()
+    response = await auth_client.add_user("admin", "test1234")
     assert response.code == 200
 
-    response = await client.add_user("admin", "test1234")
-    assert response.code == 200
-
-    response = await client.list_users()
+    response = await auth_client.list_users()
     assert response.code == 200
     assert response.result["data"]
     assert response.result["data"][0]["username"] == "admin"
-
-    config.Config.set("server", "auth", "true")
 
     response = await client.list_users()
     assert response.code == 401
 
     response = await client.login("user_does_not_exist", "test1234")
-    assert response.code == 404
-    assert response.result["message"] == "Request or referenced resource does not exist: User does not exist or is disabled"
+    assert response.code == 401
 
     response = await client.login("admin", "wrong")
     assert response.code == 401
@@ -92,37 +110,37 @@ async def test_login(server: protocol.Server, client: endpoints.Client) -> None:
     token = response.result["data"]["token"]
     config.Config.set("client_rest_transport", "token", token)
 
-    auth_client = protocol.Client("client")
-    response = await auth_client.list_users()
+    new_auth_client = protocol.Client("client")
+    response = await new_auth_client.list_users()
     assert response.code == 200
     assert response.result["data"][0]["username"] == "admin"
 
 
-async def test_set_password(client: endpoints.Client) -> None:
+async def test_set_password(server: protocol.Server, auth_client: endpoints.Client) -> None:
     old_pw = "old_password"
     new_pw = "new_password"
-    response = await client.add_user("admin", old_pw)
+    response = await auth_client.add_user("admin", old_pw)
     assert response.code == 200
 
-    response = await client.list_users()
+    response = await auth_client.list_users()
     assert response.code == 200
     assert response.result["data"]
     assert response.result["data"][0]["username"] == "admin"
 
-    response = await client.set_password("admin", "toshort")
+    response = await auth_client.set_password("admin", "toshort")
     assert response.code == 400
     assert response.result["message"] == "Invalid request: the password should be at least 8 characters long"
 
-    response = await client.set_password("admin", new_pw)
+    response = await auth_client.set_password("admin", new_pw)
     assert response.code == 200
 
-    response = await client.list_users()
+    response = await auth_client.list_users()
     assert response.code == 200
     assert response.result["data"]
     assert response.result["data"][0]["username"] == "admin"
 
-    response = await client.login("admin", old_pw)
+    response = await auth_client.login("admin", old_pw)
     assert response.code == 401
 
-    response = await client.login("admin", new_pw)
+    response = await auth_client.login("admin", new_pw)
     assert response.code == 200

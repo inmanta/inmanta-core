@@ -1336,7 +1336,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
 
     :param username: The user to login
     :param password: The password of this user
-    :raises UnauthorizedException: Raised when the login failed.
+    :raises UnauthorizedException: Raised when the login failed or if server authentication is not enabled
     """
 
 
@@ -1353,6 +1353,7 @@ def delete_user(username: str) -> None:
 
     :param username: The username to delete
     :raises NotFound: Raised when the user does not exist
+    :raises UnauthorizedException: Raised when server authentication is not enabled
     """
 
 
@@ -1363,6 +1364,7 @@ def add_user(username: str, password: str) -> model.User:
     :param username: The username of the new user
     :param password: The password of this new user
     :raises Conflict: Raised when there is already a user with this user_name
+    :raises UnauthorizedException: Raised when server authentication is not enabled
     """
 
 
@@ -1373,4 +1375,5 @@ def set_password(username: str, password: str) -> None:
     :param username: The username of the new user
     :param password: The password of this new user
     :raises NotFound: Raised when the user does not exist
+    :raises UnauthorizedException: Raised when server authentication is not enabled
     """
