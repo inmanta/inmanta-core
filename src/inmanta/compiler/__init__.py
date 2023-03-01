@@ -60,8 +60,6 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
     :param refs: Datastructure used to pass on mocking information to the compiler. Supported options:
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
-    if refs is None:
-        refs = {}
     compiler = Compiler(refs=refs)
 
     LOGGER.debug("Starting compile")
@@ -110,7 +108,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
+def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, Location]]:
     """
     Return all lexical references
 
@@ -148,11 +146,11 @@ class Compiler(object):
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
 
-    def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
+    def __init__(self, cf_file: str = "main.cf", refs: Optional[abc.Mapping[object, object]] = None) -> None:
         self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
         self.plugins: Dict[str, Plugin] = {}
-        self.refs = refs
+        self.refs = refs if refs is not None else {}
 
     def get_plugins(self) -> Dict[str, Plugin]:
         return self.plugins
