@@ -83,18 +83,8 @@ def setup_config(tmpdir, postgres_db, database_name):
 async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post):
     ibl = InmantaBootloader()
     # we need the server to start so that all the migrations scripts are applied, but the server needs to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying that the connection pool is already set in the database layer.
-    try:
-        await ibl.start()
-        await ibl.stop(timeout=15)
-    except SliceStartupException as e:
-        port = config.Config.get("server", "bind-port")
-        output = subprocess.check_output(["ss", "-antp"])
-        output = output.decode("utf-8")
-        logger.debug(f"Port: {port}")
-        logger.debug(f"Port usage: \n {output}")
-        raise e
-    except concurrent.futures.TimeoutError:
-        logger.exception("Timeout during stop of the server in teardown")
+    await ibl.start()
+    await ibl.stop(timeout=15)
 
     setup_config(tmpdir, postgres_db, database_name)
     cli = CLI_user_setup()
