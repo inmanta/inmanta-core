@@ -734,7 +734,6 @@ class User(BaseModel):
 
     username: str
     auth_method: AuthMethod
-    enabled: bool
 
 
 class LoginReturn(BaseModel):

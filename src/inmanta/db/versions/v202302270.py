@@ -28,7 +28,6 @@ async def update(connection: Connection) -> None:
         username VARCHAR NOT NULL UNIQUE ,
         password_hash VARCHAR NOT NULL,
         auth_method auth_method NOT NULL,
-        enabled boolean NOT NULL
     );
     """
 

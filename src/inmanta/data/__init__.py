@@ -5545,11 +5545,10 @@ class User(BaseDocument):
     id: uuid.UUID
     username: str
     password_hash: str
-    auth_method: str
-    enabled: bool
+    auth_method: AuthMethod
 
     def to_dao(self) -> m.User:
-        return m.User(username=self.username, enabled=self.enabled, auth_method=AuthMethod(self.auth_method))
+        return m.User(username=self.username, auth_method=AuthMethod(self.auth_method))
 
 
 _classes = [

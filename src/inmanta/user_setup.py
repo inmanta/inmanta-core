@@ -122,7 +122,10 @@ async def do_user_setup() -> None:
     """Perform the user setup that requires the database interaction"""
     connection = None
     try:
-        click.echo(f"{'Trying to connect to DB:' : <50}{server_config.db_host.get()}")
+        click.echo(
+            f"{'Trying to connect to DB:': <50}"
+            f"{('%s (%s:%s)' % ( server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
+        )
         connection = await get_connection_pool()
         DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
         schema_up_to_date = await DBschema.is_db_schema_up_to_date()
@@ -148,7 +151,6 @@ async def do_user_setup() -> None:
         user = data.User(
             username=username,
             password_hash=pw_hash.decode(),
-            enabled=True,
             auth_method="database",
         )
         await user.insert()

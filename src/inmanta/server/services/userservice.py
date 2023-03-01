@@ -24,7 +24,7 @@ import nacl.pwhash
 from inmanta import const, data, protocol
 from inmanta.data import model
 from inmanta.protocol import common, exceptions
-from inmanta.server import SLICE_TRANSPORT, SLICE_USER
+from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
 from inmanta.server import protocol as server_protocol
 
 LOGGER = logging.getLogger(__name__)
@@ -35,6 +35,9 @@ class UserService(server_protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_USER)
+
+    def get_dependencies(self) -> list[str]:
+        return [SLICE_DATABASE]
 
     def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
@@ -56,7 +59,6 @@ class UserService(server_protocol.ServerSlice):
             user = data.User(
                 username=username,
                 password_hash=pw_hash.decode(),
-                enabled=True,
                 auth_method="database",
             )
             await user.insert()
@@ -91,12 +93,8 @@ class UserService(server_protocol.ServerSlice):
     async def login(self, username: str, password: str) -> common.ReturnValue[model.LoginReturn]:
         # check if the user exists
         user = await data.User.get_one(username=username)
-        if not user or not user.enabled:
-            raise exceptions.NotFound("User does not exist or is disabled")
-
-        if not user.password_hash:
+        if not user or not user.password_hash:
             raise exceptions.UnauthorizedException()
-
         try:
             nacl.pwhash.verify(user.password_hash.encode(), password.encode())
         except nacl.exceptions.InvalidkeyError:
