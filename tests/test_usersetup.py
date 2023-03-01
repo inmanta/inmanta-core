@@ -16,17 +16,14 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import concurrent
 import logging
 import os
-import subprocess
 
 from click import testing
 
-from inmanta import config, data
+from inmanta import data
 from inmanta.db.util import PGRestore
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import SliceStartupException
 from inmanta.user_setup import cmd, get_connection_pool
 
 logger = logging.getLogger(__name__)
