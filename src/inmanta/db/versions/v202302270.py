@@ -27,7 +27,7 @@ async def update(connection: Connection) -> None:
         id uuid PRIMARY KEY,
         username VARCHAR NOT NULL UNIQUE ,
         password_hash VARCHAR NOT NULL,
-        auth_method auth_method NOT NULL,
+        auth_method auth_method NOT NULL
     );
     """
 
