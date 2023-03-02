@@ -741,7 +741,6 @@ class LoginReturn(BaseModel):
     Login information
 
     :param token: A token representing the user's authentication session
-    :param expiry: The timestamp at which the token will expire
     :param user: The user object for which the token was created
     """
 
