@@ -329,7 +329,7 @@ class Namespace(Namespaced):
         parts = name.rsplit("::", 1)
 
         if parts[0] not in self.visible_namespaces:
-            raise NotFoundException(None, name, "Variable %s not found" % parts[0])
+            raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
 
         return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
 

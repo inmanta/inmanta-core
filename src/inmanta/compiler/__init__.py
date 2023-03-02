@@ -19,7 +19,7 @@ import logging
 import sys
 from collections import abc
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 
-def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
+def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
@@ -108,7 +108,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
+def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, Location]]:
     """
     Return all lexical references
 
@@ -146,11 +146,11 @@ class Compiler(object):
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
 
-    def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
+    def __init__(self, cf_file: str = "main.cf", refs: Optional[abc.Mapping[object, object]] = None) -> None:
         self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
         self.plugins: Dict[str, Plugin] = {}
-        self.refs = refs
+        self.refs = refs if refs is not None else {}
 
     def get_plugins(self) -> Dict[str, Plugin]:
         return self.plugins
