@@ -25,7 +25,7 @@ from inmanta.server import SLICE_USER, protocol
 
 @pytest.fixture
 def server_pre_start(server_config):
-    """This fixture is called by the server. Override this fixture to influence server config"""
+    """Ensure that the server started by the server fixtures have authentication enabled with auth_method database"""
     config.Config.set("server", "auth", "true")
     config.Config.set("server", "auth_method", "database")
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
