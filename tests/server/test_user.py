@@ -38,7 +38,7 @@ def server_pre_start(server_config):
 
 
 @pytest.fixture
-def auth_client():
+def auth_client(server_pre_start):
     token = common.encode_token([str(const.ClientType.api.value)], expire=None)
     config.Config.set("client_rest_transport", "token", token)
     auth_client = protocol.Client("client")
