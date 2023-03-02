@@ -21,10 +21,10 @@ import socket
 
 import asyncpg
 import click
+from asyncpg import UndefinedTableError
 
 import nacl.pwhash
 from inmanta import config, data
-from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, schema
 from inmanta.server import config as server_config
 
 
@@ -127,16 +127,7 @@ async def do_user_setup() -> None:
             f"{('%s (%s:%s)' % ( server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
         )
         connection = await get_connection_pool()
-        DBschema = schema.DBSchema(CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, connection)
-        schema_up_to_date = await DBschema.is_db_schema_up_to_date()
-        if schema_up_to_date:
-            click.echo(f"{'DB schema up to date' : <50}{click.style('yes', fg='green')}")
-        else:
-            click.echo(
-                f"{'DB schema up to date' : <50}"
-                f"{click.style('no: please make sure your DB version and software version are aligned', fg='red')}"
-            )
-            raise click.ClickException("The database version and software version are not aligned")
+        click.echo(f"{'Connection to database' : <50}" f"{click.style('success', fg='red')}")
         users = await data.User.get_list()
 
         if len(users):
@@ -159,6 +150,11 @@ async def do_user_setup() -> None:
     except ConnectionPoolException as e:
         click.echo(f"{'Connection to database {server_config.db_host.get()}' : <50}" f"{click.style('failed', fg='red')}")
         raise e
+    except UndefinedTableError:
+        raise click.ClickException(
+            "The version of the database is out of date: start the server to upgrade the database "
+            "schema to the lastest version."
+        )
 
     finally:
         if connection is not None:

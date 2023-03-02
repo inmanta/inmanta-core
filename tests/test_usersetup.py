@@ -114,5 +114,8 @@ async def test_user_setup_schema_outdated(
 
     cli = CLI_user_setup()
     result = await cli.run("yes", "new_user", "password")
-    assert "no: please make sure your DB version and software version are aligned" in result.output
-    assert result.exit_code != 0
+    assert result.exit_code == 1
+    assert (
+        result.stderr == "Error: The version of the database is out of date: start the server"
+        " to upgrade the database schema to the lastest version.\n"
+    )
