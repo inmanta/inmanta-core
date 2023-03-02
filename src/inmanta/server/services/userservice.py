@@ -69,7 +69,7 @@ class UserService(server_protocol.ServerSlice):
             user = data.User(
                 username=username,
                 password_hash=pw_hash.decode(),
-                auth_method=AuthMethod.DATABASE.value,
+                auth_method=AuthMethod.database,
             )
             await user.insert()
         except asyncpg.UniqueViolationError:

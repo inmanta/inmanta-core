@@ -725,8 +725,8 @@ class EnvironmentMetricsResult(BaseModel):
 
 
 class AuthMethod(str, Enum):
-    DATABASE = "database"
-    OIDC = "oidc"
+    database = "database"
+    oidc = "oidc"
 
 
 class User(BaseModel):

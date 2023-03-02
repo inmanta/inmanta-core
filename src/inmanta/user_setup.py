@@ -25,6 +25,7 @@ from asyncpg import UndefinedTableError
 
 import nacl.pwhash
 from inmanta import config, data
+from inmanta.data import AuthMethod
 from inmanta.server import config as server_config
 
 
@@ -142,7 +143,7 @@ async def do_user_setup() -> None:
         user = data.User(
             username=username,
             password_hash=pw_hash.decode(),
-            auth_method="database",
+            auth_method=AuthMethod.database,
         )
         await user.insert()
 
