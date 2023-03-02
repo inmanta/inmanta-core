@@ -2167,3 +2167,44 @@ async def test_kwargs(unused_tcp_port, postgres_db, database_name, async_finaliz
     assert result.code == 200
     assert result.result["data"]["name"] == "test"
     assert result.result["data"]["value"]
+
+
+async def test_get_description_foreach_http_status_code() -> None:
+    """
+    Test whether the MethodProperties.get_description_foreach_http_status_code works as expected.
+    """
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
+        def test_method1(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+            """
+            Create a new project
+
+            :returns: A new project
+            :raises NotFound: The id was not found.
+            :raises 500: A server error.
+            """
+
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
+        def test_method2(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+            """
+            Create a new project
+
+            :returns:
+            :raises NotFound:
+            :raises 500:
+            """
+
+    method_properties = protocol.common.MethodProperties.methods["test_method1"][0]
+    response_code_to_description: Dict[int, str] = method_properties.get_description_foreach_http_status_code()
+    assert len(response_code_to_description) == 3
+    assert response_code_to_description[200] == "A new project"
+    assert response_code_to_description[404] == "The id was not found."
+    assert response_code_to_description[500] == "A server error."
+
+    method_properties = protocol.common.MethodProperties.methods["test_method2"][0]
+    response_code_to_description: Dict[int, str] = method_properties.get_description_foreach_http_status_code()
+    assert len(response_code_to_description) == 3
+    assert response_code_to_description[200] == ""
+    assert response_code_to_description[404] == ""
+    assert response_code_to_description[500] == ""
