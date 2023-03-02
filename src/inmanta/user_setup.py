@@ -31,7 +31,7 @@ from inmanta.server import config as server_config
 
 
 class ConnectionPoolException(Exception):
-    """Exception that is raised it the connection to the connection pool fails"""
+    """Exception that is raised if the connection to the connection pool fails"""
 
 
 def generate_signing_config() -> str:
