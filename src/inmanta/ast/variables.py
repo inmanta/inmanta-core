@@ -17,6 +17,7 @@
 """
 
 import logging
+from collections import abc
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
@@ -68,7 +69,15 @@ class Reference(ExpressionStatement):
         self.full_name = str(name)
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        pass
+        split: abc.Sequence[str] = self.name.rsplit("::", maxsplit=1)
+        if len(split) > 1:
+            # fail-fast if namespace does not exist
+            namespace: str = split[0]
+            res = self.namespace.get_root().get_ns_from_string(namespace)
+            if res is None:
+                raise NotFoundException(
+                    self, namespace, f"Could not find namespace {namespace}. Try importing it with `import {namespace}`"
+                )
 
     def requires(self) -> List[str]:
         return [self.full_name]
