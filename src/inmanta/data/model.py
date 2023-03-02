@@ -746,5 +746,4 @@ class LoginReturn(BaseModel):
     """
 
     token: str
-    expiry: int
     user: User

@@ -21,10 +21,11 @@ import socket
 
 import asyncpg
 import click
-from asyncpg import UndefinedTableError
+from asyncpg import PostgresError
 
 import nacl.pwhash
 from inmanta import config, data
+from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod
 from inmanta.server import config as server_config
 
@@ -50,13 +51,11 @@ def validate_server_setup() -> None:
     """Validate the server configuration so that authentication is setup correctly."""
     config.Config.load_config()
 
-    value = None
-    while value not in ["yes", "no"]:
-        value = click.prompt(
-            "This command should be execute locally on the orchestrator you want to configure. Are you "
-            "running this command locally?"
-        )
-    if value == "yes":
+    value = click.confirm(
+        "This command should be execute locally on the orchestrator you want to configure. Are you "
+        "running this command locally?"
+    )
+    if value:
         # make sure auth is on
         if not server_config.server_enable_auth.get():
             raise click.ClickException(
@@ -128,7 +127,7 @@ async def do_user_setup() -> None:
             f"{('%s (%s:%s)' % ( server_config.db_name.get(), server_config.db_host.get(), server_config.db_port.get()))}"
         )
         connection = await get_connection_pool()
-        click.echo(f"{'Connection to database' : <50}" f"{click.style('success', fg='red')}")
+        click.echo(f"{'Connection to database' : <50}{click.style('success', fg='green')}")
         users = await data.User.get_list()
 
         if len(users):
@@ -137,6 +136,8 @@ async def do_user_setup() -> None:
         username = click.prompt("What username do you want to use?", default="admin")
         password = click.prompt("What password do you want to use?", hide_input=True)
 
+        if not password or len(password) < MIN_PASSWORD_LENGTH:
+            raise click.ClickException("the password should be at least 8 characters long")
         pw_hash = nacl.pwhash.str(password.encode())
 
         # insert the user

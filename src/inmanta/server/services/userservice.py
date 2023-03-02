@@ -22,6 +22,7 @@ import asyncpg
 import nacl.exceptions
 import nacl.pwhash
 from inmanta import const, data, protocol
+from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod, model
 from inmanta.protocol import common, exceptions
 from inmanta.server import SLICE_DATABASE, SLICE_TRANSPORT, SLICE_USER
@@ -34,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 def verify_authentication_enabled() -> None:
     """raises an UnauthorizedException exception if server authentication is not enabled"""
     if not server_config.server_enable_auth.get():
-        raise exceptions.UnauthorizedException(
+        raise exceptions.BadRequest(
             "Server authentication should be enabled. To setup the initial user use the inmanta-initial-user-setup tool."
         )
 
@@ -53,12 +54,12 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.list_users)
     async def list_users(self) -> list[model.User]:
-        return [user.to_dao() for user in await data.User.get_list()]
+        return [user.to_dao() for user in await data.User.get_list()].sort(key=lambda u: u.username)
 
     @protocol.handle(protocol.methods_v2.add_user)
     async def add_user(self, username: str, password: str) -> model.User:
         verify_authentication_enabled()
-        if not password or len(password) < 8:
+        if not password or len(password) < MIN_PASSWORD_LENGTH:
             raise exceptions.BadRequest("the password should be at least 8 characters long")
 
         # hash the password
@@ -88,7 +89,7 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.set_password)
     async def set_password(self, username: str, password: str) -> None:
         verify_authentication_enabled()
-        if not password or len(password) < 8:
+        if not password or len(password) < MIN_PASSWORD_LENGTH:
             raise exceptions.BadRequest("the password should be at least 8 characters long")
         # check if the user already exists
         user = await data.User.get_one(username=username)
@@ -120,6 +121,5 @@ class UserService(server_protocol.ServerSlice):
             response=model.LoginReturn(
                 user=user.to_dao(),
                 token=token,
-                expiry=0,
             ),
         )
