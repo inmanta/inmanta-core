@@ -694,6 +694,8 @@ class OrchestrationService(protocol.ServerSlice):
         async with connection.transaction():
             try:
                 if is_partial_update:
+                    # Make mypy happy
+                    assert partial_base_version is not None
                     cm = await data.ConfigurationModel.create_for_partial_compile(
                         env_id=env.id,
                         version=version,
@@ -706,7 +708,7 @@ class OrchestrationService(protocol.ServerSlice):
                             self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
                         ),
                         partial_base=partial_base_version,
-                        rids_in_partial_compile=set(rid_to_resource.keys()) if partial_base_version else None,
+                        rids_in_partial_compile=set(rid_to_resource.keys()),
                         connection=connection,
                     )
                 else:
