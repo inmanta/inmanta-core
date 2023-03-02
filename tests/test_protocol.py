@@ -2171,7 +2171,7 @@ async def test_kwargs(unused_tcp_port, postgres_db, database_name, async_finaliz
 
 async def test_get_description_foreach_http_status_code() -> None:
     """
-    Test whether the MethodProperties.get_description_foreach_http_status_code works as expected.
+    Test whether the `MethodProperties.get_description_foreach_http_status_code()` method works as expected.
     """
 
     class ProjectServer(ServerSlice):
