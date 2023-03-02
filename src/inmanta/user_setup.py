@@ -151,7 +151,7 @@ async def do_user_setup() -> None:
     except ConnectionPoolException as e:
         click.echo(f"{'Connection to database {server_config.db_host.get()}' : <50}" f"{click.style('failed', fg='red')}")
         raise e
-    except UndefinedTableError:
+    except PostgresError:
         raise click.ClickException(
             "The version of the database is out of date: start the server to upgrade the database "
             "schema to the lastest version."
