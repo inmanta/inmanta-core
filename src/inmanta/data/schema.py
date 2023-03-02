@@ -303,11 +303,3 @@ class DBSchema(object):
         version = [make_version(name, mod) for name, mod in filtered_modules]
 
         return sorted(version, key=lambda x: x.version)
-
-    async def is_db_schema_up_to_date(self) -> bool:
-        """
-        returns True if the latest migration scripts have been applied, else return false.
-        """
-        installed_versions = await self.get_installed_versions()
-        latest_available_version = max(v.version for v in self._get_update_functions())
-        return latest_available_version in installed_versions
