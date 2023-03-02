@@ -4997,6 +4997,9 @@ class ConfigurationModel(BaseDocument):
     :param result: The result of the deployment. Success or error.
     :param version_info: Version metadata
     :param total: The total number of resources
+    :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
+                                             partial compile. In other words, the value is True iff no cross resource set
+                                             dependencies exist between the resources.
     """
 
     __primary_key__ = ("version", "environment")
@@ -5010,6 +5013,7 @@ class ConfigurationModel(BaseDocument):
     deployed: bool = False
     result: const.VersionState = const.VersionState.pending
     version_info: Optional[Dict[str, Any]] = None
+    is_suitable_for_partial_compiles: bool
 
     total: int = 0
 
@@ -5035,7 +5039,7 @@ class ConfigurationModel(BaseDocument):
         return self._done
 
     @classmethod
-    async def create_and_insert(
+    async def create_for_partial_compile(
         cls,
         env_id: uuid.UUID,
         version: int,
@@ -5043,121 +5047,117 @@ class ConfigurationModel(BaseDocument):
         version_info: Optional[JsonType],
         undeployable: abc.Sequence[ResourceIdStr],
         skipped_for_undeployable: abc.Sequence[ResourceIdStr],
-        partial_base: Optional[int] = None,
-        rids_in_partial_compile: Optional[abc.Set[ResourceIdStr]] = None,
+        partial_base: int,
+        rids_in_partial_compile: abc.Set[ResourceIdStr],
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
         """
-        Create a new ConfigurationModel instance and insert it into the database. When partial_base is provided,
-        the new ConfigururationModel will contain all the undeployables and skipped_for_undeployables present
-        in the partial_base version that are not part of the partial compile, i.e. not present in rids_in_partial_compile.
+        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigururationModel will
+        contain all the undeployables and skipped_for_undeployables present in the partial_base version that are not part of
+        the partial compile, i.e. not present in rids_in_partial_compile.
         """
-        rids_in_partial_compile = rids_in_partial_compile if rids_in_partial_compile is not None else set()
-        now = datetime.datetime.now().astimezone()
-        if partial_base is None:
-            cm = ConfigurationModel(
-                environment=env_id,
-                version=version,
-                date=now,
-                total=total,
-                version_info=version_info,
-                undeployable=undeployable,
-                skipped_for_undeployable=skipped_for_undeployable,
+        query = f"""
+            WITH base_version_exists AS (
+                SELECT COUNT(*) != 0 AS base_version_found
+                FROM {cls.table_name()} AS c1
+                WHERE c1.environment=$1 AND c1.version=$8
+            ),
+            rids_undeployable_base_version AS (
+                SELECT DISTINCT unnest(c2.undeployable) AS rid
+                FROM {cls.table_name()} AS c2
+                WHERE c2.environment=$1 AND c2.version=$8
+            ),
+            rids_skipped_for_undeployable_base_version AS (
+                SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
+                FROM {cls.table_name()} AS c3
+                WHERE c3.environment=$1 AND c3.version=$8
             )
-            await cm.insert(connection=connection)
-        else:
-            # A partial compile was done. Create the new version of the ConfigurationModel based on the partial_base version.
-            query = f"""
-                WITH rids_undeployable_base_version AS (
-                    SELECT DISTINCT unnest(c1.undeployable) AS rid
-                    FROM {cls.table_name()} AS c1
-                    WHERE c1.environment=$1 AND c1.version=$8
+            INSERT INTO {cls.table_name()}(
+                environment,
+                version,
+                date,
+                total,
+                version_info,
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                is_suitable_for_partial_compiles
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                (
+                    SELECT array_agg(rid)
+                    FROM (
+                        -- Undeployables in previous version of the model that are not part of the partial compile.
+                        (
+                            SELECT rid
+                            FROM rids_undeployable_base_version AS undepl
+                            WHERE NOT undepl.rid=ANY($9)
+                        )
+                        UNION
+                        -- Undeployables part of the partial compile.
+                        (
+                            SELECT DISTINCT rid FROM unnest($6::varchar[]) AS undeploy_filtered_new(rid)
+                        )
+                    ) AS all_undeployable
                 ),
-                rids_skipped_for_undeployable_base_version AS (
-                    SELECT DISTINCT unnest(c2.skipped_for_undeployable) AS rid
-                    FROM {cls.table_name()} AS c2
-                    WHERE c2.environment=$1 AND c2.version=$8
-                )
-                INSERT INTO {cls.table_name()}(
-                    environment,
-                    version,
-                    date,
-                    total,
-                    version_info,
-                    undeployable,
-                    skipped_for_undeployable,
-                    partial_base
-                ) VALUES(
-                    $1,
-                    $2,
-                    $3,
-                    $4,
-                    $5,
-                    (
-                        SELECT array_agg(rid)
-                        FROM (
-                            -- Undeployables in previous version of the model that are not part of the partial compile.
-                            (
-                                SELECT rid
-                                FROM rids_undeployable_base_version AS undepl
-                                WHERE NOT undepl.rid=ANY($9)
-                            )
-                            UNION
-                            -- Undeployables part of the partial compile.
-                            (
-                                SELECT DISTINCT rid FROM unnest($6::varchar[]) AS undeploy_filtered_new(rid)
-                            )
-                        ) AS all_undeployable
-                    ),
-                    (
-                        SELECT array_agg(rid)
-                        FROM (
-                            -- skipped_for_undeployables in previous version of the model that are not part of the partial
-                            -- compile.
-                            (
-                                SELECT skipped.rid
-                                FROM rids_skipped_for_undeployable_base_version AS skipped
-                                WHERE NOT skipped.rid=ANY($9)
-                            )
-                            UNION
-                            -- Skipped_for_undeployables part of the partial compile.
-                            (
-                                SELECT DISTINCT rid FROM unnest($7::varchar[]) AS skipped_filtered_new(rid)
-                            )
-                        ) AS all_skipped
-                    ),
-                    $8
-                )
-                RETURNING
-                    environment,
-                    version,
-                    date,
-                    total,
-                    version_info,
-                    undeployable,
-                    skipped_for_undeployable,
-                    partial_base,
-                    released,
-                    deployed,
-                    result
-            """
-            async with cls.get_connection(connection) as con:
-                result = await con.fetchrow(
-                    query,
-                    env_id,
-                    version,
-                    now,
-                    total,
-                    cls._get_value(version_info),
-                    undeployable,
-                    skipped_for_undeployable,
-                    partial_base,
-                    list(rids_in_partial_compile),
-                )
-                # Make mypy happy
-                assert result is not None
-                cm = cls(from_postgres=True, **result)
-        return cm
+                (
+                    SELECT array_agg(rid)
+                    FROM (
+                        -- skipped_for_undeployables in previous version of the model that are not part of the partial
+                        -- compile.
+                        (
+                            SELECT skipped.rid
+                            FROM rids_skipped_for_undeployable_base_version AS skipped
+                            WHERE NOT skipped.rid=ANY($9)
+                        )
+                        UNION
+                        -- Skipped_for_undeployables part of the partial compile.
+                        (
+                            SELECT DISTINCT rid FROM unnest($7::varchar[]) AS skipped_filtered_new(rid)
+                        )
+                    ) AS all_skipped
+                ),
+                $8,
+                True
+            )
+            RETURNING
+                (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
+                environment,
+                version,
+                date,
+                total,
+                version_info,
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                released,
+                deployed,
+                result,
+                is_suitable_for_partial_compiles
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetchrow(
+                query,
+                env_id,
+                version,
+                datetime.datetime.now().astimezone(),
+                total,
+                cls._get_value(version_info),
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                list(rids_in_partial_compile),
+            )
+            # Make mypy happy
+            assert result is not None
+            if not result["base_version_found"]:
+                raise Exception(f"Model with version {partial_base} not found in environment {env_id}")
+            fields = {name: val for name, val in result.items() if name != "base_version_found"}
+            return cls(from_postgres=True, **fields)
 
     @classmethod
     async def _get_status_field(cls, environment: uuid.UUID, values: str) -> Dict[str, str]:

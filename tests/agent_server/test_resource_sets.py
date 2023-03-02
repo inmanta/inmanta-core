@@ -1882,3 +1882,122 @@ async def test_put_partial_purge_on_delete(server, client, environment, clienthe
     # rid_deleted2
     assert rid_to_resource[rid_deleted2].attributes["requires"] == []
     assert rid_to_resource[rid_deleted2].provides == [rid_deleted1]
+
+
+async def test_is_suitable_for_partial_compiles(server, client, environment, clienthelper) -> None:
+    """
+    Test whether the put_version and the put_partial endpoint correctly sets the is_suitable_for_partial_compiles field
+    on a configurationmodel.
+    """
+
+    async def execute_put_version(set_cross_resource_set_dependency: bool) -> int:
+        """
+        Creates a new version using the put_partial endpoint.
+
+        :param set_cross_resource_set_dependency: True iff there is a cross resource set dependency in the new model version.
+        :return: The version of the new configurationmodel.
+        """
+        version = await clienthelper.get_version()
+        rid_shared = "test::Resource[agent1,key=shared]"
+        rid_set1 = "test::Resource[agent1,key=one]"
+        rid_set2 = "test::Resource[agent1,key=two]"
+        resources = [
+            {
+                "key": "shared",
+                "version": version,
+                "id": f"{rid_shared},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [],
+            },
+            {
+                "key": "set1",
+                "version": version,
+                "id": f"{rid_set1},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [f"{rid_shared},v={version}"],
+            },
+            {
+                "key": "set2",
+                "version": version,
+                "id": f"{rid_set2},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [f"{rid_shared},v={version}"],
+            },
+        ]
+        if set_cross_resource_set_dependency:
+            resources[2]["requires"].append(f"{rid_set1},v={version}")
+
+        resource_sets = {rid_set1: "set1", rid_set2: "set2"}
+        resource_states = {rid_set1: const.ResourceState.available, rid_set2: const.ResourceState.available}
+        result = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=resources,
+            resource_state=resource_states,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+            resource_sets=resource_sets,
+        )
+        assert result.code == 200
+        return version
+
+    async def do_partial_compile(should_fail: bool) -> Optional[int]:
+        """
+        Create a new version of the model using the put_partial endpoint.
+
+        :param should_fail: True iff the call to the put_partial endpoint should fail because the base version is not
+                            suitable for partial compiles because it has cross resource set dependencies.
+        :return: The new version of the model when should_fail is false, otherwise None is returned.
+        """
+        rid_set1 = "test::Resource[agent1,key=one]"
+        resources_partial = [
+            {
+                "key": "updated_set2",
+                "version": 0,
+                "id": f"{rid_set1},v=0",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [],
+            },
+        ]
+        resource_sets = {rid_set1: "set1"}
+        resource_states = {rid_set1: const.ResourceState.available}
+        result = await client.put_partial(
+            tid=environment,
+            resources=resources_partial,
+            resource_state=resource_states,
+            unknowns=[],
+            version_info=None,
+            resource_sets=resource_sets,
+            removed_resource_sets=["deleted"],
+        )
+        if not should_fail:
+            assert result.code == 200
+            return result.result["data"]
+        else:
+            assert result.code == 400
+            assert (
+                "is not suitable for a partial compiles because it has cross resource set dependencies."
+                in result.result["message"]
+            )
+            return None
+
+    version = await execute_put_version(set_cross_resource_set_dependency=False)
+    cm = await data.ConfigurationModel.get_version(environment, version)
+    assert cm.is_suitable_for_partial_compiles
+    version = await do_partial_compile(should_fail=False)
+    cm = await data.ConfigurationModel.get_version(environment, version)
+    assert cm.is_suitable_for_partial_compiles
+
+    version = await execute_put_version(set_cross_resource_set_dependency=True)
+    cm = await data.ConfigurationModel.get_version(environment, version)
+    assert not cm.is_suitable_for_partial_compiles
+    await do_partial_compile(should_fail=True)

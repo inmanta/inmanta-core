@@ -63,6 +63,72 @@ PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
 
 
+class CrossResourceSetDependencyError(Exception):
+    def __init__(self, resource_id1: ResourceIdStr, resource_id2: ResourceIdStr) -> None:
+        """
+        Raised when a cross-resource set dependency was detected between the resource with id
+        resource_id1 and resource_id2.
+        """
+        self.resource_id1 = resource_id1
+        self.resource_id2 = resource_id2
+        super().__init__(self.get_error_message())
+
+    def get_error_message(self) -> str:
+        return (
+            f"A dependency exists between resources {self.resource_id1} and {self.resource_id2}, but they belong to"
+            f" different resource sets."
+        )
+
+
+class ResourceSetValidator:
+    def __init__(self, resources: abc.Set[data.Resource]) -> None:
+        self.resources = resources
+        self.rid_to_resource_set = {res.resource_id: res.resource_set for res in self.resources}
+
+    def _is_cross_resource_set_dependency(self, res: data.Resource, rid_dependency: ResourceIdStr) -> bool:
+        """
+        Return True iff the dependency between resource res and the resource with id rid_dependency is a cross-resource set
+        dependency.
+        """
+        if res.resource_set is None:
+            # Resource is in shared resource set.
+            return False
+        if rid_dependency not in self.rid_to_resource_set:
+            # A partial compile was done and we have a dependency on a resource in another resource set
+            # that is not part of the partial compile.
+            return True
+        resource_set_dep = self.rid_to_resource_set[rid_dependency]
+        if resource_set_dep is None:
+            # Dependency towards shared resource set.
+            return False
+        return res.resource_set != resource_set_dep
+
+    def ensure_no_cross_resource_set_dependencies(self) -> None:
+        """
+        This method raises a CrossResourceSetDependencyError when a resource in self.resources that belongs to a non-shared
+        resource set has a dependency (requires/provides) on another resource that belongs to a different non-shared resource
+        set.
+        """
+        for res in self.resources:
+            for req in res.get_requires():
+                if self._is_cross_resource_set_dependency(res, req):
+                    raise CrossResourceSetDependencyError(res.resource_id, req)
+            for prov in res.provides:
+                if self._is_cross_resource_set_dependency(res, prov):
+                    raise CrossResourceSetDependencyError(res.resource_id, prov)
+
+    def has_cross_resource_set_dependency(self) -> bool:
+        """
+        Return True iff a cross resource set dependency exists between the resources in self.resources.
+        """
+        try:
+            self.ensure_no_cross_resource_set_dependencies()
+        except CrossResourceSetDependencyError:
+            return True
+        else:
+            return False
+
+
 class PartialUpdateMerger:
     """
     Class that contains the functionality to merge the shared resources and resources, present in a resource set that is updated
@@ -178,7 +244,6 @@ class PartialUpdateMerger:
 
         :param new_updated_and_shared_resources: The resources that have to be validated.
         """
-        rids_new_updated_and_shared_resources: abc.Set[ResourceIdStr] = set(new_updated_and_shared_resources.keys())
         for res_id, res in new_updated_and_shared_resources.items():
             if res.resource_id not in self.updated_and_shared_resources_old:
                 continue
@@ -190,19 +255,11 @@ class PartialUpdateMerger:
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
                 raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
 
-            for req in res.get_requires():
-                if req not in rids_new_updated_and_shared_resources:
-                    raise BadRequest(
-                        f"Resource {res_id} has a requires dependency on resource {req}, but that latter doesn't belong to"
-                        f" the shared resource set or a resource that that was updated by this partial compile."
-                    )
-
-            for provide in res.provides:
-                if provide not in rids_new_updated_and_shared_resources:
-                    raise BadRequest(
-                        f"Resource {res_id} has a provides dependency on resource {provide}, but the latter doesn't belong to"
-                        f" the shared resource set or a resource that that was updated by this partial compile."
-                    )
+            resource_set_validator = ResourceSetValidator(set(new_updated_and_shared_resources.values()))
+            try:
+                resource_set_validator.ensure_no_cross_resource_set_dependencies()
+            except CrossResourceSetDependencyError as e:
+                raise BadRequest(e.get_error_message())
 
     def _merge_shared_resources(self, shared_resources_new: Dict[ResourceIdStr, data.Resource]) -> abc.Sequence[data.Resource]:
         """
@@ -630,26 +687,42 @@ class OrchestrationService(protocol.ServerSlice):
 
         started = datetime.datetime.now().astimezone()
 
+        resource_set_validator = ResourceSetValidator(set(rid_to_resource.values()))
         undeployable_ids: abc.Sequence[ResourceIdStr] = [
             res.resource_id for res in rid_to_resource.values() if res.status in const.UNDEPLOYABLE_STATES
         ]
         async with connection.transaction():
             try:
-                cm = await data.ConfigurationModel.create_and_insert(
-                    env_id=env.id,
-                    version=version,
-                    # When a partial compile is done, the total will be updated in cm.recalculate_total()
-                    # with all the resources that belong to a resource set that was not updated.
-                    total=len(rid_to_resource),
-                    version_info=version_info,
-                    undeployable=undeployable_ids,
-                    skipped_for_undeployable=sorted(
-                        self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
-                    ),
-                    partial_base=partial_base_version,
-                    rids_in_partial_compile=set(rid_to_resource.keys()) if partial_base_version else None,
-                    connection=connection,
-                )
+                if is_partial_update:
+                    cm = await data.ConfigurationModel.create_for_partial_compile(
+                        env_id=env.id,
+                        version=version,
+                        # When a partial compile is done, the total will be updated in cm.recalculate_total()
+                        # with all the resources that belong to a resource set that was not updated.
+                        total=len(rid_to_resource),
+                        version_info=version_info,
+                        undeployable=undeployable_ids,
+                        skipped_for_undeployable=sorted(
+                            self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
+                        ),
+                        partial_base=partial_base_version,
+                        rids_in_partial_compile=set(rid_to_resource.keys()) if partial_base_version else None,
+                        connection=connection,
+                    )
+                else:
+                    cm = data.ConfigurationModel(
+                        environment=env.id,
+                        version=version,
+                        date=datetime.datetime.now().astimezone(),
+                        total=len(rid_to_resource),
+                        version_info=version_info,
+                        undeployable=undeployable_ids,
+                        skipped_for_undeployable=sorted(
+                            self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
+                        ),
+                        is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
+                    )
+                    await cm.insert(connection=connection)
             except asyncpg.exceptions.UniqueViolationError:
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
@@ -962,7 +1035,14 @@ class OrchestrationService(protocol.ServerSlice):
                 )
                 if not current_versions:
                     raise BadRequest("A partial export requires a base model but no versions have been exported yet.")
-                base_version: int = current_versions[0].version
+
+                base_model = current_versions[0]
+                base_version: int = base_model.version
+                if not base_model.is_suitable_for_partial_compiles:
+                    raise BadRequest(
+                        f"Base version {base_version} for this partial compile is not suitable for a partial compiles because"
+                        f" it has cross resource set dependencies."
+                    )
 
                 rid_to_resource: Dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
                     env_id=env.id,
