@@ -116,7 +116,7 @@ async def get_connection_pool() -> asyncpg.pool.Pool:
             connection_timeout=connection_timeout,
         )
     except Exception:
-        raise ConnectionPoolException
+        raise ConnectionPoolException()
 
 
 async def do_user_setup() -> None:
