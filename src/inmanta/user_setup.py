@@ -153,7 +153,7 @@ async def do_user_setup() -> None:
 
         click.echo(f"{'User %s: ' %username : <50}{click.style('created', fg='green')}")
     except ConnectionPoolException as e:
-        click.echo(f"{'Connection to database {server_config.db_host.get()}' : <50}" f"{click.style('failed', fg='red')}")
+        click.echo(f"{f'Connection to database {server_config.db_host.get()}' : <50}" f"{click.style('failed', fg='red')}")
         raise e
     except PostgresError:
         raise click.ClickException(
