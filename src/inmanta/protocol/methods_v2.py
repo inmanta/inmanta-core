@@ -1364,7 +1364,7 @@ def add_user(username: str, password: str) -> model.User:
     :param username: The username of the new user
     :param password: The password of this new user
     :raises Conflict: Raised when there is already a user with this user_name
-    :raises UnauthorizedException: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
