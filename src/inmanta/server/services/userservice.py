@@ -54,7 +54,7 @@ class UserService(server_protocol.ServerSlice):
 
     @protocol.handle(protocol.methods_v2.list_users)
     async def list_users(self) -> list[model.User]:
-        return sorted([user.to_dao() for user in await data.User.get_list()], key=lambda u: u.username)
+        return [user.to_dao() for user in await data.User.get_list(        order_by_column="username", order="ASC")]
 
     @protocol.handle(protocol.methods_v2.add_user)
     async def add_user(self, username: str, password: str) -> model.User:
