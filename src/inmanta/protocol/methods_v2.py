@@ -1353,7 +1353,7 @@ def delete_user(username: str) -> None:
 
     :param username: The username to delete
     :raises NotFound: Raised when the user does not exist
-    :raises UnauthorizedException: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
@@ -1364,7 +1364,7 @@ def add_user(username: str, password: str) -> model.User:
     :param username: The username of the new user. The username cannot be an empty string.
     :param password: The password of this new user. The password should be at least 8 characters long.
     :raises Conflict: Raised when there is already a user with this user_name
-    :raises UnauthorizedException: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
@@ -1375,5 +1375,5 @@ def set_password(username: str, password: str) -> None:
     :param username: The username of the user
     :param password: The password of this new user. The password should be at least 8 characters long.
     :raises NotFound: Raised when the user does not exist
-    :raises UnauthorizedException: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled
     """
