@@ -1353,7 +1353,7 @@ def delete_user(username: str) -> None:
 
     :param username: The username to delete
     :raises NotFound: Raised when the user does not exist
-    :raises UnauthorizedException: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled
     """
 
 
