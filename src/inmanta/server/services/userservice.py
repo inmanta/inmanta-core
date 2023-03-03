@@ -59,6 +59,8 @@ class UserService(server_protocol.ServerSlice):
     @protocol.handle(protocol.methods_v2.add_user)
     async def add_user(self, username: str, password: str) -> model.User:
         verify_authentication_enabled()
+        if not username:
+            raise exceptions.BadRequest("the username cannot be an empty string")
         if not password or len(password) < MIN_PASSWORD_LENGTH:
             raise exceptions.BadRequest("the password should be at least 8 characters long")
 

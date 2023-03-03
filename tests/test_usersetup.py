@@ -91,6 +91,10 @@ async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, 
     assert result.exit_code == 1
     assert result.stderr == "Error: the password should be at least 8 characters long\n"
 
+    result = await cli.run("yes", "", "password")
+    assert result.exit_code == 1
+    assert result.stderr == "Error: the password should be at least 8 characters long\n"
+
     result = await cli.run("yes", "new_user", "password")
     assert result.exit_code == 0
     try:
@@ -101,6 +105,35 @@ async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, 
         users = await data.User.get_list()
         assert len(users) == 1
         assert users[0].username == "new_user"
+
+    finally:
+        if connection is not None:
+            await data.disconnect()
+
+
+async def test_user_setup_empty_username(
+    tmpdir, server_pre_start, postgres_db, database_name, hard_clean_db, hard_clean_db_post
+):
+    ibl = InmantaBootloader()
+    # we need the server to start so that all the migrations scripts are applied, but the server needs
+    # to be shut down afterwards, otherwise the call to get_connection_pool() will result in an exception saying
+    # that the connection pool is already set in the database layer.
+    await ibl.start()
+    await ibl.stop(timeout=15)
+
+    setup_config(tmpdir, postgres_db, database_name)
+    cli = CLI_user_setup()
+
+    result = await cli.run("yes", "", "password")
+    assert result.exit_code == 0
+    try:
+        # Because the setup command calls data.disconnect(), we cannot use the init_dataclasses_and_load_schema fixture here.
+        # After calling into cli.run(), the connection to the database, which was setup by the init_dataclasses_and_load_schema
+        # fixture, will be no longer active.
+        connection = await get_connection_pool()
+        users = await data.User.get_list()
+        assert len(users) == 1
+        assert users[0].username == "admin"
 
     finally:
         if connection is not None:

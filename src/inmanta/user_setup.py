@@ -134,10 +134,13 @@ async def do_user_setup() -> None:
             raise click.ClickException("There are already users in the database")
 
         username = click.prompt("What username do you want to use?", default="admin")
-        password = click.prompt("What password do you want to use?", hide_input=True)
+        if not username:
+            raise click.ClickException("the username cannot be an empty string")
 
+        password = click.prompt("What password do you want to use?", hide_input=True)
         if not password or len(password) < MIN_PASSWORD_LENGTH:
             raise click.ClickException("the password should be at least 8 characters long")
+
         pw_hash = nacl.pwhash.str(password.encode())
 
         # insert the user

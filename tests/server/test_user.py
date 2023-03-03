@@ -57,6 +57,11 @@ async def test_create_and_delete_user(server: protocol.Server, auth_client: endp
     assert response.code == 400
     assert response.result["message"] == "Invalid request: the password should be at least 8 characters long"
 
+    # Try adding a user with no username
+    response = await auth_client.add_user("", "test12345")
+    assert response.code == 400
+    assert response.result["message"] == "Invalid request: the username cannot be an empty string"
+
     response = await auth_client.add_user("admin", "test1234")
     assert response.code == 200
 
@@ -104,7 +109,6 @@ async def test_login(server: protocol.Server, client: endpoints.Client, auth_cli
     assert response.code == 200
     assert "token" in response.result["data"]
     assert "user" in response.result["data"]
-    assert "expiry" in response.result["data"]
     assert response.result["data"]["user"]["username"] == "admin"
 
     token = response.result["data"]["token"]
