@@ -28,9 +28,6 @@ from inmanta import data
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_columns_in_db_table, postgresql_client
 ) -> None:
-    """
-    Only an index was added: make sure the migration script applies.
-    """
     assert "is_suitable_for_partial_compiles" not in await get_columns_in_db_table(data.ConfigurationModel.table_name())
     await migrate_db_from()
     assert "is_suitable_for_partial_compiles" in await get_columns_in_db_table(data.ConfigurationModel.table_name())

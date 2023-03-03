@@ -868,6 +868,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             date=datetime.now(),
             total=1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         res1 = data.Resource.new(
@@ -994,6 +995,7 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1096,6 +1098,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1138,6 +1141,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1301,6 +1305,7 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1339,6 +1344,7 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1440,6 +1446,7 @@ async def test_cleanup_old_agents(server):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     path = "/etc/file1"

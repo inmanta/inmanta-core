@@ -23,9 +23,13 @@ from inmanta.server.services.orchestrationservice import ResourceSetValidator
 
 async def update(connection: Connection) -> None:
     """
-    Ensure that the configurationmodel table has the is_suitable_for_partial_compiles column and make sure
-    it's correctly populated for all existing models in the table.
+    * Create index on table to efficiently filter resources based on the resource set that they belong to.
+    * Ensure that the configurationmodel table has the is_suitable_for_partial_compiles column and make sure
+      it's correctly populated for all existing models in the table.
     """
+    # Add index on resource table
+    await connection.execute("CREATE INDEX ON public.resource (environment, model, resource_set)")
+
     # Create column
     await connection.execute("ALTER TABLE public.configurationmodel ADD COLUMN is_suitable_for_partial_compiles boolean")
     # Populate column

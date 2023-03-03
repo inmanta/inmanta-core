@@ -30,6 +30,21 @@ from inmanta import const, data
 from inmanta.data import model
 
 
+@pytest.fixture
+async def db_model(
+    postgresql_client: asyncpg.connection.Connection, db_environment: data.Environment
+) -> abc.AsyncIterator[data.ConfigurationModel]:
+    """
+    Creates a minimal configuration model in the database without starting the inmanta server.
+    """
+    model: data.ConfigurationModel = data.ConfigurationModel(
+        version=1,
+        environment=db_environment.id,
+    )
+    await model.insert(connection=postgresql_client)
+    yield model
+
+
 @dataclass
 class MockEnum:
     name: object
