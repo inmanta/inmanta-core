@@ -247,7 +247,7 @@ class ReturnValue(Generic[T]):
         return repr(self)
 
 
-class Response(object):
+class Response:
     """
     A response object of a call
     """
@@ -380,6 +380,7 @@ class MethodProperties(object):
         typed: bool = False,
         envelope_key: str = const.ENVELOPE_KEY,
         strict_typing: bool = True,
+        enforce_auth: bool = True,
         varkw: bool = False,
     ) -> None:
         """
@@ -402,6 +403,8 @@ class MethodProperties(object):
         :param typed: Is the method definition typed or not
         :param envelope_key: The envelope key to use
         :param strict_typing: If true, does not allow `Any` when validating argument types
+        :param enforce_auth: When set to true authentication is enforced on this endpoint. When set to false, authentication is
+                             not enforced, even if auth is enabled.
         :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                       responsible for the validation.
         """
@@ -426,6 +429,7 @@ class MethodProperties(object):
         self._envelope = envelope
         self._envelope_key = envelope_key
         self._strict_typing = strict_typing
+        self._enforce_auth = enforce_auth
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
@@ -445,6 +449,10 @@ class MethodProperties(object):
     def varkw(self) -> bool:
         """Does the method allow for a variable number of key/value arguments."""
         return self._varkw
+
+    @property
+    def enforce_auth(self) -> bool:
+        return self._enforce_auth
 
     def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -975,6 +983,12 @@ def encode_token(
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
+
+    for ct in client_types:
+        if ct not in cfg.client_types:
+            raise Exception(
+                f"The signing config does not support the requested client type {ct}. Only {cfg.client_types} are allowed."
+            )
 
     payload: Dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
 

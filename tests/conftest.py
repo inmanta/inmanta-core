@@ -18,6 +18,7 @@
 import warnings
 
 import toml
+from inmanta.config import AuthJWTConfig
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -103,6 +104,7 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
+import inmanta.user_setup
 from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
@@ -139,7 +141,7 @@ from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_ty
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["public.resourceaction_resource"]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -364,7 +366,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
         tables_in_db = await postgresql_client.fetch(
             "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
         )
-        tables_in_db = [x["table_name"] for x in tables_in_db]
+        tables_in_db = ["public." + x["table_name"] for x in tables_in_db]
         tables_to_preserve = TABLES_TO_KEEP
         tables_to_preserve.append(SCHEMA_VERSION_TABLE)
         tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
@@ -511,6 +513,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
     compiler.Finalizers.reset_finalizers()
+    AuthJWTConfig.reset()
 
 
 @pytest.fixture()
@@ -554,7 +557,7 @@ def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
-    config.Config.set("auth_jwt_default", "client_types", "agent,compiler")
+    config.Config.set("auth_jwt_default", "client_types", "agent,compiler,api")
     config.Config.set("auth_jwt_default", "key", "rID3kG4OwGpajIsxnGDhat4UFcMkyFZQc1y3oKQTPRs")
     config.Config.set("auth_jwt_default", "expire", "0")
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")

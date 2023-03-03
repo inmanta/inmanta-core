@@ -70,7 +70,7 @@ from crontab import CronTab
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
+from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -1289,11 +1289,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return cls._connection_pool.acquire()
 
     @classmethod
-    def table_name(cls) -> str:
+    def table_name(cls, include_schema: bool = True) -> str:
         """
         Return the name of the collection
         """
-        return cls.__name__.lower()
+        if include_schema:
+            return f"public.{cls.__name__.lower()}"
+        else:
+            return cls.__name__.lower()
 
     @classmethod
     def get_field_metadata(cls) -> Dict[str, Field]:
@@ -1618,7 +1621,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
-            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
+            await con.copy_records_to_table(
+                table_name=cls.table_name(include_schema=False), columns=columns, records=records, schema_name="public"
+            )
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
@@ -3123,7 +3128,6 @@ class AgentInstance(BaseDocument):
         """
         if not endpoints:
             return
-
         async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""
@@ -3131,7 +3135,7 @@ class AgentInstance(BaseDocument):
                 {cls.table_name()}
                 (id, tid, process, name, expired)
                 VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
+                ON CONFLICT ON CONSTRAINT {cls.table_name(include_schema=False)}_unique DO UPDATE
                 SET expired = null
                 ;
                 """,
@@ -5533,6 +5537,20 @@ class EnvironmentMetricsTimer(BaseDocument):
     __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
+class User(BaseDocument):
+    """A user that can authenticate against inmanta"""
+
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    username: str
+    password_hash: str
+    auth_method: AuthMethod
+
+    def to_dao(self) -> m.User:
+        return m.User(username=self.username, auth_method=self.auth_method)
+
+
 _classes = [
     Project,
     Environment,
@@ -5551,6 +5569,7 @@ _classes = [
     Notification,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
+    User,
 ]
 
 

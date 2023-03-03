@@ -124,7 +124,7 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
                 INNER JOIN information_schema.columns c ON pg_type.typname = c.udt_name
                 WHERE table_schema='public' AND table_name=$1 AND column_name=$2
                 """,
-                cls._get_value(cls.table_name()),
+                cls._get_value(cls.table_name(include_schema=False)),
                 cls._get_value(enum_column),
             )
             # verify the db enum and the Python enum have the exact same values
