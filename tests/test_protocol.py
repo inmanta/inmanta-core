@@ -39,6 +39,7 @@ from tornado.httputil import url_concat
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, const, protocol
+from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
 from inmanta.protocol.common import (
