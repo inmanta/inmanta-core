@@ -49,7 +49,7 @@ audience=https://{hostname}:{server_config.server_bind_port.get()}/
 
 def validate_server_setup() -> None:
     """Validate the server configuration so that authentication is setup correctly."""
-    config.Config.load_config()
+    config.Config.load_config(config_dir="/etc/inmanta/inmanta.d")
 
     value = click.confirm(
         "This command should be execute locally on the orchestrator you want to configure. Are you "
