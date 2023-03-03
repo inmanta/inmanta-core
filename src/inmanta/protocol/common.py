@@ -780,7 +780,7 @@ class MethodProperties(object):
         for raise_statement in self._parsed_docstring.raises:
             exception_name = raise_statement.type_name
             status_code = self._get_http_status_code_for_exception(exception_name)
-            result[status_code] = raise_statement.description
+            result[status_code] = raise_statement.description if raise_statement.description is not None else ""
 
         return result
 
