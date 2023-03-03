@@ -33,7 +33,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def verify_authentication_enabled() -> None:
-    """raises an UnauthorizedException exception if server authentication is not enabled"""
+    """raises an BadRequest exception if server authentication is not enabled"""
     if not server_config.server_enable_auth.get():
         raise exceptions.BadRequest(
             "Server authentication should be enabled. To setup the initial user use the inmanta-initial-user-setup tool."
