@@ -1375,5 +1375,5 @@ def set_password(username: str, password: str) -> None:
     :param username: The username of the new user
     :param password: The password of this new user
     :raises NotFound: Raised when the user does not exist
-    :raises UnauthorizedException: Raised when server authentication is not enabled
+    :raises BadRequest: Raised when server authentication is not enabled
     """
