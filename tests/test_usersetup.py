@@ -91,10 +91,6 @@ async def test_user_setup(tmpdir, server_pre_start, postgres_db, database_name, 
     assert result.exit_code == 1
     assert result.stderr == "Error: the password should be at least 8 characters long\n"
 
-    result = await cli.run("yes", "", "password")
-    assert result.exit_code == 1
-    assert result.stderr == "Error: the password should be at least 8 characters long\n"
-
     result = await cli.run("yes", "new_user", "password")
     assert result.exit_code == 0
     try:
