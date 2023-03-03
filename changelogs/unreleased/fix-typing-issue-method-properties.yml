@@ -1,0 +1,4 @@
+---
+description: Fix typing issue in the `MethodProperties.get_description_foreach_http_status_code()` method.
+change-type: patch
+destination-branches: [iso4]
