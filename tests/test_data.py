@@ -1581,7 +1581,10 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     async def insert_resource(env_id, version, agent_name, path, status):
         resource_version_id = f"std::File[{agent_name},path={path}],v={version}"
         resource = data.Resource.new(
-            environment=env_id, resource_version_id=resource_version_id, attributes={"path": path}, status=status
+            environment=env_id,
+            resource_version_id=resource_version_id,
+            attributes={"path": path, "version": version},
+            status=status,
         )
         await resource.insert()
 
@@ -1593,7 +1596,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     assert len(result) == 3
     assert sorted([r.agent for r in result]) == ["agent1", "agent1", "agent2"]
     for r in result:
-        assert len(r.attributes) == 1
+        assert len(r.attributes) == 2
 
     result = await data.Resource.get_resources_for_version(env.id, version, agent="agent2")
     assert len(result) == 1
@@ -1603,7 +1606,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     assert len(result) == 3
     assert sorted([r["agent"] for r in result]) == ["agent1", "agent1", "agent2"]
     for r in result:
-        assert len(r["attributes"]) == 2  # path and version attribute
+        assert len(r["attributes"]) == 2
 
 
 async def test_escaped_resources(init_dataclasses_and_load_schema):
