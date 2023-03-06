@@ -4873,12 +4873,7 @@ class Resource(BaseDocument):
                         ELSE 'available'::resourcestate
                         END
                     ) AS status,
-                    (
-                        CASE WHEN r.attributes ? 'version'
-                        THEN jsonb_set(r.attributes, '{{"version"}}'::text[], to_jsonb($3::integer))
-                        ELSE r.attributes
-                        END
-                    ) AS attributes,
+                    r.attributes AS attributes,
                     r.attribute_hash,
                     r.resource_set,
                     r.provides

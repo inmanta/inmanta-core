@@ -24,13 +24,25 @@ from asyncpg.exceptions import NotNullViolationError
 from inmanta import data
 
 
+async def has_version_field_in_all_resources(postgresql_client) -> bool:
+    """
+    Return True iff all resources in the resource table have the version field in the attributes dictionary.
+    This method raises an assertion error when there are no resources in the resource table.
+    """
+    all_attributes = await postgresql_client.fetch(f"SELECT attributes from {data.Resource.table_name()}")
+    assert len(all_attributes) > 0
+    return all("version" in attrs["attributes"] for attrs in all_attributes)
+
+
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202302200.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_columns_in_db_table, postgresql_client
 ) -> None:
     assert "is_suitable_for_partial_compiles" not in await get_columns_in_db_table(data.ConfigurationModel.table_name())
+    assert await has_version_field_in_all_resources(postgresql_client)
     await migrate_db_from()
     assert "is_suitable_for_partial_compiles" in await get_columns_in_db_table(data.ConfigurationModel.table_name())
+    assert not await has_version_field_in_all_resources(postgresql_client)
 
     query = f"""
         UPDATE {data.ConfigurationModel.table_name()}

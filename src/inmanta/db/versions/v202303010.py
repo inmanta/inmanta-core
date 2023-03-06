@@ -51,3 +51,12 @@ async def update(connection: Connection) -> None:
         )
     # Add non null constraint
     await connection.execute("ALTER TABLE public.configurationmodel ALTER COLUMN is_suitable_for_partial_compiles SET NOT NULL")
+
+    # Remove the version field from the attributes of a resource
+    await connection.execute(
+        f"""
+            UPDATE {data.Resource.table_name()}
+            SET attributes = attributes - 'version'
+            WHERE attributes ? 'version'
+        """
+    )
