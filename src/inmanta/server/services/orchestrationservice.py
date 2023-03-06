@@ -236,7 +236,7 @@ class PartialUpdateMerger:
         self._validate_constraints(result)
         return result
 
-    def _validate_constraints(self, new_updated_and_shared_resources: Dict[ResourceIdStr, data.Resource]) -> None:
+    def _validate_constraints(self, new_updated_and_shared_resources: abc.Mapping[ResourceIdStr, data.Resource]) -> None:
         """
         Validate whether the new updated and shared resources that results from the merging the old version of the model
         with resources of the partial compile, are compliant with the constraints of a partial compile.
@@ -629,7 +629,8 @@ class OrchestrationService(protocol.ServerSlice):
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
                                 When a partial compile is done, it should contain all the resources that belong to the
-                                updated resource sets or the shared resource sets.
+                                updated resource sets or the shared resource sets. This method updates this object with
+                                purge-on-delete resources.
         :param unknowns: This parameter should contain all the unknowns for all the resources in the new version of the model.
                          Also the unknowns for resources that are not present in rid_to_resource.
         :param partial_base_version: When a partial compile is done, this parameter contains the version of the
@@ -640,7 +641,9 @@ class OrchestrationService(protocol.ServerSlice):
                                       a partial compile or when a full compile is done, this parameter can be set to None.
 
         Pre-conditions:
-            * The requires and provides relationships of the resources in rid_to_resource must to be set correctly.
+            * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
+              partial compile, this means it is assumed to be valid with respect to all absolute constraints that apply to
+              partial compiles. Constraints that are relative to the base version will be verified by this method.
             * When a partial compile was done, all resources in rid_to_resource must meet the constraints of a partial compile.
             * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets present
               in the resource_sets argument.
@@ -657,6 +660,12 @@ class OrchestrationService(protocol.ServerSlice):
         rid_to_resource are resources that belong to an unchanged, non-shared resource set. Those resources can only have
         cross resource set dependencies in a non-shared resource set and the latter resource set cannot be changed by a partial
         compile.
+
+        Validations done by this method:
+            * In case of a full export: Checks whether this version has any requires-provides across resource sets and
+                                        sets the is_suitable_for_partial_compiles field appropriately, indicating whether
+                                        this version is eligible to be used as a base version for a future partial compile.
+            * In case of a partial export: Verifies that no resources moved resource sets.
         """
         is_partial_update = partial_base_version is not None
 
@@ -797,12 +806,12 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        rid_to_resource: Dict[ResourceIdStr, data.Resource],
+        rid_to_resource: abc.Mapping[ResourceIdStr, data.Resource],
         all_resource_ids: abc.Sequence[ResourceIdStr],
         version_info: Optional[JsonType] = None,
         *,
         connection: asyncpg.connection.Connection,
-    ) -> Dict[ResourceIdStr, data.Resource]:
+    ) -> dict[ResourceIdStr, data.Resource]:
         """
         Return a dictionary of resources that were present in the old version of the model but that no longer exist in this
         version (in rid_to_resource) and had the purge_on_delete flag set to true. The returned resources will have the purged
