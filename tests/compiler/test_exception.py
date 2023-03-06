@@ -17,6 +17,7 @@
 """
 import os
 import re
+import textwrap
 
 import pytest
 
@@ -278,23 +279,63 @@ ManyFields(
     )
 
 
-@pytest.mark.parametrize_any("namespace", ["doesnotexist", "doesnotexist::doesnotexist", "std::doesnotexist"])
+def load_types() -> None:
+    comp: compiler.Compiler = compiler.Compiler()
+    sched: scheduler.Scheduler = scheduler.Scheduler()
+
+    (statements, blocks) = comp.compile()
+    sched.define_types(comp, statements, blocks)
+
+
+@pytest.mark.parametrize_any(
+    "namespace",
+    [
+        "doesnotexist",
+        "doesnotexist::doesnotexist",
+        "std::doesnotexist",
+        "alias::can_not_access_subnamespace_on_alias",
+    ],
+)
 def test_reference_nonexisting_namespace(snippetcompiler, namespace: str) -> None:
     """
     Verify that an appropriate exception is raised when a namespace is referenced that doesn't exist in the model.
     The exception should be raised even in the type checking phase for diagnostic purposes (e.g. VSCode language server).
     """
     # AST loading should succeed
-    snippetcompiler.setup_for_snippet(f"{namespace}::x", install_project=True)
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            f"""
+            import std as alias
+
+            {namespace}::x
+            """.strip(
+                "\n"
+            )
+        ),
+        install_project=True,
+    )
     with pytest.raises(
         NotFoundException,
         match=re.escape(
-            f"Could not find namespace {namespace}. Try importing it with `import {namespace}`"
-            f" (reported in {namespace}::x ({snippetcompiler.project_dir}/main.cf:1:1))"
+            f"Namespace {namespace} not found. Try importing it with `import {namespace}`"
+            f" (reported in {namespace}::x ({snippetcompiler.project_dir}/main.cf:3:1))"
         ),
     ):
-        comp: compiler.Compiler = compiler.Compiler()
-        sched: scheduler.Scheduler = scheduler.Scheduler()
+        load_types()
 
-        (statements, blocks) = comp.compile()
-        sched.define_types(comp, statements, blocks)
+
+def test_namespace_alias(snippetcompiler) -> None:
+    """
+    Verify that referencing an import alias does not get mistakenly interpreted as referencing a non-existing namespace.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import std as alias
+
+        alias::x
+        alias::x()
+        """,
+        install_project=True,
+    )
+    # verify that this does not fail
+    load_types()
