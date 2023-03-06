@@ -72,12 +72,11 @@ class Reference(ExpressionStatement):
         split: abc.Sequence[str] = self.name.rsplit("::", maxsplit=1)
         if len(split) > 1:
             # fail-fast if namespace does not exist
-            namespace: str = split[0]
-            res = self.namespace.get_root().get_ns_from_string(namespace)
-            if res is None:
-                raise NotFoundException(
-                    self, namespace, f"Could not find namespace {namespace}. Try importing it with `import {namespace}`"
-                )
+            try:
+                self.namespace.lookup_namespace(split[0])
+            except NotFoundException as e:
+                e.set_statement(self)
+                raise
 
     def requires(self) -> List[str]:
         return [self.full_name]
