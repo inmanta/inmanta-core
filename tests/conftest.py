@@ -141,7 +141,7 @@ from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_ty
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["public.resourceaction_resource"]  # Join table
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -366,17 +366,23 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
         tables_in_db = await postgresql_client.fetch(
             "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
         )
-        tables_in_db = ["public." + x["table_name"] for x in tables_in_db]
+        tables_in_db = [x["table_name"] for x in tables_in_db]
         tables_to_preserve = TABLES_TO_KEEP
         tables_to_preserve.append(SCHEMA_VERSION_TABLE)
-        tables_to_truncate = [x for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE]
+        tables_to_truncate = [
+            x.replace("user", "public.user") for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE
+        ]
         tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
+
         if tables_to_drop:
             drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
             await postgresql_client.execute(drop_query)
         if tables_to_truncate:
             truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
-            await postgresql_client.execute(truncate_query)
+            try:
+                await postgresql_client.execute(truncate_query)
+            except Exception as e:
+                print(e)
 
 
 @pytest.fixture(scope="function")
