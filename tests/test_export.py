@@ -23,7 +23,6 @@ from typing import Dict, List, Optional
 
 import pytest
 
-from conftest import SnippetCompilationTest
 from inmanta import config, const
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
@@ -721,7 +720,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     )
 
 
-def test_resource_pydantic(snippetcompiler: SnippetCompilationTest, modules_dir: str, tmpdir, environment) -> None:
+def test_resource_pydantic(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
     init_cf = """
 entity Res extends std::Resource:
     string name
