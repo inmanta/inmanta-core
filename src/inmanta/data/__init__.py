@@ -5545,7 +5545,7 @@ class User(BaseDocument):
     @classmethod
     def table_name(cls) -> str:
         """
-        Return the name the user table prepended by "public." to differentiate it from the user in the pg schema.
+        Return the name of the user table prepended by "public." to differentiate it from the user in the pg schema.
         """
         return f"public.{cls.__name__.lower()}"
 
