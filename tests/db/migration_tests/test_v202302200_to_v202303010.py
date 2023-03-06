@@ -44,10 +44,15 @@ async def test_migration(
     assert "is_suitable_for_partial_compiles" in await get_columns_in_db_table(data.ConfigurationModel.table_name())
     assert not await has_version_field_in_all_resources(postgresql_client)
 
+    # Ensure that the value of the is_suitable_for_partial_compiles column is set to False everywhere
+    cms = await data.ConfigurationModel.get_list()
+    assert len(cms) > 0
+    assert all(cm.is_suitable_for_partial_compiles is False for cm in cms)
+
+    # Ensure that the NOT NULL constraint is enforced on the is_suitable_for_partial_compiles column
     query = f"""
         UPDATE {data.ConfigurationModel.table_name()}
         SET is_suitable_for_partial_compiles=NULL
     """
     with pytest.raises(NotNullViolationError):
-        # Ensure that the NOT NULL constraint is enforced
         await postgresql_client.execute(query)

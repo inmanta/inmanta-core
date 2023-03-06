@@ -6,3 +6,4 @@ change-type: patch
 destination-branches: [master, iso6]
 sections:
   minor-improvement: "{{description}}"
+  upgrade-note: "It's required to run a full compile on any environment that uses partial compiles after upgrading the server."

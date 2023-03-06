@@ -18,7 +18,6 @@
 from asyncpg import Connection
 
 from inmanta import data
-from inmanta.server.services.orchestrationservice import ResourceSetValidator
 
 
 async def update(connection: Connection) -> None:
@@ -33,22 +32,12 @@ async def update(connection: Connection) -> None:
     # Create column
     await connection.execute("ALTER TABLE public.configurationmodel ADD COLUMN is_suitable_for_partial_compiles boolean")
     # Populate column
-    records = await connection.fetch(f"SELECT environment, version FROM {data.ConfigurationModel.table_name()}")
-    for record in records:
-        environment = record["environment"]
-        version = record["version"]
-        resources = await data.Resource.get_resources_for_version(environment, version, connection=connection)
-        resource_set_validator = ResourceSetValidator(set(resources))
-        await connection.execute(
-            f"""
-                UPDATE {data.ConfigurationModel.table_name()}
-                SET is_suitable_for_partial_compiles=$1
-                WHERE environment=$2 AND version=$3
-            """,
-            not resource_set_validator.has_cross_resource_set_dependency(),
-            environment,
-            version,
-        )
+    await connection.execute(
+        f"""
+            UPDATE {data.ConfigurationModel.table_name()}
+            SET is_suitable_for_partial_compiles=FALSE
+        """
+    )
     # Add non null constraint
     await connection.execute("ALTER TABLE public.configurationmodel ALTER COLUMN is_suitable_for_partial_compiles SET NOT NULL")
 
