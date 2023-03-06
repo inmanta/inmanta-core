@@ -378,10 +378,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
             await postgresql_client.execute(drop_query)
         if tables_to_truncate:
             truncate_query = "TRUNCATE %s CASCADE" % ", ".join(tables_to_truncate)
-            try:
-                await postgresql_client.execute(truncate_query)
-            except Exception as e:
-                print(e)
+            await postgresql_client.execute(truncate_query)
 
 
 @pytest.fixture(scope="function")
