@@ -5062,9 +5062,11 @@ class ConfigurationModel(BaseDocument):
         """
         query = f"""
             WITH base_version_exists AS (
-                SELECT COUNT(*) != 0 AS base_version_found
-                FROM {cls.table_name()} AS c1
-                WHERE c1.environment=$1 AND c1.version=$8
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM {cls.table_name()} AS c1
+                    WHERE c1.environment=$1 AND c1.version=$8
+                ) AS base_version_found
             ),
             rids_undeployable_base_version AS (
                 SELECT DISTINCT unnest(c2.undeployable) AS rid
