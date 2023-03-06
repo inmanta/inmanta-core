@@ -757,6 +757,5 @@ import modulev1
     )
 
     _version, json_value = snippetcompiler.do_export()
-    string_keyed = {str(k):v for k,v in json_value.items()}
+    string_keyed = {str(k): v for k, v in json_value.items()}
     string_keyed["modulev1::Res[the_resource_a,name=the_resource_a]"].name == "the_resource_a"
-

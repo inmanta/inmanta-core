@@ -36,7 +36,7 @@ from typing import (
     cast,
 )
 
-from pydantic import BaseModel, constr, PrivateAttr, Extra, validator
+from pydantic import BaseModel, Extra, PrivateAttr, constr, validator
 
 import inmanta.util
 from inmanta import plugins
@@ -194,8 +194,10 @@ class ResourceMeta(type):
 
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
+
 class BaseResource:
     pass
+
 
 @stable_api
 class Resource(BaseResource, metaclass=ResourceMeta):
@@ -368,9 +370,14 @@ class Resource(BaseResource, metaclass=ResourceMeta):
                 cls_resource = cls
                 force_fields = True
 
-        obj = cls_resource(obj_id)
-        obj.populate(obj_map, force_fields)
+        obj = cls_resource.do_deserialize(force_fields, obj_id, obj_map)
 
+        return obj
+
+    @classmethod
+    def do_deserialize(cls, force_fields: bool, obj_id: "Id", obj_map: JsonType):
+        obj = cls(obj_id)
+        obj.populate(obj_map, force_fields)
         return obj
 
     @classmethod
@@ -485,11 +492,11 @@ class ManagedResource(Resource):
         return obj.managed
 
 
-PARSE_ID_REGEX_RAW = r"^(?P<id>(?P<type>(?P<ns>[\w-]+(::[\w-]+)*)::(?P<class>[\w-]+))\[(?P<hostname>[^,]+)," \
-           r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
-PARSE_ID_REGEX = re.compile(
-    PARSE_ID_REGEX_RAW
+PARSE_ID_REGEX_RAW = (
+    r"^(?P<id>(?P<type>(?P<ns>[\w-]+(::[\w-]+)*)::(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+    r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
 )
+PARSE_ID_REGEX = re.compile(PARSE_ID_REGEX_RAW)
 
 ResourceVersionId_pd = constr(regex=PARSE_ID_REGEX_RAW)
 
@@ -685,17 +692,19 @@ class PydanticResource(BaseModel):
     class Config:
         orm_mode = True
         underscore_attrs_are_private = True
-        extra = Extra.allow #todo: resource_requires
+        extra = Extra.allow  # todo: resource_requires
 
     # ID forming data
     _entity_name: str
     _attribute_name: str
     _agent_attribute: str
     _model: object
+    _id: Optional[Id] = None
 
     requires: List[ResourceVersionId_pd] = []
     version: int = 0
-    unknowns: List[str] = [] # ???
+    unknowns: List[str] = []  # ???
+
     @classmethod
     def construct_from_model(cls, entity_name, exporter, model_object, options):
         out = cls.from_orm(model_object)
@@ -706,18 +715,32 @@ class PydanticResource(BaseModel):
         out._model = model_object
         return out
 
+    @classmethod
+    def do_deserialize(cls, force_fields: bool, obj_id: "Id", obj_map: JsonType):
+        out = cls(**obj_map)
+        out._id = obj_id
+        return out
+
     @validator("requires", pre=True)
     def validate_requires(cls, value) -> list[ResourceVersionId_pd]:
         if isinstance(value, SequenceProxy):
             # From orm, let it go
             return []
         return value
+
     def set_version(self, version: int) -> None:
         self.version = version
 
     @property
     def id(self):
-        return Id(self._entity_name, getattr(self, self._agent_attribute), self._attribute_name, getattr(self, self._attribute_name))
+        if self._id is None:
+            self._id = Id(
+                self._entity_name,
+                getattr(self, self._agent_attribute),
+                self._attribute_name,
+                getattr(self, self._attribute_name),
+            )
+        return self._id
 
     @property
     def model(self):
@@ -732,7 +755,7 @@ class PydanticResource(BaseModel):
         """
         dictionary = self.dict()
 
-        dictionary["requires"] = [str(x) for x in self.requires] # do we need this?
+        dictionary["requires"] = [str(x) for x in self.requires]  # do we need this?
         dictionary["id"] = self.id.resource_version_str()
         del dictionary["resource_requires"]
 

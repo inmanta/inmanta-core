@@ -29,7 +29,7 @@ from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.data.model import ResourceIdStr
-from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
+from inmanta.resources import IgnoreResourceException, PurgeableResource, PydanticResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.util import get_compiler_version
 from utils import retry_limited
@@ -110,11 +110,13 @@ ResourceContainer = namedtuple(
 def resource_container():
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
-        """
-        A file on a filesystem
-        """
-
         fields = ("key", "value", "purged")
+
+    @resource("test::ResourceP", agent="agent", id_attribute="key")
+    class MyResourceP(PydanticResource):
+        key: str
+        value: str
+        purged: bool
 
     @resource("test::Fact", agent="agent", id_attribute="key")
     class FactResource(Resource):
@@ -205,6 +207,7 @@ def resource_container():
         fields = ("key", "value", "set_state_to_deployed", "purged")
 
     @provider("test::Resource", name="test_resource")
+    @provider("test::ResourceP", name="test_resource")
     class Provider(ResourceHandler):
         def check_resource(self, ctx, resource):
             self.read(resource.id.get_agent_name(), resource.key)
