@@ -333,7 +333,7 @@ def test_namespace_alias(snippetcompiler) -> None:
         import std as alias
 
         alias::x
-        alias::x()
+        alias::count([])
         """,
         install_project=True,
     )
