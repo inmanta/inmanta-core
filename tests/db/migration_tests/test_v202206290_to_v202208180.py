@@ -34,13 +34,13 @@ async def test_column_add(
     """
 
     # Assert state before running the DB migration script
-    assert "partial_base" not in (await get_columns_in_db_table(ConfigurationModel.table_name()))
+    assert "partial_base" not in (await get_columns_in_db_table(ConfigurationModel.table_name(include_schema=False)))
 
     # Migrate DB schema
     await migrate_db_from()
 
     # Assert state after running the DB migration script
-    assert "partial_base" in (await get_columns_in_db_table(ConfigurationModel.table_name()))
+    assert "partial_base" in (await get_columns_in_db_table(ConfigurationModel.table_name(include_schema=False)))
 
     assert all(model.partial_base is None for model in await ConfigurationModel.get_list())
 
