@@ -110,12 +110,11 @@ class ResourceSetValidator:
         set.
         """
         for res in self.resources:
+            # It's sufficient to only check the requires relationship. The provides
+            # relationship is always a subset of the provides relationship.
             for req in res.get_requires():
                 if self._is_cross_resource_set_dependency(res, req):
                     raise CrossResourceSetDependencyError(res.resource_id, req)
-            for prov in res.provides:
-                if self._is_cross_resource_set_dependency(res, prov):
-                    raise CrossResourceSetDependencyError(res.resource_id, prov)
 
     def has_cross_resource_set_dependency(self) -> bool:
         """
