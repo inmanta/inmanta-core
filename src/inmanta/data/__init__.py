@@ -2133,7 +2133,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         Delete this document
         """
         (filter_as_string, values) = self._get_filter_on_primary_key_fields()
-        query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
+        query = "DELETE FROM " + self.table_name(include_schema=True) + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
     async def delete_cascade(self) -> None:
