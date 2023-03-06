@@ -367,6 +367,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
             "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
         )
         tables_in_db = [x["table_name"] for x in tables_in_db]
+        # replace user by public.user as we want to manipulate the public.user table and not the one in the pg schema
         tables_in_db = [x.replace("user", "public.user") for x in tables_in_db]
         tables_to_preserve = TABLES_TO_KEEP
         tables_to_preserve.append(SCHEMA_VERSION_TABLE)
