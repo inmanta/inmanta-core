@@ -249,7 +249,10 @@ class PartialUpdateMerger:
             matching_resource_old_model = self.updated_and_shared_resources_old[res.resource_id]
 
             if res.resource_set != matching_resource_old_model.resource_set:
-                raise BadRequest(f"A partial compile cannot migrate resource {res.resource_id} to another resource set.")
+                raise BadRequest(
+                    f"A partial compile cannot migrate resources: trying to move {res.resource_id} from resource set"
+                    f" {matching_resource_old_model.resource_set} to {res.resource_set}."
+                )
 
             if res.resource_set is None and res.attribute_hash != matching_resource_old_model.attribute_hash:
                 raise BadRequest(f"Resource ({res.resource_id}) without a resource set cannot be updated via a partial compile")
