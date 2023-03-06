@@ -115,7 +115,6 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
         enums: abc.Mapping[str, data.Field] = {
             name: field for name, field in cls.get_field_metadata().items() if issubclass(field.field_type, enum.Enum)
         }
-        table_name = cls.table_name().replace("public.", "")
         for enum_column, field in enums.items():
             db_enum_values: abc.Sequence[asyncpg.Record] = await cls._fetch_query(
                 """
@@ -125,7 +124,7 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
                 INNER JOIN information_schema.columns c ON pg_type.typname = c.udt_name
                 WHERE table_schema='public' AND table_name=$1 AND column_name=$2
                 """,
-                cls._get_value(table_name),
+                cls._get_value(cls.table_name()),
                 cls._get_value(enum_column),
             )
             # verify the db enum and the Python enum have the exact same values
