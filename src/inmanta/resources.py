@@ -36,11 +36,14 @@ from typing import (
     cast,
 )
 
+from pydantic import BaseModel, constr, PrivateAttr, Extra, validator
+
 import inmanta.util
 from inmanta import plugins
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, util
+from inmanta.execute.proxy import SequenceProxy
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
 
@@ -96,7 +99,8 @@ class resource(object):  # noqa: N801
     @classmethod
     def validate(cls) -> None:
         for resource, _ in cls._resources.values():
-            resource.validate()
+            if not issubclass(resource, PydanticResource):
+                resource.validate()
 
     @classmethod
     def get_entity_resources(cls) -> Iterable[str]:
@@ -190,9 +194,11 @@ class ResourceMeta(type):
 
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
+class BaseResource:
+    pass
 
 @stable_api
-class Resource(metaclass=ResourceMeta):
+class Resource(BaseResource, metaclass=ResourceMeta):
     """
     Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
 
@@ -329,20 +335,21 @@ class Resource(metaclass=ResourceMeta):
         Build a resource from a given configuration model entity
         """
         resource_cls, options = resource.get_class(entity_name)
-
         if resource_cls is None or options is None:
             raise TypeError("No resource class registered for entity %s" % entity_name)
+        obj = resource_cls.construct_from_model(entity_name, exporter, model_object, options)
 
+        return obj
+
+    @classmethod
+    def construct_from_model(cls, entity_name, exporter, model_object, options):
         # build the id of the object
-        obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
-
+        obj_id = cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
         # map all fields
-        fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields}
-
-        obj = resource_cls(obj_id)
+        fields = {field: cls.map_field(exporter, entity_name, field, model_object) for field in cls.fields}
+        obj = cls(obj_id)
         obj.populate(fields)
         obj.model = model_object
-
         return obj
 
     @classmethod
@@ -478,10 +485,14 @@ class ManagedResource(Resource):
         return obj.managed
 
 
+PARSE_ID_REGEX_RAW = r"^(?P<id>(?P<type>(?P<ns>[\w-]+(::[\w-]+)*)::(?P<class>[\w-]+))\[(?P<hostname>[^,]+)," \
+           r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
 PARSE_ID_REGEX = re.compile(
-    r"^(?P<id>(?P<type>(?P<ns>[\w-]+(::[\w-]+)*)::(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
-    r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$"
+    PARSE_ID_REGEX_RAW
 )
+
+ResourceVersionId_pd = constr(regex=PARSE_ID_REGEX_RAW)
+
 
 PARSE_RVID_REGEX = re.compile(
     r"^(?P<id>(?P<type>(?P<ns>[\w-]+(::[\w-]+)*)::(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
@@ -666,3 +677,63 @@ class HostNotFoundException(Exception):
         ra.data = {"host": self.hostname, "user": self.user, "error": self.error}
 
         return ra
+
+
+# TODO reserved keywords
+# todo parsed id
+class PydanticResource(BaseModel):
+    class Config:
+        orm_mode = True
+        underscore_attrs_are_private = True
+        extra = Extra.allow #todo: resource_requires
+
+    # ID forming data
+    _entity_name: str
+    _attribute_name: str
+    _agent_attribute: str
+    _model: object
+
+    requires: List[ResourceVersionId_pd] = []
+    version: int = 0
+    unknowns: List[str] = [] # ???
+    @classmethod
+    def construct_from_model(cls, entity_name, exporter, model_object, options):
+        out = cls.from_orm(model_object)
+        out._entity_name = entity_name
+        out._attribute_name = options["name"]
+        out._agent_attribute = options["agent"]
+        out.id
+        out._model = model_object
+        return out
+
+    @validator("requires", pre=True)
+    def validate_requires(cls, value) -> list[ResourceVersionId_pd]:
+        if isinstance(value, SequenceProxy):
+            # From orm, let it go
+            return []
+        return value
+    def set_version(self, version: int) -> None:
+        self.version = version
+
+    @property
+    def id(self):
+        return Id(self._entity_name, getattr(self, self._agent_attribute), self._attribute_name, getattr(self, self._attribute_name))
+
+    @property
+    def model(self):
+        return self._model
+
+    def __hash__(self):
+        return hash(self.id)
+
+    def serialize(self) -> JsonType:
+        """
+        Serialize this resource to its dictionary representation
+        """
+        dictionary = self.dict()
+
+        dictionary["requires"] = [str(x) for x in self.requires] # do we need this?
+        dictionary["id"] = self.id.resource_version_str()
+        del dictionary["resource_requires"]
+
+        return dictionary
