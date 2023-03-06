@@ -1289,10 +1289,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return cls._connection_pool.acquire()
 
     @classmethod
-    def table_name(cls) -> str:
+    def table_name(cls, include_schema: bool = False) -> str:
         """
         Return the name of the collection
         """
+        if include_schema:
+            return f"public.{cls.__name__.lower()}"
+        else:
+            return cls.__name__.lower()
         return cls.__name__.lower()
 
     @classmethod
@@ -1554,7 +1558,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = f"INSERT INTO {self.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})"
+        query = f"INSERT INTO {self.table_name(include_schema=True)} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})"
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
@@ -1668,7 +1672,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (set_statement, values_set_statement) = self._get_set_statement(**kwargs)
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
-        query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
+        query = "UPDATE " + self.table_name(include_schema=True) + " SET " + set_statement + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
@@ -1799,7 +1803,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         selected_columns = " * "
         if columns:
             selected_columns = ",".join([cls.validate_field_name(column) for column in columns])
-        sql_query = f"SELECT {selected_columns} FROM " + cls.table_name()
+        sql_query = f"SELECT {selected_columns} FROM " + cls.table_name(include_schema=True)
         if filter_statement:
             sql_query += " WHERE " + filter_statement
         if order_by_column is not None:
@@ -5542,12 +5546,12 @@ class User(BaseDocument):
     password_hash: str
     auth_method: AuthMethod
 
-    @classmethod
-    def table_name(cls) -> str:
-        """
-        Return the name of the user table prepended by "public." to differentiate it from the user table in the pg schema.
-        """
-        return f"public.{cls.__name__.lower()}"
+    # @classmethod
+    # def table_name(cls) -> str:
+    #     """
+    #     Return the name of the user table prepended by "public." to differentiate it from the user table in the pg schema.
+    #     """
+    #     return f"public.{cls.__name__.lower()}"
 
     def to_dao(self) -> m.User:
         return m.User(username=self.username, auth_method=self.auth_method)
