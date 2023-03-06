@@ -1558,7 +1558,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = f"INSERT INTO {self.table_name(include_schema=True)} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})"
+        query = (
+            f"INSERT INTO {self.table_name(include_schema=True)} "
+            f"({column_names_as_sql_string}) "
+            f"VALUES ({values_as_parameterize_sql_string})"
+        )
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
