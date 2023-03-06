@@ -1289,7 +1289,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return cls._connection_pool.acquire()
 
     @classmethod
-    def table_name(cls, include_schema: bool = True) -> str:
+    def table_name(cls, include_schema: bool = False) -> str:
         """
         Return the name of the collection
         """
@@ -1621,9 +1621,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
-            await con.copy_records_to_table(
-                table_name=cls.table_name(include_schema=False), columns=columns, records=records, schema_name="public"
-            )
+            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
@@ -3135,7 +3133,7 @@ class AgentInstance(BaseDocument):
                 {cls.table_name()}
                 (id, tid, process, name, expired)
                 VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name(include_schema=False)}_unique DO UPDATE
+                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
                 SET expired = null
                 ;
                 """,
