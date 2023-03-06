@@ -373,7 +373,6 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
             x.replace("user", "public.user") for x in tables_in_db if x in tables_to_preserve and x != SCHEMA_VERSION_TABLE
         ]
         tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
-
         if tables_to_drop:
             drop_query = "DROP TABLE %s CASCADE" % ", ".join(tables_to_drop)
             await postgresql_client.execute(drop_query)
