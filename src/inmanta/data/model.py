@@ -701,3 +701,27 @@ class EnvironmentMetricsResult(BaseModel):
     end: datetime.datetime
     timestamps: List[datetime.datetime]
     metrics: Dict[str, List[Optional[Union[float, Dict[str, float]]]]]
+
+
+class AuthMethod(str, Enum):
+    database = "database"
+    oidc = "oidc"
+
+
+class User(BaseModel):
+    """A user"""
+
+    username: str
+    auth_method: AuthMethod
+
+
+class LoginReturn(BaseModel):
+    """
+    Login information
+
+    :param token: A token representing the user's authentication session
+    :param user: The user object for which the token was created
+    """
+
+    token: str
+    user: User

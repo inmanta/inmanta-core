@@ -67,7 +67,7 @@ class RESTHandler(tornado.web.RequestHandler):
             return None
 
         parts = headers["Authorization"].split(" ")
-        if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
+        if len(parts) != 2 or parts[0].lower() != "bearer":
             LOGGER.warning(
                 "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)", headers["Authorization"]
             )
@@ -140,13 +140,13 @@ class RESTHandler(tornado.web.RequestHandler):
                 auth_token = self.get_auth_token(request_headers)
 
                 auth_enabled = server_enable_auth.get()
-                if not auth_enabled or auth_token is not None:
+                if not auth_enabled or auth_token is not None or not call_config.properties.enforce_auth:
                     result = await self._transport._execute_call(
                         kwargs, http_method, call_config, message, request_headers, auth_token
                     )
                     self.respond(result.body, result.headers, result.status_code)
                 else:
-                    raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
+                    raise exceptions.UnauthorizedException()
 
             except JSONDecodeError as e:
                 error_message = f"The request body couldn't be decoded as a JSON: {e}"

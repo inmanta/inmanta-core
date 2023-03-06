@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS public.schemamanager(
     assert await dbm.get_installed_versions() == {1, 3}
     # make sure legacy update gets executed only once
     await postgresql_client.execute("UPDATE public.schemamanager SET legacy_version=$1 WHERE name=$2", 2, "myslice")
-    dbm.ensure_self_update()
+    await dbm.ensure_self_update()
     assert await dbm.get_installed_versions() == {1, 3}
 
 

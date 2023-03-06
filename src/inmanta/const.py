@@ -203,13 +203,11 @@ LOG_LEVEL_AS_INTEGER = {
     LogLevel.TRACE: 3,
 }
 
-
 # The following code registers the integer log levels as values
 # in the LogLevel enum.  It allows to pass them in the constructor
 # as if it was an integer enum: LogLevel(50) == LogLevel.CRITICAL
 for level, value in LOG_LEVEL_AS_INTEGER.items():
     LogLevel._value2member_map_[value] = level
-
 
 INMANTA_URN = "urn:inmanta:"
 
@@ -242,11 +240,9 @@ class ClientType(str, Enum):
 # assume we are running in a tty
 ENVIRON_FORCE_TTY = "FORCE_TTY"
 
-
 LOG_LEVEL_TRACE = 3
 
 NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
-
 
 # Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
 SHUTDOWN_GRACE_IOLOOP = 10
@@ -256,7 +252,6 @@ SHUTDOWN_GRACE_HARD = 15
 EXIT_HARD = 3
 # Startup failed exit code
 EXIT_START_FAILED = 4
-
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 TIME_LOGFMT = "%Y-%m-%d %H:%M:%S%z"
@@ -273,6 +268,9 @@ ENVELOPE_KEY = "data"
 
 # Max number of attempts when updating modules
 MAX_UPDATE_ATTEMPT = 5
+
+# Minimum password length
+MIN_PASSWORD_LENGTH = 8
 
 
 class AgentAction(str, Enum):
