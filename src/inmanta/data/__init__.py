@@ -1297,7 +1297,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return f"public.{cls.__name__.lower()}"
         else:
             return cls.__name__.lower()
-        return cls.__name__.lower()
 
     @classmethod
     def get_field_metadata(cls) -> Dict[str, Field]:
@@ -5549,13 +5548,6 @@ class User(BaseDocument):
     username: str
     password_hash: str
     auth_method: AuthMethod
-
-    # @classmethod
-    # def table_name(cls) -> str:
-    #     """
-    #     Return the name of the user table prepended by "public." to differentiate it from the user table in the pg schema.
-    #     """
-    #     return f"public.{cls.__name__.lower()}"
 
     def to_dao(self) -> m.User:
         return m.User(username=self.username, auth_method=self.auth_method)
