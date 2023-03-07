@@ -21,6 +21,6 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-    ALTER TABLE public.user RENAME TO public.inmanta_user;
+    ALTER TABLE public.user RENAME TO inmanta_user;
     """
     await connection.execute(schema)

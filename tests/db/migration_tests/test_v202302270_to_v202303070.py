@@ -29,7 +29,7 @@ async def test_migration(
     get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
 ) -> None:
     """
-    verify that the auth_method enum and the user table are added.
+    verify that the user table is renamed correctly
     """
     tables = await get_tables_in_db()
     assert "user" in tables
