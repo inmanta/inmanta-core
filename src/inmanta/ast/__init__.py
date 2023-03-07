@@ -322,16 +322,16 @@ class Namespace(Namespaced):
                 raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
 
+    def lookup_namespace(self, name: str) -> Import:
+        if name not in self.visible_namespaces:
+            raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
+        return self.visible_namespaces[name]
+
     def lookup(self, name: str) -> "Union[Type, ResultVariable]":
         if "::" not in name:
             return self.get_scope().direct_lookup(name)
-
         parts = name.rsplit("::", 1)
-
-        if parts[0] not in self.visible_namespaces:
-            raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
-
-        return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
+        return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
     def get_type(self, typ: LocatableString) -> "Type":
         name: str = str(typ)

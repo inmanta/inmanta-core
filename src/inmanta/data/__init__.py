@@ -1289,14 +1289,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return cls._connection_pool.acquire()
 
     @classmethod
-    def table_name(cls, include_schema: bool = True) -> str:
+    def table_name(cls) -> str:
         """
         Return the name of the collection
         """
-        if include_schema:
-            return f"public.{cls.__name__.lower()}"
-        else:
-            return cls.__name__.lower()
+        return cls.__name__.lower()
 
     @classmethod
     def get_field_metadata(cls) -> Dict[str, Field]:
@@ -1557,7 +1554,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = f"INSERT INTO {self.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})"
+        query = (
+            f"INSERT INTO {self.table_name()} "
+            f"({column_names_as_sql_string}) "
+            f"VALUES ({values_as_parameterize_sql_string})"
+        )
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
@@ -1621,9 +1622,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
-            await con.copy_records_to_table(
-                table_name=cls.table_name(include_schema=False), columns=columns, records=records, schema_name="public"
-            )
+            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
@@ -3175,7 +3174,7 @@ class AgentInstance(BaseDocument):
                 {cls.table_name()}
                 (id, tid, process, name, expired)
                 VALUES ($1, $2, $3, $4, null)
-                ON CONFLICT ON CONSTRAINT {cls.table_name(include_schema=False)}_unique DO UPDATE
+                ON CONFLICT ON CONSTRAINT {cls.table_name()}_unique DO UPDATE
                 SET expired = null
                 ;
                 """,
@@ -5870,6 +5869,13 @@ class User(BaseDocument):
     username: str
     password_hash: str
     auth_method: AuthMethod
+
+    @classmethod
+    def table_name(cls) -> str:
+        """
+        Return the name of table. we call it inmanta_user to differentiate it from the pg user table.
+        """
+        return "inmanta_user"
 
     def to_dao(self) -> m.User:
         return m.User(username=self.username, auth_method=self.auth_method)

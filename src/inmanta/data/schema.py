@@ -31,7 +31,7 @@ CORE_SCHEMA_NAME = "core"
 
 LOGGER = logging.getLogger(__name__)
 
-SCHEMA_VERSION_TABLE = "public.schemamanager"
+SCHEMA_VERSION_TABLE = "schemamanager"
 
 create_schemamanager = """
 -- Table: public.schemamanager
@@ -120,7 +120,6 @@ class DBSchema(object):
         async with self.connection.transaction():
             # lock table
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
-            table_name_without_schema = SCHEMA_VERSION_TABLE.split(".", maxsplit=1)[1]
             # get legacy column, under lock => if column no longer exists -> other process has already performed migration
             legacy_column: Optional[Record] = await self.connection.fetchrow(
                 """
@@ -130,7 +129,7 @@ class DBSchema(object):
                     WHERE table_name=$1 AND column_name=$2
                 )
                 """,
-                table_name_without_schema,
+                SCHEMA_VERSION_TABLE,
                 "current_version",
             )
 
