@@ -111,7 +111,8 @@ class ResourceSetValidator:
         """
         for res in self.resources:
             # It's sufficient to only check the requires relationship. The provides
-            # relationship is always a subset of the provides relationship.
+            # relationship is always a subset of the reverse relationship (provides relationship).
+            # The provides relationship only contains the cross-agent dependencies.
             for req in res.get_requires():
                 if self._is_cross_resource_set_dependency(res, req):
                     raise CrossResourceSetDependencyError(res.resource_id, req)
