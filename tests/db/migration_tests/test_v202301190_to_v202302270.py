@@ -30,11 +30,12 @@ async def test_migration(
 ) -> None:
     """
     verify that the auth_method enum and the user table are added.
+    edit: the user table was renamed and is tested in test_v202302270_to_v202303070
     """
-    tables = await get_tables_in_db()
+    # tables = await get_tables_in_db()
     assert "auth_method" not in (await get_custom_postgresql_types())
-    assert "user" not in tables
+    # assert "user" not in tables
     await migrate_db_from()
-    tables = await get_tables_in_db()
+    # tables = await get_tables_in_db()
     assert "auth_method" in (await get_custom_postgresql_types())
-    assert "user" in tables
+    # assert "user" in tables
