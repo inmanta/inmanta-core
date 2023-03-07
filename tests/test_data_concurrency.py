@@ -100,6 +100,7 @@ async def test_4889_deadlock_delete_resource_action_update(
         date=datetime.datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     resource = model.ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
@@ -191,6 +192,7 @@ async def test_4889_deadlock_delete_resource_action_insert(monkeypatch, environm
         date=datetime.datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await confmodel.insert()
 

@@ -524,6 +524,8 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
     myagent = agent.Agent(
         hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
     )
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
     await myagent.add_end_point_name("agent1")
     await myagent.add_end_point_name("agent2")
     await myagent.start()

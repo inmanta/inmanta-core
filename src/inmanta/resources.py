@@ -599,21 +599,24 @@ class Id(object):
         return id
 
     @classmethod
-    def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr]) -> "Id":
+    def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr], version: Optional[int] = None) -> "Id":
         """
         Parse the resource id and return the type, the hostname and the
         resource identifier.
+
+        :param version: If provided, the version field of the returned Id will be set to this version.
         """
         result = PARSE_ID_REGEX.search(resource_id)
 
         if result is None:
             raise ValueError("Invalid id for resource %s" % resource_id)
 
-        version_match: str = result.group("version")
+        if version is None:
+            version_match: str = result.group("version")
 
-        version = 0
-        if version_match is not None:
-            version = int(version_match)
+            version = 0
+            if version_match is not None:
+                version = int(version_match)
 
         id_obj = Id(result.group("type"), result.group("hostname"), result.group("attr"), result.group("value"), version)
         return id_obj

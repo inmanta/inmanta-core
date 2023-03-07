@@ -49,9 +49,15 @@ async def test_column_add(
     await project.insert()
     env = Environment(name="myenv", project=project.id, repo_url="", repo_branch="")
     await env.insert()
-    base: ConfigurationModel = ConfigurationModel(environment=env.id, version=1, partial_base=None)
-    partial_one: ConfigurationModel = ConfigurationModel(environment=env.id, version=2, partial_base=1)
-    partial_two: ConfigurationModel = ConfigurationModel(environment=env.id, version=3, partial_base=2)
+    base: ConfigurationModel = ConfigurationModel(
+        environment=env.id, version=1, partial_base=None, is_suitable_for_partial_compiles=False
+    )
+    partial_one: ConfigurationModel = ConfigurationModel(
+        environment=env.id, version=2, partial_base=1, is_suitable_for_partial_compiles=False
+    )
+    partial_two: ConfigurationModel = ConfigurationModel(
+        environment=env.id, version=3, partial_base=2, is_suitable_for_partial_compiles=False
+    )
 
     await base.insert()
     await partial_one.insert()

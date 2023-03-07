@@ -676,9 +676,9 @@ async def test_agent_count_metric(clienthelper, client, server):
     assert len(agents) == 3
 
     # Add dummy resources that use some (but not all) of the agents
-    model1 = data.ConfigurationModel(environment=env1.id, version=1, released=True)
+    model1 = data.ConfigurationModel(environment=env1.id, version=1, released=True, is_suitable_for_partial_compiles=False)
     await model1.insert()
-    model2 = data.ConfigurationModel(environment=env2.id, version=1, released=True)
+    model2 = data.ConfigurationModel(environment=env2.id, version=1, released=True, is_suitable_for_partial_compiles=False)
     await model2.insert()
     resource1 = data.Resource(
         environment=env1.id, model=1, agent="agent1", resource_id="", resource_type="", resource_id_value=""

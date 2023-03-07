@@ -372,7 +372,7 @@ class Exporter(object):
 
         if types is not None:
             # then process the configuration model to submit it to the mgmt server
-            # This is the actuel export : convert entities to resources.
+            # This is the actual export : convert entities to resources.
             self._load_resources(types)
             resource_sets_to_remove_all += self._empty_resource_sets
             # call dependency managers

@@ -39,6 +39,7 @@ async def env_with_versions(environment):
             total=1,
             released=i != 1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
