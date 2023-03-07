@@ -34,7 +34,7 @@ async def has_version_field_in_all_resources(postgresql_client) -> bool:
     return all("version" in attrs["attributes"] for attrs in all_attributes)
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202302200.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202303070.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_columns_in_db_table, postgresql_client
 ) -> None:
