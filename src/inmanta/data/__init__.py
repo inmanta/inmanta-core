@@ -5549,7 +5549,7 @@ class User(BaseDocument):
     @classmethod
     def table_name(cls) -> str:
         """
-        Return the name of the collection
+        Return the name of table. we call it inmanta_user to differentiate it from the pg user table.
         """
         return "inmanta_user"
 
