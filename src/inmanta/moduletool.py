@@ -82,7 +82,6 @@ if TYPE_CHECKING:
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -105,8 +104,8 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-        "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-        "--strict-deps-check option.",
+             "All other version conflicts will result in a warning. This option is mutually exclusive with the "
+             "--strict-deps-check option.",
     )
     parser.add_argument(
         "--strict-deps-check",
@@ -114,7 +113,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-        "This option is mutually exclusive with the --no-strict-deps-check option.",
+             "This option is mutually exclusive with the --no-strict-deps-check option.",
     )
 
 
@@ -159,7 +158,7 @@ class ModuleLikeTool(object):
             project.load()
         return project
 
-    def determine_new_version(self, old_version, version, major, minor, patch, dev):
+    def determine_new_version(self, old_version, version, major, minor, patch, revision, dev):
         """
         Only used by the `inmanta module commit` command.
         """
@@ -193,7 +192,7 @@ class ModuleLikeTool(object):
                     LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
                     return None
 
-                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
                 if change_type:
                     outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
                 else:
@@ -216,6 +215,7 @@ class ChangeType(enum.Enum):
     MAJOR: str = "major"
     MINOR: str = "minor"
     PATCH: str = "patch"
+    REVISION: str = "revision"
 
     def less(self) -> Optional["ChangeType"]:
         """
@@ -225,10 +225,12 @@ class ChangeType(enum.Enum):
             return ChangeType.MINOR
         if self == ChangeType.MINOR:
             return ChangeType.PATCH
+        if self == ChangeType.PATCH:
+            return ChangeType.REVISION
         return None
 
     def __lt__(self, other: "ChangeType") -> bool:
-        order: List[ChangeType] = [ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
+        order: List[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
         if other not in order:
             return NotImplemented
         return order.index(self) < order.index(other)
@@ -251,17 +253,25 @@ class ChangeType(enum.Enum):
             return cls.MINOR
         if high.micro > low.micro:
             return cls.PATCH
+        if len(high.base_version.split('.')) >= 4:
+            high_revision = high.base_version.split('.')[-1]
+            # We are switching from 3 digits to 4
+            if len(low.base_version.split('.')) < 4 or \
+                (len(low.base_version.split('.')) >= 4 and high_revision > low.base_version.split('.')[-1]):
+                return cls.REVISION
         raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
     @classmethod
-    def parse_from_bools(cls, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
+    def parse_from_bools(cls, revision: bool, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
         """
         Create a ChangeType for the type of which the boolean is set to True. If none
         of the boolean arguments is set to True, None is returned. If more
         than one boolean argument is set to True, a ValueError is raised.
         """
-        if sum([patch, minor, major]) > 1:
+        if sum([revision, patch, minor, major]) > 1:
             raise ValueError("Only one argument of patch, minor or major can be set to True at the same time.")
+        if revision:
+            return ChangeType.REVISION
         if patch:
             return ChangeType.PATCH
         if minor:
@@ -281,6 +291,7 @@ class VersionOperation:
         parts = [int(x) for x in version.base_version.split(".")]
         while len(parts) < 3:
             parts.append(0)
+
         if change_type is ChangeType.PATCH:
             parts[2] += 1
         if change_type is ChangeType.MINOR:
@@ -290,9 +301,20 @@ class VersionOperation:
             parts[0] += 1
             parts[1] = 0
             parts[2] = 0
+
+        if len(parts) >= 4:
+            size_version = 4
+
+            if change_type is ChangeType.REVISION:
+                parts[3] += 1
+            else:
+                parts[3] = 0
+        else:
+            size_version = 3
+
         # Reset remaining digits to zero
-        if len(parts) > 3:
-            parts[3:] = [0 for _ in range(len(parts) - 3)]
+        if len(parts) > size_version:
+            parts[size_version:] = [0 for _ in range(len(parts) - size_version)]
 
         return cls._to_version(parts, version_tag)
 
@@ -329,14 +351,14 @@ class ProjectTool(ModuleLikeTool):
             "-r",
             "--recursive",
             help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
-            "which defaults to False",
+                 "which defaults to False",
             action="store_true",
             default=None,
         )
         freeze.add_argument(
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-            " project.yml is used which defaults to ~=",
+                 " project.yml is used which defaults to ~=",
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
@@ -548,7 +570,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            f"Either --v1 or --v2 has to be set.",
+                        f"Either --v1 or --v2 has to be set.",
         )
         add.add_argument(
             "module_req",
@@ -605,7 +627,7 @@ mode.
             "--tag",
             dest="tag",
             help="Create a tag for the commit."
-            "Tags are not created for dev releases by default, if you want to tag it, specify this flag explicitly",
+                 "Tags are not created for dev releases by default, if you want to tag it, specify this flag explicitly",
             action="store_true",
         )
         commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
@@ -628,14 +650,14 @@ mode.
             "-r",
             "--recursive",
             help="Freeze dependencies recursively. If not set, freeze_recursive option in module.yml is used,"
-            " which defaults to False",
+                 " which defaults to False",
             action="store_true",
             default=None,
         )
         freeze.add_argument(
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-            " module.yml is used which defaults to ~=",
+                 " module.yml is used which defaults to ~=",
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
@@ -657,7 +679,7 @@ mode.
             "--dev",
             dest="dev_build",
             help="Perform a development build of the module. This adds the build tag `.dev<timestamp>` to the "
-            "package name. The timestamp has the form %%Y%%m%%d%%H%%M%%S.",
+                 "package name. The timestamp has the form %%Y%%m%%d%%H%%M%%S.",
             default=False,
             action="store_true",
         )
@@ -683,10 +705,10 @@ When a stable release is done, this command:
   version.
 When a development release is done using the --dev option, this command:
 * Does a commit that updates the current version of the module to a development version that is a patch, minor or major version
-  ahead of the previous stable release. The size of the increment is determined by the --patch, --minor or --major argument
-  (--patch is the default). When a CHANGELOG.md file is present in the root of the module directory then the version number in
-  the changelog is also updated accordingly. The changelog file is always populated with the associated stable version and
-  not a development version.
+  ahead of the previous stable release. The size of the increment is determined by the --revision (only with 4 digits version),
+  --patch, --minor or --major argument (--patch is the default). When a CHANGELOG.md file is present in the root of the module
+  directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
+  the associated stable version and not a development version.
             """.strip(),
             formatter_class=RawTextHelpFormatter,
         )
@@ -715,12 +737,18 @@ When a development release is done using the --dev option, this command:
             help="Do a patch version bump compared to the previous stable release.",
             action="store_true",
         )
+        release.add_argument(
+            "--revision",
+            dest="revision",
+            help="Do a revision version bump compared to the previous stable release (only with 4 digits version).",
+            action="store_true",
+        )
         release.add_argument("-m", "--message", help="Commit message")
         release.add_argument(
             "-c",
             "--changelog-message",
             help="This changelog message will be written to the changelog file. If the -m option is not provided, "
-            "this message will also be used as the commit message.",
+                 "this message will also be used as the commit message.",
         )
         release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
@@ -1175,6 +1203,7 @@ version: 0.0.1dev0"""
         self,
         dev: bool,
         message: Optional[str] = None,
+        revision: bool = False,
         patch: bool = False,
         minor: bool = False,
         major: bool = False,
@@ -1186,9 +1215,9 @@ version: 0.0.1dev0"""
         """
 
         # Validate patch, minor, major
-        nb_version_bump_arguments_set = sum([patch, minor, major])
+        nb_version_bump_arguments_set = sum([revision, patch, minor, major])
         if nb_version_bump_arguments_set > 1:
-            raise click.UsageError("Only one of --patch, --minor and --major can be set at the same time.")
+            raise click.UsageError("Only one of --revision, --patch, --minor and --major can be set at the same time.")
 
         # Make module
         module_dir = os.path.abspath(os.getcwd())
@@ -1210,7 +1239,7 @@ version: 0.0.1dev0"""
             ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
         )
 
-        requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+        requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
             # Dev always bumps
             requested_version_bump = ChangeType.PATCH
@@ -1634,7 +1663,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
             files_in_wheel = set(
-                info.filename[len(dir_prefix) :]
+                info.filename[len(dir_prefix):]
                 for info in z.infolist()
                 if not info.is_dir() and info.filename.startswith(dir_prefix)
             )

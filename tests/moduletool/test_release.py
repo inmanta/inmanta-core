@@ -414,6 +414,56 @@ def test_bump_dev_version_distance_already_met(
     assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
 
 
+@pytest.mark.parametrize(
+    "initial_version, after_revision_increment, after_patch_increment, after_minor_increment, after_major_increment",
+    [
+        ("1.0.1.4", "1.0.1.5.dev0", "1.0.2.0.dev0", "1.1.0.0.dev0", "2.0.0.0.dev0"),
+    ],
+)
+def test_bump_dev_version_four_digits(
+    tmpdir,
+    modules_dir: str,
+    monkeypatch,
+    initial_version: str,
+    after_revision_increment: str,
+    after_patch_increment: str,
+    after_minor_increment: str,
+    after_major_increment: str,
+) -> None:
+    """
+    Ensure that the `inmanta module release --dev` command doesn't increment the version when
+    the current version is already sufficiently separated from the previous stable release.
+    This test also verifies the behavior when the release part of the version number is longer
+    than three numbers.
+    """
+    module_name = "mod"
+    path_module = os.path.join(tmpdir, module_name)
+    v1_module_from_template(
+        source_dir=os.path.join(modules_dir, "minimalv1module"),
+        dest_dir=path_module,
+        new_version=Version(initial_version),
+        new_name=module_name,
+    )
+    gitprovider.git_init(repo=path_module)
+    gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
+    gitprovider.tag(repo=path_module, tag=initial_version)
+
+    monkeypatch.chdir(path_module)
+    module_tool = ModuleTool()
+    module_tool.release(dev=True, revision=True, message="Commit changes")
+    assert str(Module.from_path(path_module).version) == str(Version(after_revision_increment))
+    assert str(Module.from_path(path_module).version) == str(Version(after_revision_increment))
+    module_tool.release(dev=True, patch=True, message="Commit changes")
+    assert str(Module.from_path(path_module).version) == str(Version(after_patch_increment))
+    assert str(Module.from_path(path_module).version) == str(Version(after_patch_increment))
+    module_tool.release(dev=True, minor=True, message="Commit changes")
+    assert str(Module.from_path(path_module).version) == str(Version(after_minor_increment))
+    assert str(Module.from_path(path_module).version) == str(Version(after_minor_increment))
+    module_tool.release(dev=True, major=True, message="Commit changes")
+    assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
+    assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
+
+
 @pytest.mark.parametrize("top_level_header_exists", [True, False])
 def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_header_exists: bool) -> None:
     """
