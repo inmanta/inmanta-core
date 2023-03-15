@@ -181,9 +181,9 @@ class GradualFor(ResultCollector[object]):
         self.stmt = stmt
         self.seen: set[int] = set()
 
-    def receive_result(self, value: object, location: ResultVariable) -> None:
+    def receive_result(self, value: object, location: ResultVariable) -> bool:
         if id(value) in self.seen:
-            return
+            return False
         self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
@@ -193,6 +193,7 @@ class GradualFor(ResultCollector[object]):
         assert isinstance(loopvar, ResultVariable)
         loopvar.set_value(value, self.stmt.location)
         xc.emit(self.queue)
+        return False
 
 
 class For(RequiresEmitStatement):

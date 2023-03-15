@@ -195,12 +195,14 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         self.owner: Statement = owner
         self.target: ResultVariable[bool] = target
 
-    def receive_result(self, value: object, location: Location) -> None:
+    def receive_result(self, value: object, location: Location) -> bool:
         """
         Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
         value implies that the variable is defined.
         """
         self.target.set_value(True, self.owner.location)
+        # TODO: do the same for for and other statements
+        return True
 
     def variable_resume(
         self,

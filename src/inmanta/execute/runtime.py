@@ -18,7 +18,7 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
-import inmanta.ast.attribute  # noqa: F401 (pep8 does not recognize partially qualified access ast.attribute)
+import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
 from inmanta.ast import (
     AttributeException,
@@ -56,9 +56,12 @@ class ResultCollector(Generic[T]):
 
     __slots__ = ()
 
-    def receive_result(self, value: T, location: Location) -> None:
+    def receive_result(self, value: T, location: Location) -> bool:
         """
-        receive a possibly partial result
+        Receive a single value for gradual execution. Called once for each value that is part of the result.
+
+        :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
+            waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
         """
         raise NotImplementedError()
 
@@ -127,10 +130,19 @@ class VariableABC(Generic[T]):
         """
         raise NotImplementedError()
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
         """
         Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
         assignments of `null` will not be reported.
+
+        Each listener is expected to register one associated waiter to track completeness. The progress potential implementation
+        is based on this invariant.
+
+        :param resultcollector: The collector for the values of this variable.
+        :param location: The location associated with this listener.
+        :param may_progress: True iff freezing this variable may cause execution progress for this listener. By default,
+            listeners are assumed to be fully gradual, therefore progress is made gradually with each value assignment, rather
+            than in one go at freeze-time.
         """
         raise NotImplementedError()
 
@@ -173,7 +185,7 @@ class WrappedValueVariable(VariableABC[T]):
     def get_value(self) -> T:
         return self.value
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
         if not isinstance(self.value, NoneValue):
             resultcollector.receive_result(self.value, location)
 
@@ -266,10 +278,10 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     def freeze(self) -> None:
         pass
 
-    def receive_result(self, value: T, location: Location) -> None:
-        pass
+    def receive_result(self, value: T, location: Location) -> bool:
+        return True
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
         """
         Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
         """
@@ -288,6 +300,9 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         return self._node
 
 
+ProgressPotential = bool
+
+
 class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
@@ -299,7 +314,7 @@ class ResultVariableProxy(VariableABC[T]):
 
     def __init__(self, variable: Optional[VariableABC[T]] = None) -> None:
         self.variable: Optional[VariableABC[T]] = variable
-        self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
+        self._listeners: Optional[list[tuple[ResultCollector[T], Location, ProgressPotential]]] = []
         self._waiters: Optional[list["Waiter"]] = []
 
     def connect(self, variable: VariableABC[T]) -> None:
@@ -312,7 +327,7 @@ class ResultVariableProxy(VariableABC[T]):
         assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
         assert self._waiters is not None  # only set to None after a variable is connected to prevent data leaks
         for listener in self._listeners:
-            self.variable.listener(*listener)
+            self.variable.listener(*listener[:2], may_progress=listener[2])
         for waiter in self._waiters:
             self.variable.waitfor(waiter)
         self._listeners = None
@@ -331,12 +346,12 @@ class ResultVariableProxy(VariableABC[T]):
             )
         return self.variable.get_value()
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
         if self.variable is None:
             assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
-            self._listeners.append((resultcollector, location))
+            self._listeners.append((resultcollector, location, may_progress))
         else:
-            self.variable.listener(resultcollector, location)
+            self.variable.listener(resultcollector, location, may_progress=may_progress)
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
@@ -425,7 +440,7 @@ class DelayedResultVariable(ResultVariable[T]):
         (a queue variable can be dequeued by the scheduler when a provider is added)
     """
 
-    __slots__ = ("queued", "queues", "listeners", "promises", "done_promises")
+    __slots__ = ("queued", "queues", "promises", "done_promises")
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
@@ -467,7 +482,6 @@ class DelayedResultVariable(ResultVariable[T]):
             waiter.ready(self)
         # prevent memory leaks
         self.waiters = None
-        self.listeners = None
         self.queues = None
         self.promises = None
         self.done_promises = None
@@ -494,8 +508,10 @@ class DelayedResultVariable(ResultVariable[T]):
         return out
 
     def get_progress_potential(self) -> int:
-        """How many are actually waiting for us"""
-        raise NotImplementedError()
+        """
+        Returns the number of blocked waiters, meaning any waiters that may progress when this variable is frozen.
+        """
+        return len(self.waiters)
 
 
 ListValue = Union["Instance", List["Instance"]]
@@ -508,10 +524,14 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     value: "List[Instance]"
 
-    __slots__ = ()
+    __slots__ = ("_listeners", "_done_listeners", "_nb_pure_listeners")
 
     def __init__(self, queue: "QueueScheduler") -> None:
-        self.listeners: List[ResultCollector[ListValue]] = []
+        # keep track of listeners and whether they may cause progress when this variable is frozen
+        self._listeners: Optional[dict[ResultCollector[ListValue], ProgressPotential]] = {}
+        self._done_listeners: int = 0
+        # cache count for listeners without progress potential
+        self._nb_pure_listeners: int = 0
         super().__init__(queue, [])
 
     def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
@@ -561,11 +581,24 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
             return False
 
         self.value.append(value)
-
-        for listener in self.listeners:
-            listener.receive_result(value, location)
+        self._notify_listeners(value, location)
 
         return True
+
+    def _notify_listeners(self, value: ListValue, location: Location) -> None:
+        """
+        Notifies all listeners about a new value. Deregisters any listeners that indicate they no longer wish to receive
+        results.
+        """
+        assert self._listeners is not None
+        for listener, progress_potential in list(self._listeners.items()):
+            done: bool = listener.receive_result(value, location)
+            if done:
+                if not self._listeners[listener]:
+                    self._nb_pure_listeners -= 1
+                # keep memory footprint minimal
+                del self._listeners[listener]
+                self._done_listeners += 1
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if not self._set_value(value, location, recur):
@@ -576,17 +609,31 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
     def can_get(self) -> bool:
         return self.get_waiting_providers() == 0
 
-    def receive_result(self, value: ListValue, location: Location) -> None:
+    def receive_result(self, value: ListValue, location: Location) -> bool:
         self.set_value(value, location)
+        return False
 
-    def listener(self, resultcollector: ResultCollector, location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector, location: Location, *, may_progress: bool = False) -> None:
         for value in self.value:
             resultcollector.receive_result(value, location)
         if not self.hasValue:
-            self.listeners.append(resultcollector)
+            assert self._listeners is not None
+            assert resultcollector not in self._listeners, "Invalid compiler state: ResultCollector registered twice"
+            self._listeners[resultcollector] = may_progress
+            if not may_progress:
+                self._nb_pure_listeners += 1
 
     def is_multi(self) -> bool:
         return True
+
+    def get_progress_potential(self) -> int:
+        # listeners generally aren't blocked on this variable being frozen
+        return len(self.waiters) - self._done_listeners - self._nb_pure_listeners
+
+    def freeze(self) -> None:
+        super().freeze()
+        # prevent memory leaks
+        self._listeners = None
 
     def __str__(self) -> str:
         return "BaseListVariable %s" % (self.value)
@@ -601,11 +648,6 @@ class ListLiteral(BaseListVariable):
     """
 
     __slots__ = ()
-
-    def get_progress_potential(self) -> int:
-        """How many are actually waiting for us"""
-        # A ListLiteral is never associated with an Entity, so it cannot have a relation precedence rule.
-        return len(self.waiters) - len(self.listeners)
 
     def fulfill(self, promise: IPromise) -> None:
         """
@@ -681,10 +723,9 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
     def get_progress_potential(self) -> int:
-        """How many are actually waiting for us"""
         # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
         # of the scheduler. We know the order in which those types can be frozen safely.
-        return len(self.waiters) - len(self.listeners) + int(self.attribute.has_relation_precedence_rules())
+        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
 
 class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariable):
@@ -753,8 +794,7 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
     def get_progress_potential(self) -> int:
-        """How many are actually waiting for us"""
-        return len(self.waiters) + int(self.attribute.has_relation_precedence_rules())
+        return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
 
 class QueueScheduler(object):
