@@ -214,7 +214,8 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
             self.target.set_value(self._target_value(variable), self.owner.location)
         else:
             # gradual execution: as soon as a value comes in, the result is known
-            variable.listener(self, self.owner.location)
+            # TODO: do this for other statements
+            variable.listener(self, self.owner.location, may_progress=True)
             # wait for variable completeness in case no value comes in at all
             RawUnit(queue_scheduler, resolver, {self: variable}, self, override_exception_location=False)
 
