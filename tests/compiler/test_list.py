@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import textwrap
+
 import pytest
 
 import inmanta.compiler as compiler
@@ -529,3 +531,24 @@ x.lst = [x]
         "  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal"
         " (reported in x.lst = List() ({dir}/main.cf:13))",
     )
+
+
+# TODO: consider name and location
+def test_same_assignment(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            x = A()
+            y = A()
+
+            x.others += [y.others, y.others]
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()

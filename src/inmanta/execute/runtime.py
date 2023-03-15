@@ -622,6 +622,9 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
             resultcollector.receive_result(value, location)
         if not self.hasValue:
             assert self._listeners is not None
+            if resultcollector in self._listeners:
+                # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
+                return
             assert resultcollector not in self._listeners, "Invalid compiler state: ResultCollector registered twice"
             self._listeners[resultcollector] = None
             if not resultcollector.pure_gradual():
