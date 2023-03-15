@@ -195,6 +195,11 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         self.owner: Statement = owner
         self.target: ResultVariable[bool] = target
 
+    @classmethod
+    def gradual_only(self) -> bool:
+        # freezing an empty variable causes progress
+        return False
+
     def receive_result(self, value: object, location: Location) -> bool:
         """
         Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single

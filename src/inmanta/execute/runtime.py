@@ -51,10 +51,19 @@ T = TypeVar("T")
 
 class ResultCollector(Generic[T]):
     """
-    Helper interface for gradual execution
+    Helper interface for gradual execution. Should be attached as a listener to a ResultVariable, which will then call
+    receive_result whenever it receives a new value.
     """
 
     __slots__ = ()
+
+    @classmethod
+    def gradual_only(self) -> bool:
+        """
+        Returns true iff this result collector represents pure gradual execution, i.e. all progress comes from new values and
+        no progress is expected as a result of the variable being frozen.
+        """
+        return True
 
     def receive_result(self, value: T, location: Location) -> bool:
         """
@@ -130,7 +139,7 @@ class VariableABC(Generic[T]):
         """
         raise NotImplementedError()
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
         """
         Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
         assignments of `null` will not be reported.
@@ -140,9 +149,6 @@ class VariableABC(Generic[T]):
 
         :param resultcollector: The collector for the values of this variable.
         :param location: The location associated with this listener.
-        :param may_progress: True iff freezing this variable may cause execution progress for this listener. By default,
-            listeners are assumed to be fully gradual, therefore progress is made gradually with each value assignment, rather
-            than in one go at freeze-time.
         """
         raise NotImplementedError()
 
@@ -185,7 +191,7 @@ class WrappedValueVariable(VariableABC[T]):
     def get_value(self) -> T:
         return self.value
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
         if not isinstance(self.value, NoneValue):
             resultcollector.receive_result(self.value, location)
 
@@ -281,7 +287,7 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     def receive_result(self, value: T, location: Location) -> bool:
         return True
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
         """
         Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
         """
@@ -314,7 +320,7 @@ class ResultVariableProxy(VariableABC[T]):
 
     def __init__(self, variable: Optional[VariableABC[T]] = None) -> None:
         self.variable: Optional[VariableABC[T]] = variable
-        self._listeners: Optional[list[tuple[ResultCollector[T], Location, ProgressPotential]]] = []
+        self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
         self._waiters: Optional[list["Waiter"]] = []
 
     def connect(self, variable: VariableABC[T]) -> None:
@@ -327,7 +333,7 @@ class ResultVariableProxy(VariableABC[T]):
         assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
         assert self._waiters is not None  # only set to None after a variable is connected to prevent data leaks
         for listener in self._listeners:
-            self.variable.listener(*listener[:2], may_progress=listener[2])
+            self.variable.listener(*listener)
         for waiter in self._waiters:
             self.variable.waitfor(waiter)
         self._listeners = None
@@ -346,12 +352,12 @@ class ResultVariableProxy(VariableABC[T]):
             )
         return self.variable.get_value()
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location, *, may_progress: bool = False) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
         if self.variable is None:
             assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
-            self._listeners.append((resultcollector, location, may_progress))
+            self._listeners.append((resultcollector, location))
         else:
-            self.variable.listener(resultcollector, location, may_progress=may_progress)
+            self.variable.listener(resultcollector, location)
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
@@ -613,12 +619,15 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         self.set_value(value, location)
         return False
 
-    def listener(self, resultcollector: ResultCollector, location: Location, *, may_progress: bool = False) -> None:
+    def listener(self, resultcollector: ResultCollector, location: Location) -> None:
         for value in self.value:
             resultcollector.receive_result(value, location)
         if not self.hasValue:
             assert self._listeners is not None
             assert resultcollector not in self._listeners, "Invalid compiler state: ResultCollector registered twice"
+            # TODO: refactor data structure? Get rid of ProgressPotential type?
+            # TODO: rename gradual_only -> pure_gradual?
+            may_progress: bool = resultcollector.gradual_only()
             self._listeners[resultcollector] = may_progress
             if not may_progress:
                 self._nb_pure_listeners += 1
