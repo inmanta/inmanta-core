@@ -182,7 +182,7 @@ class GradualFor(ResultCollector[object]):
         self.seen: set[int] = set()
 
     @classmethod
-    def gradual_only(self) -> bool:
+    def pure_gradual(self) -> bool:
         # freezing the iterable allows dropping eager promises
         return False
 

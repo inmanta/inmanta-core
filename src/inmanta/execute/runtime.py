@@ -58,7 +58,7 @@ class ResultCollector(Generic[T]):
     __slots__ = ()
 
     @classmethod
-    def gradual_only(self) -> bool:
+    def pure_gradual(self) -> bool:
         """
         Returns true iff this result collector represents pure gradual execution, i.e. all progress comes from new values and
         no progress is expected as a result of the variable being frozen.
@@ -306,9 +306,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         return self._node
 
 
-ProgressPotential = bool
-
-
 class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
@@ -534,7 +531,8 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def __init__(self, queue: "QueueScheduler") -> None:
         # keep track of listeners and whether they may cause progress when this variable is frozen
-        self._listeners: Optional[dict[ResultCollector[ListValue], ProgressPotential]] = {}
+        # use dict for easy lookup with reliable ordering
+        self._listeners: Optional[dict[ResultCollector[ListValue], None]] = {}
         self._done_listeners: int = 0
         # cache count for listeners without progress potential
         self._nb_pure_listeners: int = 0
@@ -597,10 +595,10 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         results.
         """
         assert self._listeners is not None
-        for listener, progress_potential in list(self._listeners.items()):
+        for listener in list(self._listeners.keys()):
             done: bool = listener.receive_result(value, location)
             if done:
-                if not self._listeners[listener]:
+                if not listener.pure_gradual():
                     self._nb_pure_listeners -= 1
                 # keep memory footprint minimal
                 del self._listeners[listener]
@@ -625,11 +623,8 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         if not self.hasValue:
             assert self._listeners is not None
             assert resultcollector not in self._listeners, "Invalid compiler state: ResultCollector registered twice"
-            # TODO: refactor data structure? Get rid of ProgressPotential type?
-            # TODO: rename gradual_only -> pure_gradual?
-            may_progress: bool = resultcollector.gradual_only()
-            self._listeners[resultcollector] = may_progress
-            if not may_progress:
+            self._listeners[resultcollector] = None
+            if not resultcollector.pure_gradual():
                 self._nb_pure_listeners += 1
 
     def is_multi(self) -> bool:

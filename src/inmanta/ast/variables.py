@@ -196,7 +196,7 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         self.target: ResultVariable[bool] = target
 
     @classmethod
-    def gradual_only(self) -> bool:
+    def pure_gradual(self) -> bool:
         # freezing an empty variable causes progress
         return False
 
