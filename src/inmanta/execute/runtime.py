@@ -598,7 +598,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         for listener in list(self._listeners.keys()):
             done: bool = listener.receive_result(value, location)
             if done:
-                if not listener.pure_gradual():
+                if listener.pure_gradual():
                     self._nb_pure_listeners -= 1
                 # keep memory footprint minimal
                 del self._listeners[listener]
@@ -624,10 +624,11 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
             assert self._listeners is not None
             if resultcollector in self._listeners:
                 # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
+                self._done_listeners += 1
                 return
             assert resultcollector not in self._listeners, "Invalid compiler state: ResultCollector registered twice"
             self._listeners[resultcollector] = None
-            if not resultcollector.pure_gradual():
+            if resultcollector.pure_gradual():
                 self._nb_pure_listeners += 1
 
     def is_multi(self) -> bool:
