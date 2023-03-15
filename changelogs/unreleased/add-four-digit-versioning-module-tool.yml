@@ -1,0 +1,4 @@
+---
+description: Add four digit versioning for module tool (release).
+change-type: minor
+destination-branches: [master, iso6]
