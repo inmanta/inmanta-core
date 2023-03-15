@@ -197,3 +197,46 @@ def test_get_types_and_scopes(snippetcompiler):
     # Verify scopes
     assert scopes.get_name() == "__root__"
     assert sorted([scope.get_name() for scope in scopes.children()]) == sorted(["__config__", "std"])
+
+
+def test_anchors_with_docs(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import tests
+
+l = tests::length("Hello World!")
+
+
+entity Test:
+    \"\"\"this is a test entity\"\"\"
+    string a = "a"
+    string b
+end
+
+a = Test(b="xx")
+u = a.b
+
+implementation a for Test:
+end
+
+implement Test using a
+""",
+        autostd=False,
+    )
+    anchormap = compiler.anchormap()
+
+    assert len(anchormap) == 6
+
+    checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
+
+    def verify_anchor(flnr, s, e, tolnr):
+        assert checkmap[(flnr, s, e)] == tolnr
+
+    # for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
+    #     print("%s:%d -> %s" % (f, f.end_char, t))
+    verify_anchor(4, 5, 18, 13)
+    verify_anchor(13, 5, 9, 7)
+    verify_anchor(13, 10, 11, 10)
+    verify_anchor(16, 22, 26, 7)
+    verify_anchor(19, 11, 15, 7)
+    verify_anchor(19, 22, 23, 16)

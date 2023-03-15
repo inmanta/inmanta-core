@@ -29,7 +29,7 @@ try:
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
-
+typeof = type
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.entity import Entity
@@ -143,6 +143,22 @@ class Range(Location):
         return False
 
 
+class AncherTarget(Range):
+    __slots__ = "docstring"
+
+    def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int, docstring: str) -> None:
+        """
+        Create a new Range instance.
+        :param file: the file this Range is in
+        :param start_lnr: the line number this Range starts on, 1-based
+        :param start_char: the start character number of the Range, 1-based
+        :param end_lnr: the line number this Range ends on, 1-based
+        :param end_char: the end character number of the Range, exclusive, 1-based
+        """
+        Range.__init__(self, file, start_lnr, start_char, end_lnr, end_char)
+        self.docstring = docstring
+
+
 class Locatable(object):
     __slots__ = ("_location",)
 
@@ -225,7 +241,14 @@ class TypeReferenceAnchor(Anchor):
 
     def resolve(self) -> Location:
         t = self.namespace.get_type(self.type)
-        return t.get_location()
+        location = t.get_location()
+        print("=TypeReferenceAnchor=")
+        print(typeof(location))
+        return location
+        # if location:
+        #     return AncherTarget(location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, "test1")
+        # else:
+        #     return location
 
 
 class AttributeReferenceAnchor(Anchor):
@@ -241,7 +264,11 @@ class AttributeReferenceAnchor(Anchor):
         # assert isinstance(instancetype, Entity)
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
-        return entity_attribute.get_location()
+        location = entity_attribute.get_location()
+        print("=AttributeReferenceAnchor=")
+        print(typeof(location))
+        return location
+        # return AncherTarget(location.file, location.start_lnr, location.start_char, location.end_lnr, location.end_char, "test1")
 
 
 class Namespaced(Locatable):
