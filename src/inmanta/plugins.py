@@ -188,6 +188,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
 
     deprecated: bool = False
     replaced_by: Optional[str] = None
+    comment: Optional[str] = None
 
     def __init__(self, namespace: Namespace) -> None:
         self.ns = namespace
@@ -211,7 +212,7 @@ class Plugin(NamedType, metaclass=PluginMeta):
         except OSError:
             # In case of bytecompiled code there is no source line
             line = 1
-
+        self.comment = self.__class__.__function__.__doc__
         self.location = Location(filename, line)
 
     def normalize(self) -> None:

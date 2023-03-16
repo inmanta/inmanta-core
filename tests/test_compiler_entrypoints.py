@@ -204,39 +204,48 @@ def test_anchors_with_docs(snippetcompiler):
         """
 import tests
 
-l = tests::length("Hello World!")
-
+l = tests::length("Hello World!") # has a docstring
+m = tests::empty("Hello World!") # has no docstring
 
 entity Test:
     \"\"\"this is a test entity\"\"\"
-    string a = "a"
-    string b
 end
 
-a = Test(b="xx")
-u = a.b
+entity Test_no_doc:
+end
+
+a = Test()
+b = Test_no_doc()
 
 implementation a for Test:
 end
 
+implementation b for Test_no_doc:
+end
+
 implement Test using a
+implement Test_no_doc using b
 """,
         autostd=False,
     )
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 6
+    assert len(anchormap) == 10
 
-    checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
+    checkmap = {(r.lnr, r.start_char, r.end_char): (t.lnr, t.docstring) for r, t in anchormap}
 
-    def verify_anchor(flnr, s, e, tolnr):
-        assert checkmap[(flnr, s, e)] == tolnr
+    def verify_anchor(flnr, s, e, tolnr, docs):
+        assert checkmap[(flnr, s, e)] == (tolnr, docs)
 
-    # for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
-    #     print("%s:%d -> %s" % (f, f.end_char, t))
-    verify_anchor(4, 5, 18, 13)
-    verify_anchor(13, 5, 9, 7)
-    verify_anchor(13, 10, 11, 10)
-    verify_anchor(16, 22, 26, 7)
-    verify_anchor(19, 11, 15, 7)
-    verify_anchor(19, 22, 23, 16)
+    for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
+        print("%s:%d -> %s docstring: %s" % (f, f.end_char, t, t.docstring))
+    verify_anchor(4, 5, 18, 13, "returns the length of the string")
+    verify_anchor(5, 5, 17, 19, None)
+    verify_anchor(14, 5, 9, 7, "this is a test entity")
+    verify_anchor(15, 5, 16, 11, None)
+    verify_anchor(17, 22, 26, 7, "this is a test entity")
+    verify_anchor(20, 22, 33, 11, None)
+    verify_anchor(23, 22, 23, 17, None)
+    verify_anchor(23, 11, 15, 7, "this is a test entity")
+    verify_anchor(24, 29, 30, 20, None)
+    verify_anchor(24, 11, 22, 11, None)

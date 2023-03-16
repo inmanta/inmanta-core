@@ -256,7 +256,7 @@ class Number(Primitive):
     def is_primitive(self) -> bool:
         return True
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
     def type_string(self) -> str:
@@ -320,7 +320,7 @@ class Bool(Primitive):
     def is_primitive(self) -> bool:
         return True
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 
@@ -362,7 +362,7 @@ class String(Primitive):
     def is_primitive(self) -> bool:
         return True
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 
@@ -390,7 +390,7 @@ class List(Type):
     def type_string_internal(self) -> str:
         return "List"
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 
@@ -429,7 +429,7 @@ class TypedList(List):
     def type_string_internal(self) -> str:
         return self._wrap_type_string(self.element_type.type_string_internal())
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
     def get_base_type(self) -> Type:
@@ -501,7 +501,7 @@ class Dict(Type):
     def type_string(self) -> str:
         return "dict"
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 

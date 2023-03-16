@@ -143,19 +143,29 @@ class Range(Location):
         return False
 
 
-class AncherTarget(Range):
-    __slots__ = "docstring"
-
-    def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int, docstring: str) -> None:
+class AncherTarget(Location):
+    def __init__(
+        self,
+        file: str,
+        start_lnr: int,
+        start_char: Optional[int],
+        end_lnr: Optional[int],
+        end_char: Optional[int],
+        docstring: Optional[str],
+    ) -> None:
         """
-        Create a new Range instance.
+        Create a new AncherTarget instance.
         :param file: the file this Range is in
         :param start_lnr: the line number this Range starts on, 1-based
         :param start_char: the start character number of the Range, 1-based
         :param end_lnr: the line number this Range ends on, 1-based
         :param end_char: the end character number of the Range, exclusive, 1-based
+        :param docstring: the docstring of the target
         """
-        Range.__init__(self, file, start_lnr, start_char, end_lnr, end_char)
+        Location.__init__(self, file, start_lnr)
+        self.start_char = start_char
+        self.end_lnr = end_lnr
+        self.end_char = end_char
         self.docstring = docstring
 
 
@@ -229,7 +239,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Location:
+    def resolve(self) -> Union[Location, Range, None]:
         raise NotImplementedError()
 
 
@@ -239,16 +249,19 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Union[Location, Range, None]:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
-        print("=TypeReferenceAnchor=")
-        print(typeof(location))
-        return location
-        # if location:
-        #     return AncherTarget(location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, "test1")
-        # else:
-        #     return location
+        if not location:
+            return None
+        if isinstance(location, Range):
+            return AncherTarget(
+                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, t.comment
+            )
+        if isinstance(location, Location):
+            return AncherTarget(location.file, location.lnr, None, None, None, t.comment)
+        else:
+            raise Exception("Could not resolve to a location or a range")
 
 
 class AttributeReferenceAnchor(Anchor):
@@ -258,17 +271,23 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Union[Location, Range, None]:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         # assert isinstance(instancetype, Entity)
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
         location = entity_attribute.get_location()
-        print("=AttributeReferenceAnchor=")
-        print(typeof(location))
-        return location
-        # return AncherTarget(location.file, location.start_lnr, location.start_char, location.end_lnr, location.end_char, "test1")
+        if not location:
+            return None
+        if isinstance(location, Range):
+            return AncherTarget(
+                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, instancetype.comment
+            )
+        if isinstance(location, Location):
+            return AncherTarget(location.file, location.lnr, None, None, None, None)
+        else:
+            raise Exception("Could not resolve to a location or a range")
 
 
 class Namespaced(Locatable):
