@@ -142,7 +142,9 @@ class Range(Location):
         return False
 
 
-class AncherTarget(Location):
+class AnchorTarget(Location):
+    __slots__ = ("start_char", "end_lnr", "end_char", "docstring")
+
     def __init__(
         self,
         file: str,
@@ -254,11 +256,11 @@ class TypeReferenceAnchor(Anchor):
         if not location:
             return None
         if isinstance(location, Range):
-            return AncherTarget(
+            return AnchorTarget(
                 location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, t.comment
             )
         if isinstance(location, Location):
-            return AncherTarget(location.file, location.lnr, None, None, None, t.comment)
+            return AnchorTarget(location.file, location.lnr, None, None, None, t.comment)
         else:
             raise Exception("Could not resolve to a location or a range")
 
@@ -280,11 +282,11 @@ class AttributeReferenceAnchor(Anchor):
         if not location:
             return None
         if isinstance(location, Range):
-            return AncherTarget(
+            return AnchorTarget(
                 location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, instancetype.comment
             )
         if isinstance(location, Location):
-            return AncherTarget(location.file, location.lnr, None, None, None, None)
+            return AnchorTarget(location.file, location.lnr, None, None, None, None)
         else:
             raise Exception("Could not resolve to a location or a range")
 
