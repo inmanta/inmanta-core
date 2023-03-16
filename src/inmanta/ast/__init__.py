@@ -29,7 +29,6 @@ try:
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
-typeof = type
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.entity import Entity
