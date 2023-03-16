@@ -181,8 +181,9 @@ class GradualFor(ResultCollector[object]):
         self.stmt = stmt
         self.seen: set[int] = set()
 
+    # TODO: add test and drop
     @classmethod
-    def pure_gradual(self) -> bool:
+    def pure_gradual(cls) -> bool:
         # freezing the iterable allows dropping eager promises
         return False
 
