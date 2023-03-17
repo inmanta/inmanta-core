@@ -533,8 +533,12 @@ x.lst = [x]
     )
 
 
-# TODO: consider name and location
-def test_same_assignment(snippetcompiler):
+def test_relation_list_duplicate_assignment(snippetcompiler):
+    """
+    Verify that including the same instance twice in a list for relation assignment works without issue.
+
+    This test was included because naive implementations of ResultVariable listener tracking would break this.
+    """
     snippetcompiler.setup_for_snippet(
         textwrap.dedent(
             """
