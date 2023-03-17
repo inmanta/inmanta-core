@@ -205,7 +205,6 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         value implies that the variable is defined.
         """
         self.target.set_value(True, self.owner.location)
-        # TODO: do the same for for and other statements
         return True
 
     def variable_resume(
@@ -218,7 +217,6 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
             self.target.set_value(self._target_value(variable), self.owner.location)
         else:
             # gradual execution: as soon as a value comes in, the result is known
-            # TODO: do this for other statements
             variable.listener(self, self.owner.location)
             # wait for variable completeness in case no value comes in at all
             RawUnit(queue_scheduler, resolver, {self: variable}, self, override_exception_location=False)
