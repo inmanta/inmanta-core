@@ -195,7 +195,6 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         self.owner: Statement = owner
         self.target: ResultVariable[bool] = target
 
-    @classmethod
     def pure_gradual(self) -> bool:
         # freezing an empty variable causes progress
         return False

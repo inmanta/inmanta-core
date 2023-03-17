@@ -57,11 +57,13 @@ class ResultCollector(Generic[T]):
 
     __slots__ = ()
 
-    @classmethod
     def pure_gradual(self) -> bool:
         """
         Returns true iff this result collector represents pure gradual execution, i.e. all progress comes from new values and
         no progress is expected as a result of the variable being frozen.
+
+        This is a static property of a result collector, i.e. this method will always have the same result at any point within
+        the lifetime of the instance.
         """
         return True
 
