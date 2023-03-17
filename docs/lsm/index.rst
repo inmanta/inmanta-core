@@ -25,6 +25,7 @@
         allocation/*
         embedded_entities/*
         inter_service_relations/*
+        partial_compiles/partial_compiles.md
         troubleshooting/*
         limitations/*
         lifecycle/*
