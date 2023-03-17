@@ -17,7 +17,7 @@
 """
 
 import traceback
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
@@ -29,6 +29,7 @@ try:
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
+
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.entity import Entity
@@ -257,9 +258,7 @@ class TypeReferenceAnchor(Anchor):
     def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
-        docstring = ""
-        if isinstance(t, WithComment):
-            docstring = t.comment
+        docstring = t.comment if isinstance(t, WithComment) else ""
         if not location:
             return None
         if isinstance(location, Range):
@@ -286,9 +285,7 @@ class AttributeReferenceAnchor(Anchor):
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
         location = entity_attribute.get_location()
-        docstring = ""
-        if isinstance(instancetype, WithComment):
-            docstring = instancetype.comment
+        docstring = instancetype.comment if isinstance(instancetype, WithComment) else ""
         if not location:
             return None
         if isinstance(location, Range):

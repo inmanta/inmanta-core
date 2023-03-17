@@ -83,7 +83,7 @@ end
     assert stmt.name == "Test"
     assert [str(p) for p in stmt.parents] == ["std::Entity"]
     assert len(stmt.attributes) == 0
-    assert stmt.comment is None
+    assert stmt.comment == ""
     assert stmt.type.comment is None
 
 
@@ -102,7 +102,7 @@ end"""
     assert stmt.name == "Test"
     assert [str(p) for p in stmt.parents] == ["Foo"]
     assert len(stmt.attributes) == 2
-    assert stmt.comment is None
+    assert stmt.comment == ""
     assert stmt.type.comment is None
 
     for ad in stmt.attributes:

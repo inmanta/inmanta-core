@@ -25,7 +25,6 @@ from typing import Optional, Sequence
 from inmanta.ast import (
     DuplicateException,
     Locatable,
-    Location,
     Named,
     Namespace,
     NotFoundException,
