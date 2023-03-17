@@ -17,7 +17,7 @@
 """
 
 import traceback
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
@@ -170,6 +170,10 @@ class AnchorTarget(Location):
         self.docstring = docstring
 
 
+class WithComment(object):
+    comment: str = ""
+
+
 class Locatable(object):
     __slots__ = ("_location",)
 
@@ -180,7 +184,7 @@ class Locatable(object):
         assert location is not None and location.lnr > 0
         self._location = location
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Optional[Location]:
         assert self._location is not None
         return self._location
 
@@ -240,7 +244,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Union[Location, Range, None]:
+    def resolve(self) -> Optional[AnchorTarget]:
         raise NotImplementedError()
 
 
@@ -250,17 +254,20 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Union[Location, Range, None]:
+    def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
+        docstring = ""
+        if isinstance(t, WithComment):
+            docstring = t.comment
         if not location:
             return None
         if isinstance(location, Range):
             return AnchorTarget(
-                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, t.comment
+                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, docstring
             )
         if isinstance(location, Location):
-            return AnchorTarget(location.file, location.lnr, None, None, None, t.comment)
+            return AnchorTarget(location.file, location.lnr, None, None, None, docstring)
         else:
             raise Exception("Could not resolve to a location or a range")
 
@@ -272,21 +279,24 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> Union[Location, Range, None]:
+    def resolve(self) -> Optional[AnchorTarget]:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         # assert isinstance(instancetype, Entity)
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
         location = entity_attribute.get_location()
+        docstring = ""
+        if isinstance(instancetype, WithComment):
+            docstring = instancetype.comment
         if not location:
             return None
         if isinstance(location, Range):
             return AnchorTarget(
-                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, instancetype.comment
+                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, docstring
             )
         if isinstance(location, Location):
-            return AnchorTarget(location.file, location.lnr, None, None, None, None)
+            return AnchorTarget(location.file, location.lnr, None, None, None, docstring)
         else:
             raise Exception("Could not resolve to a location or a range")
 

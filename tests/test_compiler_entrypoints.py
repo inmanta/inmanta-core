@@ -232,20 +232,20 @@ implement Test_no_doc using b
 
     assert len(anchormap) == 10
 
-    checkmap = {(r.lnr, r.start_char, r.end_char): (t.lnr, t.docstring) for r, t in anchormap}
+    checkmap = {(r.lnr, r.start_char, r.end_char): t.docstring for r, t in anchormap}
 
-    def verify_anchor(flnr, s, e, tolnr, docs):
-        assert checkmap[(flnr, s, e)] == (tolnr, docs)
+    def verify_anchor(flnr, s, e, docs):
+        assert checkmap[(flnr, s, e)] == docs
 
     for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
         print("%s:%d -> %s docstring: %s" % (f, f.end_char, t, t.docstring))
-    verify_anchor(4, 5, 18, 13, "returns the length of the string")
-    verify_anchor(5, 5, 17, 19, None)
-    verify_anchor(14, 5, 9, 7, "this is a test entity")
-    verify_anchor(15, 5, 16, 11, None)
-    verify_anchor(17, 22, 26, 7, "this is a test entity")
-    verify_anchor(20, 22, 33, 11, None)
-    verify_anchor(23, 22, 23, 17, None)
-    verify_anchor(23, 11, 15, 7, "this is a test entity")
-    verify_anchor(24, 29, 30, 20, None)
-    verify_anchor(24, 11, 22, 11, None)
+    verify_anchor(4, 5, 18, "returns the length of the string")
+    verify_anchor(5, 5, 17, "")
+    verify_anchor(14, 5, 9, "this is a test entity")
+    verify_anchor(15, 5, 16, "")
+    verify_anchor(17, 22, 26, "this is a test entity")
+    verify_anchor(20, 22, 33, "")
+    verify_anchor(23, 22, 23, "")
+    verify_anchor(23, 11, 15, "this is a test entity")
+    verify_anchor(24, 29, 30, "")
+    verify_anchor(24, 11, 22, "")

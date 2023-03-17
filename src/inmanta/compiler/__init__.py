@@ -25,6 +25,7 @@ import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta import const, module
 from inmanta.ast import (
+    AnchorTarget,
     AttributeException,
     CompilerException,
     DoubleSetException,
@@ -108,7 +109,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, Location]]:
+def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, Optional[AnchorTarget]]]:
     """
     Return all lexical references
 

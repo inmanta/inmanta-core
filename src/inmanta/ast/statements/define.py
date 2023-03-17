@@ -119,7 +119,7 @@ class DefineEntity(TypeDefinitionStatement):
     Define a new entity in the configuration
     """
 
-    comment: Optional[str]
+    comment: str
     type: Entity
 
     def __init__(
@@ -142,7 +142,7 @@ class DefineEntity(TypeDefinitionStatement):
         if comment is not None:
             self.comment = str(comment)
         else:
-            self.comment = None
+            self.comment = ""
 
         self.parents = parents
 
@@ -254,7 +254,7 @@ class DefineImplementation(TypeDefinitionStatement):
     :param name: The name of the implementation
     """
 
-    comment: Optional[str]
+    comment: str
     type: Implementation
 
     def __init__(
@@ -273,7 +273,7 @@ class DefineImplementation(TypeDefinitionStatement):
         self.block = statements
         self.entity = target_type
 
-        self.comment = None
+        self.comment = ""
         if comment is not None:
             self.comment = str(comment)
 
@@ -411,7 +411,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
     :param basetype: The name of the type that is "refined"
     """
 
-    comment: Optional[str]
+    comment: str
     __expression: ExpressionStatement
     type: ConstraintType
 
@@ -426,7 +426,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.set_expression(expression)
         self.type = ConstraintType(self.namespace, str(name))
         self.type.location = name.get_location()
-        self.comment = None
+        self.comment = ""
         if self.name in TYPES:
             warnings.warn(CompilerRuntimeWarning(self, "Trying to override a built-in type: %s" % self.name))
         if "-" in self.name:

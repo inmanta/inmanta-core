@@ -531,7 +531,7 @@ class TypedDict(Dict):
     def type_string_internal(self) -> str:
         return "dict[%s]" % self.element_type.type_string_internal()
 
-    def get_location(self) -> Location:
+    def get_location(self) -> None:
         return None
 
 

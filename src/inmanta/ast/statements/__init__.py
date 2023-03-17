@@ -29,6 +29,7 @@ from inmanta.ast import (
     Namespaced,
     OptionalValueException,
     RuntimeException,
+    WithComment,
 )
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -573,8 +574,8 @@ class DefinitionStatement(Statement):
         Statement.__init__(self)
 
 
-class TypeDefinitionStatement(DefinitionStatement, Named):
-    comment: Optional[str]
+class TypeDefinitionStatement(DefinitionStatement, Named, WithComment):
+    comment: str
 
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
@@ -582,7 +583,7 @@ class TypeDefinitionStatement(DefinitionStatement, Named):
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
-        self.comment = None
+        self.comment = ""
 
     def register_types(self) -> Tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)
