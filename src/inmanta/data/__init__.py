@@ -2070,7 +2070,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @staticmethod
     def _combine_filter_statements(statements_and_values: Iterable[Tuple[str, List[object]]]) -> Tuple[str, List[object]]:
-        statements: Tuple[str]
+        filter_statements: Tuple[str]
         values: Tuple[List[object]]
         filter_statements, values = zip(*statements_and_values)  # type: ignore
         return (

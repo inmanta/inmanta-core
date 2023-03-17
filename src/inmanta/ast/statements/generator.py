@@ -22,7 +22,7 @@ import logging
 import uuid
 from collections import abc
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
@@ -179,7 +179,7 @@ class GradualFor(ResultCollector[object]):
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen = set()  # type: Set[int]
+        self.seen: set[int] = set()
 
     def receive_result(self, value: object, location: ResultVariable) -> None:
         if id(value) in self.seen:
