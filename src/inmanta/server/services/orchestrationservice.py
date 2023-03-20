@@ -1053,10 +1053,21 @@ class OrchestrationService(protocol.ServerSlice):
                 base_model = current_versions[0]
                 base_version: int = base_model.version
                 if not base_model.is_suitable_for_partial_compiles:
-                    raise BadRequest(
-                        f"Base version {base_version} for this partial compile is not suitable for a partial compiles because"
-                        f" it has cross resource set dependencies."
-                    )
+                    resources_in_base_version = await data.Resource.get_resources_for_version(env.id, base_version)
+                    resource_set_validator = ResourceSetValidator(set(resources_in_base_version))
+                    try:
+                        resource_set_validator.ensure_no_cross_resource_set_dependencies()
+                    except CrossResourceSetDependencyError as e:
+                        raise BadRequest(
+                            f"Base version {base_version} is not suitable for a partial compile. {e.get_error_message()}"
+                        )
+                    else:
+                        # This should never happen
+                        LOGGER.warning(
+                            "Base version %d was marked as not suitable for partial compiles, but no cross resource set"
+                            " dependencies were found.",
+                            base_version,
+                        )
 
                 rid_to_resource: Dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
                     env_id=env.id,
