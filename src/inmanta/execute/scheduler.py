@@ -264,7 +264,7 @@ class Scheduler(object):
 
     def anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
-    ) -> Sequence[Tuple[Location, Optional[AnchorTarget]]]:
+    ) -> Sequence[Tuple[Location, AnchorTarget]]:
         prev = time.time()
 
         # first evaluate all definitions, this should be done in one iteration

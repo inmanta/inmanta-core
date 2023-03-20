@@ -246,7 +246,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Optional[AnchorTarget]:
+    def resolve(self) -> AnchorTarget:
         raise NotImplementedError()
 
 
@@ -256,12 +256,12 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Optional[AnchorTarget]:
+    def resolve(self) -> AnchorTarget:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
-        if not location:
-            return None
         docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return AnchorTarget(location=None, docstring=docstring)
         return location.as_anchor_target(docstring)
 
 
@@ -272,16 +272,16 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> Optional[AnchorTarget]:
+    def resolve(self) -> AnchorTarget:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         # assert isinstance(instancetype, Entity)
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
         location = entity_attribute.get_location()
-        if not location:
-            return None
         docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        if not location:
+            return AnchorTarget(location=None, docstring=docstring)
         return location.as_anchor_target(docstring)
 
 
