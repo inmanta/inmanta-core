@@ -67,7 +67,6 @@ class ResultCollector(Generic[T]):
         """
         return True
 
-    # TODO: update docstring: when returned True it may or may not still get further results
     def receive_result(self, value: T, location: Location) -> bool:
         """
         Receive a single value for gradual execution. Called once for each value that is part of the result.
@@ -530,13 +529,13 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     value: "List[Instance]"
 
-    __slots__ = ("_listeners", "_nb_pure_listeners")
+    __slots__ = ("_listeners", "_done_listeners", "_nb_pure_listeners")
 
     def __init__(self, queue: "QueueScheduler") -> None:
         # keep track of listeners and whether they may cause progress when this variable is frozen
         # use dict for easy lookup with reliable ordering
-        self._listeners: Optional[list[ResultCollector[ListValue]]] = []
-        # TODO: update name to match new usage: counter for everything with no progress potential, including done
+        self._listeners: Optional[dict[ResultCollector[ListValue], None]] = {}
+        self._done_listeners: int = 0
         # cache count for listeners without progress potential
         self._nb_pure_listeners: int = 0
         super().__init__(queue, [])
@@ -598,12 +597,14 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         results.
         """
         assert self._listeners is not None
-        for listener in self._listeners:
+        for listener in list(self._listeners.keys()):
             done: bool = listener.receive_result(value, location)
             if done:
-                # TODO: comments
-                if not listener.pure_gradual():
-                    self._nb_pure_listeners += 1
+                if listener.pure_gradual():
+                    self._nb_pure_listeners -= 1
+                # keep memory footprint minimal
+                del self._listeners[listener]
+                self._done_listeners += 1
 
     def set_value(self, value: ListValue, location: Location, recur: bool = True) -> None:
         if not self._set_value(value, location, recur):
@@ -623,7 +624,12 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
             resultcollector.receive_result(value, location)
         if not self.hasValue:
             assert self._listeners is not None
-            self._listeners.append(resultcollector)
+            if resultcollector in self._listeners:
+                # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
+                self._done_listeners += 1
+                return
+            assert resultcollector not in self._listeners, "Invalid compiler state: ResultCollector registered twice"
+            self._listeners[resultcollector] = None
             if resultcollector.pure_gradual():
                 self._nb_pure_listeners += 1
 
@@ -632,7 +638,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def get_progress_potential(self) -> int:
         # listeners generally aren't blocked on this variable being frozen
-        return len(self.waiters) - self._nb_pure_listeners
+        return len(self.waiters) - self._done_listeners - self._nb_pure_listeners
 
     def freeze(self) -> None:
         super().freeze()
