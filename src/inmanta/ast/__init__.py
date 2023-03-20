@@ -156,7 +156,7 @@ class AnchorTarget(object):
 
     def __init__(
         self,
-        location: Optional[Location] = None,
+        location: Location,
         docstring: Optional[str] = None,
     ) -> None:
         """
@@ -246,7 +246,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> AnchorTarget:
+    def resolve(self) -> Optional[AnchorTarget]:
         raise NotImplementedError()
 
 
@@ -256,12 +256,12 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> AnchorTarget:
+    def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
         docstring = t.comment if isinstance(t, WithComment) else None
         if not location:
-            return AnchorTarget(location=None, docstring=docstring)
+            return None
         return location.as_anchor_target(docstring)
 
 
@@ -272,7 +272,7 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> AnchorTarget:
+    def resolve(self) -> Optional[AnchorTarget]:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         # assert isinstance(instancetype, Entity)
@@ -281,7 +281,7 @@ class AttributeReferenceAnchor(Anchor):
         location = entity_attribute.get_location()
         docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
         if not location:
-            return AnchorTarget(location=None, docstring=docstring)
+            return None
         return location.as_anchor_target(docstring)
 
 
