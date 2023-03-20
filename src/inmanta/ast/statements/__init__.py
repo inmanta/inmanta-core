@@ -575,15 +575,12 @@ class DefinitionStatement(Statement):
 
 
 class TypeDefinitionStatement(DefinitionStatement, Named, WithComment):
-    comment: str
-
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
         self.name = name
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
-        self.comment = ""
 
     def register_types(self) -> Tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)

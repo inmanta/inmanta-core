@@ -109,7 +109,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, Optional[AnchorTarget]]]:
+def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, AnchorTarget]]:
     """
     Return all lexical references
 

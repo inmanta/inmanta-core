@@ -65,6 +65,9 @@ class Location(export.Exportable):
 
         return Location(self.file, min(self.lnr, other.lnr))
 
+    def as_anchor_target(self, docstring: Optional[str]) -> "AnchorTarget":
+        return AnchorTarget(location=self, docstring=docstring)
+
     def export(self) -> export.Location:
         # Location is 1-based, export.Position spec is 0-based
         # whole line: range from line:0 to line+1:0
@@ -121,6 +124,9 @@ class Range(Location):
                 end_char = self.end_char
             return Range(self.file, lnr, start_char, end_lnr, end_char)
 
+    def as_anchor_target(self, docstring: Optional[str]) -> "AnchorTarget":
+        return AnchorTarget(location=self, docstring=docstring)
+
     def export(self) -> export.Location:
         range_start: export.Position = export.Position(line=self.lnr - 1, character=self.start_char - 1)
         range_end: export.Position = export.Position(line=self.end_lnr - 1, character=self.end_char - 1)
@@ -143,36 +149,27 @@ class Range(Location):
         return False
 
 
-class AnchorTarget(Location):
-    __slots__ = ("start_char", "end_lnr", "end_char", "docstring")
+class AnchorTarget(object):
+    """AnchorTarget is used purely at the periphery of the compiler"""
+
+    __slots__ = ("location", "docstring")
 
     def __init__(
         self,
-        file: str,
-        start_lnr: int,
-        start_char: Optional[int],
-        end_lnr: Optional[int],
-        end_char: Optional[int],
-        docstring: Optional[str],
+        location: Optional[Location] = None,
+        docstring: Optional[str] = None,
     ) -> None:
         """
         Create a new AncherTarget instance.
-        :param file: the file this Range is in
-        :param start_lnr: the line number this Range starts on, 1-based
-        :param start_char: the start character number of the Range, 1-based
-        :param end_lnr: the line number this Range ends on, 1-based
-        :param end_char: the end character number of the Range, exclusive, 1-based
-        :param docstring: the docstring of the target
+        :param location: the location of the target of the anchor
+        :param docstring: the docstring attached to the target
         """
-        Location.__init__(self, file, start_lnr)
-        self.start_char = start_char
-        self.end_lnr = end_lnr
-        self.end_char = end_char
+        self.location = location
         self.docstring = docstring
 
 
 class WithComment(object):
-    comment: str = ""
+    comment: Optional[str] = None
 
 
 class Locatable(object):
@@ -258,17 +255,10 @@ class TypeReferenceAnchor(Anchor):
     def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
-        docstring = t.comment if isinstance(t, WithComment) else ""
         if not location:
             return None
-        if isinstance(location, Range):
-            return AnchorTarget(
-                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, docstring
-            )
-        if isinstance(location, Location):
-            return AnchorTarget(location.file, location.lnr, None, None, None, docstring)
-        else:
-            raise Exception("Could not resolve to a location or a range")
+        docstring = t.comment if isinstance(t, WithComment) else ""
+        return location.as_anchor_target(docstring)
 
 
 class AttributeReferenceAnchor(Anchor):
@@ -285,17 +275,10 @@ class AttributeReferenceAnchor(Anchor):
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
         location = entity_attribute.get_location()
-        docstring = instancetype.comment if isinstance(instancetype, WithComment) else ""
         if not location:
             return None
-        if isinstance(location, Range):
-            return AnchorTarget(
-                location.file, location.lnr, location.start_char, location.end_lnr, location.end_char, docstring
-            )
-        if isinstance(location, Location):
-            return AnchorTarget(location.file, location.lnr, None, None, None, docstring)
-        else:
-            raise Exception("Could not resolve to a location or a range")
+        docstring = instancetype.comment if isinstance(instancetype, WithComment) else ""
+        return location.as_anchor_target(docstring)
 
 
 class Namespaced(Locatable):

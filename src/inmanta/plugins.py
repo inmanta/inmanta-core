@@ -221,7 +221,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # In case of bytecompiled code there is no source line
             line = 1
 
-        self.comment = ""
         if self.__class__.__function__.__doc__:
             self.comment = self.__class__.__function__.__doc__
 

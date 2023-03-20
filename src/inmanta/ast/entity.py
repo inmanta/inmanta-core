@@ -87,7 +87,7 @@ class Entity(NamedType, WithComment):
 
         self._instance_list = set()  # type: Set[Instance]
 
-        self.comment = comment if comment else ""
+        self.comment = comment
 
         self.normalized = False
 
