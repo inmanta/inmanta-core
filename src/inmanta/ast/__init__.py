@@ -262,7 +262,7 @@ class TypeReferenceAnchor(Anchor):
     def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
-        docstring = t.comment if isinstance(t, WithComment) else ""
+        docstring = t.comment if isinstance(t, WithComment) else None
         if not location:
             return None
         if isinstance(location, Range):
