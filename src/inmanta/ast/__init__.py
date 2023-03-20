@@ -173,6 +173,9 @@ class AnchorTarget(Location):
 
 
 class WithComment(object):
+    """
+    Mixin class for AST nodes that can have a comment attached to them.
+    """
     comment: str = ""
 
 
