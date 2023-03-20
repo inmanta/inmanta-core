@@ -156,7 +156,8 @@ class AnchorTarget(Location):
         docstring: Optional[str],
     ) -> None:
         """
-        Create a new AncherTarget instance.
+        Create a new AnchorTarget instance.
+
         :param file: the file this Range is in
         :param start_lnr: the line number this Range starts on, 1-based
         :param start_char: the start character number of the Range, 1-based
