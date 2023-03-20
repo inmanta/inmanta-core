@@ -1948,10 +1948,11 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
         assert result.code == 200
         return version
 
-    async def do_partial_compile(should_fail: bool) -> Optional[int]:
+    async def do_partial_compile(base_version: int, should_fail: bool) -> Optional[int]:
         """
         Create a new version of the model using the put_partial endpoint.
 
+        :param base_version: The expected base version for the partial compile.
         :param should_fail: True iff the call to the put_partial endpoint should fail because the base version is not
                             suitable for partial compiles because it has cross resource set dependencies.
         :return: The new version of the model when should_fail is false, otherwise None is returned.
@@ -1985,19 +1986,20 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
         else:
             assert result.code == 400
             assert (
-                "is not suitable for a partial compiles because it has cross resource set dependencies."
-                in result.result["message"]
+                f"Base version {base_version} is not suitable for a partial compile. A dependency exists between resources"
+                " test::Resource[agent1,key=two] and test::Resource[agent1,key=one],"
+                " but they belong to different resource sets." in result.result["message"]
             )
             return None
 
     version = await execute_put_version(set_cross_resource_set_dependency=False)
     cm = await data.ConfigurationModel.get_version(environment, version)
     assert cm.is_suitable_for_partial_compiles
-    version = await do_partial_compile(should_fail=False)
+    version = await do_partial_compile(base_version=version, should_fail=False)
     cm = await data.ConfigurationModel.get_version(environment, version)
     assert cm.is_suitable_for_partial_compiles
 
     version = await execute_put_version(set_cross_resource_set_dependency=True)
     cm = await data.ConfigurationModel.get_version(environment, version)
     assert not cm.is_suitable_for_partial_compiles
-    await do_partial_compile(should_fail=True)
+    await do_partial_compile(base_version=version, should_fail=True)
