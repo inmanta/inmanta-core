@@ -160,7 +160,7 @@ class AnchorTarget(object):
         docstring: Optional[str] = None,
     ) -> None:
         """
-        Create a new AncherTarget instance.
+        Create a new AnchorTarget instance.
         :param location: the location of the target of the anchor
         :param docstring: the docstring attached to the target
         """
@@ -169,6 +169,10 @@ class AnchorTarget(object):
 
 
 class WithComment(object):
+    """
+    Mixin class for AST nodes that can have a comment attached to them.
+    """
+
     comment: Optional[str] = None
 
 
@@ -257,7 +261,7 @@ class TypeReferenceAnchor(Anchor):
         location = t.get_location()
         if not location:
             return None
-        docstring = t.comment if isinstance(t, WithComment) else ""
+        docstring = t.comment if isinstance(t, WithComment) else None
         return location.as_anchor_target(docstring)
 
 
@@ -277,7 +281,7 @@ class AttributeReferenceAnchor(Anchor):
         location = entity_attribute.get_location()
         if not location:
             return None
-        docstring = instancetype.comment if isinstance(instancetype, WithComment) else ""
+        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
         return location.as_anchor_target(docstring)
 
 
