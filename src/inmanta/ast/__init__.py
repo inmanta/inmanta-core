@@ -65,9 +65,6 @@ class Location(export.Exportable):
 
         return Location(self.file, min(self.lnr, other.lnr))
 
-    def as_anchor_target(self, docstring: Optional[str]) -> "AnchorTarget":
-        return AnchorTarget(location=self, docstring=docstring)
-
     def export(self) -> export.Location:
         # Location is 1-based, export.Position spec is 0-based
         # whole line: range from line:0 to line+1:0
@@ -123,9 +120,6 @@ class Range(Location):
                 end_lnr = self.lnr
                 end_char = self.end_char
             return Range(self.file, lnr, start_char, end_lnr, end_char)
-
-    def as_anchor_target(self, docstring: Optional[str]) -> "AnchorTarget":
-        return AnchorTarget(location=self, docstring=docstring)
 
     def export(self) -> export.Location:
         range_start: export.Position = export.Position(line=self.lnr - 1, character=self.start_char - 1)
@@ -262,7 +256,7 @@ class TypeReferenceAnchor(Anchor):
         docstring = t.comment if isinstance(t, WithComment) else None
         if not location:
             return None
-        return location.as_anchor_target(docstring)
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class AttributeReferenceAnchor(Anchor):
@@ -282,7 +276,7 @@ class AttributeReferenceAnchor(Anchor):
         docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
         if not location:
             return None
-        return location.as_anchor_target(docstring)
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class Namespaced(Locatable):
