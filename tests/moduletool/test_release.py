@@ -418,6 +418,7 @@ def test_bump_dev_version_distance_already_met(
     "initial_version, after_revision_increment, after_patch_increment, after_minor_increment, after_major_increment",
     [
         ("1.0.1.4", "1.0.1.5.dev0", "1.0.2.0.dev0", "1.1.0.0.dev0", "2.0.0.0.dev0"),
+        ("1.0.1", "1.0.1.1.dev0", "1.0.2.0.dev0", "1.1.0.0.dev0", "2.0.0.0.dev0"),
     ],
 )
 def test_bump_dev_version_four_digits(
@@ -452,15 +453,11 @@ def test_bump_dev_version_four_digits(
     module_tool = ModuleTool()
     module_tool.release(dev=True, revision=True, message="Commit changes")
     assert str(Module.from_path(path_module).version) == str(Version(after_revision_increment))
-    assert str(Module.from_path(path_module).version) == str(Version(after_revision_increment))
     module_tool.release(dev=True, patch=True, message="Commit changes")
-    assert str(Module.from_path(path_module).version) == str(Version(after_patch_increment))
     assert str(Module.from_path(path_module).version) == str(Version(after_patch_increment))
     module_tool.release(dev=True, minor=True, message="Commit changes")
     assert str(Module.from_path(path_module).version) == str(Version(after_minor_increment))
-    assert str(Module.from_path(path_module).version) == str(Version(after_minor_increment))
     module_tool.release(dev=True, major=True, message="Commit changes")
-    assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
     assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
 
 

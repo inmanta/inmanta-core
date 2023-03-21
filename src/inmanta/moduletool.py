@@ -103,17 +103,21 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-             "All other version conflicts will result in a warning. This option is mutually exclusive with the "
+        help=(
+            "When this option is enabled, only version conflicts in the direct dependencies will result in an error. ",
+             "All other version conflicts will result in a warning. This option is mutually exclusive with the ",
              "--strict-deps-check option.",
+        ),
     )
     parser.add_argument(
         "--strict-deps-check",
         dest="strict_deps_check",
         action="store_true",
         default=False,
-        help="When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
+        help=(
+            "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. ",
              "This option is mutually exclusive with the --no-strict-deps-check option.",
+        )
     )
 
 
@@ -158,7 +162,7 @@ class ModuleLikeTool(object):
             project.load()
         return project
 
-    def determine_new_version(self, old_version, version, major, minor, patch, revision, dev):
+    def determine_new_version(self, old_version, version, major, minor, patch, dev):
         """
         Only used by the `inmanta module commit` command.
         """
@@ -192,6 +196,8 @@ class ModuleLikeTool(object):
                     LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
                     return None
 
+                # We do not support revision for deprecated methods
+                revision = False
                 change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
                 if change_type:
                     outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
@@ -217,18 +223,6 @@ class ChangeType(enum.Enum):
     PATCH: str = "patch"
     REVISION: str = "revision"
 
-    def less(self) -> Optional["ChangeType"]:
-        """
-        Returns the change type that is one less than this one.
-        """
-        if self == ChangeType.MAJOR:
-            return ChangeType.MINOR
-        if self == ChangeType.MINOR:
-            return ChangeType.PATCH
-        if self == ChangeType.PATCH:
-            return ChangeType.REVISION
-        return None
-
     def __lt__(self, other: "ChangeType") -> bool:
         order: List[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
         if other not in order:
@@ -239,7 +233,7 @@ class ChangeType(enum.Enum):
     def diff(cls, *, low: Version, high: Version) -> Optional["ChangeType"]:
         """
         Returns the order of magnitude of the change type diff between two versions.
-        Return None if the versions are less than a patch separated from each other.
+        Return None if the versions are less than a patch / a revision (if 4 digit version number) separated from each other.
         For example, a dev release and a post release for the same version number are less
         than a patch separated from each other.
         """
@@ -254,10 +248,10 @@ class ChangeType(enum.Enum):
         if high.micro > low.micro:
             return cls.PATCH
         if len(high.base_version.split('.')) >= 4:
-            high_revision = high.base_version.split('.')[-1]
+            high_revision = high.base_version.split('.')[3]
             # We are switching from 3 digits to 4
             if len(low.base_version.split('.')) < 4 or \
-                (len(low.base_version.split('.')) >= 4 and high_revision > low.base_version.split('.')[-1]):
+                (len(low.base_version.split('.')) >= 4 and high_revision > low.base_version.split('.')[3]):
                 return cls.REVISION
         raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
@@ -269,7 +263,7 @@ class ChangeType(enum.Enum):
         than one boolean argument is set to True, a ValueError is raised.
         """
         if sum([revision, patch, minor, major]) > 1:
-            raise ValueError("Only one argument of patch, minor or major can be set to True at the same time.")
+            raise ValueError("Only one argument of revision, patch, minor or major can be set to True at the same time.")
         if revision:
             return ChangeType.REVISION
         if patch:
@@ -289,10 +283,13 @@ class VersionOperation:
         If the given version has a different version tag set, it will be ignored.
         """
         parts = [int(x) for x in version.base_version.split(".")]
-        while len(parts) < 3:
+        while len(parts) < 4:
             parts.append(0)
 
+        if change_type is ChangeType.REVISION:
+            parts[3] += 1
         if change_type is ChangeType.PATCH:
+            parts[3] = 0
             parts[2] += 1
         if change_type is ChangeType.MINOR:
             parts[1] += 1
@@ -302,19 +299,9 @@ class VersionOperation:
             parts[1] = 0
             parts[2] = 0
 
-        if len(parts) >= 4:
-            size_version = 4
-
-            if change_type is ChangeType.REVISION:
-                parts[3] += 1
-            else:
-                parts[3] = 0
-        else:
-            size_version = 3
-
         # Reset remaining digits to zero
-        if len(parts) > size_version:
-            parts[size_version:] = [0 for _ in range(len(parts) - size_version)]
+        if len(parts) > 4:
+            parts[4:] = [0 for _ in range(len(parts) - 4)]
 
         return cls._to_version(parts, version_tag)
 
@@ -705,8 +692,8 @@ When a stable release is done, this command:
   version.
 When a development release is done using the --dev option, this command:
 * Does a commit that updates the current version of the module to a development version that is a patch, minor or major version
-  ahead of the previous stable release. The size of the increment is determined by the --revision (only with 4 digits version),
-  --patch, --minor or --major argument (--patch is the default). When a CHANGELOG.md file is present in the root of the module
+  ahead of the previous stable release. The size of the increment is determined by the --revision, --patch, --minor or
+  --major argument (--patch is the default). When a CHANGELOG.md file is present in the root of the module
   directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
   the associated stable version and not a development version.
             """.strip(),
