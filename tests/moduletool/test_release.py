@@ -371,7 +371,7 @@ def test_add_changelog_entry(tmpdir, modules_dir: str, monkeypatch, initial_chan
         ("1.0.1.dev0", "1.0.1.dev", "1.1.0.dev", "2.0.0.dev"),
         ("1.1.2.dev0", "1.1.2.dev", "1.1.2.dev", "2.0.0.dev"),
         ("2.0.0.dev", "2.0.0.dev", "2.0.0.dev", "2.0.0.dev"),
-        ("1.0.1.4.6.dev0", "1.0.1.4.6.dev0", "1.1.0.0.0.dev0", "2.0.0.0.0.dev0"),
+        ("1.0.1.4.6.dev0", "1.0.1.4.6.dev0", "1.1.0.dev0", "2.0.0.dev0"),
     ],
 )
 def test_bump_dev_version_distance_already_met(
@@ -417,8 +417,8 @@ def test_bump_dev_version_distance_already_met(
 @pytest.mark.parametrize(
     "initial_version, after_revision_increment, after_patch_increment, after_minor_increment, after_major_increment",
     [
-        ("1.0.1.4", "1.0.1.5.dev0", "1.0.2.0.dev0", "1.1.0.0.dev0", "2.0.0.0.dev0"),
-        ("1.0.1", "1.0.1.1.dev0", "1.0.2.0.dev0", "1.1.0.0.dev0", "2.0.0.0.dev0"),
+        ("1.0.1.4", "1.0.1.5.dev0", "1.0.2.dev0", "1.1.0.dev0", "2.0.0.dev0"),
+        ("1.0.1", "1.0.1.1.dev0", "1.0.2.dev0", "1.1.0.dev0", "2.0.0.dev0"),
     ],
 )
 def test_bump_dev_version_four_digits(
@@ -508,7 +508,7 @@ def test_too_many_version_bump_arguments() -> None:
     module_tool = ModuleTool()
     with pytest.raises(click.UsageError) as exc_info:
         module_tool.release(dev=False, minor=True, major=True, message="Commit changes")
-    assert "Only one of --patch, --minor and --major can be set at the same time." in exc_info.value.message
+    assert "Only one of --revision, --patch, --minor and --major can be set at the same time." in exc_info.value.message
 
 
 def test_epoch_value_larger_than_zero(tmpdir, modules_dir: str, monkeypatch) -> None:

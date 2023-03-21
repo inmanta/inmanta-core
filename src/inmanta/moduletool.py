@@ -103,21 +103,20 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help=(
-            "When this option is enabled, only version conflicts in the direct dependencies will result in an error. ",
-             "All other version conflicts will result in a warning. This option is mutually exclusive with the ",
-             "--strict-deps-check option.",
-        ),
+        help="""
+    When this option is enabled, only version conflicts in the direct dependencies will result in an error.
+    All other version conflicts will result in a warning. This option is mutually exclusive with the --strict-deps-check option.
+        """,
     )
     parser.add_argument(
         "--strict-deps-check",
         dest="strict_deps_check",
         action="store_true",
         default=False,
-        help=(
-            "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. ",
-             "This option is mutually exclusive with the --no-strict-deps-check option.",
-        )
+        help="""
+        When this option is enabled, a version conflict in any (transitive) dependency will results in an error.
+        This option is mutually exclusive with the --no-strict-deps-check option.
+        """,
     )
 
 
@@ -247,11 +246,12 @@ class ChangeType(enum.Enum):
             return cls.MINOR
         if high.micro > low.micro:
             return cls.PATCH
-        if len(high.base_version.split('.')) >= 4:
-            high_revision = high.base_version.split('.')[3]
+        if len(high.base_version.split(".")) >= 4:
+            high_revision = high.base_version.split(".")[3]
             # We are switching from 3 digits to 4
-            if len(low.base_version.split('.')) < 4 or \
-                (len(low.base_version.split('.')) >= 4 and high_revision > low.base_version.split('.')[3]):
+            if len(low.base_version.split(".")) < 4 or (
+                len(low.base_version.split(".")) >= 4 and high_revision > low.base_version.split(".")[3]
+            ):
                 return cls.REVISION
         raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
@@ -292,16 +292,21 @@ class VersionOperation:
             parts[3] = 0
             parts[2] += 1
         if change_type is ChangeType.MINOR:
-            parts[1] += 1
+            parts[3] = 0
             parts[2] = 0
+            parts[1] += 1
         if change_type is ChangeType.MAJOR:
-            parts[0] += 1
+            parts[3] = 0
             parts[1] = 0
             parts[2] = 0
+            parts[0] += 1
 
         # Reset remaining digits to zero
         if len(parts) > 4:
             parts[4:] = [0 for _ in range(len(parts) - 4)]
+
+        while len(parts) > 3 and parts[-1] == 0:
+            parts.pop()
 
         return cls._to_version(parts, version_tag)
 
@@ -338,14 +343,14 @@ class ProjectTool(ModuleLikeTool):
             "-r",
             "--recursive",
             help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
-                 "which defaults to False",
+            "which defaults to False",
             action="store_true",
             default=None,
         )
         freeze.add_argument(
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-                 " project.yml is used which defaults to ~=",
+            " project.yml is used which defaults to ~=",
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
@@ -557,7 +562,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-                        f"Either --v1 or --v2 has to be set.",
+            f"Either --v1 or --v2 has to be set.",
         )
         add.add_argument(
             "module_req",
@@ -614,7 +619,7 @@ mode.
             "--tag",
             dest="tag",
             help="Create a tag for the commit."
-                 "Tags are not created for dev releases by default, if you want to tag it, specify this flag explicitly",
+            "Tags are not created for dev releases by default, if you want to tag it, specify this flag explicitly",
             action="store_true",
         )
         commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
@@ -637,14 +642,14 @@ mode.
             "-r",
             "--recursive",
             help="Freeze dependencies recursively. If not set, freeze_recursive option in module.yml is used,"
-                 " which defaults to False",
+            " which defaults to False",
             action="store_true",
             default=None,
         )
         freeze.add_argument(
             "--operator",
             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-                 " module.yml is used which defaults to ~=",
+            " module.yml is used which defaults to ~=",
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
@@ -666,7 +671,7 @@ mode.
             "--dev",
             dest="dev_build",
             help="Perform a development build of the module. This adds the build tag `.dev<timestamp>` to the "
-                 "package name. The timestamp has the form %%Y%%m%%d%%H%%M%%S.",
+            "package name. The timestamp has the form %%Y%%m%%d%%H%%M%%S.",
             default=False,
             action="store_true",
         )
@@ -735,7 +740,7 @@ When a development release is done using the --dev option, this command:
             "-c",
             "--changelog-message",
             help="This changelog message will be written to the changelog file. If the -m option is not provided, "
-                 "this message will also be used as the commit message.",
+            "this message will also be used as the commit message.",
         )
         release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
@@ -1650,7 +1655,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
             files_in_wheel = set(
-                info.filename[len(dir_prefix):]
+                info.filename[len(dir_prefix) :]
                 for info in z.infolist()
                 if not info.is_dir() and info.filename.startswith(dir_prefix)
             )
