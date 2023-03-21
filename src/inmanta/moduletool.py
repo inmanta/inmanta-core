@@ -20,6 +20,7 @@ import configparser
 import datetime
 import enum
 import inspect
+import itertools
 import logging
 import os
 import py_compile
@@ -38,6 +39,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
 
 import click
+import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
@@ -249,9 +251,7 @@ class ChangeType(enum.Enum):
         if len(high.base_version.split(".")) >= 4:
             high_revision = high.base_version.split(".")[3]
             # We are switching from 3 digits to 4
-            if len(low.base_version.split(".")) < 4 or (
-                len(low.base_version.split(".")) >= 4 and high_revision > low.base_version.split(".")[3]
-            ):
+            if len(low.base_version.split(".")) < 4 or high_revision > low.base_version.split(".")[3]:
                 return cls.REVISION
         raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
@@ -282,31 +282,31 @@ class VersionOperation:
         Bump the release part of the given version with this ChangeType and apply the given version_tag to it.
         If the given version has a different version tag set, it will be ignored.
         """
-        parts = [int(x) for x in version.base_version.split(".")]
-        while len(parts) < 4:
-            parts.append(0)
-
+        bump_index: int
         if change_type is ChangeType.REVISION:
-            parts[3] += 1
-        if change_type is ChangeType.PATCH:
-            parts[3] = 0
-            parts[2] += 1
-        if change_type is ChangeType.MINOR:
-            parts[3] = 0
-            parts[2] = 0
-            parts[1] += 1
-        if change_type is ChangeType.MAJOR:
-            parts[3] = 0
-            parts[1] = 0
-            parts[2] = 0
-            parts[0] += 1
+            bump_index = 3
+        elif change_type is ChangeType.PATCH:
+            bump_index = 2
+        elif change_type is ChangeType.MINOR:
+            bump_index = 1
+        elif change_type is ChangeType.MAJOR:
+            bump_index = 0
+        else:
+            raise RuntimeError(f"Unsupported change type: {change_type}!")
 
-        # Reset remaining digits to zero
-        if len(parts) > 4:
-            parts[4:] = [0 for _ in range(len(parts) - 4)]
-
-        while len(parts) > 3 and parts[-1] == 0:
-            parts.pop()
+        base_parts = [int(x) for x in version.base_version.split(".")]
+        # use 4th digit only if it already existed or if it is being bumped
+        nb_digits: int = max(bump_index + 1, 3, len(base_parts))
+        parts = list(
+            more_itertools.take(
+                nb_digits,
+                itertools.chain(
+                    base_parts[: bump_index + 1],
+                    itertools.repeat(0),
+                ),
+            )
+        )
+        parts[bump_index] += 1
 
         return cls._to_version(parts, version_tag)
 
