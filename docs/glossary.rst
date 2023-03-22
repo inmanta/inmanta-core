@@ -133,3 +133,6 @@ Glossary
         computer data centers through machine-readable definition files, rather than physical
         hardware configuration or interactive configuration tools.* Inmanta achieves this by using a
         desired state configuration model that is entirely expressed in code.
+
+    expert feature
+        A feature that is stable, but requires great care and/or knowledge to use properly.
