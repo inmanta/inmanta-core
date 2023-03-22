@@ -59,7 +59,7 @@ from inmanta.execute.runtime import (
     ExecutionContext,
     ExecutionUnit,
     Instance,
-    ManualFreezeVariable,
+    FixedCountVariable,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -345,12 +345,13 @@ class ListComprehension(RawResumer, ExpressionStatement):
             raise TypingException(
                 self, f"A list comprehension can only be applied to lists and relations, got {type(iterable)}"
             )
-        # TODO: current implementation processes each value twice: once gradualy and once here
-        for item in iterable:
-            # TODO: should this be self.iterable.location?
-            gradual_helper.receive_result(item, self.location)
-        gradual_helper.freeze()
-        # TODO: indicate to helper that we're done
+        if gradual_helper.nb_results_received == 0:
+            # non-gradual mode: pass results now
+            for item in iterable:
+                # TODO: should this be self.iterable.location?
+                gradual_helper.receive_result(item, self.location)
+        # indicate to helper that we're done
+        gradual_helper.done()
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
@@ -380,8 +381,8 @@ class ListComprehensionGradual(ResultCollector[object]):
         self.resolver: Resolver = resolver
         self.queue: QueueScheduler = queue
         self.lhs: Optional[ResultCollector[object]] = None
-        # TODO: evaluate whether this is the right type of variable => NO: ExecutionUnit requires ResultVariable
-        self.result: ResultVariable = ManualFreezeVariable([])
+        self.nb_results_received: int = 0
+        self.result: FixedCountVariable = FixedCountVariable()
 
     def receive_result(self, value: object, location: Location) -> bool:
         # TODO: keep track of seen to avoid duplicate work? Be careful not to introduce the same bug as with the for loop
@@ -400,11 +401,14 @@ class ListComprehensionGradual(ResultCollector[object]):
         )
         ExecutionUnit(self.queue, value_resolver, self.result, requires, self.statement.value_expression)
 
+        self.nb_results_received += 1
+
         return False
 
-    def freeze(self) -> None:
+    def done(self) -> None:
         # TODO: docstring
-        self.result.freeze()
+        # TODO: can't just freeze, some ExecutionUnits might still be waiting
+        self.result.set_freeze_count(self.nb_results_received)
 
 
 class If(RequiresEmitStatement):

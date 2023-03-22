@@ -310,17 +310,34 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
 
 
 # TODO: review implementation
-# TODO: typing and initial value is not correct: T vs list[T]
-class ManualFreezeVariable(ResultVariable[T]):
+# TODO: typing is not correct: T vs list[T]
+class FixedCountVariable(ResultVariable[T]):
     # TODO: docstring
+
+    __slots__ = ("count", "freeze_count")
+
+    def __init__(self, freeze_count: Optional[int] = None) -> None:
+        super().__init__([])
+        self.count: int = 0
+        self.freeze_count: Optional[int] = None
+
+    def set_freeze_count(self, freeze_count: int) -> None:
+        # TODO: docstring
+        self.freeze_count = freeze_count
+        self.check_count()
+
+    def check_count(self) -> bool:
+        # TODO: docstring
+        if self.freeze_count is not None and self.count >= self.freeze_count:
+            self.hasValue = True
+            for waiter in self.waiters:
+                waiter.ready(self)
+            self.waiters = None
+
     def set_value(self, value: T, location: Location, recur: bool = True) -> None:
         self.value.append(value)
-
-    def freeze(self) -> bool:
-        self.hasValue = True
-        for waiter in self.waiters:
-            waiter.ready(self)
-        self.waiters = None
+        self.count += 1
+        self.check_count()
 
     # TODO: do we really need to override this?
     def get_value(self) -> T:
