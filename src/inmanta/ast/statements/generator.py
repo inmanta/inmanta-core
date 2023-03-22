@@ -324,7 +324,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         return {self: gradual_helper.result}
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector[object]]
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
         return self.requires_emit(resolver, queue, lhs=resultcollector)
 
