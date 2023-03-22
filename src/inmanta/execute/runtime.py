@@ -1192,7 +1192,7 @@ class Instance(ExecutionContext):
         Locatable.set_location(self, location)
         self.locations.append(location)
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Optional[Location]:
         return Locatable.get_location(self)
 
     location = property(get_location, set_location)

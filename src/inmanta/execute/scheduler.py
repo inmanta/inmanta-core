@@ -23,7 +23,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import plugins
-from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
+from inmanta.ast import Anchor, AnchorTarget, CompilerException, CycleException, Location, MultiException, RuntimeException
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Implementation
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
@@ -264,7 +264,7 @@ class Scheduler(object):
 
     def anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
-    ) -> Sequence[Tuple[Location, Location]]:
+    ) -> Sequence[Tuple[Location, AnchorTarget]]:
         prev = time.time()
 
         # first evaluate all definitions, this should be done in one iteration

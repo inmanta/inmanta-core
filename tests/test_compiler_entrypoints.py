@@ -56,7 +56,7 @@ implement Test using a
 
     assert len(anchormap) == 9
 
-    checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
+    checkmap = {(r.lnr, r.start_char, r.end_char): t.location.lnr for r, t in anchormap}
 
     def verify_anchor(flnr, s, e, tolnr):
         assert checkmap[(flnr, s, e)] == tolnr
@@ -98,7 +98,7 @@ implement Test using a
 
     assert len(anchormap) == 5
 
-    checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
+    checkmap = {(r.lnr, r.start_char, r.end_char): t.location.lnr for r, t in anchormap}
 
     def verify_anchor(flnr, s, e, tolnr):
         assert checkmap[(flnr, s, e)] == tolnr
@@ -132,8 +132,8 @@ l = tests::length("Hello World!")
     assert location.start_char == 5
     assert location.end_lnr == 4
     assert location.end_char == 18
-    assert resolves_to.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "__init__.py")
-    assert resolves_to.lnr == 13
+    assert resolves_to.location.file == os.path.join(snippetcompiler.modules_dir, "tests", "plugins", "__init__.py")
+    assert resolves_to.location.lnr == 13
 
 
 def test_get_types_and_scopes(snippetcompiler):
@@ -197,3 +197,55 @@ def test_get_types_and_scopes(snippetcompiler):
     # Verify scopes
     assert scopes.get_name() == "__root__"
     assert sorted([scope.get_name() for scope in scopes.children()]) == sorted(["__config__", "std"])
+
+
+def test_anchors_with_docs(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import tests
+
+l = tests::length("Hello World!") # has a docstring
+m = tests::empty("Hello World!") # has no docstring
+
+entity Test:
+    \"\"\"this is a test entity\"\"\"
+end
+
+entity Test_no_doc:
+end
+
+a = Test()
+b = Test_no_doc()
+
+implementation a for Test:
+end
+
+implementation b for Test_no_doc:
+end
+
+implement Test using a
+implement Test_no_doc using b
+""",
+        autostd=False,
+    )
+    anchormap = compiler.anchormap()
+
+    assert len(anchormap) == 10
+
+    checkmap = {(r.lnr, r.start_char, r.end_char): t.docstring for r, t in anchormap}
+
+    def verify_anchor(flnr, s, e, docs):
+        assert checkmap[(flnr, s, e)] == docs
+
+    for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
+        print("%s:%d -> %s docstring: %s" % (f, f.end_char, t, t.docstring))
+    verify_anchor(4, 5, 18, "returns the length of the string")
+    verify_anchor(5, 5, 17, None)
+    verify_anchor(14, 5, 9, "this is a test entity")
+    verify_anchor(15, 5, 16, None)
+    verify_anchor(17, 22, 26, "this is a test entity")
+    verify_anchor(20, 22, 33, None)
+    verify_anchor(23, 22, 23, None)
+    verify_anchor(23, 11, 15, "this is a test entity")
+    verify_anchor(24, 29, 30, None)
+    verify_anchor(24, 11, 22, None)
