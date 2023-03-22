@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
+# TODO: timeboxed attempt to make this contravariant with T_contra
 class ResultCollector(Generic[T]):
     """
     Helper interface for gradual execution. Should be attached as a listener to a ResultVariable, which will then call
@@ -306,6 +307,27 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     def get_dataflow_node(self) -> dataflow.AssignableNodeReference:
         assert self._node is not None, "assertion error at %s.get_dataflow_node() in ResultVariable" % self
         return self._node
+
+
+# TODO: review implementation
+# TODO: typing and initial value is not correct: T vs list[T]
+class ManualFreezeVariable(ResultVariable[T]):
+    # TODO: docstring
+    def set_value(self, value: T, location: Location, recur: bool = True) -> None:
+        self.value.append(value)
+
+    def freeze(self) -> bool:
+        self.hasValue = True
+        for waiter in self.waiters:
+            waiter.ready(self)
+        self.waiters = None
+
+    # TODO: do we really need to override this?
+    def get_value(self) -> T:
+        if not self.is_ready():
+            # TODO: proper exception
+            raise Exception("invalid: should not be called yet")
+        return self.value
 
 
 class ResultVariableProxy(VariableABC[T]):
@@ -908,7 +930,7 @@ class Waiter(object):
         self.requires[key] = waitable
         self.waitfor(waitable)
 
-    def waitfor(self, waitable: ResultVariable) -> None:
+    def waitfor(self, waitable: VariableABC) -> None:
         self.waitcount = self.waitcount + 1
         waitable.waitfor(self)
 

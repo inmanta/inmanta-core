@@ -157,7 +157,7 @@ class RequiresEmitStatement(DynamicStatement):
         return self._requires_emit_promises(resolver, queue)
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> Dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach

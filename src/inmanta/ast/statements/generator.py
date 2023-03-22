@@ -57,7 +57,9 @@ from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
+    ExecutionUnit,
     Instance,
+    ManualFreezeVariable,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -181,7 +183,7 @@ class GradualFor(ResultCollector[object]):
         self.stmt = stmt
         self.seen: set[int] = set()
 
-    def receive_result(self, value: object, location: ResultVariable) -> bool:
+    def receive_result(self, value: object, location: Location) -> bool:
         if id(value) in self.seen:
             return False
         self.seen.add(id(value))
@@ -232,7 +234,6 @@ class For(RequiresEmitStatement):
         return list(set(base).union(ext) - set(var))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        """Not an actual expression, but following the pattern"""
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
 
         # pass context via requires!
@@ -268,7 +269,145 @@ class For(RequiresEmitStatement):
         yield self.module
 
 
-class If(ExpressionStatement):
+# TODO: include general flow in docstring (here or requires_emit?): requires_emit -> resume -> execute
+class ListComprehension(RawResumer, ExpressionStatement):
+    """
+    A list comprehension expression, e.g. `["hello {{world}}" for world in worlds]`.
+    """
+
+    __slots__ = ("loop_var", "value_expression", "iterable")
+
+    def __init__(self, value_expression: ExpressionStatement, loop_var: LocatableString, iterable: ExpressionStatement) -> None:
+        super().__init__()
+        self.value_expression: ExpressionStatement = value_expression
+        self.loop_var: LocatableString = loop_var
+        self.iterable: ExpressionStatement = iterable
+        # TODO: extend anchors?
+
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        self.value_expression.normalize(lhs_attribute=lhs_attribute)
+        self.iterable.normalize()
+
+    def requires(self) -> list[str]:
+        return list({*self.value_expression.requires(), *self.iterable.requires(), str(self.loopvar)})
+
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
+    ) -> dict[object, VariableABC]:
+        """
+        Sets up gradual execution of the list comprehension. Additionally sets up a resumer for when the iterable is complete.
+        Returns as requires the gradual helper's result variable, which will be frozen by the resumer.
+
+        Flow: requires_emit -> gradual execution -> resume -> execute
+        """
+        base_requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
+
+        # set up gradual execution
+        gradual_helper: ListComprehensionGradual = ListComprehensionGradual(
+            statement=self,
+            resolver=resolver,
+            queue=queue,
+            lhs=lhs,
+        )
+        iterable_requires: dict[object, VariableABC] = self.iterable.requires_emit_gradual(
+            resolver, queue, resultcollector=gradual_helper
+        )
+
+        # non-gradual mode / finishing up
+        # pass helper to the resumer via the requires object
+        wrapped_helper: VariableABC = WrappedValueVariable(gradual_helper)
+        requires: dict[object, VariableABC] = base_requires | iterable_requires | {self: wrapped_helper}
+        RawUnit(queue, resolver, requires, resumer=self)
+
+        # wait for resumer to populate result
+        # TODO: consider whether base_requires and/or iterable_requires are still important here
+        return {self: gradual_helper.result}
+
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector[object]]
+    ) -> dict[object, VariableABC]:
+        return self.requires_emit(resolver, queue, lhs=resultcollector)
+
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+        """
+        Resume when the iterable is fully ready for execution. Populates the helper's result variable and signals that no more
+        values will be sent.
+        """
+        # fetch helper, passed via the requires object
+        gradual_helper: object = requires[self].get_value()
+        assert isinstance(gradual_helper, ListComprehensionGradual)
+
+        iterable: object = self.iterable.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+        if isinstance(iterable, Unknown):
+            return Unknown(self)
+        if not isinstance(iterable, list):
+            # TODO: allow dict?
+            raise TypingException(
+                self, f"A list comprehension can only be applied to lists and relations, got {type(iterable)}"
+            )
+        # TODO: current implementation processes each value twice: once gradualy and once here
+        for item in iterable:
+            # TODO: should this be self.iterable.location?
+            gradual_helper.receive_result(item, self.location)
+        gradual_helper.freeze()
+        # TODO: indicate to helper that we're done
+
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        return requires[self]
+
+    # TODO: execute_direct?
+    # TODO: repr/str
+
+    # TODO
+
+
+# TODO: name + invariants in docstring
+class ListComprehensionGradual(ResultCollector[object]):
+    """
+    Result collector for gradual execution of the list comprehension statement. When it receives a result, it sets up gradual
+    execution for the value expression, with the lhs as final result collector. Additionally, it collects all final results
+    in its own result variable for non-gradual execution.
+    """
+
+    def __init__(
+        self,
+        statement: ListComprehension,
+        resolver: Resolver,
+        queue: QueueScheduler,
+        lhs: Optional[ResultCollector[object]] = None,
+    ) -> None:
+        self.statement: ListComprehension = statement
+        self.resolver: Resolver = resolver
+        self.queue: QueueScheduler = queue
+        self.lhs: Optional[ResultCollector[object]] = None
+        # TODO: evaluate whether this is the right type of variable => NO: ExecutionUnit requires ResultVariable
+        self.result: ResultVariable = ManualFreezeVariable([])
+
+    def receive_result(self, value: object, location: Location) -> bool:
+        # TODO: keep track of seen to avoid duplicate work? Be careful not to introduce the same bug as with the for loop
+        value_wrapper: ResultVariable[object] = ResultVariable()
+        value_wrapper.set_value(value, location)
+        value_resolver: VariableResolver = VariableResolver(
+            parent=self.resolver,
+            name=str(self.statement.loop_var),
+            variable=value_wrapper,
+        )
+
+        # execute the value expression
+        # TODO: a test case that depends on this being gradual
+        requires: dict[object, VariableABC] = self.statement.value_expression.requires_emit_gradual(
+            value_resolver, self.queue, self.lhs
+        )
+        ExecutionUnit(self.queue, value_resolver, self.result, requires, self.statement.value_expression)
+
+        return False
+
+    def freeze(self) -> None:
+        # TODO: docstring
+        self.result.freeze()
+
+
+class If(RequiresEmitStatement):
     """
     An if Statement
     """
@@ -287,7 +426,7 @@ class If(ExpressionStatement):
     def __repr__(self) -> str:
         return "If"
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self) -> None:
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()

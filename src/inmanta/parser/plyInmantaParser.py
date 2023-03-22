@@ -41,7 +41,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     TypeDeclaration,
 )
-from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
+from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, ListComprehension, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
@@ -647,6 +647,7 @@ def p_expression(p: YaccProduction) -> None:
     | var_ref %prec VAR_REF
     | constructor
     | list_def
+    | list_comprehension
     | map_def
     | map_lookup %prec MAP_LOOKUP
     | index_lookup
@@ -743,6 +744,24 @@ def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
     p[0] = CreateList(p[2])
     attach_lnr(p, 1)
+
+
+# TODO: delete these two productions
+def p_list_comprehension_start(p: YaccProduction) -> None:
+    "list_comprehension_start : '[' '['"
+
+
+def p_list_comprehension_end(p: YaccProduction) -> None:
+    "list_comprehension_end : ']' ']'"
+
+
+def p_list_comprehension(p: YaccProduction) -> None:
+    # TODO: support nesting with multiple for's as in Python: [x for xs in xss for x in xs] or [(x, y) for x in [1,2,3] for y in [3,1,4] if x != y]
+    # TODO: support guards with if
+    "list_comprehension : '[' expression FOR ID IN expression ']'"
+    p[0] = ListComprehension(p[2], p[4], p[6])
+    # TODO: use token 1 to set lnr
+    attach_lnr(p, 3)
 
 
 def p_r_string_dict_key(p: YaccProduction) -> None:
