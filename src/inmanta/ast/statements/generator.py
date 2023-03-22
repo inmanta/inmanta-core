@@ -395,9 +395,11 @@ class ListComprehensionGradual(ResultCollector[object]):
         )
 
         # execute the value expression
-        # TODO: a test case that depends on this being gradual
-        requires: dict[object, VariableABC] = self.statement.value_expression.requires_emit_gradual(
-            value_resolver, self.queue, self.lhs
+        requires: dict[object, VariableABC] = (
+            self.statement.value_expression.requires_emit(value_resolver, self.queue)
+            if self.lhs is None
+            # TODO: a test case that depends on this being gradual
+            else self.statement.value_expression.requires_emit_gradual(value_resolver, self.queue, self.lhs)
         )
         ExecutionUnit(self.queue, value_resolver, self.result, requires, self.statement.value_expression)
 
@@ -407,7 +409,6 @@ class ListComprehensionGradual(ResultCollector[object]):
 
     def done(self) -> None:
         # TODO: docstring
-        # TODO: can't just freeze, some ExecutionUnits might still be waiting
         self.result.set_freeze_count(self.nb_results_received)
 
 
