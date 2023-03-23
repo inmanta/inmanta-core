@@ -70,7 +70,6 @@ class Schema(BaseModel):
     oneOf: Optional[Sequence["Schema"]] = None
     enum: Optional[List[str]] = None
 
-
     def resolve(self, ref_prefix: str, known_schemas: Dict[str, "Schema"]) -> "Schema":
         """
         Returns this object or the one this object is refering to.
@@ -111,7 +110,6 @@ class Schema(BaseModel):
 
         # We only do a deepcopy if the parameter says so AND this object has not been newly built
         deep = deep and schema is not self
-
 
         # Duplicate the schema, and update some of its values
         duplicate = schema.copy(update=update, deep=deep)

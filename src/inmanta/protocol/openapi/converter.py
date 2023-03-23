@@ -21,7 +21,6 @@ import json
 import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
-import pydantic
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 from pydantic.typing import NoneType
@@ -55,6 +54,7 @@ def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
     return util.api_boundary_json_encoder(o)
+
 
 class OpenApiDataTypes(enum.Enum):
     STRING = "string"
