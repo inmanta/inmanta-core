@@ -753,14 +753,16 @@ def p_list_def(p: YaccProduction) -> None:
 class ForSpecifier:
     variable: LocatableString
     iterable: ExpressionStatement
+    guard: Optional[ExpressionStatement] = None
 
 
 def p_list_comprehension(p: YaccProduction) -> None:
-    # TODO: support guards with if
     "list_comprehension : '[' expression list_comprehension_for list_comprehension_guard ']'"
 
     def create_list_comprehension(value_expression: ExpressionStatement, for_specifier: ForSpecifier) -> ListComprehension:
-        result: ListComprehension = ListComprehension(value_expression, for_specifier.variable, for_specifier.iterable)
+        result: ListComprehension = ListComprehension(
+            value_expression, for_specifier.variable, for_specifier.iterable, for_specifier.guard
+        )
         line_nb_token: int = 1
         result.location = Location(file, p.lineno(line_nb_token))
         result.namespace = namespace
@@ -769,6 +771,7 @@ def p_list_comprehension(p: YaccProduction) -> None:
 
     # for-specifiers in reverse order
     loops: abc.Sequence[ForSpecifier] = p[3]
+    loops[-1].guard = p[4]
     # `[z for y in x.y for z in y.z]` is syntactic sugar for `[[z for z in y.z] for y in x.y]`, loops = [(z, y.z), (y, x.y)]
     p[0] = functools.reduce(
         lambda acc, for_spec: create_list_comprehension(value_expression=acc, for_specifier=for_spec),
@@ -778,7 +781,6 @@ def p_list_comprehension(p: YaccProduction) -> None:
 
 
 def p_list_comprehension_for_empty(p: YaccProduction) -> None:
-    # TODO: drop empty?
     "list_comprehension_for_empty : empty"
     p[0]: list[ForSpecifier] = []
 
@@ -791,11 +793,19 @@ def p_list_comprehension_for(p: YaccProduction) -> None:
     p[0].append(ForSpecifier(variable=p[2], iterable=p[4]))
 
 
-# TODO: this is currenlty ignored
+def p_list_comprehension_guard_empty(p: YaccProduction) -> None:
+    "list_comprehension_guard : empty"
+    p[0] = None
+
+
 def p_list_comprehension_guard(p: YaccProduction) -> None:
-    """list_comprehension_guard : IF expression list_comprehension_guard
-    | empty empty"""
-    # TODO
+    "list_comprehension_guard : IF expression list_comprehension_guard"
+    if p[3] is None:
+        p[0] = p[2]
+    else:
+        # `if x if y` is syntactic sugar for `if x and y`
+        p[0] = And(p[2], p[3])
+        attach_lnr(p, 1)
 
 
 def p_r_string_dict_key(p: YaccProduction) -> None:

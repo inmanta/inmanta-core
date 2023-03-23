@@ -273,13 +273,21 @@ class ListComprehension(RawResumer, ExpressionStatement):
     A list comprehension expression, e.g. `["hello {{world}}" for world in worlds]`.
     """
 
-    __slots__ = ("loop_var", "value_expression", "iterable")
+    __slots__ = ("loop_var", "value_expression", "iterable", "guard")
 
-    def __init__(self, value_expression: ExpressionStatement, loop_var: LocatableString, iterable: ExpressionStatement) -> None:
+    def __init__(
+        self,
+        value_expression: ExpressionStatement,
+        loop_var: LocatableString,
+        iterable: ExpressionStatement,
+        guard: ExpressionStatement = None,
+    ) -> None:
         super().__init__()
         self.value_expression: ExpressionStatement = value_expression
         self.loop_var: LocatableString = loop_var
         self.iterable: ExpressionStatement = iterable
+        # TODO: currently ignored
+        self.guard: ExpressionStatement = guard
         # TODO: extend anchors?
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
