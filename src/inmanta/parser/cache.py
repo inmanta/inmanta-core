@@ -19,11 +19,13 @@ import logging
 import os
 from typing import List, Optional
 
+from inmanta import warnings
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
 from inmanta.const import CF_CACHE_DIR
 from inmanta.parser.pickle import ASTPickler, ASTUnpickler
 from inmanta.util import get_compiler_version
+from inmanta.warnings import InmantaWarning
 
 LOGGER = logging.getLogger(__name__)
 
@@ -85,9 +87,15 @@ class CacheManager:
         self.root_cache_dir = None
 
     def un_cache(self, namespace: Namespace, filename: str) -> Optional[List[Statement]]:
-        print("===============un_cache===============")
-        print(os.getenv("INMANTA_COMPILER_CACHE"))
-        print(self.cache_enabled.get())
+        warnings.warn(
+            InmantaWarning(
+                (
+                    "===============un_cache==============="
+                    f'{os.getenv("INMANTA_COMPILER_CACHE")}'
+                    f"{self.cache_enabled.get()}"
+                )
+            )
+        )
         if not self.cache_enabled.get():
             # cache not enabled
             return None
@@ -120,9 +128,11 @@ class CacheManager:
             return None
 
     def cache(self, namespace: Namespace, filename: str, statements: List[Statement]) -> None:
-        print("===============cache===============")
-        print(os.getenv("INMANTA_COMPILER_CACHE"))
-        print(self.cache_enabled.get())
+        warnings.warn(
+            InmantaWarning(
+                ("===============cache===============" f'{os.getenv("INMANTA_COMPILER_CACHE")}' f"{self.cache_enabled.get()}")
+            )
+        )
         if not self.cache_enabled.get():
             # cache not enabled
             return
@@ -143,9 +153,15 @@ class CacheManager:
         self.failures = 0
 
     def log_stats(self) -> None:
-        print("===============log_stats===============")
-        print(os.getenv("INMANTA_COMPILER_CACHE"))
-        print(self.cache_enabled.get())
+        warnings.warn(
+            InmantaWarning(
+                (
+                    "===============log_stats==============="
+                    f'{os.getenv("INMANTA_COMPILER_CACHE")}'
+                    f"{self.cache_enabled.get()}"
+                )
+            )
+        )
         if not self.cache_enabled.get():
             # cache not enabled
             return
