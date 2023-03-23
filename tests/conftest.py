@@ -120,6 +120,7 @@ from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
+from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
@@ -1749,3 +1750,16 @@ def index_with_pkgs_containing_optional_deps() -> str:
                 publish_index=pip_index,
             )
         yield pip_index.url
+
+
+@pytest.fixture(scope="session")
+def disable_version_and_agent_cleanup_job():
+    """
+    Disable the cleanup job ran by the Inmanta server that cleans up old model version and agent records that are no longer
+    used. Enabling this cleanup for the test suite causes race conditions in tests cases that create agent records without an
+    associated model version.
+    """
+    old_perform_cleanup = orchestrationservice.PERFORM_CLEANUP
+    orchestrationservice.PERFORM_CLEANUP = False
+    yield
+    orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
