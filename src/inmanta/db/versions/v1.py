@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS public.unknownparameter (
 --      * server.get_version()
 CREATE INDEX unknownparameter_env_version_index ON unknownparameter (environment, version);
 -- Used in:
---      * server.renew_expired_facts()
+--      * server.renew_facts()
 CREATE INDEX unknownparameter_resolved_index ON unknownparameter (resolved);
 
 -- Table: public.agentprocess
