@@ -309,6 +309,9 @@ class VersionOperation:
         )
         parts[bump_index] += 1
 
+        while len(parts) > 3 and parts[-1] == 0:
+            parts.pop()
+
         return cls._to_version(parts, version_tag)
 
     @classmethod
