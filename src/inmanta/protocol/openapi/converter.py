@@ -15,11 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import enum
 import inspect
 import json
 import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
+import pydantic
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 from pydantic.typing import NoneType
@@ -53,6 +55,14 @@ def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
     return util.api_boundary_json_encoder(o)
+
+class OpenApiDataTypes(enum.Enum):
+    STRING = "string"
+    NUMBER = "number"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    ARRAY = "array"
+    OBJECT = "object"
 
 
 class OpenApiConverter:
@@ -173,8 +183,27 @@ class OpenApiTypeConverter:
             definitions: Dict[str, Dict[str, object]] = schema.pop("definitions")
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
+                    definition = self._add_type_field_to_enum_value(definition)
                     self.components.schemas[key] = Schema(**definition)
         return Schema(**schema)
+
+    def _add_type_field_to_enum_value(self, definition: Dict[str, object]) -> Dict[str, object]:
+        """
+        When pydantic converts an Python Enum type to its corresponding json schema, it doesn't
+        populate the type field. This way the rendered API documentation doesn't include all possible
+        enum values. This method makes sure that the type attribute of an enum is always populated.
+        """
+        if definition.get("enum") is not None and not definition.get("type"):
+            # Convert Python type to a type known by OpenAPI
+            if all(isinstance(e, bool) for e in definition["enum"]):
+                definition["type"] = OpenApiDataTypes.BOOLEAN.value
+            elif all(isinstance(e, int) for e in definition["enum"]):
+                definition["type"] = OpenApiDataTypes.INTEGER.value
+            elif all(isinstance(e, float) or isinstance(e, int) for e in definition["enum"]):
+                definition["type"] = OpenApiDataTypes.NUMBER.value
+            else:
+                definition["type"] = OpenApiDataTypes.STRING.value
+        return definition
 
     def get_openapi_type(self, type_annotation: Type) -> Schema:
         class Sub(BaseModel):
@@ -186,6 +215,15 @@ class OpenApiTypeConverter:
         pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
         pydantic_result.title = None
         return pydantic_result
+
+    def get_openapi_schema_for_python_parameters(self, parameter: inspect.Parameter) -> Schema:
+        """
+        Return the OpenAPI schema for a parameter in a Python function.
+        """
+        schema = self.get_openapi_type(parameter.annotation)
+        if parameter.default is not inspect.Parameter.empty:
+            schema.default = parameter.default
+        return schema
 
     def resolve_reference(self, reference: str) -> Optional[Schema]:
         """
@@ -230,7 +268,9 @@ class ArgOptionHandler:
         headers: Dict[str, Union[Header, Reference]] = {}
         for option_name, option in arg_options.items():
             if option.header and option.reply_header:
-                headers[option.header] = Header(description=option.header, schema=Schema(type="string"))
+                headers[option.header] = Header(
+                    description=f"The value of the request header {option.header}", schema=Schema(type="string")
+                )
         return headers if headers else None
 
 
