@@ -35,6 +35,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from inmanta import const
+from inmanta.warnings import InmantaWarning
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ def _normalize_name(name: str) -> str:
 
 
 def _get_from_env(section: str, name: str) -> Optional[str]:
+    warnings.warn(InmantaWarning(("===============def_get_from_env===============")))
     return os.environ.get(f"INMANTA_{section}_{name}".replace("-", "_").upper(), default=None)
 
 
@@ -133,7 +135,7 @@ class Config(object):
         name = _normalize_name(name)
 
         opt = cls.validate_option_request(section, name, default_value)
-
+        warnings.warn(InmantaWarning(("===============get===============")))
         val = _get_from_env(section, name)
         if val is not None:
             LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
