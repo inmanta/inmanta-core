@@ -1752,7 +1752,7 @@ def index_with_pkgs_containing_optional_deps() -> str:
         yield pip_index.url
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def disable_version_and_agent_cleanup_job():
     """
     Disable the cleanup job ran by the Inmanta server that cleans up old model version and agent records that are no longer
