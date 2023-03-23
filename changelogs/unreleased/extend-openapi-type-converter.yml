@@ -1,0 +1,9 @@
+---
+description: |
+   * Extend functionality OpenAPI type converter.
+   * Bugfix: Ensure OpenAPI enum values always have the type field set.
+   * Bugfix: Ensure that the OpenAPI type reference resolver populates the allOf and oneOf properties of the OpenAPI schema.
+issue-nr: 1169
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso6, iso5, iso4]
