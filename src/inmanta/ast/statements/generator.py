@@ -355,6 +355,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         if gradual_helper.nb_results_received == 0:
             # non-gradual mode: pass results now
             for item in iterable:
+                # TODO: BUG: may lose ordering of primitive lists, e.g. if value_expression = `x > 2 ? x : (true ?  0 : 0)'
                 # TODO: should this be self.iterable.location?
                 gradual_helper.receive_result(item, self.location)
         # indicate to helper that we're done
