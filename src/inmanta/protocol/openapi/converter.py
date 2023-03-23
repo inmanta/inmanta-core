@@ -171,8 +171,10 @@ class OpenApiTypeConverter:
         patch_pydantic_field_type_schema()
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
-        type_annotation = parameter_type.annotation
-        return self.get_openapi_type(type_annotation)
+        schema = self.get_openapi_type(parameter_type.annotation)
+        if parameter_type.default is not inspect.Parameter.empty:
+            schema.default = parameter_type.default
+        return schema
 
     def _handle_pydantic_model(self, type_annotation: Type, by_alias: bool = True) -> Schema:
         # JsonSchema stores the model (and sub-model) definitions at #/definitions,
@@ -215,15 +217,6 @@ class OpenApiTypeConverter:
         pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
         pydantic_result.title = None
         return pydantic_result
-
-    def get_openapi_schema_for_python_parameters(self, parameter: inspect.Parameter) -> Schema:
-        """
-        Return the OpenAPI schema for a parameter in a Python function.
-        """
-        schema = self.get_openapi_type(parameter.annotation)
-        if parameter.default is not inspect.Parameter.empty:
-            schema.default = parameter.default
-        return schema
 
     def resolve_reference(self, reference: str) -> Optional[Schema]:
         """
