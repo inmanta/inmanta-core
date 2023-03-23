@@ -105,20 +105,21 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help="""
-    When this option is enabled, only version conflicts in the direct dependencies will result in an error.
-    All other version conflicts will result in a warning. This option is mutually exclusive with the --strict-deps-check option.
-        """,
+        help=(
+            "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
+            "All other version conflicts will result in a warning. This option is mutually exclusive with the "
+            "--strict-deps-check option."
+        ),
     )
     parser.add_argument(
         "--strict-deps-check",
         dest="strict_deps_check",
         action="store_true",
         default=False,
-        help="""
-        When this option is enabled, a version conflict in any (transitive) dependency will results in an error.
-        This option is mutually exclusive with the --no-strict-deps-check option.
-        """,
+        help=(
+            "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
+            "This option is mutually exclusive with the --no-strict-deps-check option."
+        ),
     )
 
 
@@ -249,9 +250,9 @@ class ChangeType(enum.Enum):
         if high.micro > low.micro:
             return cls.PATCH
         if len(high.base_version.split(".")) >= 4:
-            high_revision = high.base_version.split(".")[3]
+            high_revision = int(high.base_version.split(".")[3])
             # We are switching from 3 digits to 4
-            if len(low.base_version.split(".")) < 4 or high_revision > low.base_version.split(".")[3]:
+            if len(low.base_version.split(".")) < 4 or high_revision > int(low.base_version.split(".")[3]):
                 return cls.REVISION
         raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
