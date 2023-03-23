@@ -15,9 +15,12 @@
 
     Contact: code@inmanta.com
 """
+import functools
 import logging
 import re
 import warnings
+from collections import abc
+from dataclasses import dataclass
 from itertools import accumulate
 from typing import Iterator, List, Optional, Tuple, Union
 
@@ -746,13 +749,53 @@ def p_list_def(p: YaccProduction) -> None:
     attach_lnr(p, 1)
 
 
+@dataclass
+class ForSpecifier:
+    variable: LocatableString
+    iterable: ExpressionStatement
+
+
 def p_list_comprehension(p: YaccProduction) -> None:
-    # TODO: support nesting with multiple for's as in Python: [x for xs in xss for x in xs] or [(x, y) for x in [1,2,3] for y in [3,1,4] if x != y]
     # TODO: support guards with if
-    "list_comprehension : '[' expression FOR ID IN expression ']'"
-    p[0] = ListComprehension(p[2], p[4], p[6])
-    # TODO: use token 1 to set lnr
-    attach_lnr(p, 1)
+    "list_comprehension : '[' expression list_comprehension_for list_comprehension_guard ']'"
+
+    def create_list_comprehension(value_expression: ExpressionStatement, for_specifier: ForSpecifier) -> ListComprehension:
+        result: ListComprehension = ListComprehension(value_expression, for_specifier.variable, for_specifier.iterable)
+        line_nb_token: int = 1
+        result.location = Location(file, p.lineno(line_nb_token))
+        result.namespace = namespace
+        result.lexpos = p.lexpos(line_nb_token)
+        return result
+
+    # for-specifiers in reverse order
+    loops: abc.Sequence[ForSpecifier] = p[3]
+    # `[z for y in x.y for z in y.z]` is syntactic sugar for `[[z for z in y.z] for y in x.y]`, loops = [(z, y.z), (y, x.y)]
+    p[0] = functools.reduce(
+        lambda acc, for_spec: create_list_comprehension(value_expression=acc, for_specifier=for_spec),
+        loops,
+        p[2],
+    )
+
+
+def p_list_comprehension_for_empty(p: YaccProduction) -> None:
+    # TODO: drop empty?
+    "list_comprehension_for_empty : empty"
+    p[0]: list[ForSpecifier] = []
+
+
+def p_list_comprehension_for(p: YaccProduction) -> None:
+    """list_comprehension_for : FOR ID IN expression list_comprehension_for_empty
+    | FOR ID IN expression list_comprehension_for"""
+    p[0]: list[ForSpecifier] = p[5]
+    # for-specifiers in reverse order
+    p[0].append(ForSpecifier(variable=p[2], iterable=p[4]))
+
+
+# TODO: this is currenlty ignored
+def p_list_comprehension_guard(p: YaccProduction) -> None:
+    """list_comprehension_guard : IF expression list_comprehension_guard
+    | empty empty"""
+    # TODO
 
 
 def p_r_string_dict_key(p: YaccProduction) -> None:

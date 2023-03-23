@@ -310,14 +310,15 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
 
 
 # TODO: review implementation
-# TODO: typing is not correct: T vs list[T]
-class FixedCountVariable(ResultVariable[T]):
+# TODO: double check typing
+class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
     # TODO: docstring
 
     __slots__ = ("count", "freeze_count")
 
     def __init__(self, freeze_count: Optional[int] = None) -> None:
-        super().__init__([])
+        super().__init__()
+        self.value: list[T] = []
         self.count: int = 0
         self.freeze_count: Optional[int] = None
 
@@ -334,13 +335,17 @@ class FixedCountVariable(ResultVariable[T]):
                 waiter.ready(self)
             self.waiters = None
 
-    def set_value(self, value: T, location: Location, recur: bool = True) -> None:
-        self.value.append(value)
+    def set_value(self, value: Union[T, list[T]], location: Location, recur: bool = True) -> None:
+        # flatten list
+        if isinstance(value, list):
+            self.value.extend(value)
+        else:
+            self.value.append(value)
         self.count += 1
         self.check_count()
 
     # TODO: do we really need to override this?
-    def get_value(self) -> T:
+    def get_value(self) -> list[T]:
         if not self.is_ready():
             # TODO: proper exception
             raise Exception("invalid: should not be called yet")

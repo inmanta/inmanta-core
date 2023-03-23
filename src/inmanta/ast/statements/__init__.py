@@ -117,7 +117,9 @@ class DynamicStatement(Statement):
         raise NotImplementedError()
 
     def requires(self) -> List[str]:
-        """List of all variable names used by this statement"""
+        """
+        List of all variable names used by this statement. Artifact from the past, hardly used anymore.
+        """
         raise NotImplementedError()
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:

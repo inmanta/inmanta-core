@@ -228,10 +228,8 @@ class For(RequiresEmitStatement):
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
 
     def requires(self) -> List[str]:
-        base = self.base.requires()
-        var = self.loop_var
-        ext = self.module.requires
-        return list(set(base).union(ext) - set(var))
+        # exclude loop var, unless it shadows an occurrence in iterable
+        return list(set(self.base.requires()) - {self.loop_var} + set(self.module.requires()))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
@@ -289,7 +287,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
         self.iterable.normalize()
 
     def requires(self) -> list[str]:
-        return list({*self.value_expression.requires(), *self.iterable.requires(), str(self.loopvar)})
+        # exclude loop var, unless it shadows an occurrence in iterable
+        return list(set(self.iterable.requires()) - {self.loop_var} + set(self.value_expression.requires()))
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
