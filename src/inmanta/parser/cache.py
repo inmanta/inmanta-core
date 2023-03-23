@@ -85,6 +85,9 @@ class CacheManager:
         self.root_cache_dir = None
 
     def un_cache(self, namespace: Namespace, filename: str) -> Optional[List[Statement]]:
+        print("===============un_cache===============")
+        print(os.getenv("INMANTA_COMPILER_CACHE"))
+        print(self.cache_enabled.get())
         if not self.cache_enabled.get():
             # cache not enabled
             return None
@@ -117,6 +120,9 @@ class CacheManager:
             return None
 
     def cache(self, namespace: Namespace, filename: str, statements: List[Statement]) -> None:
+        print("===============cache===============")
+        print(os.getenv("INMANTA_COMPILER_CACHE"))
+        print(self.cache_enabled.get())
         if not self.cache_enabled.get():
             # cache not enabled
             return
@@ -137,6 +143,9 @@ class CacheManager:
         self.failures = 0
 
     def log_stats(self) -> None:
+        print("===============log_stats===============")
+        print(os.getenv("INMANTA_COMPILER_CACHE"))
+        print(self.cache_enabled.get())
         if not self.cache_enabled.get():
             # cache not enabled
             return
