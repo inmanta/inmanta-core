@@ -60,21 +60,21 @@ class ParameterService(protocol.ServerSlice):
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
-        self.schedule(self.renew_expired_facts, self._fact_renew, cancel_on_stop=False)
+        self.schedule(self.renew_facts, self._fact_renew, cancel_on_stop=False)
         await super().start()
 
-    async def renew_expired_facts(self) -> None:
+    async def renew_facts(self) -> None:
         """
-        Send out requests to renew expired facts
+        Send out requests to renew facts.
         """
-        LOGGER.info("Renewing expired parameters")
+        LOGGER.info("Renewing parameters")
 
-        updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
-        expired_params = await data.Parameter.get_updated_before(updated_before)
+        updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
+        params_to_renew = await data.Parameter.get_updated_before(updated_before)
 
-        LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
+        LOGGER.debug("Renewing %d parameters", len(params_to_renew))
 
-        for param in expired_params:
+        for param in params_to_renew:
             if param.environment is None:
                 LOGGER.warning(
                     "Found parameter without environment (%s for resource %s). Deleting it.", param.name, param.resource_id
@@ -100,7 +100,7 @@ class ParameterService(protocol.ServerSlice):
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
                 await self.agentmanager.request_parameter(u.environment, u.resource_id)
 
-        LOGGER.info("Done renewing expired parameters")
+        LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")
     async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
