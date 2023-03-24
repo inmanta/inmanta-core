@@ -1,3 +1,4 @@
+.. _partial_compile_lsm_sec:
 Partial Compiles
 ****************
 
@@ -6,40 +7,63 @@ Partial compilation is an approach to speed up compilation when the Service Inve
 
 Ordinarily, LSM re-compiles all instances on every update. This means that as the inventory grows, the compiles become slower. Partial compiles allow LSM to re-compile only those instances that are relevant to the current service instance, avoiding any slowdown. 
 
+Implementation guidelines
+-------------------------
+
+1. for every :inmanta:entity:`lsm::ServiceEntity`, 
+
+    1. make sure to collect all resources it contains in the relation :inmanta:relation:`owned_resources<lsm::ServiceBase.owned_resources>`
+    2. make sure to always enable the select the ``parent`` implementations (`implement ... using parents`)
+2. for every :ref:`Inter Service Relation<inter_service_relations>`
+    
+    1. indicate which side of the relation is the owner by setting :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner` and :inmanta:relation:`lsm::ServiceEntityBinding.owner`. 
+
+
 Supported scenarios
 -------------------
 
 Partial compiles are possible when
 
-1. Service Instances are unrelated: service instances don't share any resources and don't depend on each other in any way. This requires no modifications to the model.
+1. Service Instances are unrelated: service instances don't share any resources and don't depend on each other in any way. This requires correctly setting :inmanta:relation:`owned_resources<lsm::ServiceBase.owned_resources>`.
 2. Services form groups under a common owner. 
-    Instances within the group can freely depend on each other and share resources, but nothing is shared across group. 
-    One specific instance is designated as the owner of the group.
-    This requires indicating what the parent of any service is, by setting :inmanta:relation:`lsm::ServiceEntityBinding.owner` and :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner`.
+    Instances within the group can freely depend on each other and share resources, but nothing is shared across groups. 
+    One specific instance is designated as the common owner of the group.
+    This requires indicating what the owner of any service is, by setting :inmanta:relation:`lsm::ServiceEntityBinding.owner` and :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner`.
+    This does not immediately have to be the root owner, the ownership hierarchy is allowed to form a tree with intermediate owners below the root owner. 
 
-3. Service instances and groups can depend on shared resources, that are identical for all service instances and groups. This requires no modifications to the model.
+3. Service instances and groups can depend on shared resources, that are identical for all service instances and groups.
 4. Any combination of the above
 
-Example
--------------------
+How it works for unrelated services
+---------------------------------------
+
+For unrelated services, LSM expands on the normal :ref:`resources set based partial compiles<partial_compile>` by automatically creating a single
+resource set for each service instance. 
+
+To add resources to the instance's resource set, simply add them to its :inmanta:relation:`lsm::ServiceBase.owned_resources` relation and make sure to select the ``parents`` implementation for your service entities. LSM will then
+make sure to populate the resource set and to correctly trigger related compiles and exports.
+
+
+Example with Inter Service Relations
+-------------------------------------
 
 As an example, consider the following model for managing ports and routers.
-Both are independent services, but a port can only be managed in combination with its router and all its sibling. 
-(This is not in general true, we often managed port without managing the entire router, but we use it as an example.)
+Both are independent services, but a port can only be managed in combination with its router and all its siblings. 
+(This is not in general true, we often manage ports without managing the entire router, but we use it as an example.)
 
-This model is not much different from normal :ref:`Inter Service Relations<inter_service_relations>`, except for lines 55-56.
+This model is not much different from normal :ref:`Inter Service Relations<inter_service_relations>`, except for lines 29, 38, 57-58.
 
 .. literalinclude:: partial.cf
     :linenos:
     :language: inmanta
-    :emphasize-lines: 55-56
+    :emphasize-lines: 29,38,57-58
     :caption: main.cf
 
 
 How it works
 -------------------
 
-There are two things to consider:
+To better understand how this works, there are two things to consider:
 1. how to divide the resources into resource sets
 2. how to get the correct instances into the model
 
@@ -51,7 +75,7 @@ Resources in ``ResourceSet`` can not depend on Resources in other ``ResourceSets
 
 To make this work, we have assign every Service Instance to a ``ResourceSet``, such that the set has no relations to any other ``ResourceSet``.
 
-In practice, we do this by putting all ``Resources`` in the ``ResourceSet`` of the parent entity.
+In practice, we do this by putting all ``Resources`` in the ``ResourceSet`` of the owning entity.
 
 .. digraph:: resource_sets_generic_good
     :caption: Resource Sets for Router example with 2 Routers with each 2 ports.
@@ -85,7 +109,7 @@ In practice, we do this by putting all ``Resources`` in the ``ResourceSet`` of t
 
 
 In addition to the ``ResourceSets`` used by individual services, there are also ``Resources`` that are not in any set.
-There ``Resources`` can be shared by multiple services, with the limitation that any compile that produces them, has to produce them exactly the same. 
+These ``Resources`` can be shared by multiple services, with the limitation that any compile that produces them, has to produce them exactly the same. 
 For more information see :ref:`Partial Compiles<partial_compile>`.
 
 Service Instance Selection

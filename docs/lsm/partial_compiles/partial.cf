@@ -26,6 +26,7 @@ Port.router [1] lsm::__service__, lsm::__rwplus__ Router
 implementation router_config for Router:
     """ Add a dummy resource to the router to represent actual configuration """
     self.resources += std::testing::NullResource(name=self.mgmt_ip)
+    self.owned_resources += self.resources # We own all our resources and nothing else
 end
 
 implementation port_config for Port:
@@ -34,6 +35,7 @@ implementation port_config for Port:
         name="{{self.router.mgmt_ip}}-{{self.name}}",
         requires = self.router.resources
     )
+    self.owned_resources += self.resources # We own all our resources and nothing else
 end
 
 implement Router using router_config, parents

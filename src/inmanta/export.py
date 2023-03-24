@@ -532,6 +532,7 @@ class Exporter(object):
         LOGGER.info("Sending resource updates to server")
         for res in resources:
             LOGGER.debug("  %s", res["id"])
+        LOGGER.debug("Parts:  %s", self._resource_sets)
 
         if partial_compile:
             result = conn.put_partial(
