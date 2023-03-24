@@ -26,7 +26,7 @@ import pytest
 from openapi_spec_validator import openapi_v30_spec_validator
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
-from inmanta.const import ResourceAction, ClientType
+from inmanta.const import ClientType, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
@@ -38,7 +38,7 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import MediaType, Schema, ParameterType, OpenApiDataTypes
+from inmanta.protocol.openapi.model import MediaType, OpenApiDataTypes, ParameterType, Schema
 from inmanta.server import SLICE_SERVER
 from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
@@ -792,6 +792,7 @@ def test_get_openapi_type_for_on_enum() -> None:
     """
     Ensure that the type field is populated correctly when OpenApiTypeConverter.get_openapi_type() is called on an Enum.
     """
+
     class StrValEnum(enum.Enum):
         A = "a"
         B = "b"

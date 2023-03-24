@@ -34,6 +34,7 @@ from inmanta.protocol.openapi.model import (
     Info,
     MediaType,
     OpenAPI,
+    OpenApiDataTypes,
     Operation,
     Parameter,
     ParameterType,
@@ -43,7 +44,6 @@ from inmanta.protocol.openapi.model import (
     Response,
     Schema,
     Server,
-    OpenApiDataTypes,
 )
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
