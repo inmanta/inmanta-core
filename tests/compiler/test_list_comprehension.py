@@ -199,3 +199,30 @@ def test_list_comprehension_constructor_trees(snippetcompiler) -> None:
         )
     )
     compiler.do_compile()
+
+
+def test_list_comprehension_nested_tail(snippetcompiler) -> None:
+    """
+    Verify correct behavior of list comprehensions where the iterable is a list comprehension itself.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            x = 0
+            l = [
+                # shadow outer variable to verify the nested list comprehension doesn't see the shadow
+                "{{x}}{{x}}"
+                for x in [
+                    "{{x}}{{y}}"
+                    for y in [1, 2]
+                ]
+            ]
+
+            # assert
+            l = ["0101", "0202"]
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
