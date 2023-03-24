@@ -22,6 +22,8 @@ import more_itertools
 
 from inmanta import compiler
 from inmanta.ast import Range
+from inmanta.compiler import Compiler
+from inmanta.execute import scheduler
 
 
 def test_anchors_basic(snippetcompiler):
@@ -57,6 +59,63 @@ implement Test using a
     assert len(anchormap) == 9
 
     checkmap = {(r.lnr, r.start_char, r.end_char): t.location.lnr for r, t in anchormap}
+
+    def verify_anchor(flnr, s, e, tolnr):
+        assert checkmap[(flnr, s, e)] == tolnr
+
+    for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
+        print("%s:%d -> %s" % (f, f.end_char, t))
+    verify_anchor(7, 22, 26, 2)
+    verify_anchor(8, 5, 8, 13)
+    verify_anchor(11, 1, 5, 2)
+    verify_anchor(11, 24, 29, 7)
+    verify_anchor(15, 5, 9, 2)
+    verify_anchor(15, 10, 11, 4)
+    verify_anchor(19, 22, 26, 2)
+    verify_anchor(23, 11, 15, 2)
+    verify_anchor(23, 22, 23, 19)
+
+
+def test_anchors_basic_old(snippetcompiler):
+    """
+    this test verify that the old path to generate the Anchormap still works. This ensure that we remain
+    backward compatible with old Language servers.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    string a = "a"
+    string b
+end
+
+entity Test2 extends Test:
+    foo c
+end
+
+Test.relation [0:1] -- Test2.reverse [0:]
+
+typedef foo as string matching /^a+$/
+
+a = Test(b="xx")
+z = a.relation
+u = a.b
+
+implementation a for Test:
+
+end
+
+implement Test using a
+""",
+        autostd=False,
+    )
+    compiler = Compiler()
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    anchormap = sched.anchormap(compiler, statements, blocks)
+
+    assert len(anchormap) == 9
+
+    checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
 
     def verify_anchor(flnr, s, e, tolnr):
         assert checkmap[(flnr, s, e)] == tolnr
@@ -228,7 +287,10 @@ implement Test_no_doc using b
 """,
         autostd=False,
     )
-    anchormap = compiler.anchormap()
+    compiler = Compiler()
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    anchormap = sched.anchormap_extended(compiler, statements, blocks)
 
     assert len(anchormap) == 10
 

@@ -124,7 +124,7 @@ def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tu
 
     (statements, blocks) = compiler.compile()
     sched = scheduler.Scheduler()
-    return sched.anchormap(compiler, statements, blocks)
+    return sched.anchormap_extended(compiler, statements, blocks)
 
 
 def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
