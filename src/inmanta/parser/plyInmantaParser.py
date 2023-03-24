@@ -756,6 +756,7 @@ class ForSpecifier:
     guard: Optional[ExpressionStatement] = None
 
 
+# TODO: add language docs
 def p_list_comprehension(p: YaccProduction) -> None:
     "list_comprehension : '[' expression list_comprehension_for list_comprehension_guard ']'"
 
