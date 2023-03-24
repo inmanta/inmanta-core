@@ -54,9 +54,9 @@ binding_port = lsm::ServiceEntityBinding(
     service_entity="__config__::Port",
     lifecycle=lsm::fsm::simple_with_delete_validate,
     service_entity_name="port",
-    service_identity="name",      # required for Partial Compile
-    relation_to_owner = "router", # required for Partial Compile
-    owner = binding_router,
+    service_identity="name",
+    relation_to_owner="router", # required for Partial Compile
+    owner=binding_router, # required for Partial Compile
 )
 
 # Normal Service unrolling
