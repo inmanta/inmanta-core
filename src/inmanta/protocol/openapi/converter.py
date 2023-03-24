@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import enum
 import inspect
 import json
 import re
@@ -44,6 +43,7 @@ from inmanta.protocol.openapi.model import (
     Response,
     Schema,
     Server,
+    OpenApiDataTypes,
 )
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
@@ -54,15 +54,6 @@ def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
     return util.api_boundary_json_encoder(o)
-
-
-class OpenApiDataTypes(enum.Enum):
-    STRING = "string"
-    NUMBER = "number"
-    INTEGER = "integer"
-    BOOLEAN = "boolean"
-    ARRAY = "array"
-    OBJECT = "object"
 
 
 class OpenApiConverter:

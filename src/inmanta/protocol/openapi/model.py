@@ -251,3 +251,12 @@ class OpenAPI(BaseModel):
     servers: Optional[List[Server]] = None
     paths: Dict[str, PathItem]
     components: Optional[Components] = None
+
+
+class OpenApiDataTypes(Enum):
+    STRING = "string"
+    NUMBER = "number"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    ARRAY = "array"
+    OBJECT = "object"
