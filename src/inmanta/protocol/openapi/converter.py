@@ -182,7 +182,7 @@ class OpenApiTypeConverter:
 
     def _add_type_field_to_enum_value(self, definition: Dict[str, object]) -> Dict[str, object]:
         """
-        When pydantic converts an Python Enum type to its corresponding json schema, it doesn't
+        When pydantic converts a Python Enum type to its corresponding json schema, it doesn't
         populate the type field. This way the rendered API documentation doesn't include all possible
         enum values. This method makes sure that the type attribute of an enum is always populated.
         """
