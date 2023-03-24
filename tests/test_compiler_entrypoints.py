@@ -287,10 +287,7 @@ implement Test_no_doc using b
 """,
         autostd=False,
     )
-    compiler = Compiler()
-    (statements, blocks) = compiler.compile()
-    sched = scheduler.Scheduler()
-    anchormap = sched.anchormap_extended(compiler, statements, blocks)
+    anchormap = compiler.anchormap()
 
     assert len(anchormap) == 10
 
