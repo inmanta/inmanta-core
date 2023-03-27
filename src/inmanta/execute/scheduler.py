@@ -262,7 +262,7 @@ class Scheduler(object):
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-    def anchormap_extended(
+    def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[Tuple[Location, AnchorTarget]]:
         prev = time.time()
@@ -294,7 +294,7 @@ class Scheduler(object):
         """
         This methode exists for backward compatibility with inmantals
         """
-        range_to_anchor_target = self.anchormap_extended(compiler, statements, blocks)
+        range_to_anchor_target = self.get_anchormap(compiler, statements, blocks)
         range_to_range = [(f, t.location) for f, t in range_to_anchor_target]
 
         return range_to_range
