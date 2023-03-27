@@ -290,7 +290,10 @@ class Scheduler(object):
 
     def anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
-    ) -> Sequence[Tuple[Location, AnchorTarget]]:
+    ) -> Sequence[Tuple[Location, Location]]:
+        """
+        This methode exists for backward compatibility with inmantals
+        """
         range_to_anchor_target = self.anchormap_extended(compiler, statements, blocks)
         range_to_range = [(f, t.location) for f, t in range_to_anchor_target]
 
