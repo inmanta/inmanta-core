@@ -114,6 +114,7 @@ implement Test using a
     anchormap = sched.anchormap(compiler, statements, blocks)
 
     assert len(anchormap) == 9
+    assert all(isinstance(item[0], Range) and isinstance(item[1], Range) for item in anchormap)
 
     checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
 
