@@ -262,7 +262,7 @@ class Scheduler(object):
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-    def anchormap(
+    def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[Tuple[Location, AnchorTarget]]:
         prev = time.time()
@@ -280,13 +280,24 @@ class Scheduler(object):
             if anchor is not None
         )
 
-        rangetorange = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
-        rangetorange = [(f, t) for f, t in rangetorange if t is not None]
+        range_to_anchor_target = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
+        range_to_anchor_target = [(f, t) for f, t in range_to_anchor_target if t is not None]
 
         now = time.time()
         LOGGER.debug("Anchormap took %f seconds", now - prev)
 
-        return rangetorange
+        return range_to_anchor_target
+
+    def anchormap(
+        self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
+    ) -> Sequence[Tuple[Location, Location]]:
+        """
+        This methode exists for backward compatibility with inmantals
+        """
+        range_to_anchor_target = self.get_anchormap(compiler, statements, blocks)
+        range_to_range = [(f, t.location) for f, t in range_to_anchor_target]
+
+        return range_to_range
 
     def find_wait_cycle(self, attributes_with_precedence_rule: List[RelationAttribute], allwaiters: Set[Waiter]) -> bool:
         """
