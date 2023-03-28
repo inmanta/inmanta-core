@@ -113,7 +113,7 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
 
             # assertions
             l1 = ["1-10", "1-20", "2-10", "2-20"]
-            l2 = [3, 1, 2]  # specific order doesn't matter but it should be consistent
+            l2 = [1, 2, 3]  # specific order doesn't matter but it should be consistent
             """.strip(
                 "\n"
             )
@@ -226,3 +226,73 @@ def test_list_comprehension_nested_tail(snippetcompiler) -> None:
         )
     )
     compiler.do_compile()
+
+
+def test_list_comprehension_gradual(snippetcompiler) -> None:
+    """
+    Verify that list comprehensions are executed gradually.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            a = A()
+            b = A(others=[chained for chained in [other for other in a.others]])
+            a.others += A()
+            if b.others is defined:
+                # this seems like bad practice, but it should work as long as the list comprehension is executed gradually.
+                a.others += A()
+            end
+
+            count = 2
+            count = std::count(a.others)
+            count = std::count(b.others)
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+def test_list_comprehension_gradual_consistency(snippetcompiler, monkeypatch) -> None:
+    """
+    Verify that gradual execution produces results consistent with non-gradual execution.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            A.self [1] -- A
+            implementation a for A:
+                self.self = self
+            end
+            implement A using a
+
+            a = A()
+            a.others = [A(), A(), A()]
+
+            # gradual execution
+            b = A()
+            b.others = [chained for chained in [other for other in a.others]]
+            # non-gradual execution
+            c = A()
+            c.others = std::select([chained for chained in [other for other in a.others]], "self")
+
+            assert = true
+            assert = b.others == c.others
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+# TODO: tests for error scenarios
+# TODO: tests for guards
+# TODO: test for shadowing + guard

@@ -58,8 +58,9 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
     ExecutionUnit,
-    Instance,
     FixedCountVariable,
+    ImmediateResultVariable,
+    Instance,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -302,13 +303,15 @@ class ListComprehension(RawResumer, ExpressionStatement):
         self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
     ) -> dict[object, VariableABC]:
         """
-        Sets up gradual execution of the list comprehension. Additionally sets up a resumer for when the iterable is complete.
-        Returns as requires the gradual helper's result variable, which will be frozen by the resumer.
+        Sets up gradual or non-gradual execution (depending on the lhs) of the list comprehension. Additionally sets up a
+        resumer for when the iterable is complete. Returns as requires the (gradual) helper's result variable, which will be
+        frozen by the resumer.
 
         Flow: requires_emit -> gradual execution -> resume -> execute
         """
         base_requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
 
+        # TODO: gradual_helper name
         # set up gradual execution
         gradual_helper: ListComprehensionGradual = ListComprehensionGradual(
             statement=self,
@@ -316,8 +319,12 @@ class ListComprehension(RawResumer, ExpressionStatement):
             queue=queue,
             lhs=lhs,
         )
-        iterable_requires: dict[object, VariableABC] = self.iterable.requires_emit_gradual(
-            resolver, queue, resultcollector=gradual_helper
+        iterable_requires: dict[object, VariableABC] = (
+            # use helper strictly non-gradually when in a non-gradual context
+            # => propagates progress potential to iterable expression's requires
+            self.iterable.requires_emit(resolver, queue)
+            if lhs is None
+            else self.iterable.requires_emit_gradual(resolver, queue, gradual_helper)
         )
 
         # non-gradual mode / finishing up
@@ -370,7 +377,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
     # TODO
 
 
-# TODO: name + invariants in docstring
+# TODO: name + invariants in docstring => not only gradual
 class ListComprehensionGradual(ResultCollector[object]):
     """
     Result collector for gradual execution of the list comprehension statement. When it receives a result, it sets up gradual
@@ -388,14 +395,14 @@ class ListComprehensionGradual(ResultCollector[object]):
         self.statement: ListComprehension = statement
         self.resolver: Resolver = resolver
         self.queue: QueueScheduler = queue
-        self.lhs: Optional[ResultCollector[object]] = None
+        self.lhs: Optional[ResultCollector[object]] = lhs
         self.nb_results_received: int = 0
         self.result: FixedCountVariable = FixedCountVariable()
 
     def receive_result(self, value: object, location: Location) -> bool:
         # TODO: keep track of seen to avoid duplicate work? Be careful not to introduce the same bug as with the for loop
-        value_wrapper: ResultVariable[object] = ResultVariable()
-        value_wrapper.set_value(value, location)
+        # TODO: ResultVariable does not handle receive_result => breaks gradual execution => add comment
+        value_wrapper: ResultVariable[object] = ImmediateResultVariable(value, location)
         value_resolver: VariableResolver = VariableResolver(
             parent=self.resolver,
             name=str(self.statement.loop_var),
@@ -406,7 +413,6 @@ class ListComprehensionGradual(ResultCollector[object]):
         requires: dict[object, VariableABC] = (
             self.statement.value_expression.requires_emit(value_resolver, self.queue)
             if self.lhs is None
-            # TODO: a test case that depends on this being gradual
             else self.statement.value_expression.requires_emit_gradual(value_resolver, self.queue, self.lhs)
         )
         ExecutionUnit(self.queue, value_resolver, self.result, requires, self.statement.value_expression)

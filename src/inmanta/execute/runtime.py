@@ -309,6 +309,18 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         return self._node
 
 
+# TODO: name + docstring: this is not only immediate, it also takes listeners
+class ImmediateResultVariable(ResultVariable[T]):
+    def __init__(self, value: T, location: Location) -> None:
+        super().__init__()
+        self.set_value(value, location)
+
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+        assert self.value is not None
+        if not isinstance(self.value, NoneValue):
+            resultcollector.receive_result(self.value, location)
+
+
 # TODO: review implementation
 # TODO: double check typing
 class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
