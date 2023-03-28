@@ -44,8 +44,6 @@ also arise.
 
 ### [option 2]
 
-[example | description | pointer to more information | ...] <!-- optional -->
-
 * Good, because there is isolation between folders as long as different venvs are selected.
 * Good, because it still allows folders to share a venv if desired, by selecting the same venv.
 * Good, because of ease of implementation: each language server is responsible for only one folder and doesn't need to
