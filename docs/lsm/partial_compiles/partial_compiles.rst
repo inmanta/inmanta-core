@@ -1,4 +1,5 @@
 .. _partial_compile_lsm_sec:
+
 Partial Compiles
 ****************
 
@@ -16,7 +17,7 @@ Implementation guidelines
     2. make sure to always select the ``parent`` implementations (`implement ... using parents`)
 2. for every :ref:`Inter Service Relation<inter_service_relations>`
     
-    1. indicate which side of the relation is the owner by setting :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner` and :inmanta:relation:`lsm::ServiceEntityBinding.owner`. 
+    1. indicate if this is the relation to the owner by setting :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner` and :inmanta:relation:`lsm::ServiceEntityBinding.owner`. 
 
 
 Supported scenarios
@@ -79,7 +80,7 @@ To make this work, we have to assign every Service Instance to a ``ResourceSet``
 In practice, we do this by putting all ``Resources`` in the ``ResourceSet`` of the owning entity.
 
 .. digraph:: resource_sets_generic_good
-    :caption: Resource Sets for Router example with 2 Routers with each 2 ports.
+    :caption: Resource Sets for the Router example with 2 Routers with each 1 port.
 
     subgraph cluster_services {
         "NullResource(name=r1)" [shape=rectangle];
@@ -135,6 +136,8 @@ Limitations
     However, complex interdependencies between service instances are often an operation risk as well. 
     Overly entangled services are hard to reason about, debug and fix. 
     While it is possible to develop more complex topologies using the guidelines set out in :ref:`Partial Compiles<partial_compile>`, it may be preferable to simplify the service design for less interdependence. 
+
+For more details, see :ref:`limitation section in the core documentation<partial-compiles-limitations>`
 
 Further Reading
 -------------------
