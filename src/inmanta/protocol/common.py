@@ -689,6 +689,7 @@ class MethodProperties(object):
         return self._operation
 
     @property
+    @stable_api
     def arg_options(self) -> Dict[str, ArgOption]:
         return self._arg_options
 
@@ -728,12 +729,14 @@ class MethodProperties(object):
     def api_version(self) -> int:
         return self._api_version
 
+    @stable_api
     def get_long_method_description(self) -> Optional[str]:
         """
         Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._parsed_docstring.long_description
 
+    @stable_api
     def get_short_method_description(self) -> Optional[str]:
         """
         Return the first paragraph of the description present in the docstring of the method.
@@ -885,6 +888,7 @@ class MethodProperties(object):
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
 
+    @stable_api
     def get_openapi_parameter_type_for(self, param_name: str) -> Optional[openapi_model.ParameterType]:
         """
         Return the openapi ParameterType for the parameter with the given param_name or None when the parameter
