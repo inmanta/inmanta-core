@@ -143,6 +143,33 @@ class Range(Location):
         return False
 
 
+class AnchorTarget(object):
+    """AnchorTarget is used purely at the periphery of the compiler"""
+
+    __slots__ = ("location", "docstring")
+
+    def __init__(
+        self,
+        location: Location,
+        docstring: Optional[str] = None,
+    ) -> None:
+        """
+        Create a new AnchorTarget instance.
+        :param location: the location of the target of the anchor
+        :param docstring: the docstring attached to the target
+        """
+        self.location = location
+        self.docstring = docstring
+
+
+class WithComment(object):
+    """
+    Mixin class for AST nodes that can have a comment attached to them.
+    """
+
+    comment: Optional[str] = None
+
+
 class Locatable(object):
     __slots__ = ("_location",)
 
@@ -153,7 +180,7 @@ class Locatable(object):
         assert location is not None and location.lnr > 0
         self._location = location
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Optional[Location]:
         assert self._location is not None
         return self._location
 
@@ -213,7 +240,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         raise NotImplementedError()
 
 
@@ -223,9 +250,13 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
-        return t.get_location()
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class AttributeReferenceAnchor(Anchor):
@@ -235,13 +266,17 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         # assert isinstance(instancetype, Entity)
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
-        return entity_attribute.get_location()
+        location = entity_attribute.get_location()
+        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class Namespaced(Locatable):

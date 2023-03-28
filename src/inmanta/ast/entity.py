@@ -29,6 +29,7 @@ from inmanta.ast import (
     Namespace,
     NotFoundException,
     RuntimeException,
+    WithComment,
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
@@ -51,7 +52,7 @@ if TYPE_CHECKING:
 import inmanta.ast.attribute
 
 
-class Entity(NamedType):
+class Entity(NamedType, WithComment):
     """
     This class models a defined entity in the domain model of the configuration model.
 
@@ -61,8 +62,6 @@ class Entity(NamedType):
     :param name: The name of this entity. This name can not be changed
         after this object has been created
     """
-
-    comment: Optional[str]
 
     def __init__(self, name: str, namespace: Namespace, comment: Optional[str] = None) -> None:
         NamedType.__init__(self)
