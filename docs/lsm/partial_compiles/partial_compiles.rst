@@ -13,7 +13,7 @@ Implementation guidelines
 1. for every :inmanta:entity:`lsm::ServiceEntity`, 
 
     1. make sure to collect all resources it contains in the relation :inmanta:relation:`owned_resources<lsm::ServiceBase.owned_resources>`
-    2. make sure to always enable the select the ``parent`` implementations (`implement ... using parents`)
+    2. make sure to always select the ``parent`` implementations (`implement ... using parents`)
 2. for every :ref:`Inter Service Relation<inter_service_relations>`
     
     1. indicate which side of the relation is the owner by setting :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner` and :inmanta:relation:`lsm::ServiceEntityBinding.owner`. 
