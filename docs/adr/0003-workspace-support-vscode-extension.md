@@ -1,7 +1,7 @@
 # Workspace support in the Inmanta vs-code extension
 
 * Status: accepted
-* Deciders: [Sander, Hugo]
+* Deciders: [HugoT, Sander, Arnaud]
 * Date: 2023-03-13
 
 Technical Story: [Original ticket](https://github.com/inmanta/vscode-inmanta/issues/892)
