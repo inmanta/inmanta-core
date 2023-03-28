@@ -41,6 +41,8 @@ def patch_pydantic_field_type_schema() -> None:
     """
     This ugly patch fixes the serialization of models containing Optional in them.
     https://github.com/samuelcolvin/pydantic/issues/1270
+
+    The fix for this issue will be included in pydantic V2.
     """
 
     def patch_nullable(field: ModelField, **kwargs):

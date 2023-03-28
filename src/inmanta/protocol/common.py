@@ -63,6 +63,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
+from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
 
@@ -326,6 +327,12 @@ class UrlPath(object):
             path = path.replace(f"<{var}>", f"(?P<{var}>[^/]+)")
 
         return path
+
+    def has_path_variable(self, var_name: str) -> bool:
+        """
+        Return True iff the given var_name is a path parameter of this UrlPath.
+        """
+        return var_name in self._vars
 
 
 class InvalidMethodDefinition(Exception):
@@ -682,6 +689,7 @@ class MethodProperties(object):
         return self._operation
 
     @property
+    @stable_api
     def arg_options(self) -> Dict[str, ArgOption]:
         return self._arg_options
 
@@ -721,12 +729,14 @@ class MethodProperties(object):
     def api_version(self) -> int:
         return self._api_version
 
+    @stable_api
     def get_long_method_description(self) -> Optional[str]:
         """
         Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._parsed_docstring.long_description
 
+    @stable_api
     def get_short_method_description(self) -> Optional[str]:
         """
         Return the first paragraph of the description present in the docstring of the method.
@@ -877,6 +887,21 @@ class MethodProperties(object):
         """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2"""
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
+
+    @stable_api
+    def get_openapi_parameter_type_for(self, param_name: str) -> Optional[openapi_model.ParameterType]:
+        """
+        Return the openapi ParameterType for the parameter with the given param_name or None when the parameter
+        with the given name is not an OpenAPI parameter (but a RequestBodyParameter for example).
+        """
+        if param_name in self.arg_options and self.arg_options[param_name].header:
+            return openapi_model.ParameterType.header
+        elif self._path.has_path_variable(param_name):
+            return openapi_model.ParameterType.path
+        elif self.arguments_in_url():
+            return openapi_model.ParameterType.query
+        else:
+            return None
 
 
 class UrlMethod(object):

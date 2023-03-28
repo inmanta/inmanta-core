@@ -66,6 +66,8 @@ class Schema(BaseModel):
     example: Optional[Any] = None
     deprecated: Optional[bool] = None
     anyOf: Optional[Sequence["Schema"]] = None
+    allOf: Optional[Sequence["Schema"]] = None
+    oneOf: Optional[Sequence["Schema"]] = None
     enum: Optional[List[str]] = None
 
     def resolve(self, ref_prefix: str, known_schemas: Dict[str, "Schema"]) -> "Schema":
@@ -112,9 +114,17 @@ class Schema(BaseModel):
         # Duplicate the schema, and update some of its values
         duplicate = schema.copy(update=update, deep=deep)
 
-        # We copy and resolve the list of schema
+        # We copy and resolve the anyOf if we have any
         if duplicate.anyOf is not None:
             duplicate.anyOf = [s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for s in duplicate.anyOf]
+
+        # We copy and resolve the allOf if we have any
+        if duplicate.allOf is not None:
+            duplicate.allOf = [s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for s in duplicate.allOf]
+
+        # We copy and resolve the oneOf if we have any
+        if duplicate.oneOf is not None:
+            duplicate.oneOf = [s.recursive_resolve(ref_prefix, known_schemas, update, deep=False) for s in duplicate.oneOf]
 
         # We copy and resolve the items if we have any
         if duplicate.items is not None:
@@ -241,3 +251,12 @@ class OpenAPI(BaseModel):
     servers: Optional[List[Server]] = None
     paths: Dict[str, PathItem]
     components: Optional[Components] = None
+
+
+class OpenApiDataTypes(Enum):
+    STRING = "string"
+    NUMBER = "number"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    ARRAY = "array"
+    OBJECT = "object"
