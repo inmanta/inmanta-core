@@ -24,11 +24,11 @@ Supported scenarios
 
 Partial compiles are possible when
 
-1. Service Instances are unrelated: service instances don't share any resources and don't depend on each other in any way. This requires correctly setting :inmanta:relation:`owned_resources<lsm::ServiceBase.owned_resources>`.
+1. Service Instances are unrelated: service instances don't share any resources and don't depend on each other in any way. This only requires correctly setting :inmanta:relation:`owned_resources<lsm::ServiceBase.owned_resources>`.
 2. Services form groups under a common owner. 
     Instances within the group can freely depend on each other and share resources, but nothing is shared across groups. 
     One specific instance is designated as the common owner of the group.
-    This requires indicating what the owner of any service is, by setting :inmanta:relation:`lsm::ServiceEntityBinding.owner` and :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner`.
+    This additionally requires indicating what the owner of any service is, by setting :inmanta:relation:`lsm::ServiceEntityBinding.owner` and :inmanta:attribute:`lsm::ServiceEntityBinding.relation_to_owner`.
     This does not immediately have to be the root owner, the ownership hierarchy is allowed to form a tree with intermediate owners below the root owner. 
 
 3. Service instances and groups can depend on shared resources, that are identical for all service instances and groups.
@@ -51,12 +51,12 @@ As an example, consider the following model for managing ports and routers.
 Both are independent services, but a port can only be managed in combination with its router and all its siblings. 
 (This is not in general true, we often manage ports without managing the entire router, but we use it as an example.)
 
-This model is not much different from normal :ref:`Inter Service Relations<inter_service_relations>`, except for lines 29, 38, 57-58.
+This model is not much different from normal :ref:`Inter Service Relations<inter_service_relations>`, except for lines 29, 38, 58-59.
 
 .. literalinclude:: partial.cf
     :linenos:
     :language: inmanta
-    :emphasize-lines: 29,38,57-58
+    :emphasize-lines: 29,38,58-59
     :caption: main.cf
 
 
@@ -64,16 +64,17 @@ How it works
 -------------------
 
 To better understand how this works, there are two things to consider:
+
 1. how to divide the resources into resource sets
 2. how to get the correct instances into the model
 
 Resource sets
 +++++++++++++
-The key mechanism behind partial compiles are ``ResourceSet``: all resources in the desired state are divided into groups.
-When building a new desired state, instead of replacing the entire desired state, we only replace specific ``ResourceSet``.
-Resources in ``ResourceSet`` can not depend on Resources in other ``ResourceSets``.
+The key mechanism behind partial compiles are ``ResourceSets``: all resources in the desired state are divided into groups.
+When building a new desired state, instead of replacing the entire desired state, we only replace a specific ``ResourceSet``.
+Resources in a ``ResourceSet`` can not depend on Resources in other ``ResourceSets``.
 
-To make this work, we have assign every Service Instance to a ``ResourceSet``, such that the set has no relations to any other ``ResourceSet``.
+To make this work, we have to assign every Service Instance to a ``ResourceSet``, such that the set has no relations to any other ``ResourceSet``.
 
 In practice, we do this by putting all ``Resources`` in the ``ResourceSet`` of the owning entity.
 
