@@ -127,13 +127,13 @@ Limitations
 -------------------
 
 1. When doing normal compiles, the model can very effectively find conflicts between services (e.g. using indexes), because it has an overview of all instances. 
-When using partial compile, conflicts between groups can not be detected, because the compiler never sees them together. 
-This means that the model must be designed to be conflict free or rely on an (external) inventory to avoid conflicts. 
-*This is why we always advice to run models in full compile mode until performance becomes an issue*: it gives the model time to mature and to detect subtle conflicts.
+    When using partial compile, conflicts between groups can not be detected, because the compiler never sees them together. 
+    This means that the model must be designed to be conflict free or rely on an (external) inventory to avoid conflicts. 
+    *This is why we always advice to run models in full compile mode until performance becomes an issue*: it gives the model time to mature and to detect subtle conflicts.
 2. Complex topologies (with multiple parents or cross-relations) are currently not supported out of the box. 
-However, complex interdependencies between service instances are often an operation risk as well. 
-Overly entangled services are hard to reason about, debug and fix. 
-While it is possible to develop more complex topologies using the guidelines set out in :ref:`Partial Compiles<partial_compile>`, it may be preferable to simplify the service design for less interdependence. 
+    However, complex interdependencies between service instances are often an operation risk as well. 
+    Overly entangled services are hard to reason about, debug and fix. 
+    While it is possible to develop more complex topologies using the guidelines set out in :ref:`Partial Compiles<partial_compile>`, it may be preferable to simplify the service design for less interdependence. 
 
 Further Reading
 -------------------
