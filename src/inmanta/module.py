@@ -1530,7 +1530,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
           of the module to the URL.
         * package: When the type is set to package, the URL field should contain the URL of the Python package repository.
           The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-          compliant.
+          compliant. If more than one package url is configured, they will all be passed to pip. This is generally only
+          recommended if all configured indexes are under full control of the end user to protect against dependency
+          confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
+          `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
