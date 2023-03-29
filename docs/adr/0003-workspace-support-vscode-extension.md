@@ -17,7 +17,7 @@ to help guide the choice of having one language server for all the folders, or o
 * We want the functionalities offered by the Inmanta extension when working on a single project or module to work
 seamlessly when working in a workspace.
 * We want to make sure independent projects or modules are isolated from each other and don't pollute each other's
-environments.
+Python environments.
 
 ## Considered Options
 
@@ -30,16 +30,25 @@ environments.
 Chosen option: option 2, because it is the best compromise between allowing isolation between folders when desired and
 ease of implementation.
 
-When a `.cf` file is opened, if the folder it belongs to is not already being managed by a language server, then we
-prompt the user to select a venv for this folder and spin a language server up.
+When a `.cf` file is opened, we mimick the behaviour of the pylance extension:
+- If the top-most folder this file belongs to is already being watched by a language server -> Nothing to do
+- Else -> We need to start a new language server for this folder using :
+  - Case 1: a venv for this folder has already been selected in the past and persisted by vs code in the persistent
+storage ==> we simply use this venv and start a new language server. Relevant documentation [here](https://github.com/microsoft/vscode-python/wiki/Setting-descriptions#experience).
+
+  - Case 2: this is a fresh folder with no pre-selected venv
+      * if a workspace-wide venv has been selected -> use this one
+      * use the default environment used by the python extension: the interpreter with the highest version amongst [interpreters](https://code.visualstudio.com/docs/python/environments#_where-the-extension-looks-for-environments).
+
+NOTE: A check is performed to make sure the interpreted used is not a globally installed one
 
 ## Pros and Cons of the Options
 
 ### [option 1]
 
-* Bad, because there is no isolation between folders, all dependencies would be installed in the same venv. This might
-be a desired behaviour in some cases, but is not acceptable in most cases. The issue of incompatible requirements would
-also arise.
+* Bad, because there is no isolation between folders. All dependencies would be installed in the same venv. This might
+be a desired behaviour in some cases, but is not acceptable in most cases. e.g. Two projects with different python or
+compiler version. Similarly, issues with incompatible requirements between projects could also arise.
 * Good, because a single server is started.
 
 ### [option 2]
