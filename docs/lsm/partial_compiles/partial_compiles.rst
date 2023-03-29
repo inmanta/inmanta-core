@@ -80,7 +80,7 @@ To make this work, we have to assign every Service Instance to a ``ResourceSet``
 In practice, we do this by putting all ``Resources`` in the ``ResourceSet`` of the owning entity.
 
 .. digraph:: resource_sets_generic_good
-    :caption: Resource Sets for the Router example with 2 Routers with each 1 port.
+    :caption: Resource Sets for the Router example with 2 Routers with each 1 port. Arrows represent the requires relation.
 
     subgraph cluster_services {
         "NullResource(name=r1)" [shape=rectangle];
