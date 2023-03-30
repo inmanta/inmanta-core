@@ -40,7 +40,8 @@ storage ==> we simply use this venv and start a new language server. Relevant do
       * if a workspace-wide venv has been selected -> use this one
       * use the default environment used by the python extension: the interpreter with the highest version amongst [interpreters](https://code.visualstudio.com/docs/python/environments#_where-the-extension-looks-for-environments).
 
-NOTE: A check is performed to make sure the interpreted used is not a globally installed one
+NOTE: A check is performed to make sure the interpreter used is not a globally installed one. If this is the case,
+the user will be prompted to pick another interpreter.
 
 ## Pros and Cons of the Options
 
