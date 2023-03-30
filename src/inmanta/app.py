@@ -767,8 +767,7 @@ def _get_default_stream_handler() -> logging.StreamHandler:
 def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
     if not options.log_file:
         raise Exception("No logfile was provided.")
-    log_level = options.log_file_level
-    level = _convert_to_log_level(log_level)
+    level = _convert_to_log_level(options.log_file_level)
     formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
     file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
     file_handler.setFormatter(formatter)
