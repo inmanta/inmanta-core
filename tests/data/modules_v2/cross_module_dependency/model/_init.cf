@@ -1,0 +1,1 @@
+cross_module_dependency::print_message("message from model")

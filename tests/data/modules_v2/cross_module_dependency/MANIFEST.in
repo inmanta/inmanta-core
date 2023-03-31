@@ -1,0 +1,5 @@
+include inmanta_plugins/cross_module_dependency/setup.cfg
+include inmanta_plugins/cross_module_dependency/py.typed
+recursive-include inmanta_plugins/cross_module_dependency/model *.cf
+graft inmanta_plugins/cross_module_dependency/files
+graft inmanta_plugins/cross_module_dependency/templates
