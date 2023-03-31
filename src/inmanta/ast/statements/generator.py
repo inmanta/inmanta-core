@@ -313,7 +313,11 @@ class ListComprehension(RawResumer, ExpressionStatement):
         resumer for when the iterable is complete. Returns as requires the (gradual) helper's result variable, which will be
         frozen by the resumer.
 
-        Flow: requires_emit -> gradual execution -> resume -> execute
+        Flow:
+            `requires_emit()` -> set up helper, schedule resume and execute
+            -> helper gradual execution (if lhs is not None)
+            -> wait for iterable completion -> `resume()` -> finalize helper input
+            -> wait for helper completion -> `execute()` -> return complete value
         """
         base_requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
 
@@ -332,13 +336,14 @@ class ListComprehension(RawResumer, ExpressionStatement):
             else self.iterable.requires_emit_gradual(resolver, queue, collector_helper)
         )
 
-        # non-gradual mode / finishing up
+        # non-gradual mode / finishing up: resume as soon as the iterable can be executed
         # pass helper to the resumer via the requires object
         wrapped_helper: VariableABC = WrappedValueVariable(collector_helper)
         requires: dict[object, VariableABC] = base_requires | iterable_requires | {self: wrapped_helper}
         RawUnit(queue, resolver, requires, resumer=self)
 
-        # Wait for resumer to populate result. No need to wait for iterable requires explicitly because resumer already does
+        # Wait for resumer and helper to populate result.
+        # No need to wait for iterable requires explicitly because resumer already does
         return base_requires | {self: collector_helper.result}
 
     def requires_emit_gradual(
