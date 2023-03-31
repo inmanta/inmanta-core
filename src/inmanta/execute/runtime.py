@@ -309,8 +309,12 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         return self._node
 
 
-# TODO: name + docstring: this is not only immediate, it also takes listeners
-class ImmediateResultVariable(ResultVariable[T]):
+class ListElementVariable(ResultVariable[T]):
+    """
+    Variable representing a single value in a gradually executable list. Can be resolved immediately and allows attaching
+    listeners who will receive this single value.
+    """
+
     def __init__(self, value: T, location: Location) -> None:
         super().__init__()
         self.set_value(value, location)
@@ -321,10 +325,12 @@ class ImmediateResultVariable(ResultVariable[T]):
             resultcollector.receive_result(self.value, location)
 
 
-# TODO: review implementation
-# TODO: double check typing
 class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
-    # TODO: docstring
+    """
+    Variable that is complete when it has received a fixed number of assignments (not values, a single assignment can be a list
+    of values). The count can be supplied at construction or at a later stage. The variable will never freeze itself as long
+    as its count has not been reached (or if it has not yet been set).
+    """
 
     __slots__ = ("count", "freeze_count")
 
@@ -335,12 +341,18 @@ class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
         self.freeze_count: Optional[int] = None
 
     def set_freeze_count(self, freeze_count: int) -> None:
-        # TODO: docstring
+        """
+        Set the new assignment count and check if the variable can be frozen.
+        """
         self.freeze_count = freeze_count
         self.check_count()
 
     def check_count(self) -> bool:
-        # TODO: docstring
+        """
+        Freeze the variable iff it has received all its assignments.
+        """
+        if self.hasValue:
+            return
         if self.freeze_count is not None and self.count >= self.freeze_count:
             self.hasValue = True
             for waiter in self.waiters:
@@ -348,6 +360,9 @@ class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
             self.waiters = None
 
     def set_value(self, value: Union[T, list[T]], location: Location, recur: bool = True) -> None:
+        if self.hasValue:
+            # should never happen, indicates bug in compiler
+            raise RuntimeException(None, "FixedCountVariable assignment after freeze")
         # flatten list
         if isinstance(value, list):
             self.value.extend(value)
@@ -355,13 +370,6 @@ class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
             self.value.append(value)
         self.count += 1
         self.check_count()
-
-    # TODO: do we really need to override this?
-    def get_value(self) -> list[T]:
-        if not self.is_ready():
-            # TODO: proper exception
-            raise Exception("invalid: should not be called yet")
-        return self.value
 
 
 class ResultVariableProxy(VariableABC[T]):
@@ -674,7 +682,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         self.set_value(value, location)
         return False
 
-    def listener(self, resultcollector: ResultCollector, location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> None:
         for value in self.value:
             resultcollector.receive_result(value, location)
         if not self.hasValue:

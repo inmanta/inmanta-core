@@ -296,3 +296,5 @@ def test_list_comprehension_gradual_consistency(snippetcompiler, monkeypatch) ->
 # TODO: tests for error scenarios
 # TODO: tests for guards
 # TODO: test for shadowing + guard
+# TODO: test with Unknowns: in list / list itself is unknown
+# TODO: test with null values in list

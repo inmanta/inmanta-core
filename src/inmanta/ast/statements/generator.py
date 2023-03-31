@@ -18,6 +18,7 @@
 
 # pylint: disable-msg=W0613,R0201
 
+import itertools
 import logging
 import uuid
 from collections import abc
@@ -59,7 +60,7 @@ from inmanta.execute.runtime import (
     ExecutionContext,
     ExecutionUnit,
     FixedCountVariable,
-    ImmediateResultVariable,
+    ListElementVariable,
     Instance,
     QueueScheduler,
     RawUnit,
@@ -268,7 +269,6 @@ class For(RequiresEmitStatement):
         yield self.module
 
 
-# TODO: include general flow in docstring (here or requires_emit?): requires_emit -> resume -> execute
 class ListComprehension(RawResumer, ExpressionStatement):
     """
     A list comprehension expression, e.g. `["hello {{world}}" for world in worlds]`.
@@ -287,9 +287,15 @@ class ListComprehension(RawResumer, ExpressionStatement):
         self.value_expression: ExpressionStatement = value_expression
         self.loop_var: LocatableString = loop_var
         self.iterable: ExpressionStatement = iterable
-        # TODO: currently ignored
+        # TODO: guard currently ignored
         self.guard: ExpressionStatement = guard
-        # TODO: extend anchors?
+        self.anchors.extend(
+            itertools.chain(
+                self.value_expression.get_anchors(),
+                self.iterable.get_anchors(),
+                (self.guard.get_anchors() if self.guard is not None else ()),
+            )
+        )
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.value_expression.normalize(lhs_attribute=lhs_attribute)
@@ -311,9 +317,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
         """
         base_requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
 
-        # TODO: gradual_helper name
         # set up gradual execution
-        gradual_helper: ListComprehensionGradual = ListComprehensionGradual(
+        collector_helper: ListComprehensionCollector = ListComprehensionCollector(
             statement=self,
             resolver=resolver,
             queue=queue,
@@ -324,18 +329,17 @@ class ListComprehension(RawResumer, ExpressionStatement):
             # => propagates progress potential to iterable expression's requires
             self.iterable.requires_emit(resolver, queue)
             if lhs is None
-            else self.iterable.requires_emit_gradual(resolver, queue, gradual_helper)
+            else self.iterable.requires_emit_gradual(resolver, queue, collector_helper)
         )
 
         # non-gradual mode / finishing up
         # pass helper to the resumer via the requires object
-        wrapped_helper: VariableABC = WrappedValueVariable(gradual_helper)
+        wrapped_helper: VariableABC = WrappedValueVariable(collector_helper)
         requires: dict[object, VariableABC] = base_requires | iterable_requires | {self: wrapped_helper}
         RawUnit(queue, resolver, requires, resumer=self)
 
-        # wait for resumer to populate result
-        # TODO: consider whether base_requires and/or iterable_requires are still important here
-        return {self: gradual_helper.result}
+        # Wait for resumer to populate result. No need to wait for iterable requires explicitly because resumer already does
+        return base_requires | {self: collector_helper.result}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
@@ -348,27 +352,26 @@ class ListComprehension(RawResumer, ExpressionStatement):
         values will be sent.
         """
         # fetch helper, passed via the requires object
-        gradual_helper: object = requires[self].get_value()
-        assert isinstance(gradual_helper, ListComprehensionGradual)
+        collector_helper: object = requires[self].get_value()
+        assert isinstance(collector_helper, ListComprehensionCollector)
 
         iterable: object = self.iterable.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
         if isinstance(iterable, Unknown):
             return Unknown(self)
         if not isinstance(iterable, list):
-            # TODO: allow dict?
             raise TypingException(
                 self, f"A list comprehension can only be applied to lists and relations, got {type(iterable)}"
             )
-        if gradual_helper.nb_results_received == 0:
+        if collector_helper.nb_results_received == 0:
             # non-gradual mode: pass results now
             for item in iterable:
                 # TODO: BUG: may lose ordering of primitive lists, e.g. if value_expression = `x > 2 ? x : (true ?  0 : 0)'
-                # TODO: should this be self.iterable.location?
-                gradual_helper.receive_result(item, self.location)
+                collector_helper.receive_result(item, self.location)
         # indicate to helper that we're done
-        gradual_helper.done()
+        collector_helper.complete()
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     # TODO: execute_direct?
@@ -377,12 +380,14 @@ class ListComprehension(RawResumer, ExpressionStatement):
     # TODO
 
 
-# TODO: name + invariants in docstring => not only gradual
-class ListComprehensionGradual(ResultCollector[object]):
+class ListComprehensionCollector(ResultCollector[object]):
     """
-    Result collector for gradual execution of the list comprehension statement. When it receives a result, it sets up gradual
-    execution for the value expression, with the lhs as final result collector. Additionally, it collects all final results
-    in its own result variable for non-gradual execution.
+    Result collector for result collection (gradual or otherwise) of the list comprehension statement. When it receives a
+    result, it sets up appropriate (gradual or otherwise) execution for the value expression, with the lhs as final result
+    collector. Finally, it collects all final results in its own result variable for non-gradual execution.
+
+    Expects to receive each result once, be it gradually or at execution-time. Clients should indicate completion by calling
+    `complete()`.
     """
 
     def __init__(
@@ -397,12 +402,17 @@ class ListComprehensionGradual(ResultCollector[object]):
         self.queue: QueueScheduler = queue
         self.lhs: Optional[ResultCollector[object]] = lhs
         self.nb_results_received: int = 0
+        # FixedCountVariable allows us to indicate how many assignments are expected: 1 for each scheduled value expression
         self.result: FixedCountVariable = FixedCountVariable()
 
     def receive_result(self, value: object, location: Location) -> bool:
         # TODO: keep track of seen to avoid duplicate work? Be careful not to introduce the same bug as with the for loop
-        # TODO: ResultVariable does not handle receive_result => breaks gradual execution => add comment
-        value_wrapper: ResultVariable[object] = ImmediateResultVariable(value, location)
+        if self.result.freeze_count is not None:
+            # should never happen, indicates bug in compiler
+            raise RuntimeException(self.statement, "ListComprehensionCollector received result after completeness")
+        # Use special result variable for a pre-known value with listener capabilities. Using a plain `ResultVariable` would
+        # break gradual execution (e.g. `Reference.requires_emit_gradual` registers self.lhs as listener)
+        value_wrapper: ListElementVariable[object] = ListElementVariable(value, location)
         value_resolver: VariableResolver = VariableResolver(
             parent=self.resolver,
             name=str(self.statement.loop_var),
@@ -421,8 +431,10 @@ class ListComprehensionGradual(ResultCollector[object]):
 
         return False
 
-    def done(self) -> None:
-        # TODO: docstring
+    def complete(self) -> None:
+        """
+        Indicate that all results have been received. No further calls to `receive_result` should be done after this.
+        """
         self.result.set_freeze_count(self.nb_results_received)
 
 
