@@ -691,7 +691,7 @@ def cmd_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--log-file-level",
         dest="log_file_level",
-        choices=["0", "1", "2", "3", "ERROR", "WARNING", "INFO", "DEBUG"],
+        choices=["0", "1", "2", "3", "4", "ERROR", "WARNING", "INFO", "DEBUG", "TRACE"],
         default="INFO",
         help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG",
     )
