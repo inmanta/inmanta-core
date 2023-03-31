@@ -505,6 +505,7 @@ async def test_threadpool_join():
     hanglock = Event()
     done = Queue()
 
+    eventloop = asyncio.get_event_loop()
     async def cor():
         await asyncio.sleep(0.02)
 
@@ -514,7 +515,7 @@ async def test_threadpool_join():
         hanglock.wait()
         print("S1", flush=True)
         # hang on ioloop
-        block = asyncio.get_event_loop().call_soon_threadsafe(cor)
+        block = asyncio.run_coroutine_threadsafe(cor(), loop=eventloop)
         block.result()
         done.put("A")
         print("DONE", flush=True)
@@ -527,7 +528,6 @@ async def test_threadpool_join():
     hanglock.set()
     assert done.qsize() == 0
     await join_threadpool(tp)
-    await asyncio.sleep(10)
     # verify we are done
     tp.shutdown(wait=True)
     assert done.qsize() == 5
