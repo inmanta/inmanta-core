@@ -49,7 +49,7 @@ from inmanta.plugins import Plugin, PluginMeta
 from inmanta.stable_api import stable_api
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
-
+LOGGER.setLevel("DEBUG")
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
@@ -197,8 +197,13 @@ class Compiler(object):
         project.log_installed_modules()
 
         # load plugins
+        LOGGER.debug("self.__root_ns: %s", self.__root_ns)
         for name, cls in PluginMeta.get_functions().items():
+            LOGGER.debug("TT" * 30)
+            LOGGER.debug("name %s, cls %s", name, cls)
             mod_ns = cls.__module__.split(".")
+            LOGGER.debug("mod_ns %s", mod_ns)
+
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
                     "All plugin modules should be loaded in the %s package not in %s" % (const.PLUGINS_PACKAGE, cls.__module__)
@@ -208,16 +213,25 @@ class Compiler(object):
 
             ns: Optional[Namespace] = self.__root_ns
             for part in mod_ns:
+                LOGGER.debug("-|" * 30)
+                LOGGER.debug("part %s", part)
+                LOGGER.debug("ns %s", ns)
                 if ns is None:
                     break
                 ns = ns.get_child(part)
+                LOGGER.debug("ns CHILD %s", ns)
 
             if ns is None:
-                raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
+                LOGGER.debug(r"""raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))""")
+                # raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
+                # https://github.com/inmanta/inmanta-core/issues/5651
+                PluginMeta.clear(".".join(mod_ns))
 
-            name = name.split("::")[-1]
-            statement = PluginStatement(ns, name, cls)
-            statements.append(statement)
+            else:
+                name = name.split("::")[-1]
+                statement = PluginStatement(ns, name, cls)
+                LOGGER.debug("New statement: %s", statement)
+                statements.append(statement)
 
         # add the entity type (hack?)
         ns = self.__root_ns.get_child_or_create("std")
