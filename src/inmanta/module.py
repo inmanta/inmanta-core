@@ -960,7 +960,7 @@ class ModuleRepo:
 
     def is_empty(self) -> bool:
         """
-        return true of this repo will never produce any repo
+        Return true if this repo will never produce any repo.
 
         Used to distinguish an empty compose repo from a non-empty one
         """
