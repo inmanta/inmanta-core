@@ -21,7 +21,7 @@ import py_compile
 import shutil
 import sys
 from collections import abc
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Sequence, Set
 
 import py
 import pytest
@@ -29,6 +29,7 @@ from pkg_resources import Requirement
 
 from inmanta import const, loader, plugins, resources
 from inmanta.ast import CompilerException
+from inmanta.compiler import Compiler
 from inmanta.const import CF_CACHE_DIR
 from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
 from inmanta.module import (
@@ -1365,13 +1366,12 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     assert module.path == module_dir
 
 
-
 def test_ignore_plugins_for_modules_that_are_not_loaded_check_subpkg_implementation(
     local_module_package_index: str,
     snippetcompiler,
 ) -> None:
     """
-    TODO check 1. in slack: lake sure desired behaviour is achieved
+    TODO check 1. in slack: make sure desired behaviour is achieved
     """
     project: Project = snippetcompiler.setup_for_snippet(
         """
@@ -1410,99 +1410,65 @@ import cross_module_dependency
     # assert "cross_module_dependency::print_message" not in plugins.PluginMeta.get_functions()
 
 
-
-
-#
-# import logging
-#
-# LOGGER = logging.getLogger(__name__)
-# LOGGER.setLevel("DEBUG")
-#
-#
-# LOGGER.debug("MODULE IS BEING LOADED")
-#
-# # TODO remove above
-#
-# from inmanta.plugins import plugin
-# @plugin("subpkg_plugin")
-# def subpkg_plugin(message: "string"):
-#     print(message)
-
-
-
-
-def test_cross_module_dependency(
-    local_module_package_index: str,
-    snippetcompiler_clean,
-    capsys
-) -> None:
+def test_cross_module_dependency(local_module_package_index: str, snippetcompiler_clean, capsys) -> None:
     """
-    TODO add docstring
+    This test checks that the python code living in the inmanta_plugins dir of a module ('anothermod' in this test case)
+    can be used from the plugins of another module. ('cross_module_dependency' in this test case)
     """
+
+    def check_name_space(name_space: Dict[str, any], includes: Sequence[str], excludes: Sequence[str]) -> None:
+        for x in includes:
+            assert x in name_space
+        for x in excludes:
+            assert x not in name_space
+
     project: Project = snippetcompiler_clean.setup_for_snippet(
         """
 import cross_module_dependency
 
-cross_module_dependency::print_message('sanity CHECK')
+cross_module_dependency::print_message('message from project model')
+cross_module_dependency::call_to_triple_from_another_mod('triple this string')
+
         """.strip(),
         python_package_sources=[local_module_package_index],
         python_requires=[
-            # InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
+            InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
             InmantaModuleRequirement.parse("cross_module_dependency").get_python_package_requirement(),
         ],
         autostd=False,
     )
-    # project.load()
 
-    # compiler = Compiler()
-    # (statements, blocks) = compiler.compile()
+    check_name_space(
+        name_space=project.modules, includes=["cross_module_dependency"], excludes=["minimalv2module", "anothermod"]
+    )
+    check_name_space(
+        name_space=sys.modules,
+        includes=[],
+        excludes=["inmanta_plugins.cross_module_dependency", "inmanta_plugins.minimalv2module", "inmanta_plugins.anothermod"],
+    )
 
     snippetcompiler_clean.do_export()
-
-
     out, _ = capsys.readouterr()
     output = out.strip()
-    assert output == "sanity CHECK"
 
+    expected_output: list[str] = [
+        "message from project model",
+        "triple this string" * 3,
+        "message from cross_module_dependency model",
+    ]
+    assert output == "\n".join(expected_output)
 
-    #
-    # assert "minimalv2module" in project.modules
-    # assert "cross_module_dependency" in project.modules
-    #
-    # assert "inmanta_plugins.minimalv2module" in sys.modules
-    # assert "inmanta_plugins.cross_module_dependency" in sys.modules
-    #
-    # assert "cross_module_dependency::print_message" in plugins.PluginMeta.get_functions()
-    #
-    # project.modules["cross_module_dependency"].unload()
-    #
-    # assert "minimalv2module" in project.modules
-    # assert "cross_module_dependency" not in project.modules
-    #
-    # assert "inmanta_plugins.minimalv2module" in sys.modules
-    # assert "inmanta_plugins.cross_module_dependency" not in sys.modules
-    #
-    # assert "cross_module_dependency::print_message" not in plugins.PluginMeta.get_functions()
+    check_name_space(
+        name_space=project.modules, includes=["cross_module_dependency"], excludes=["minimalv2module", "anothermod"]
+    )
+    check_name_space(
+        name_space=sys.modules,
+        includes=["inmanta_plugins.cross_module_dependency", "inmanta_plugins.anothermod"],
+        excludes=["inmanta_plugins.minimalv2module"],
+    )
 
-
-
-
-
-
-# Plugin code to add to subpkg/__init__.py in cross_module_dependency
-
-# import logging
-#
-# LOGGER = logging.getLogger(__name__)
-# LOGGER.setLevel("DEBUG")
-#
-#
-# LOGGER.debug("MODULE IS BEING LOADED")
-#
-# # TODO remove above
-#
-# from inmanta.plugins import plugin
-# @plugin("subpkg_plugin")
-# def subpkg_plugin(message: "string"):
-#     print(message)
-#
+    check_name_space(
+        name_space=plugins.PluginMeta.get_functions(),
+        includes=["cross_module_dependency::print_message", "cross_module_dependency::call_to_triple_from_another_mod"],
+        excludes=["anothermod::flag_plugin"],
+    )
