@@ -236,6 +236,7 @@ class ExpressionStatement(RequiresEmitStatement):
         raise NotImplementedError()
 
 
+# TODO: why do resumers inherit from ExpressionStatement? Could just be a mix-in?
 class Resumer(ExpressionStatement):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).

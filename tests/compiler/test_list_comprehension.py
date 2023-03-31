@@ -46,13 +46,12 @@ def test_list_comprehension_basic(snippetcompiler) -> None:
     )
     compiler.do_compile()
 
-# TODO
-@pytest.mark.xfail(strict=True)
 def test_list_comprehension_order(snippetcompiler) -> None:
     """
     Verify that the list comprehension expression preserves order on primitive lists.
     """
     snippetcompiler.setup_for_snippet(
+        # TODO: this without intermediate base variable
         textwrap.dedent(
             """
             base = [1, 2, 3, 4, 5]
@@ -298,3 +297,5 @@ def test_list_comprehension_gradual_consistency(snippetcompiler, monkeypatch) ->
 # TODO: test for shadowing + guard
 # TODO: test with Unknowns: in list / list itself is unknown
 # TODO: test with null values in list
+# TODO: test with gradually executable literal list order
+# TODO: as = [[a, a] for x in xs] where a = [1,2,3]

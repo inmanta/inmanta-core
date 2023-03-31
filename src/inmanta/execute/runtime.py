@@ -325,11 +325,14 @@ class ListElementVariable(ResultVariable[T]):
             resultcollector.receive_result(self.value, location)
 
 
+# TODO: delete
 class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
     """
     Variable that is complete when it has received a fixed number of assignments (not values, a single assignment can be a list
     of values). The count can be supplied at construction or at a later stage. The variable will never freeze itself as long
     as its count has not been reached (or if it has not yet been set).
+
+    This variable ignores listeners.
     """
 
     __slots__ = ("count", "freeze_count")
@@ -370,6 +373,8 @@ class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
             self.value.append(value)
         self.count += 1
         self.check_count()
+
+    # TODO: override get_promise to set two vars?
 
 
 class ResultVariableProxy(VariableABC[T]):

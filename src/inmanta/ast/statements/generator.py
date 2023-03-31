@@ -269,11 +269,13 @@ class For(RequiresEmitStatement):
         yield self.module
 
 
+# TODO: normal Resumer would be simpler?
 class ListComprehension(RawResumer, ExpressionStatement):
     """
     A list comprehension expression, e.g. `["hello {{world}}" for world in worlds]`.
     """
 
+    # TODO: slotted test?
     __slots__ = ("loop_var", "value_expression", "iterable", "guard")
 
     def __init__(
@@ -344,7 +346,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
         # Wait for resumer and helper to populate result.
         # No need to wait for iterable requires explicitly because resumer already does
-        return base_requires | {self: collector_helper.result}
+        return base_requires | {self: collector_helper.final_result}
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
@@ -367,13 +369,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
             raise TypingException(
                 self, f"A list comprehension can only be applied to lists and relations, got {type(iterable)}"
             )
-        if collector_helper.nb_results_received == 0:
-            # non-gradual mode: pass results now
-            for item in iterable:
-                # TODO: BUG: may lose ordering of primitive lists, e.g. if value_expression = `x > 2 ? x : (true ?  0 : 0)'
-                collector_helper.receive_result(item, self.location)
         # indicate to helper that we're done
-        collector_helper.complete()
+        collector_helper.complete(iterable, resolver, queue)
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -385,7 +382,9 @@ class ListComprehension(RawResumer, ExpressionStatement):
     # TODO
 
 
-class ListComprehensionCollector(ResultCollector[object]):
+# TODO: implement Locatable interface?
+# TODO: normal Resumer would be simpler?
+class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     """
     Result collector for result collection (gradual or otherwise) of the list comprehension statement. When it receives a
     result, it sets up appropriate (gradual or otherwise) execution for the value expression, with the lhs as final result
@@ -394,6 +393,8 @@ class ListComprehensionCollector(ResultCollector[object]):
     Expects to receive each result once, be it gradually or at execution-time. Clients should indicate completion by calling
     `complete()`.
     """
+
+    # TODO: slotted + test?
 
     def __init__(
         self,
@@ -406,15 +407,14 @@ class ListComprehensionCollector(ResultCollector[object]):
         self.resolver: Resolver = resolver
         self.queue: QueueScheduler = queue
         self.lhs: Optional[ResultCollector[object]] = lhs
-        self.nb_results_received: int = 0
-        # FixedCountVariable allows us to indicate how many assignments are expected: 1 for each scheduled value expression
-        self.result: FixedCountVariable = FixedCountVariable()
+        self.results: list[VariableABC] = []
+        # TODO: get rid of
+        self.final_result: ResultVariable = ResultVariable()
 
-    def receive_result(self, value: object, location: Location) -> bool:
+    # TODO: docstring chain
+    def receive_result(self, value: object, location: Location, *, chain: bool = False) -> bool:
+        # TODO: raise exception if already complete
         # TODO: keep track of seen to avoid duplicate work? Be careful not to introduce the same bug as with the for loop
-        if self.result.freeze_count is not None:
-            # should never happen, indicates bug in compiler
-            raise RuntimeException(self.statement, "ListComprehensionCollector received result after completeness")
         # Use special result variable for a pre-known value with listener capabilities. Using a plain `ResultVariable` would
         # break gradual execution (e.g. `Reference.requires_emit_gradual` registers self.lhs as listener)
         value_wrapper: ListElementVariable[object] = ListElementVariable(value, location)
@@ -424,23 +424,54 @@ class ListComprehensionCollector(ResultCollector[object]):
             variable=value_wrapper,
         )
 
+        additional_requires: Optional[VariableABC] = self.results[-1] if chain and self.results else None
+
+        result_variable: ResultVariable = ResultVariable()
+        self.results.append(result_variable)
+
         # execute the value expression
         requires: dict[object, VariableABC] = (
             self.statement.value_expression.requires_emit(value_resolver, self.queue)
             if self.lhs is None
             else self.statement.value_expression.requires_emit_gradual(value_resolver, self.queue, self.lhs)
         )
-        ExecutionUnit(self.queue, value_resolver, self.result, requires, self.statement.value_expression)
-
-        self.nb_results_received += 1
+        ExecutionUnit(
+            self.queue,
+            value_resolver,
+            result_variable,
+            requires | ({self: additional_requires} if additional_requires is not None else {}),
+            self.statement.value_expression,
+        )
 
         return False
 
-    def complete(self) -> None:
+    def complete(self, all_values: abc.Sequence[object], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Indicate that all results have been received. No further calls to `receive_result` should be done after this.
         """
-        self.result.set_freeze_count(self.nb_results_received)
+        # TODO: restructure
+        if self.lhs is not None:
+            # gradual mode: should have already received all values
+            if len(all_values) != len(self.results):
+                # TODO: raise exception
+                pass
+        elif self.results:
+            # TODO: raise exception
+            pass
+        else:
+            for value in all_values:
+                self.receive_result(value, location=self.statement.location, chain=True)
+
+        RawUnit(queue, resolver, dict(enumerate(self.results)), resumer=self)
+
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+        def get(variable: VariableABC) -> abc.Sequence[object]:
+            value: object = variable.get_value()
+            return value if isinstance(value, list) else [value]
+
+        self.final_result.set_value(
+            list(itertools.chain.from_iterable(get(variable) for variable in requires.values())), self.statement.location
+        )
 
 
 class If(RequiresEmitStatement):
