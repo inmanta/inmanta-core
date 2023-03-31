@@ -27,6 +27,7 @@ import itertools
 import logging
 import os
 import socket
+import threading
 import time
 import uuid
 import warnings
@@ -36,7 +37,6 @@ from collections import abc, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from threading import Thread
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
@@ -702,18 +702,23 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
     async def __aexit__(self, *excinfo: object) -> None:
         pass
 
-async def join_thread(thread: Thread, loop_delay: float = 0.01) -> None:
-    """
-    Wait for a thread to be terminated.
 
-    Will do a polling wait.
+async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
+    # idea borrowed from BaseEventLoop.shutdown_default_executor
+    loop = asyncio.get_event_loop()
+    future = loop.create_future()
 
-    :param loop_delay: number of seconds to sleep when polling
-    """
-    while thread.is_alive():
-        await asyncio.sleep(loop_delay)
+    def join() -> None:
+        for threadpool in threadpools:
+            try:
+                threadpool.shutdown(wait=True)
+            except Exception:
+                LOGGER.exception("Exception during threadpool shutdown")
+        loop.call_soon_threadsafe(future.set_result, None)
 
-async def join_threadpool(threadpool: ThreadPoolExecutor, loop_delay: float = 0.01) -> None:
-    assert threadpool._shutdown
-    for t in threadpool._threads:
-        await join_thread(t, loop_delay)
+    thread = threading.Thread(target=join)
+    thread.start()
+    try:
+        await future
+    finally:
+        thread.join()
