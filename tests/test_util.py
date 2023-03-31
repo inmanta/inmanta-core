@@ -20,7 +20,10 @@ import dataclasses
 import datetime
 import logging
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from queue import Queue
+from threading import Lock, Event, Condition
 from typing import Optional
 
 import pytest
@@ -35,7 +38,7 @@ from inmanta.util import (
     ScheduledTask,
     TaskSchedule,
     ensure_future_and_handle_exception,
-    stable_depth_first,
+    stable_depth_first, join_threadpool,
 )
 from utils import LogSequence, get_product_meta_data, log_contains, no_error_in_logs
 
@@ -494,3 +497,37 @@ def test_running_test_fixture():
     Assert that the RUNNING_TESTS variable is set to True when we run the tests
     """
     assert inmanta.RUNNING_TESTS
+
+
+async def test_threadpool_join():
+    tp = ThreadPoolExecutor()
+
+    hanglock = Event()
+    done = Queue()
+
+    async def cor():
+        await asyncio.sleep(0.02)
+
+    def worker():
+        print("IN", flush=True)
+        # hang on lock
+        hanglock.wait()
+        print("S1", flush=True)
+        # hang on ioloop
+        block = asyncio.get_event_loop().call_soon_threadsafe(cor)
+        block.result()
+        done.put("A")
+        print("DONE", flush=True)
+
+    for i in range(5):
+        tp.submit(worker)
+
+    tp.shutdown(wait=False)
+    assert done.qsize() == 0
+    hanglock.set()
+    assert done.qsize() == 0
+    await join_threadpool(tp)
+    await asyncio.sleep(10)
+    # verify we are done
+    tp.shutdown(wait=True)
+    assert done.qsize() == 5

@@ -33,8 +33,10 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
+from threading import Thread
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
@@ -699,3 +701,19 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
 
     async def __aexit__(self, *excinfo: object) -> None:
         pass
+
+async def join_thread(thread: Thread, loop_delay: float = 0.01) -> None:
+    """
+    Wait for a thread to be terminated.
+
+    Will do a polling wait.
+
+    :param loop_delay: number of seconds to sleep when polling
+    """
+    while thread.is_alive():
+        await asyncio.sleep(loop_delay)
+
+async def join_threadpool(threadpool: ThreadPoolExecutor, loop_delay: float = 0.01) -> None:
+    assert threadpool._shutdown
+    for t in threadpool._threads:
+        await join_thread(t, loop_delay)
