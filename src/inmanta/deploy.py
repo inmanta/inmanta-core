@@ -141,7 +141,7 @@ host=localhost
             "-m",
             "inmanta.app",
             "--log-file-level",
-            "INFO",
+            "DEBUG",
             "-c",
             server_config,
             "--config-dir",

@@ -667,10 +667,12 @@ log_levels = {
     "1": logging.WARNING,
     "2": logging.INFO,
     "3": logging.DEBUG,
+    "4": 2,
     "ERROR": logging.ERROR,
     "WARNING": logging.WARNING,
     "INFO": logging.INFO,
     "DEBUG": logging.DEBUG,
+    "TRACE": 2,
 }
 
 
@@ -689,8 +691,8 @@ def cmd_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--log-file-level",
         dest="log_file_level",
-        choices=["1", "2", "3", "4", "ERROR", "WARNING", "INFO", "DEBUG"],
-        default="WARNING",
+        choices=["0", "1", "2", "3", "ERROR", "WARNING", "INFO", "DEBUG"],
+        default="INFO",
         help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG",
     )
     parser.add_argument("--timed-logs", dest="timed", help="Add timestamps to logs", action="store_true")
@@ -785,6 +787,8 @@ def _convert_cli_log_level(level: int) -> int:
         # The minimal log level on the CLI is always WARNING
         return logging.WARNING
     else:
+        if level >= 4:
+            level = 4
         return _convert_to_log_level(str(level))
 
 

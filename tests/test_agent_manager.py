@@ -35,7 +35,7 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
 from inmanta.server.protocol import Session
-from utils import UNKWN, assert_equal_ish, retry_limited
+from utils import UNKWN, LogSequence, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1272,3 +1272,31 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     assert "Started new agent with PID" not in caplog.text
     # Ensure no timeout happened
     assert "took too long to start" not in caplog.text
+
+
+async def test_auto_started_agent_log_in_debug_mode(server, environment, agent_factory, caplog, monkeypatch):
+    """
+    Test the logging of an autostarted agent
+    """
+
+    async def mock_start_agent(self) -> None:
+        await super(Agent, self).start()
+        LOGGER.debug("test log in debug level")
+
+    monkeypatch.setattr(Agent, "start", mock_start_agent)
+
+    with caplog.at_level(logging.DEBUG):
+        agent_config.use_autostart_agent_map.set("True")
+        agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+        agent_name = "agent1"
+        env_id = UUID(environment)
+        env = await data.Environment.get_by_id(env_id)
+
+        # Start agent
+        await agentmanager.ensure_agent_registered(env, agent_name)
+        await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
+
+        # Verify agent is active
+        await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
+        log_sequence = LogSequence(caplog)
+        log_sequence.contains("test_agent_manager", logging.DEBUG, "test log in debug level")
