@@ -92,7 +92,7 @@ This folder contains a project.yml, which looks like this:
 
     Additional explanation of each field can be found on the quickstart.
 
-5. Change the <token> in the repo url to the credentials of the package repository (see :ref:`Prerequisites section<lsm_quickstart_prerequisites>`).
+5. Change the <token> in the repo url to the credentials to the package repository (see :ref:`Prerequisites section<lsm_quickstart_prerequisites>`).
 
 6. Go to the ``containerlab`` directory.
 
