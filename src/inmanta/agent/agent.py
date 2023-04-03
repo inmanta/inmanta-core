@@ -45,7 +45,7 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future
+from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -567,6 +567,16 @@ class AgentInstance(object):
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
 
+    def join(self, thread_pool_finalizer: List[ThreadPoolExecutor]) -> None:
+        """
+        Called after stop to ensure complete shutdown
+
+        :param thread_pool_finalizer: all threadpools that should be joined should be added here.
+        """
+        assert self._stopped
+        thread_pool_finalizer.append(self.provider_thread_pool)
+        thread_pool_finalizer.append(self.thread_pool)
+
     @property
     def environment(self) -> uuid.UUID:
         return self._env_id
@@ -1037,8 +1047,11 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         await super(Agent, self).stop()
         self.thread_pool.shutdown(wait=False)
+        threadpools_to_join = [self.thread_pool]
         for instance in self._instances.values():
             await instance.stop()
+            instance.join(threadpools_to_join)
+        await join_threadpools(threadpools_to_join)
 
     async def start_connected(self) -> None:
         """
