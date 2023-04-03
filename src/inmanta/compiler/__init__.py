@@ -202,6 +202,9 @@ class Compiler(object):
 
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
+            if cls.__module__ in marked_for_unregistration:
+                continue
+
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
@@ -216,10 +219,11 @@ class Compiler(object):
                     break
                 ns = ns.get_child(part)
 
-            if ns is None and cls.__module__ not in marked_for_unregistration:
+            if ns is None:
+                # Mark this plugin's module for unregistration so that future iterations on this module can be skipped.
+                marked_for_unregistration.add(cls.__module__)
                 # Un-register this plugin, as it is part of a module that is not loaded
                 # (https://github.com/inmanta/inmanta-core/issues/5651)
-                marked_for_unregistration.add(cls.__module__)
                 PluginMeta.clear(".".join(mod_ns))
 
             else:
