@@ -704,7 +704,18 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
 
 
 async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
-    # idea borrowed from BaseEventLoop.shutdown_default_executor
+    """
+    Asynchronously join a set of threadpools
+
+    idea borrowed from BaseEventLoop.shutdown_default_executor
+
+    We implemented this method because:
+    1. ThreadPoolExecutor.shutdown(wait=True)` is a blocking call, blocking the ioloop.
+       This doesn't work because we often have back-and-forth between the ioloop and the thread
+       due to our `ResourceHandler.run_sync` method.
+    2.The python sdk has no support for async awaiting threadpool shutdown (except for the default pool)
+    """
+
     loop = asyncio.get_event_loop()
     future = loop.create_future()
 
