@@ -1291,7 +1291,6 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment, monkeyp
     logdir = Config.get("config", "log-dir")
     log_file = f"{logdir}/agent-{environment}.log"  # Path to the log file
 
-    # Use async with to open the log file and read its contents
     with open(log_file, mode="r") as f:
         log_content = f.read()
 
