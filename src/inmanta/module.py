@@ -21,6 +21,7 @@ import enum
 import glob
 import importlib
 import logging
+import operator
 import os
 import re
 import subprocess
@@ -34,6 +35,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from configparser import ConfigParser
 from dataclasses import dataclass
+from functools import reduce
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
 from itertools import chain
@@ -853,6 +855,14 @@ class ModuleRepo:
         # same class is used for search path and remote repos, perhaps not optimal
         raise NotImplementedError("Abstract method")
 
+    def is_empty(self) -> bool:
+        """
+        Return true if this repo will never produce any repo.
+
+        Used to distinguish an empty compose repo from a non-empty one
+        """
+        return False
+
 
 class CompositeModuleRepo(ModuleRepo):
     def __init__(self, children: List[ModuleRepo]) -> None:
@@ -870,6 +880,9 @@ class CompositeModuleRepo(ModuleRepo):
             if result is not None:
                 return result
         return None
+
+    def is_empty(self) -> bool:
+        return reduce(operator.and_, (child.is_empty() for child in self.children), True)
 
 
 class LocalFileRepo(ModuleRepo):
@@ -893,6 +906,10 @@ class LocalFileRepo(ModuleRepo):
             return path
         return None
 
+    def is_empty(self) -> bool:
+        # May have or receive items
+        return False
+
 
 class RemoteRepo(ModuleRepo):
     def __init__(self, baseurl: str) -> None:
@@ -913,6 +930,10 @@ class RemoteRepo(ModuleRepo):
 
     def path_for(self, name: str) -> Optional[str]:
         raise NotImplementedError("Should only be called on local repos")
+
+    def is_empty(self) -> bool:
+        # May have or receive items
+        return False
 
 
 def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
@@ -1758,13 +1779,15 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             ),
         )
 
-        if self._metadata.downloadpath is not None:
-            self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
-            if self._metadata.downloadpath not in self._metadata.modulepath:
-                LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
+        if not self.module_source_v1.remote_repo.is_empty():
+            # This is only relevant if we have a V1 module source
+            if self._metadata.downloadpath is not None:
+                self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
+                if self._metadata.downloadpath not in self._metadata.modulepath:
+                    LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
 
-            if not os.path.exists(self._metadata.downloadpath):
-                os.mkdir(self._metadata.downloadpath)
+                if not os.path.exists(self._metadata.downloadpath):
+                    os.mkdir(self._metadata.downloadpath)
 
         self.virtualenv: env.ActiveEnv
         if venv_path is None:
