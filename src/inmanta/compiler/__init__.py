@@ -196,6 +196,10 @@ class Compiler(object):
 
         project.log_installed_modules()
 
+        # This lookup variable provides efficiency in the loop bellow:
+        # only call PluginMeta.clear once per module that is not loaded
+        marked_for_unregistration: Set[str] = set()
+
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
             mod_ns = cls.__module__.split(".")
@@ -212,9 +216,10 @@ class Compiler(object):
                     break
                 ns = ns.get_child(part)
 
-            if ns is None:
+            if ns is None and cls.__module__ not in marked_for_unregistration:
                 # Un-register this plugin, as it is part of a module that is not loaded
                 # (https://github.com/inmanta/inmanta-core/issues/5651)
+                marked_for_unregistration.add(cls.__module__)
                 PluginMeta.clear(".".join(mod_ns))
 
             else:

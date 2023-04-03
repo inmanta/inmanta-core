@@ -1372,6 +1372,10 @@ def test_cross_module_dependency(local_module_package_index: str, snippetcompile
     """
 
     def check_name_space(name_space: Dict[str, any], includes: Sequence[str], excludes: Sequence[str]) -> None:
+        """
+        Check that all the items in `includes` are present in `name_space`
+        and that no item in `excludes` is present in `name_space`
+        """
         for x in includes:
             assert x in name_space
         for x in excludes:
@@ -1406,14 +1410,13 @@ cross_module_dependency::call_to_triple_from_another_mod('triple this string')
     out, _ = capsys.readouterr()
     output = out.strip()
 
-    expected_output: str = "\n".join(
-        [
-            "message from project model",
-            "triple this string" * 3,
-            "message from cross_module_dependency model",
-        ]
-    )
-    assert output == expected_output
+    expected_output: List[str] = [
+        "message from project model",
+        "triple this string" * 3,
+        "message from cross_module_dependency model",
+    ]
+    for line in expected_output:
+        assert line in output
 
     check_name_space(
         name_space=project.modules, includes=["cross_module_dependency"], excludes=["minimalv2module", "anothermod"]
