@@ -140,3 +140,37 @@ implement A using std::none
         """,
         "Can not assign a value of type A to a variable of type int (reported in Construct(A) ({dir}/main.cf:8))",
     )
+
+
+def test_type_inference_is_subclass_right_direction_5790(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_5790
+
+entity A extends test_5790::A:
+end
+
+entity B extends test_5790::B:
+    int n = 1
+end
+
+implement A using std::none
+implement B using std::none
+
+
+a = A(b=B())
+n = a.b.n
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert 1 == root.lookup("n").get_value()
+
+
+# mymod:
+
+
+# main.cf
+
+# assert
+# n = 1
