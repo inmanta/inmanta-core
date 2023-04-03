@@ -29,7 +29,6 @@ from pkg_resources import Requirement
 
 from inmanta import const, loader, plugins, resources
 from inmanta.ast import CompilerException
-from inmanta.compiler import Compiler
 from inmanta.const import CF_CACHE_DIR
 from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
 from inmanta.module import (
@@ -1407,11 +1406,13 @@ cross_module_dependency::call_to_triple_from_another_mod('triple this string')
     out, _ = capsys.readouterr()
     output = out.strip()
 
-    expected_output: str = "\n".join([
-        "message from project model",
-        "triple this string" * 3,
-        "message from cross_module_dependency model",
-    ])
+    expected_output: str = "\n".join(
+        [
+            "message from project model",
+            "triple this string" * 3,
+            "message from cross_module_dependency model",
+        ]
+    )
     assert output == expected_output
 
     check_name_space(
