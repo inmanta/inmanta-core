@@ -1368,7 +1368,7 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
 def test_cross_module_dependency(local_module_package_index: str, snippetcompiler_clean, capsys) -> None:
     """
     This test checks that the python code living in the inmanta_plugins dir of a module ('anothermod' in this test case)
-    can be used from the plugins of another module. ('cross_module_dependency' in this test case)
+    that is not loaded, can be used from the plugins of another module. ('cross_module_dependency' in this test case)
     """
 
     def check_name_space(name_space: Dict[str, any], includes: Sequence[str], excludes: Sequence[str]) -> None:

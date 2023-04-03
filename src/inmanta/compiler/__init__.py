@@ -49,6 +49,7 @@ from inmanta.plugins import Plugin, PluginMeta
 from inmanta.stable_api import stable_api
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
