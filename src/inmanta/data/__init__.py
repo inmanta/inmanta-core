@@ -82,7 +82,6 @@ LOGGER = logging.getLogger(__name__)
 DBLIMIT = 100000
 APILIMIT = 1000
 
-
 # TODO: disconnect
 # TODO: difference between None and not set
 
@@ -5881,6 +5880,18 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
+class UnmanagedResource(BaseDocument):
+    """
+    discovered resources
+    :param environment: the environment of the resource
+    :param agent: the uuid of the agent that discovered the resource
+    :param discovered_resource_name: The name of the resource
+    :param value: The actual resource
+    """
+
+    __primary_key__ = ("environment", "discovered_resource_name", "agent")
+
+
 _classes = [
     Project,
     Environment,
@@ -5900,6 +5911,7 @@ _classes = [
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     User,
+    UnmanagedResource,
 ]
 
 
