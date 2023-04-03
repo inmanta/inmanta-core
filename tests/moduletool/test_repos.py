@@ -73,6 +73,7 @@ def test_local_repo_bad(tmpdir, modules_repo):
     result = repo.clone("thatotherthing", coroot)
     assert not result
 
+
 def test_composite_repo_empty():
     repo = LocalFileRepo("test")
 
