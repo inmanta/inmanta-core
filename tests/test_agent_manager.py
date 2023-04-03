@@ -30,6 +30,7 @@ import pytest
 from inmanta import config, data
 from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
+from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
@@ -1274,29 +1275,24 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     assert "took too long to start" not in caplog.text
 
 
-async def test_auto_started_agent_log_in_debug_mode(server, environment, agent_factory, caplog, monkeypatch):
+async def test_auto_started_agent_log_in_debug_mode(server, environment, monkeypatch):
     """
     Test the logging of an autostarted agent
     """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "test1": ""})
 
-    async def mock_start_agent(self) -> None:
-        await super(Agent, self).start()
-        LOGGER.debug("test log in debug level")
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agentmanager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
-    monkeypatch.setattr(Agent, "start", mock_start_agent)
+    await agentmanager.ensure_agent_registered(env, "test1")
+    await autostarted_agentmanager._ensure_agents(env, ["test1"])
 
-    with caplog.at_level(logging.DEBUG):
-        agent_config.use_autostart_agent_map.set("True")
-        agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-        agent_name = "agent1"
-        env_id = UUID(environment)
-        env = await data.Environment.get_by_id(env_id)
+    logdir = Config.get("config", "log-dir")
+    log_file = f"{logdir}/agent-{environment}.log"  # Path to the log file
 
-        # Start agent
-        await agentmanager.ensure_agent_registered(env, agent_name)
-        await agent_factory(environment=environment, agent_map={agent_name: ""}, agent_names=[agent_name])
+    # Use async with to open the log file and read its contents
+    with open(log_file, mode="r") as f:
+        log_content = f.read()
 
-        # Verify agent is active
-        await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
-        log_sequence = LogSequence(caplog)
-        log_sequence.contains("test_agent_manager", logging.DEBUG, "test log in debug level")
+    assert "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content

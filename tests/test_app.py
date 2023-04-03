@@ -314,7 +314,6 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     log_file = os.path.join(log_dir, log_file)
     with open(log_file, "r") as f:
         log_lines = f.readlines()
-        print(log_lines)
     check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=False)
@@ -351,6 +350,14 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
             2,
             [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
             [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+        ),
+        (
+            1,
+            [],
+            [
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+            ],
         ),
     ],
 )

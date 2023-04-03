@@ -662,6 +662,9 @@ def export(options: argparse.Namespace) -> None:
         conn.release_version(tid, version, True, agent_trigger_method)
 
 
+"""
+This dictionary maps the Inmanta log levels to the corresponding Python log levels
+"""
 log_levels = {
     "0": logging.ERROR,
     "1": logging.WARNING,
@@ -769,7 +772,7 @@ def _get_default_stream_handler() -> logging.StreamHandler:
 def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
     if not options.log_file:
         raise Exception("No logfile was provided.")
-    level = _convert_to_log_level(options.log_file_level)
+    level = _convert_inmanta_log_level_to_python_log_level(options.log_file_level)
     formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
     file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
     file_handler.setFormatter(formatter)
@@ -778,18 +781,24 @@ def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.W
     return file_handler
 
 
-def _convert_to_log_level(level: str) -> int:
+def _convert_inmanta_log_level_to_python_log_level(level: str) -> int:
+    """
+    Converts the Inmanta log level to the Python log level
+    """
+    if level.isdigit() and int(level) >= 4:
+        level = "4"
     return log_levels[level]
 
 
 def _convert_cli_log_level(level: int) -> int:
+    """
+    Converts the number of -v's passed on the CLI to the corresponding Inmanta log level
+    """
     if level < 1:
         # The minimal log level on the CLI is always WARNING
         return logging.WARNING
     else:
-        if level >= 4:
-            level = 4
-        return _convert_to_log_level(str(level))
+        return _convert_inmanta_log_level_to_python_log_level(str(level))
 
 
 def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
