@@ -1366,50 +1366,6 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     assert module.path == module_dir
 
 
-def test_ignore_plugins_for_modules_that_are_not_loaded_check_subpkg_implementation(
-    local_module_package_index: str,
-    snippetcompiler,
-) -> None:
-    """
-    TODO check 1. in slack: make sure desired behaviour is achieved
-    """
-    project: Project = snippetcompiler.setup_for_snippet(
-        """
-import minimalv2module
-import cross_module_dependency
-        """.strip(),
-        python_package_sources=[local_module_package_index],
-        python_requires=[
-            InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
-            InmantaModuleRequirement.parse("cross_module_dependency").get_python_package_requirement(),
-        ],
-        autostd=False,
-    )
-    project.load()
-
-    compiler = Compiler()
-    (statements, blocks) = compiler.compile()
-
-    #
-    # assert "minimalv2module" in project.modules
-    # assert "cross_module_dependency" in project.modules
-    #
-    # assert "inmanta_plugins.minimalv2module" in sys.modules
-    # assert "inmanta_plugins.cross_module_dependency" in sys.modules
-    #
-    # assert "cross_module_dependency::print_message" in plugins.PluginMeta.get_functions()
-    #
-    # project.modules["cross_module_dependency"].unload()
-    #
-    # assert "minimalv2module" in project.modules
-    # assert "cross_module_dependency" not in project.modules
-    #
-    # assert "inmanta_plugins.minimalv2module" in sys.modules
-    # assert "inmanta_plugins.cross_module_dependency" not in sys.modules
-    #
-    # assert "cross_module_dependency::print_message" not in plugins.PluginMeta.get_functions()
-
-
 def test_cross_module_dependency(local_module_package_index: str, snippetcompiler_clean, capsys) -> None:
     """
     This test checks that the python code living in the inmanta_plugins dir of a module ('anothermod' in this test case)
@@ -1451,12 +1407,12 @@ cross_module_dependency::call_to_triple_from_another_mod('triple this string')
     out, _ = capsys.readouterr()
     output = out.strip()
 
-    expected_output: list[str] = [
+    expected_output: str = "\n".join([
         "message from project model",
         "triple this string" * 3,
         "message from cross_module_dependency model",
-    ]
-    assert output == "\n".join(expected_output)
+    ])
+    assert output == expected_output
 
     check_name_space(
         name_space=project.modules, includes=["cross_module_dependency"], excludes=["minimalv2module", "anothermod"]

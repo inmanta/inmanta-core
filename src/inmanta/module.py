@@ -89,7 +89,6 @@ except ImportError:
 
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel("DEBUG")
 
 Path = NewType("Path", str)
 ModuleName = NewType("ModuleName", str)
