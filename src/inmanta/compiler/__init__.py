@@ -213,8 +213,8 @@ class Compiler(object):
                 ns = ns.get_child(part)
 
             if ns is None:
-                # raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
-                # https://github.com/inmanta/inmanta-core/issues/5651
+                # Un-register this plugin, as it is part of a module that is not loaded
+                # (https://github.com/inmanta/inmanta-core/issues/5651)
                 PluginMeta.clear(".".join(mod_ns))
 
             else:
