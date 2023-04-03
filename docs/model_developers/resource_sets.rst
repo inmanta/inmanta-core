@@ -483,10 +483,12 @@ Inter-resource set dependencies
 -------------------------------
 
 Resources within a resource set can only depend on resources within the same resource set or on shared resources.
-The diagram below provides an example where the resource dependency graph satisfies this requirement.
+Shared resources on the other hand can have dependencies on any resource in the model. The diagram below provides
+an example where the resource dependency graph satisfies these requirements. The arrows in the diagram show the
+requires relationship between entities/resources.
 
 .. digraph:: resource_sets_example_valid_dependencies
-    :caption: Two resource sets satisfying the dependency constraint
+    :caption: Two resource sets satisfying the dependency constraints
 
     subgraph cluster_shared {
         AgentConfig;
@@ -528,7 +530,7 @@ The diagram below provides an example where the resource dependency graph satisf
 In the diagram below, resource ``Host(id=269)`` that belongs to resource set 0 depends on resource ``Host(id=31)`` that belongs to resource set 1. This inter-resource set dependency is not allowed.
 
 .. digraph:: resource_sets_example_invalid_dependencies
-    :caption: Two resource sets violating the dependency constraint
+    :caption: Two resource sets violating the dependency constraints
 
     subgraph cluster_shared {
         AgentConfig;
