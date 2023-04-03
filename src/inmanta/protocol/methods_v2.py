@@ -1377,3 +1377,14 @@ def set_password(username: str, password: str) -> None:
     :raises NotFound: Raised when the user does not exist
     :raises BadRequest: Raised when server authentication is not enabled
     """
+
+
+@typedmethod(
+    path="/unmanaged",
+    validate_sid=False,
+    operation="POST",
+    agent_server=True,
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.agent],
+)
+def discovered_resources_create(env: uuid.UUID, discovered_resource_name: str, value: List[Dict[str, str]]) -> None:
