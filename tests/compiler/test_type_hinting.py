@@ -165,12 +165,3 @@ n = a.b.n
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
     assert 1 == root.lookup("n").get_value()
-
-
-# mymod:
-
-
-# main.cf
-
-# assert
-# n = 1
