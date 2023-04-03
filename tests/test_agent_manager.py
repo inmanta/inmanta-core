@@ -36,7 +36,7 @@ from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
 from inmanta.server.protocol import Session
-from utils import UNKWN, LogSequence, assert_equal_ish, retry_limited
+from utils import UNKWN, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
