@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 import traceback
+import typing
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
@@ -47,7 +48,7 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
-import yaml
+from colorlog.formatter import LogColors
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -60,7 +61,7 @@ from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
-from inmanta.export import ModelExporter, cfg_env
+from inmanta.export import cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -73,6 +74,50 @@ except ImportError:
 LOGGER = logging.getLogger("inmanta")
 
 
+class MultiLineFormatter(colorlog.ColoredFormatter):
+    """Multi-line formatter."""
+
+    def __init__(
+        self,
+        fmt: typing.Optional[str] = None,
+        *,
+        # keep interface minimal: only include fields we actually use
+        log_colors: typing.Optional[LogColors] = None,
+        reset: bool = True,
+        no_color: bool = False,
+    ):
+        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
+        self.fmt = fmt
+
+    def get_header_length(self, record: logging.LogRecord) -> int:
+        """Get the header length of a given record."""
+        # to get the length of the header we want to get the header without the color codes
+        formatter = colorlog.ColoredFormatter(
+            fmt=self.fmt,
+            log_colors=self.log_colors,
+            reset=False,
+            no_color=True,
+        )
+        header = formatter.format(
+            logging.LogRecord(
+                name=record.name,
+                level=record.levelno,
+                pathname=record.pathname,
+                lineno=record.lineno,
+                msg="",
+                args=(),
+                exc_info=None,
+            )
+        )
+        return len(header)
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format a record with added indentation."""
+        indent: str = " " * self.get_header_length(record)
+        head, *tail = super().format(record).splitlines(True)
+        return head + "".join(indent + line for line in tail)
+
+
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
@@ -80,6 +125,8 @@ def start_server(options: argparse.Namespace) -> None:
 
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
+
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
@@ -110,6 +157,8 @@ def start_server(options: argparse.Namespace) -> None:
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
+
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
@@ -221,11 +270,11 @@ class ExperimentalFeatureFlags:
         return f"flag_{option.name}"
 
     def add(self, option: Option[bool]) -> None:
-        """ Add an option to the set of feature flags """
+        """Add an option to the set of feature flags"""
         self.metavar_to_option[self._get_name(option)] = option
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """ Add all feature flag options to the argument parser """
+        """Add all feature flag options to the argument parser"""
         for metavar, option in self.metavar_to_option.items():
             parser.add_argument(
                 f"--experimental-{option.name}",
@@ -247,10 +296,6 @@ class ExperimentalFeatureFlags:
             value = getattr(options, metavar, False)
             if value:
                 option.set("true")
-
-
-compiler_features = ExperimentalFeatureFlags()
-compiler_features.add(compiler.config.feature_compiler_cache)
 
 
 def compiler_config(parser: argparse.ArgumentParser) -> None:
@@ -285,6 +330,13 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
     parser.add_argument(
+        "--no-cache",
+        dest="feature_compiler_cache",
+        help="Disable caching of compiled CF files",
+        action="store_false",
+        default=True,
+    )
+    parser.add_argument(
         "--experimental-data-trace",
         dest="datatrace",
         help="Experimental data trace tool useful for debugging",
@@ -298,8 +350,9 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
     )
-    compiler_features.add_arguments(parser)
+
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command(
@@ -333,15 +386,19 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
+
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")
 
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
 
-    compiler_features.read_options_to_config(options)
-
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     if options.profile:
         import cProfile
@@ -398,14 +455,6 @@ def project(options: argparse.Namespace) -> None:
 def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    parser.add_argument(
-        "--dashboard",
-        dest="dashboard",
-        help="Start the dashboard and keep the server running. "
-        "The server uses the current project as the source for server recompiles",
-        action="store_true",
-        default=False,
-    )
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -446,7 +495,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
-    parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
+    parser.add_argument("--ssl", help="Enable SSL", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
         "-X",
@@ -491,11 +540,41 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
-    compiler_features.add_arguments(parser)
+    parser.add_argument(
+        "--no-cache",
+        dest="feature_compiler_cache",
+        help="Disable caching of compiled CF files",
+        action="store_false",
+        default=True,
+    )
+    parser.add_argument(
+        "--partial",
+        dest="partial_compile",
+        help=(
+            "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
+            " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
+            " concurrent with a full export. When used in combination with the `--json` option, 0 is used as a placeholder for"
+            " the model version."
+        ),
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--delete-resource-set",
+        dest="delete_resource_set",
+        help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
+        "be used together with the --partial option.",
+        action="append",
+    )
+    moduletool.add_deps_check_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
+    if not options.partial_compile and options.delete_resource_set:
+        raise CLIException(
+            "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
+        )
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -508,8 +587,8 @@ def export(options: argparse.Namespace) -> None:
     if options.token is not None:
         Config.set("compiler_rest_transport", "token", options.token)
 
-    if options.ssl:
-        Config.set("compiler_rest_transport", "ssl", "true")
+    if options.ssl is not None:
+        Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
@@ -520,7 +599,8 @@ def export(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
-    compiler_features.read_options_to_config(options)
+    if options.feature_compiler_cache is False:
+        Config.set("compiler", "cache", "false")
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:
@@ -540,7 +620,10 @@ def export(options: argparse.Namespace) -> None:
     if "type" not in metadata:
         metadata["type"] = "manual"
 
-    module.Project.get(options.main_file)
+    strict_deps_check = moduletool.get_strict_deps_check(
+        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
+    )
+    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
     from inmanta.export import Exporter  # noqa: H307
 
@@ -558,18 +641,18 @@ def export(options: argparse.Namespace) -> None:
 
     export = Exporter(options)
     results = export.run(
-        types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
+        types,
+        scopes,
+        metadata=metadata,
+        model_export=options.model_export,
+        export_plugin=options.export_plugin,
+        partial_compile=options.partial_compile,
+        resource_sets_to_remove=options.delete_resource_set,
     )
     version = results[0]
 
     if exp is not None:
         raise exp
-
-    if options.model:
-        modelexporter = ModelExporter(types)
-        with open("testdump.json", "w", encoding="utf-8") as fh:
-            print(yaml.dump(modelexporter.export_all()))
-            json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
         conn = protocol.SyncClient("compiler")
@@ -579,7 +662,21 @@ def export(options: argparse.Namespace) -> None:
         conn.release_version(tid, version, True, agent_trigger_method)
 
 
-log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}
+"""
+This dictionary maps the Inmanta log levels to the corresponding Python log levels
+"""
+log_levels = {
+    "0": logging.ERROR,
+    "1": logging.WARNING,
+    "2": logging.INFO,
+    "3": logging.DEBUG,
+    "4": 2,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "TRACE": 2,
+}
 
 
 def cmd_parser() -> argparse.ArgumentParser:
@@ -597,8 +694,8 @@ def cmd_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--log-file-level",
         dest="log_file_level",
-        default=2,
-        type=int,
+        choices=["0", "1", "2", "3", "4", "ERROR", "WARNING", "INFO", "DEBUG", "TRACE"],
+        default="INFO",
         help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG",
     )
     parser.add_argument("--timed-logs", dest="timed", help="Add timestamps to logs", action="store_true")
@@ -607,8 +704,8 @@ def cmd_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="count",
         default=0,
-        help="Log level for messages going to the console. Default is only errors,"
-        "-v warning, -vv info and -vvv debug and -vvvv trace",
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
     parser.add_argument(
         "--warnings",
@@ -675,7 +772,7 @@ def _get_default_stream_handler() -> logging.StreamHandler:
 def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
     if not options.log_file:
         raise Exception("No logfile was provided.")
-    level = _convert_to_log_level(options.log_file_level)
+    level = _convert_inmanta_log_level_to_python_log_level(options.log_file_level)
     formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
     file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
     file_handler.setFormatter(formatter)
@@ -684,25 +781,42 @@ def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.W
     return file_handler
 
 
-def _convert_to_log_level(level: int) -> int:
-    if level >= len(log_levels):
-        level = len(log_levels) - 1
+def _convert_inmanta_log_level_to_python_log_level(level: str) -> int:
+    """
+    Converts the Inmanta log level to the Python log level
+    """
+    if level.isdigit() and int(level) > 4:
+        level = "4"
     return log_levels[level]
+
+
+def _convert_cli_log_level(level: int) -> int:
+    """
+    Converts the number of -v's passed on the CLI to the corresponding Inmanta log level
+    """
+    if level < 1:
+        # The minimal log level on the CLI is always WARNING
+        return logging.WARNING
+    else:
+        return _convert_inmanta_log_level_to_python_log_level(str(level))
 
 
 def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
-        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
-        formatter = colorlog.ColoredFormatter(
+        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+        formatter = MultiLineFormatter(
             log_format,
-            datefmt=None,
             reset=True,
             log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
         )
     else:
         log_format += "%(name)-25s%(levelname)-8s%(message)s"
-        formatter = logging.Formatter(fmt=log_format)
+        formatter = MultiLineFormatter(
+            log_format,
+            reset=False,
+            no_color=True,
+        )
     return formatter
 
 
@@ -731,7 +845,7 @@ def app() -> None:
         if options.timed:
             formatter = _get_log_formatter_for_stream_handler(timed=True)
             stream_handler.setFormatter(formatter)
-        log_level = _convert_to_log_level(options.verbose)
+        log_level = _convert_cli_log_level(options.verbose)
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)
