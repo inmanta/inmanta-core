@@ -6,3 +6,4 @@ entity B:
 end
 
 A.b [1] -- B
+
