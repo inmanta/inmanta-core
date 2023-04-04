@@ -1384,7 +1384,29 @@ def set_password(username: str, password: str) -> None:
     validate_sid=False,
     operation="POST",
     agent_server=True,
-    arg_options=ENV_OPTS,
-    client_types=[const.ClientType.agent],
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
 )
-def discovered_resources_create(env: uuid.UUID, discovered_resource_name: str, value: List[Dict[str, str]]) -> None:
+def unmanaged_resources_create(env: uuid.UUID, unmanaged_resource_name: str, value: Dict[str, str]) -> None:
+    """
+    Send discovered resource to the server
+    :param env: The id of the environment this resource belongs to
+    :param unmanaged_resource_name: The name of the unmanaged resource
+    :param value: The values associated with the unmanaged_resource
+    """
+
+
+@typedmethod(
+    path="/unmanaged/<unmanaged_resource_name>",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_name: str) -> model.Project:
+    """
+    Get a project and a list of the environments under this project
+    :param tid: the id of the environment if in which to get the unmanaged resource.
+    :param unmanaged_resource_name: The name of the unmanaged resource
+    """
