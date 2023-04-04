@@ -1289,9 +1289,11 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment, monkeyp
     await autostarted_agentmanager._ensure_agents(env, ["test1"])
 
     logdir = Config.get("config", "log-dir")
-    log_file = f"{logdir}/agent-{environment}.log"  # Path to the log file
+    log_file_path = f"{logdir}/agent-{environment}.log"  # Path to the log file
 
-    with open(log_file, mode="r") as f:
-        log_content = f.read()
+    def log_contains_debug_line():
+        with open(log_file_path, mode="r") as f:
+            log_content = f.read()
+        return "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
 
-    assert "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
+    await retry_limited(log_contains_debug_line, 10)
