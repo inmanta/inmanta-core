@@ -196,14 +196,13 @@ class Compiler(object):
 
         project.log_installed_modules()
 
-        # This lookup variable provides efficiency in the loop below:
-        # Make sure that `PluginMeta.clear` is called only once for each loaded Python module
-        # that is part of a non-loaded (non-imported) Inmanta module.
-        marked_for_unregistration: set[str] = set()
+        # This lookup variable provides efficiency in the loop below by skipping iterations for plugins
+        # that are part of modules that are not imported in the model.
+        non_imported_modules: set[str] = set()
 
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
-            if cls.__module__ in marked_for_unregistration:
+            if cls.__module__ in non_imported_modules:
                 continue
 
             mod_ns = cls.__module__.split(".")
@@ -221,17 +220,13 @@ class Compiler(object):
                 ns = ns.get_child(part)
 
             if ns is None:
-                # Mark this plugin's module for unregistration so that future iterations on this module can be skipped.
-                marked_for_unregistration.add(cls.__module__)
-
+                # This plugin is part of a module that is not imported in the model. We mark this module as such
+                # so that future iterations on other plugins from this module can be skipped.
+                non_imported_modules.add(cls.__module__)
             else:
                 name = name.split("::")[-1]
                 statement = PluginStatement(ns, name, cls)
                 statements.append(statement)
-
-            # Un-register the plugins marked for unregistration, as they are part of modules that are not loaded
-            # (i.e. not imported in the model) (https://github.com/inmanta/inmanta-core/issues/5651)
-            PluginMeta.clear_namespaces(marked_for_unregistration)
 
         # add the entity type (hack?)
         ns = self.__root_ns.get_child_or_create("std")
