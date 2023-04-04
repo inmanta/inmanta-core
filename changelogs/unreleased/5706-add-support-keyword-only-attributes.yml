@@ -6,4 +6,3 @@ change-type: minor
 destination-branches: [master, iso6]
 sections:
   feature: "{{description}}"
-  minor-improvement: "Performance of template processing has been improved"
