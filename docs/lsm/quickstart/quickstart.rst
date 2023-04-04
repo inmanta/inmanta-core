@@ -32,7 +32,7 @@ The service modelled in the following section manages the association of IP-addr
 Prerequisites
 ###################
 
-This guide assumes that you already finished the :ref:`quickstart<quickstart>`, so if you haven't followed that one, please start with it.
+This guide assumes that you already finished the :ref:`quickstart <quickstart>`, so if you haven't followed that one, please start with it.
 
 **Make sure that you have the necessary license information**, namely:
 
@@ -42,12 +42,16 @@ This guide assumes that you already finished the :ref:`quickstart<quickstart>`, 
 
 - License file.
 
+**System requirements:**
 
-**Python version 3.9 needs to be installed on your machine.**
+* Python version 3.9 needs to be installed on your machine.
+* Minimal 8GB of RAM.
 
-1.  [Install Docker](https://docs.docker.com/get-docker/).
+**Setup procedure:**
 
-2.  [Install Containerlab](https://containerlab.dev/install/).
+1.  `Install Docker <https://docs.docker.com/get-docker/>`_.
+
+2.  `Install Containerlab <https://containerlab.dev/install/>`_.
 
 3.  Prepare a development environment by creating a python virtual environment and installing Inmanta:
 
@@ -58,7 +62,7 @@ This guide assumes that you already finished the :ref:`quickstart<quickstart>`, 
     $ source ~/.virtualenvs/lsm-srlinux/bin/activate
     $ pip install inmanta
 
-4.  Change directory to the LSM SR Linux example:
+4.  Change directory to the LSM SR Linux example of the `examples repository <https://github.com/inmanta/examples>`_:
 
 .. code-block::
 
@@ -69,7 +73,7 @@ This folder contains a project.yml, which looks like this:
 .. code-block::
 
     name: LSM SR Linux Example
-    description: Provides and example of a LSM use case with SR Linux.
+    description: Provides an example of a LSM use case with SR Linux.
     author: Inmanta
     author_email: code@inmanta.com
     license: ASL 2.0
@@ -88,7 +92,7 @@ This folder contains a project.yml, which looks like this:
 
     Additional explanation of each field can be found on the quickstart.
 
-5. Change the <token> in the repo url to the credentials to the package repository (see Prerequisites section).
+5. Change the <token> in the repo url to the credentials to the package repository (see :ref:`Prerequisites section<lsm_quickstart_prerequisites>`).
 
 6. Go to the ``containerlab`` directory.
 
@@ -96,7 +100,7 @@ This folder contains a project.yml, which looks like this:
 
    $ cd containerlab
 
-7. Create a folder called ``resources`` on the ``containerlab`` folder and place your license and entitlement files there.
+7. Create a folder called ``resources`` in the ``containerlab`` folder and place your license and entitlement files there.
    The names of the files have to be ``com.inmanta.jwe`` for the entitlement file and ``com.inmanta.license`` for the license file.
 8. :ref:`Spin-up the containers<lab>`.
 
@@ -156,7 +160,7 @@ The full orchestration model to assign an IP-address to an interface of a SR Lin
                     mgmt_ip = self.router_ip,
                     yang_credentials = yang::Credentials(
                         username = "admin",
-                        password = "admin"
+                        password = "NokiaSrl1!",
                     )
                 )
 
@@ -179,7 +183,7 @@ The full orchestration model to assign an IP-address to an interface of a SR Lin
                             ip_prefix = self.address
                         ),
                     ),
-                ),           
+                ),
                 comanaged = false
             )
 
@@ -216,8 +220,8 @@ The full orchestration model to assign an IP-address to an interface of a SR Lin
 * Line 28 defines which implementation should be used to instantiate the `InterfaceIPAssignment` service entity.
 * Lines 30 to 65 provide the actual implementation for the `InterfaceIPAssignment` service entity. If an instance is created of the
   `InterfaceIPAssignment` service entity, this implementation will make sure that the `address` specified in the attributes of the
-  service instance, will be configured on the requested interface and SR Linux router. 
-* Lines 42 to 47 in particular, are where the resource is instantiated and assigned to the `resources` field. 
+  service instance, will be configured on the requested interface and SR Linux router.
+* Lines 42 to 47 in particular, is where the resource is instantiated and assigned to the `resources` field.
   The `resources` field should contain the list of `resources` that need to be deployed before the state of the instance can be moved from *creating* to *up*.
 * Lines 68 to 72 create a service entity binding. It associates a name and a lifecycle to the `InterfaceIPAssignment` service entity
   and registers it in the Inmanta Service Orchestrator via its northbound API. More information on service lifecycles can be
@@ -233,6 +237,8 @@ Go back to the previous folder and :ref:`create an Inmanta project and environme
 
 .. code-block::
 
+    # Go back to previous folder
+    $ cd ..
     # Create a project called test
     $ inmanta-cli --host 172.30.0.3 project create -n test
     # Create an environment called lsm-srlinux
@@ -245,7 +251,7 @@ The following command executes a script to copy the required resources to a spec
 
    $ docker exec -ti -w /code clab-srlinux-inmanta-server  /code/setup.sh
 
-Afterwards, open the web-console, in this example it is on http://172.30.0.3:8888/console/. 
+Afterwards, open the web-console, in this example it is on http://172.30.0.3:8888/console/.
 
 .. image:: images/empty-service-catalog.png
     :align: center
@@ -271,7 +277,7 @@ web-console as shown in the figure below.
 Check that the router is empty
 ##############################
 
-Login into the SR Linux router named "spine" using the username "admin" and password "admin".
+Login into the SR Linux router named "spine" using the username "admin" and password "NokiaSrl1!".
 
 .. code-block::
 
@@ -279,14 +285,14 @@ Login into the SR Linux router named "spine" using the username "admin" and pass
 
 .. note::
 
-    Additional information on how to connect to these containers can be found on the :ref:`quickstart<quickstart_connecting_to_the_containers>`. 
+    Additional information on how to connect to these containers can be found on the :ref:`quickstart<quickstart_connecting_to_the_containers>`.
     In this guide we will only do certain commands to show the changes.
 
-Check the interface configuration via the following command. 
+Check the interface configuration via the following command.
 
 .. code-block::
 
-    A:spine# list interface 
+    A:spine# list interface
         interface ethernet-1/1 {
         }
         interface ethernet-1/2 {
@@ -300,7 +306,7 @@ Check the interface configuration via the following command.
                 ipv6 {
                     dhcp-client {
                     }
-                } 
+                }
             }
         }
 
@@ -327,7 +333,7 @@ state, the interface is configured successfully. Verify the configuration on the
 
 .. code-block::
 
-    A:spine# list interface 
+    A:spine# list interface
         interface ethernet-1/1 {
             subinterface 0 {
                 ipv4 {
