@@ -7,10 +7,6 @@ entity B:
     int n = 0
 end
 
-entity C extends B:
-end
-
 
 implement A using std::none
 implement B using std::none
-implement C using std::none

@@ -1,12 +1,5 @@
-entity A:
+import test_5790_follow_up_mod_a
+
+entity B extends test_5790_follow_up_mod_a::B:
 end
-
-A.b [1] -- B
-
-entity B:
-    int n = 0
-end
-
-
-implement A using std::none
 implement B using std::none

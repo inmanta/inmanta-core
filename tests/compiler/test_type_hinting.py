@@ -151,14 +151,14 @@ def test_advanced_type_hint_name_collision(snippetcompiler):
     """
     snippetcompiler.setup_for_error(
         """
+import test_5790_follow_up_mod_a
 import test_5790_follow_up_mod_b
-import test_5790_follow_up_mod_c
 
-a = test_5790_follow_up_mod_b::A(b=B())
-# raises exception because B can be either `test_5790_follow_up_mod_c::B` or `test_5790_follow_up_mod_b::B`
+a = test_5790_follow_up_mod_a::A(b=B())
+# raises exception because B can be either `test_5790_follow_up_mod_b::B` or `test_5790_follow_up_mod_a::B`
 # (both are in scope and of a compatible type)
         """,
-        "Could not determine namespace for type B. 2 possible candidates exists: [test_5790_follow_up_mod_b::B, "
-        "test_5790_follow_up_mod_c::B]. To resolve this, use the fully qualified name instead of the short name. "
-        "(reported in a = Construct(test_5790_follow_up_mod_b::A) ({dir}/main.cf:5:36))",
+        "Could not determine namespace for type B. 2 possible candidates exists: [test_5790_follow_up_mod_a::B, "
+        "test_5790_follow_up_mod_b::B]. To resolve this, use the fully qualified name instead of the short name. "
+        "(reported in a = Construct(test_5790_follow_up_mod_a::A) ({dir}/main.cf:5:36))",
     )
