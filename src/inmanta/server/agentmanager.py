@@ -1073,7 +1073,8 @@ class AutostartedAgentManager(ServerSlice):
         try:
             proc = await self._fork_inmanta(
                 [
-                    "-vvvv",
+                    "--log-file-level",
+                    "DEBUG",
                     "--timed-logs",
                     "--config",
                     config_path,
