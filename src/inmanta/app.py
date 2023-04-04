@@ -47,6 +47,7 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
+import yaml
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -59,7 +60,7 @@ from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
-from inmanta.export import cfg_env
+from inmanta.export import ModelExporter, cfg_env
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -220,9 +221,11 @@ class ExperimentalFeatureFlags:
         return f"flag_{option.name}"
 
     def add(self, option: Option[bool]) -> None:
+        """ Add an option to the set of feature flags """
         self.metavar_to_option[self._get_name(option)] = option
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
+        """ Add all feature flag options to the argument parser """
         for metavar, option in self.metavar_to_option.items():
             parser.add_argument(
                 f"--experimental-{option.name}",
@@ -336,6 +339,8 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
 
+    compiler_features.read_options_to_config(options)
+
     module.Project.get(options.main_file)
 
     if options.profile:
@@ -393,6 +398,14 @@ def project(options: argparse.Namespace) -> None:
 def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    parser.add_argument(
+        "--dashboard",
+        dest="dashboard",
+        help="Start the dashboard and keep the server running. "
+        "The server uses the current project as the source for server recompiles",
+        action="store_true",
+        default=False,
+    )
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -433,7 +446,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
-    parser.add_argument("--ssl", help="Enable SSL", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
         "-X",
@@ -478,6 +491,7 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
+    compiler_features.add_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -525,6 +539,8 @@ def export(options: argparse.Namespace) -> None:
 
     if "type" not in metadata:
         metadata["type"] = "manual"
+
+    module.Project.get(options.main_file)
 
     from inmanta.export import Exporter  # noqa: H307
 

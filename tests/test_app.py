@@ -241,7 +241,7 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 
 
 @pytest.mark.parametrize_any(
-    "log_level,with_tty, regexes_required_lines, regexes_forbidden_lines",
+    "log_level, with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
             3,
