@@ -21,7 +21,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar, Set
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
@@ -188,6 +188,27 @@ class PluginMeta(type):
             }
         else:
             cls.__functions = {}
+
+    @classmethod
+    def clear_namespaces(cls, namespaces: Optional[Set[str]] = None) -> None:
+        """
+        Clears registered plugin functions living under each provided namespace.
+
+        :param namespaces: Clear plugin functions for these inmanta modules.
+        """
+
+        def _filter(module: str) -> bool:
+            for namespace in namespaces:
+                if module == namespace or module.startswith(namespace):
+                    return False
+            return True
+
+        if namespaces is not None:
+            cls.__functions = {
+                fq_name: plugin_class
+                for fq_name, plugin_class in cls.__functions.items()
+                if _filter(plugin_class.__module__)
+            }
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):

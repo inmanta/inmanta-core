@@ -1365,7 +1365,7 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     assert module.path == module_dir
 
 
-def test_cross_module_dependency(local_module_package_index: str, snippetcompiler_clean, capsys) -> None:
+def test_cross_module_dependency(local_module_package_index: str, snippetcompiler, capsys) -> None:
     """
     This test checks that the python code living in the inmanta_plugins dir of a module ('anothermod' in this test case)
     that is not loaded, can be used from the plugins of another module. ('cross_module_dependency' in this test case)
@@ -1381,7 +1381,7 @@ def test_cross_module_dependency(local_module_package_index: str, snippetcompile
         for x in excludes:
             assert x not in name_space
 
-    project: Project = snippetcompiler_clean.setup_for_snippet(
+    project: Project = snippetcompiler.setup_for_snippet(
         """
 import cross_module_dependency
 
@@ -1406,7 +1406,7 @@ cross_module_dependency::call_to_triple_from_another_mod('triple this string')
         excludes=["inmanta_plugins.cross_module_dependency", "inmanta_plugins.minimalv2module", "inmanta_plugins.anothermod"],
     )
 
-    snippetcompiler_clean.do_export()
+    snippetcompiler.do_export()
     out, _ = capsys.readouterr()
     output = out.strip()
 
