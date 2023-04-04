@@ -40,7 +40,6 @@ import sys
 import threading
 import time
 import traceback
-import typing
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
@@ -48,7 +47,6 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
-from colorlog.formatter import LogColors
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -74,50 +72,6 @@ except ImportError:
 LOGGER = logging.getLogger("inmanta")
 
 
-class MultiLineFormatter(colorlog.ColoredFormatter):
-    """Multi-line formatter."""
-
-    def __init__(
-        self,
-        fmt: typing.Optional[str] = None,
-        *,
-        # keep interface minimal: only include fields we actually use
-        log_colors: typing.Optional[LogColors] = None,
-        reset: bool = True,
-        no_color: bool = False,
-    ):
-        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
-        self.fmt = fmt
-
-    def get_header_length(self, record: logging.LogRecord) -> int:
-        """Get the header length of a given record."""
-        # to get the length of the header we want to get the header without the color codes
-        formatter = colorlog.ColoredFormatter(
-            fmt=self.fmt,
-            log_colors=self.log_colors,
-            reset=False,
-            no_color=True,
-        )
-        header = formatter.format(
-            logging.LogRecord(
-                name=record.name,
-                level=record.levelno,
-                pathname=record.pathname,
-                lineno=record.lineno,
-                msg="",
-                args=(),
-                exc_info=None,
-            )
-        )
-        return len(header)
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format a record with added indentation."""
-        indent: str = " " * self.get_header_length(record)
-        head, *tail = super().format(record).splitlines(True)
-        return head + "".join(indent + line for line in tail)
-
-
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
@@ -125,8 +79,6 @@ def start_server(options: argparse.Namespace) -> None:
 
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
-
-    asyncio.set_event_loop(asyncio.new_event_loop())
 
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
@@ -157,8 +109,6 @@ def start_server(options: argparse.Namespace) -> None:
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
-
-    asyncio.set_event_loop(asyncio.new_event_loop())
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
@@ -270,11 +220,9 @@ class ExperimentalFeatureFlags:
         return f"flag_{option.name}"
 
     def add(self, option: Option[bool]) -> None:
-        """Add an option to the set of feature flags"""
         self.metavar_to_option[self._get_name(option)] = option
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
-        """Add all feature flag options to the argument parser"""
         for metavar, option in self.metavar_to_option.items():
             parser.add_argument(
                 f"--experimental-{option.name}",
@@ -296,6 +244,10 @@ class ExperimentalFeatureFlags:
             value = getattr(options, metavar, False)
             if value:
                 option.set("true")
+
+
+compiler_features = ExperimentalFeatureFlags()
+compiler_features.add(compiler.config.feature_compiler_cache)
 
 
 def compiler_config(parser: argparse.ArgumentParser) -> None:
@@ -330,13 +282,6 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
     parser.add_argument(
-        "--no-cache",
-        dest="feature_compiler_cache",
-        help="Disable caching of compiled CF files",
-        action="store_false",
-        default=True,
-    )
-    parser.add_argument(
         "--experimental-data-trace",
         dest="datatrace",
         help="Experimental data trace tool useful for debugging",
@@ -350,9 +295,8 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
     )
-
+    compiler_features.add_arguments(parser)
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    moduletool.add_deps_check_arguments(parser)
 
 
 @command(
@@ -386,19 +330,13 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
-    if options.feature_compiler_cache is False:
-        Config.set("compiler", "cache", "false")
-
     if options.datatrace is True:
         Config.set("compiler", "datatrace_enable", "true")
 
     if options.dataflow_graphic is True:
         Config.set("compiler", "dataflow_graphic_enable", "true")
 
-    strict_deps_check = moduletool.get_strict_deps_check(
-        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
-    )
-    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
+    module.Project.get(options.main_file)
 
     if options.profile:
         import cProfile
@@ -540,41 +478,10 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
         dest="export_compile_data_file",
         help="File to export compile data to. If omitted %s is used." % compiler.config.default_compile_data_file,
     )
-    parser.add_argument(
-        "--no-cache",
-        dest="feature_compiler_cache",
-        help="Disable caching of compiled CF files",
-        action="store_false",
-        default=True,
-    )
-    parser.add_argument(
-        "--partial",
-        dest="partial_compile",
-        help=(
-            "Execute a partial export. Does not upload new Python code to the server: it is assumed to be unchanged since the"
-            " last full export. Multiple partial exports for disjunct resource sets may be performed concurrently but not"
-            " concurrent with a full export. When used in combination with the `--json` option, 0 is used as a placeholder for"
-            " the model version."
-        ),
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--delete-resource-set",
-        dest="delete_resource_set",
-        help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
-        "be used together with the --partial option.",
-        action="append",
-    )
-    moduletool.add_deps_check_arguments(parser)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options: argparse.Namespace) -> None:
-    if not options.partial_compile and options.delete_resource_set:
-        raise CLIException(
-            "The --delete-resource-set option should always be used together with the --partial option", exitcode=1
-        )
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
@@ -587,8 +494,8 @@ def export(options: argparse.Namespace) -> None:
     if options.token is not None:
         Config.set("compiler_rest_transport", "token", options.token)
 
-    if options.ssl is not None:
-        Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
+    if options.ssl:
+        Config.set("compiler_rest_transport", "ssl", "true")
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
@@ -599,8 +506,7 @@ def export(options: argparse.Namespace) -> None:
     if options.export_compile_data_file is not None:
         Config.set("compiler", "export_compile_data_file", options.export_compile_data_file)
 
-    if options.feature_compiler_cache is False:
-        Config.set("compiler", "cache", "false")
+    compiler_features.read_options_to_config(options)
 
     # try to parse the metadata as json. If a normal string, create json for it.
     if options.metadata is not None and len(options.metadata) > 0:
@@ -620,11 +526,6 @@ def export(options: argparse.Namespace) -> None:
     if "type" not in metadata:
         metadata["type"] = "manual"
 
-    strict_deps_check = moduletool.get_strict_deps_check(
-        no_strict_deps_check=options.no_strict_deps_check, strict_deps_check=options.strict_deps_check
-    )
-    module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
-
     from inmanta.export import Exporter  # noqa: H307
 
     exp = None
@@ -641,18 +542,18 @@ def export(options: argparse.Namespace) -> None:
 
     export = Exporter(options)
     results = export.run(
-        types,
-        scopes,
-        metadata=metadata,
-        model_export=options.model_export,
-        export_plugin=options.export_plugin,
-        partial_compile=options.partial_compile,
-        resource_sets_to_remove=options.delete_resource_set,
+        types, scopes, metadata=metadata, model_export=options.model_export, export_plugin=options.export_plugin
     )
     version = results[0]
 
     if exp is not None:
         raise exp
+
+    if options.model:
+        modelexporter = ModelExporter(types)
+        with open("testdump.json", "w", encoding="utf-8") as fh:
+            print(yaml.dump(modelexporter.export_all()))
+            json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
         conn = protocol.SyncClient("compiler")
@@ -804,19 +705,16 @@ def _convert_cli_log_level(level: int) -> int:
 def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
-        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
-        formatter = MultiLineFormatter(
+        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
+        formatter = colorlog.ColoredFormatter(
             log_format,
+            datefmt=None,
             reset=True,
             log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
         )
     else:
         log_format += "%(name)-25s%(levelname)-8s%(message)s"
-        formatter = MultiLineFormatter(
-            log_format,
-            reset=False,
-            no_color=True,
-        )
+        formatter = logging.Formatter(fmt=log_format)
     return formatter
 
 
