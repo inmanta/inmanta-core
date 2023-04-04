@@ -1038,3 +1038,24 @@ class ResourceService(protocol.ServerSlice):
         if not resource:
             raise NotFound("The resource with the given id does not exist")
         return resource
+
+    @handle(methods_v2.unmanaged_resources_create)
+    async def unmanaged_resources_create(self, env: data.Environment, discovered_resource_name: str, value: Sequence[dict]):
+        unmanaged_resources = data.UnmanagedResource(
+            environment=env, agent="1", discovered_resource_name=discovered_resource_name, values=value
+        )
+        (column_names, values) = unmanaged_resources._get_column_names_and_values()
+        column_names_as_sql_string = ",".join(column_names)
+        values_as_parameterize_sql_string = "$1,$2,$3"
+        query = f"""INSERT INTO {unmanaged_resources.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})
+                ON CONFLICT (environment,discovered_resource_name) DO UPDATE SET values = $3;
+            """
+        await unmanaged_resources._execute_query(query, *values)
+
+    @handle(methods_v2.unmanaged_resources_get)
+    async def get_discovered_resources(
+        self,
+        env: data.Environment,
+    ):
+        discovered_resources = await data.DiscoveredResources.get_list(environment=env)
+        return discovered_resources

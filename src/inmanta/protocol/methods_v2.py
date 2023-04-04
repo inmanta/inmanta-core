@@ -1404,7 +1404,7 @@ def unmanaged_resources_create(env: uuid.UUID, unmanaged_resource_name: str, val
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_name: str) -> model.Project:
+def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_name: str) -> model.UnmanagedResource:
     """
     Get a project and a list of the environments under this project
     :param tid: the id of the environment if in which to get the unmanaged resource.

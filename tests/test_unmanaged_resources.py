@@ -1,5 +1,5 @@
 """
-    Copyright 2022 Inmanta
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,19 +15,16 @@
 
     Contact: code@inmanta.com
 """
-import math
-
-from inmanta.plugins import PluginException, plugin
+from inmanta.agent import agent
 
 
-@plugin
-def power(base: "int", exponent: "int") -> "int":
-    return base ** exponent
-
-
-@plugin
-def root(square: "int") -> "int":
-    result: float = math.sqrt(square)
-    if not result.is_integer():
-        raise PluginException("%d is not a square of an integer" % square)
-    return int(result)
+async def test_discovery_resource(
+    resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer
+):
+    resource_container.Provider.reset()
+    myagent = agent.Agent(
+        hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
+    )
+    await myagent.add_end_point_name("agent1")
+    await myagent.add_end_point_name("agent2")
+    await myagent.start()

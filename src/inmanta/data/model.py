@@ -727,3 +727,19 @@ class LoginReturn(BaseModel):
 
     token: str
     user: User
+
+
+class UnmanagedResource(BaseModel):
+    """
+    A container for UnmanagedResource as returned by the /unmanaged endpoint.
+
+    :param environment: the environment of the resource
+    :param agent: the uuid of the agent that discovered the resource
+    :param discovered_resource_name: The name of the resource
+    :param value: The actual resource
+    """
+
+    environment: uuid.UUID
+    agent: uuid.UUID
+    discovered_resource_name: str
+    value: Dict[str, str]
