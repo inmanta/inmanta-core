@@ -21,8 +21,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar, ClassVar
-from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
@@ -195,6 +194,7 @@ class PluginArgument:
     """
     Represents the argument of an Inmanta plugin.
     """
+
     # Marker used to indicate that a plugin argument has no default value.
     NO_DEFAULT_VALUE_SET = object()
 
@@ -399,7 +399,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             )
         # check for missing arguments
         required_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments if not arg.has_default_value())
-        present_positional_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments[:len(args)])
+        present_positional_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments[: len(args)])
         present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
         missing_args = required_args.difference({*present_positional_args, *present_kwargs})
         if missing_args:
@@ -413,8 +413,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         if overlapping_args:
             raise RuntimeException(
                 None,
-                "Multiple values for %s in %s()"
-                % (",".join(overlapping_args), self.__class__.__function_name__),
+                "Multiple values for %s in %s()" % (",".join(overlapping_args), self.__class__.__function_name__),
             )
 
         def is_valid(expected_arg: PluginArgument, expected_type: Type[object], arg: object) -> bool:
