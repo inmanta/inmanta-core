@@ -613,8 +613,14 @@ class Constructor(ExpressionStatement):
                     f"Can not assign a value of type {self.class_type} "
                     f"to a variable of type {str(lhs_attribute.type_hint)}",
                 )
-            elif local_type is not None and local_type.is_parent(type_hint):
-                # we have a local match, use that to prevent breaking existing code
+            elif local_type is not None:
+                # always prefer local type, raise an exception if it is of an incorrect type
+                if not local_type.is_parent(type_hint):
+                    raise TypingException(
+                        self,
+                        f"Can not assign a value of type {str(local_type)} "
+                        f"to a variable of type {str(lhs_attribute.type_hint)}",
+                    )
                 return local_type
             elif "::" not in str(self.class_type):
                 # Consider the hint type
@@ -631,28 +637,12 @@ class Constructor(ExpressionStatement):
                 elif len(candidates) == 1:
                     # One, nice
                     return next(iter(candidates))
-                else:
-                    # None, pretend nothing happened, reraise original exception
-                    if resolver_failure is not None:
-                        raise resolver_failure
-                    else:
-                        raise TypingException(
-                            self,
-                            f"Can not assign a value of type {str(local_type)} "
-                            f"to a variable of type {str(lhs_attribute.type_hint)}",
-                        )
-            else:
-                if local_type is not None:
-                    return local_type
-                else:
-                    assert resolver_failure is not None  # make mypy happy
-                    raise resolver_failure
-        else:
-            if local_type is not None:
-                return local_type
-            else:
-                assert resolver_failure is not None  # make mypy happy
-                raise resolver_failure
+        elif local_type is not None:
+            return local_type
+
+        # No matching types found: pretend nothing happened, reraise original exception
+        assert resolver_failure is not None  # make mypy happy
+        raise resolver_failure
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(
