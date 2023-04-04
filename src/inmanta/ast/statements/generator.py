@@ -613,7 +613,7 @@ class Constructor(ExpressionStatement):
                     f"Can not assign a value of type {self.class_type} "
                     f"to a variable of type {str(lhs_attribute.type_hint)}",
                 )
-            elif local_type is not None and local_type.is_subclass(type_hint):
+            elif local_type is not None and local_type.is_parent(type_hint):
                 # we have a local match, use that to prevent breaking existing code
                 return local_type
             elif "::" not in str(self.class_type):
@@ -738,7 +738,7 @@ class Constructor(ExpressionStatement):
             if (
                 inverse is not None
                 and inverse.name not in self._direct_attributes
-                # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by
+                # in case of a double set, prefer kwargs: double set will be raised when the bidirectional relation is set by
                 # the LHS
                 and inverse.name not in kwarg_attrs
                 and inverse.name in chain.from_iterable(type_class.get_indices())
