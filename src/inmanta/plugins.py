@@ -199,7 +199,7 @@ class PluginArgument:
     NO_DEFAULT_VALUE_SET = object()
 
     def __init__(
-        self, arg_name: str, arg_type: str, is_kw_only_argument: bool, default_value: Optional[object] = NO_DEFAULT_VALUE_SET
+        self, arg_name: str, arg_type: object, is_kw_only_argument: bool, default_value: Optional[object] = NO_DEFAULT_VALUE_SET
     ) -> None:
         self.arg_name = arg_name
         self.arg_type = arg_type
@@ -277,7 +277,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         arguments: List[PluginArgument] = []
 
         def process_kw_only_args(argument_name: str, spec_type: object) -> PluginArgument:
-            if argument_name in arg_spec.kwonlydefaults:
+            if arg_spec.kwonlydefaults and argument_name in arg_spec.kwonlydefaults:
                 default_value = arg_spec.kwonlydefaults[argument_name]
                 return PluginArgument(argument_name, spec_type, is_kw_only_argument=True, default_value=default_value)
             else:
