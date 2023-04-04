@@ -21,7 +21,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar, Set
+from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
@@ -205,9 +205,7 @@ class PluginMeta(type):
 
         if namespaces is not None:
             cls.__functions = {
-                fq_name: plugin_class
-                for fq_name, plugin_class in cls.__functions.items()
-                if _filter(plugin_class.__module__)
+                fq_name: plugin_class for fq_name, plugin_class in cls.__functions.items() if _filter(plugin_class.__module__)
             }
 
 

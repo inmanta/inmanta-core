@@ -196,10 +196,10 @@ class Compiler(object):
 
         project.log_installed_modules()
 
-        # This lookup variable provides efficiency in the loop bellow:
+        # This lookup variable provides efficiency in the loop below:
         # Make sure that `PluginMeta.clear` is called only once for each loaded Python module
         # that is part of a non-loaded (non-imported) Inmanta module.
-        marked_for_unregistration: Set[str] = set()
+        marked_for_unregistration: set[str] = set()
 
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
@@ -223,7 +223,6 @@ class Compiler(object):
             if ns is None:
                 # Mark this plugin's module for unregistration so that future iterations on this module can be skipped.
                 marked_for_unregistration.add(cls.__module__)
-
 
             else:
                 name = name.split("::")[-1]

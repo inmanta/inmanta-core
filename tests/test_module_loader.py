@@ -1371,7 +1371,7 @@ def test_cross_module_dependency(local_module_package_index: str, snippetcompile
     that is not loaded, can be used from the plugins of another module. ('cross_module_dependency' in this test case)
     """
 
-    def check_name_space(name_space: Dict[str, any], includes: Sequence[str], excludes: Sequence[str]) -> None:
+    def check_name_space(name_space: Dict[str, object], includes: Sequence[str], excludes: Sequence[str]) -> None:
         """
         Check that all the items in `includes` are present in `name_space`
         and that no item in `excludes` is present in `name_space`
