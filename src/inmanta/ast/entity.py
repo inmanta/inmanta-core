@@ -302,12 +302,12 @@ class Entity(NamedType, WithComment):
         self.add_instance(out)
         return out
 
-    def is_subclass(self, sub_class_candidate: "Entity") -> bool:
+    def is_subclass(self, subclass_candidate: "Entity") -> bool:
         """
         Check if the given sub_class_candidate entity is a subclass of this class.
         Does not consider entities a subclass of themselves.
         """
-        return sub_class_candidate.is_parent(self)
+        return subclass_candidate.is_parent(self)
 
     def validate(self, value: object) -> bool:
         """
