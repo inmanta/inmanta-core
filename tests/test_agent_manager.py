@@ -1275,7 +1275,7 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     assert "took too long to start" not in caplog.text
 
 
-async def test_auto_started_agent_log_in_debug_mode(server, environment, monkeypatch):
+async def test_auto_started_agent_log_in_debug_mode(server, environment):
     """
     Test the logging of an autostarted agent
     """
