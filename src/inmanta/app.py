@@ -785,7 +785,7 @@ def _convert_inmanta_log_level_to_python_log_level(level: str) -> int:
     """
     Converts the Inmanta log level to the Python log level
     """
-    if level.isdigit() and int(level) >= 4:
+    if level.isdigit() and int(level) > 4:
         level = "4"
     return log_levels[level]
 
