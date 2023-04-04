@@ -304,7 +304,7 @@ class Entity(NamedType, WithComment):
 
     def is_subclass(self, subclass_candidate: "Entity") -> bool:
         """
-        Check if the given sub_class_candidate entity is a subclass of this class.
+        Check if the given subclass_candidate entity is a subclass of this class.
         Does not consider entities a subclass of themselves.
         """
         return subclass_candidate.is_parent(self)
