@@ -145,7 +145,8 @@ n = a.b.n
 
 
 
-def test_advanced_type_hint_name_collision(snippetcompiler):
+# TODO remove this testcase
+def test_advanced_type_hint_name_collision_old(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 import elaboratev1module
@@ -164,3 +165,23 @@ implement A using std::none
         "(reported in Construct(A) ({dir}/main.cf:10:7))",
     )
 
+
+def test_advanced_type_hint_name_collision(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_5790_follow_up
+
+entity C:
+    int n = 1
+end
+
+implement C using std::none
+
+a = test_5790_follow_up::A(b=C())
+
+n = a.b.n
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    assert 1 == root.lookup("n").get_value()
