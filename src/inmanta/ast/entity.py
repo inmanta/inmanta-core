@@ -186,15 +186,15 @@ class Entity(NamedType, WithComment):
 
     attributes: "Dict[str,Attribute]" = property(get_attributes, set_attributes, None, None)
 
-    def is_parent(self, entity: "Entity") -> bool:
+    def is_parent(self, parent_candidate: "Entity") -> bool:
         """
-        Check if the given entity is a parent of this entity. Does not consider an entity its own parent.
+        Check if the given parent_candidate entity is a parent of this entity. Does not consider an entity its own parent.
         """
-        if entity in self.parent_entities:
+        if parent_candidate in self.parent_entities:
             return True
         else:
             for parent in self.parent_entities:
-                if parent.is_parent(entity):
+                if parent.is_parent(parent_candidate):
                     return True
         return False
 
@@ -302,11 +302,12 @@ class Entity(NamedType, WithComment):
         self.add_instance(out)
         return out
 
-    def is_subclass(self, cls: "Entity") -> bool:
+    def is_subclass(self, subclass_candidate: "Entity") -> bool:
         """
-        Is the given class a subclass of this class. Does not consider entities a subclass of themselves.
+        Check if the given subclass_candidate entity is a subclass of this class.
+        Does not consider entities a subclass of themselves.
         """
-        return cls.is_parent(self)
+        return subclass_candidate.is_parent(self)
 
     def validate(self, value: object) -> bool:
         """

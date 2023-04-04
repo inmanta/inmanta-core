@@ -84,8 +84,7 @@ When using partial compiles, the following rules have to be followed:
 * Resources cannot be migrated using a partial compile to a different resource set. A full compile is necessary for this process.
 * A resource set that is contained in a partial export must be complete, meaning that all of its resources must be present.
 * Resources that weren't assigned to a specific resource set can never be updated or removed by a partial build. Although, adding resources is allowed.
-* The new version of the model that emerges from a partial compilation should have a dependency graph that is closed within the resource sets that were exported.
-  i.e., it should not depend on any resource sets other than those that were exported.
+* Resources within a resource set cannot depend on resources in another resource set. Dependencies on shared resources are allowed.
 * Multiple resource sets may be updated simultaneously via a partial build.
 
 For a guide on how to design a model in order to take these into account, see `Modeling guidelines`_.
@@ -478,6 +477,98 @@ behavior because the allocator guarantees uniqueness for the host id:
 
     # force rendering on multiple ranks
     {"Host(id=694)" "Host(id=269)" "Host(id=712)" "Host(id=31)"} -> "AgentConfig";
+
+
+Inter-resource set dependencies
+-------------------------------
+
+Resources within a resource set can only depend on resources within the same resource set or on shared resources.
+Shared resources on the other hand can have dependencies on any resource in the model. The diagram below provides
+an example where the resource dependency graph satisfies these requirements. The arrows in the diagram show the
+requires relationship between entities/resources.
+
+.. digraph:: resource_sets_example_valid_dependencies
+    :caption: Two resource sets satisfying the dependency constraints
+
+    subgraph cluster_shared {
+        AgentConfig;
+        color = "green";
+        fontcolor = "grey";
+        label = "Shared resources";
+        labelloc = "bottom";
+    }
+
+    subgraph cluster_service0 {
+        "Network(id=0)" [shape=rectangle];
+        "Network(id=0)" -> subgraph cluster_resources0 {
+            "Host(id=269)";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set 0";
+            labelloc = "bottom";
+        }
+        color = "green";
+        label = "service 0";
+        labelloc = "top";
+    }
+    subgraph cluster_service1 {
+        "Network(id=1)" [shape=rectangle];
+        "Network(id=1)" -> subgraph cluster_resources1 {
+            "Host(id=31)";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set 1";
+            labelloc = "bottom";
+        }
+        color = "green";
+        label = "service 1";
+        labelloc = "top";
+    }
+
+    {"Host(id=269)" "Host(id=31)"} -> "AgentConfig";
+
+In the diagram below, resource ``Host(id=269)`` that belongs to resource set 0 depends on resource ``Host(id=31)`` that belongs to resource set 1. This inter-resource set dependency is not allowed.
+
+.. digraph:: resource_sets_example_invalid_dependencies
+    :caption: Two resource sets violating the dependency constraints
+
+    subgraph cluster_shared {
+        AgentConfig;
+        color = "green";
+        fontcolor = "grey";
+        label = "Shared resources";
+        labelloc = "bottom";
+    }
+
+    subgraph cluster_service0 {
+        "Network(id=0)" [shape=rectangle];
+        "Network(id=0)" -> subgraph cluster_resources0 {
+            "Host(id=269)";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set 0";
+            labelloc = "bottom";
+        }
+        color = "green";
+        label = "service 0";
+        labelloc = "top";
+    }
+    subgraph cluster_service1 {
+        "Network(id=1)" [shape=rectangle];
+        "Network(id=1)" -> subgraph cluster_resources1 {
+            "Host(id=31)";
+            color = "grey";
+            fontcolor = "grey";
+            label = "Resource set 1";
+            labelloc = "bottom";
+        }
+        color = "green";
+        label = "service 1";
+        labelloc = "top";
+    }
+
+    {"Host(id=269)" "Host(id=31)"} -> "AgentConfig";
+    {"Host(id=269)"} -> "Host(id=31)" [color=red];
 
 
 Testing
