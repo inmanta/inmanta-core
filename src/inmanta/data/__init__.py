@@ -5890,11 +5890,19 @@ class UnmanagedResource(BaseDocument):
     """
 
     environment: uuid.UUID
-    agent: uuid.UUID
+    agent: str
     unmanaged_resource_name: str
     value: Dict[str, str]
 
     __primary_key__ = ("environment", "unmanaged_resource_name", "agent")
+
+    def to_dto(self) -> m.UnmanagedResource:
+        return m.UnmanagedResource(
+            environment=self.environment,
+            agent=self.agent,
+            unmanaged_resource_name=self.unmanaged_resource_name,
+            value=self.value,
+        )
 
 
 _classes = [

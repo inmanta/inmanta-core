@@ -19,9 +19,9 @@ async def update(connection: Connection) -> None:
     schema = """
 CREATE TABLE IF NOT EXISTS public.unmanagedresource (
     environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
-    agent uuid NOT NULL REFERENCES agentinstance(id) ON DELETE CASCADE,
+    agent character varying NOT NULL,
     unmanaged_resource_name VARCHAR NOT NULL,
-    values jsonb NOT NULL,
+    value jsonb NOT NULL,
     PRIMARY KEY (environment, agent, unmanaged_resource_name)
 );
     """

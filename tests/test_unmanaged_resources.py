@@ -15,9 +15,17 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.agent import agent
+import uuid
 
 
-async def test_discovery_resource(server, client, environment):
-    result = await client.unmanaged_resources_create(environment, "test", {"value1": "test1", "value2": "test2"})
-    print(result)
+async def test_discovery_resource_single(server, client, agent, environment):
+    result = await client.unmanaged_resources_create(
+        environment, agent.name, "unmanaged_res", {"value1": "test1", "value2": "test2"}
+    )
+    assert result.code == 200
+
+    discovered_resource = await client.unmanaged_resources_get(environment, agent.name, "unmanaged_res")
+    assert discovered_resource.agent == agent.name
+    assert discovered_resource.environement == environment
+    assert discovered_resource.unmanaged_resource_name == "unmanaged_res"
+    assert discovered_resource.value == {"value1": "test1", "value2": "test2"}

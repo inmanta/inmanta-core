@@ -1040,22 +1040,26 @@ class ResourceService(protocol.ServerSlice):
         return resource
 
     @handle(methods_v2.unmanaged_resources_create)
-    async def unmanaged_resources_create(self, env: data.Environment, unmanaged_resource_name: str, value: Dict[str, str]):
+    async def unmanaged_resources_create(
+        self, env: data.Environment, agent: str, unmanaged_resource_name: str, value: Dict[str, str]
+    ):
         unmanaged_resources = data.UnmanagedResource(
-            environment=env, agent="1", unmanaged_resource_name=unmanaged_resource_name, values=value
+            environment=env, agent=agent, unmanaged_resource_name=unmanaged_resource_name, value=value
         )
         (column_names, values) = unmanaged_resources._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterize_sql_string = "$1,$2,$3"
+        values_as_parameterize_sql_string = "$1,$2,$3,$4"
         query = f"""INSERT INTO {unmanaged_resources.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})
-                ON CONFLICT (environment,agent,unmanaged_resource_name) DO UPDATE SET values = $3;
+                ON CONFLICT (environment,agent,unmanaged_resource_name) DO UPDATE SET value = $4;
             """
         await unmanaged_resources._execute_query(query, *values)
 
-    @handle(methods_v2.unmanaged_resources_get)
-    async def get_discovered_resources(
-        self,
-        env: data.Environment,
-    ):
-        discovered_resources = await data.UnmanagedResource.get_list(environment=env)
-        return discovered_resources
+    @handle(methods_v2.unmanaged_resources_get, env="tid")
+    async def unmanaged_resources_get(self, env: data.Environment, agent: str, unmanaged_resource_name: str):
+        result = await data.UnmanagedResource.get_one(
+            environment=env.id, agent=agent, unmanaged_resource_name=unmanaged_resource_name
+        )
+        if not result:
+            raise NotFound(f"unmanaged_resource with name {unmanaged_resource_name} not found for agent {agent} in env {env}")
+        dto = result.to_dto()
+        return dto
