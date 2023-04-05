@@ -1493,7 +1493,7 @@ async def test_status_compilerservice_task_queue(
     assert await get_length_compiler_queue_from_status_endpoint() == 0
 
     # Add element to compile queue
-    compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=False, do_export=False, remote_id=uuid.uuid4())
     assert await get_length_compiler_queue_from_status_endpoint() == 1
 
     # Action on environment that empties the compile queue
