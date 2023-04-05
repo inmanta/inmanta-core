@@ -885,11 +885,11 @@ class CompilerService(ServerSlice):
             raise NotFound("The compile with the given id does not exist.")
         return details
 
-    def reset_compile_queue_counter_for(self, env: model.Environment) -> None:
+    def reset_compile_queue_counter_for(self, env_id: uuid.UUID) -> None:
         """
         Will be called when the environment is cleared or deleted.
 
         :param env: The environment that is cleared
         """
-        if env.id in self._queue_count_cache:
-            del self._queue_count_cache[env.id]
+        if env_id in self._queue_count_cache:
+            del self._queue_count_cache[env_id]
