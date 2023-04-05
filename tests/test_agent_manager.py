@@ -1224,7 +1224,7 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
     """
     Test the logging of an autostarted agent
     """
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    env = await data.Environment.get_by_id(UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "test1": ""})
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
