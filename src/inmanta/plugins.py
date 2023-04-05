@@ -199,7 +199,7 @@ class PluginArgument:
     NO_DEFAULT_VALUE_SET = object()
 
     def __init__(
-        self, arg_name: str, arg_type: object, is_kw_only_argument: bool, default_value: Optional[object] = NO_DEFAULT_VALUE_SET
+        self, arg_name: str, arg_type: object, is_kw_only_argument: bool, default_value: object = NO_DEFAULT_VALUE_SET
     ) -> None:
         self.arg_name = arg_name
         self.arg_type = arg_type
