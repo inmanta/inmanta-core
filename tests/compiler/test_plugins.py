@@ -93,6 +93,16 @@ std::equals(42, 42, arg1=42)
     )
 
 
+def test_plugin_has_no_type_annotation(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import plugin_missing_type_annotation
+plugin_missing_type_annotation::no_type_annotation(42)
+        """,
+        "All arguments of plugin 'no_type_annotation' should be annotated",
+    )
+
+
 def test_kwargs_in_plugin_call_double_kwarg(snippetcompiler):
     snippetcompiler.setup_for_error(
         """

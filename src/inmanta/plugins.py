@@ -276,31 +276,31 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         arguments: List[PluginArgument] = []
 
-        def process_kw_only_args(argument_name: str, spec_type: object) -> PluginArgument:
+        def process_kw_only_args(argument_name: str, annotation: object) -> PluginArgument:
             if arg_spec.kwonlydefaults and argument_name in arg_spec.kwonlydefaults:
                 default_value = arg_spec.kwonlydefaults[argument_name]
-                return PluginArgument(argument_name, spec_type, is_kw_only_argument=True, default_value=default_value)
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=True, default_value=default_value)
             else:
-                return PluginArgument(argument_name, spec_type, is_kw_only_argument=True)
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=True)
 
-        def process_regular_args(index: int, argument_name: str, spec_type: object) -> PluginArgument:
+        def process_regular_args(index: int, argument_name: str, annotation: object) -> PluginArgument:
             if default_start_for_args is not None and default_start_for_args <= index:
                 default_value = arg_spec.defaults[default_start_for_args - index]
-                return PluginArgument(argument_name, spec_type, is_kw_only_argument=False, default_value=default_value)
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=False, default_value=default_value)
             else:
-                return PluginArgument(argument_name, spec_type, is_kw_only_argument=False)
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=False)
 
         def process_arg(index: int, argument_name: str, is_kwonly_arg: bool) -> None:
             if argument_name not in arg_spec.annotations:
-                raise Exception(f"All arguments of plugin '{function.__name__}' should be annotated")
-            spec_type = arg_spec.annotations[argument_name]
-            if spec_type == Context:
+                raise CompilerException(f"All arguments of plugin '{function.__name__}' should be annotated")
+            annotation = arg_spec.annotations[argument_name]
+            if annotation == Context:
                 self._context = index
             else:
                 if is_kwonly_arg:
-                    plugin_argument = process_kw_only_args(argument_name, spec_type)
+                    plugin_argument = process_kw_only_args(argument_name, annotation)
                 else:
-                    plugin_argument = process_regular_args(index, argument_name, spec_type)
+                    plugin_argument = process_regular_args(index, argument_name, annotation)
                 arguments.append(plugin_argument)
 
         # Process regular arguments
