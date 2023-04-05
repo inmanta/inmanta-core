@@ -15,7 +15,7 @@ Pull the image
 
     .. code-block:: sh
 
-        docker pull ghcr.io/inmanta/orchestrator:2022
+        docker pull ghcr.io/inmanta/orchestrator:latest
 
 
     This command will pull the latest version of the Inmanta OSS Orchestrator image.
@@ -77,7 +77,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
 
             inmanta-server:
                 container_name: inmanta_orchestrator
-                image: ghcr.io/inmanta/orchestrator:2022
+                image: ghcr.io/inmanta/orchestrator:latest
                 ports:
                     - 8888:8888
                 networks:
@@ -190,7 +190,7 @@ If you use docker-compose, you can simply update this section of the example abo
 
         inmanta-server:
             container_name: inmanta_orchestrator
-            image: ghcr.io/inmanta/orchestrator:2022
+            image: ghcr.io/inmanta/orchestrator:latest
             ports:
                 - 8888:8888
             volumes:
@@ -270,7 +270,7 @@ There are two ways you can achieve this:
 
         inmanta-server:
             container_name: inmanta_orchestrator
-            image: ghcr.io/inmanta/orchestrator:2022
+            image: ghcr.io/inmanta/orchestrator:latest
             ports:
                 - 8888:8888
             volumes:

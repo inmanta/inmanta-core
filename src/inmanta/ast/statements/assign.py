@@ -290,9 +290,10 @@ class GradualSetAttributeHelper(ResultCollector[T]):
         self.next = next
         self.attribute_name = attribute_name
 
-    def receive_result(self, value: T, location: Location) -> None:
+    def receive_result(self, value: T, location: Location) -> bool:
         try:
             self.next.receive_result(value, location)
+            return False
         except AttributeException as e:
             e.set_statement(self.stmt, False)
             raise
@@ -302,7 +303,6 @@ class GradualSetAttributeHelper(ResultCollector[T]):
 
 
 class SetAttributeHelper(ExecutionUnit):
-
     __slots__ = ("stmt", "instance", "attribute_name")
 
     def __init__(

@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import datetime
 import uuid
 from collections import abc
 from typing import Optional
@@ -23,7 +24,7 @@ from typing import Optional
 import utils
 from inmanta import const, data
 from inmanta.protocol.common import Result
-from inmanta.resources import ResourceIdStr
+from inmanta.resources import Id, ResourceIdStr
 from inmanta.util import get_compiler_version
 
 
@@ -424,8 +425,8 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
 
     assert result.code == 400
     assert result.result["message"] == (
-        "Invalid request: A partial compile cannot migrate resource "
-        "test::Resource[agent1,key=key1],v=2 to another resource set"
+        "Invalid request: A partial compile cannot migrate resources "
+        "['test::Resource[agent1,key=key1]'] to another resource set"
     )
 
 
@@ -477,7 +478,7 @@ async def test_put_partial_update_not_in_resource_set(server, client, environmen
 
     assert result.code == 400
     assert result.result["message"] == (
-        "Invalid request: Resource (test::Resource[agent1,key=key1],v=2) without a "
+        "Invalid request: Resource (test::Resource[agent1,key=key1]) without a "
         "resource set cannot be updated via a partial compile"
     )
 
@@ -776,7 +777,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[0].attributes == {
         "key": "key1",
         "value": "100",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -784,7 +784,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[1].attributes == {
         "key": "key2",
         "value": "200",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -792,7 +791,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[2].attributes == {
         "key": "key3",
         "value": "3",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -800,7 +798,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[3].attributes == {
         "key": "key4",
         "value": "4",
-        "version": 2,
         "purged": False,
         "requires": ["test::Resource[agent1,key=key3]"],
         "send_event": False,
@@ -808,7 +805,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[4].attributes == {
         "key": "key5",
         "value": "5",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -816,7 +812,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[5].attributes == {
         "key": "key6",
         "value": "6",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -824,7 +819,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[6].attributes == {
         "key": "key9",
         "value": "900",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -832,7 +826,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[7].attributes == {
         "key": "key91",
         "value": "910",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -840,7 +833,6 @@ async def test_put_partial_mixed_scenario(server, client, environment, clienthel
     assert resource_list[8].attributes == {
         "key": "key92",
         "value": "920",
-        "version": 2,
         "purged": False,
         "requires": [],
         "send_event": False,
@@ -990,8 +982,9 @@ async def test_put_partial_verify_params(server, client, environment, clienthelp
     )
 
     assert result.code == 400
-    assert result.result["message"] == (
-        "Invalid request: Invalid resource id in resource set: " "Invalid id for resource hello"
+    assert (
+        "The following resource ids provided in the resource_sets parameter are not present in the resources list: hello"
+        in result.result["message"]
     )
 
 
@@ -1381,3 +1374,632 @@ async def test_put_partial_with_unknowns(server, client, environment, clienthelp
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key1]"], "unknown_1", "test::Resource[agent1,key=key1]")
     assert_unknown(unknowns_by_rid[""], "unknown_3", "")
     assert_unknown(unknowns_by_rid["test::Resource[agent1,key=key5]"], "unknown_5", "test::Resource[agent1,key=key5]")
+
+
+async def test_put_partial_dep_on_shared_set_removed(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that the put_partial endpoint correctly updates the provides relationship when a resource A from a specific
+    resource set depends on a resource B from the shared resource set and resource A is removed by a partial compile.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent2,key=key2]"
+    rid3 = "test::Resource[agent2,key=key3]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v={version}"],
+        },
+        {
+            "key": "key3",
+            "version": version,
+            "id": f"{rid3},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-a"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+        rid3: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "key3",
+            "version": 0,
+            "id": f"{rid3},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid3: "set-a"}
+    resource_states = {rid3: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    resources_in_model = await data.Resource.get_list(model=2)
+    assert len(resources_in_model) == 2
+    rid_to_resource = {res.resource_id: res for res in resources_in_model}
+    assert rid_to_resource[rid1].provides == []
+
+
+async def test_put_partial_dep_on_specific_set_removed(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that the put_partial endpoint correctly updates the requires/provides relationship when a resource A from the shared
+    resource set depends on a resource B from a specific resource set and this dependency is removed by a partial compile.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent2,key=key2]"
+    rid3 = "test::Resource[agent2,key=key3]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid2},v={version}"],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key3",
+            "version": version,
+            "id": f"{rid3},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-b"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+        rid3: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid2: "set-a"}
+    resource_states = {rid2: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    resources_in_model = await data.Resource.get_list(model=2)
+    assert len(resources_in_model) == 3
+    rid_to_resource = {res.resource_id: res for res in resources_in_model}
+    assert rid_to_resource[rid1].attributes["requires"] == []
+    assert rid_to_resource[rid2].provides == []
+
+
+async def test_put_partial_dep_on_non_existing_resource(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that an exception is raised when a resource passed to the put_partial endpoint has a dependency on a
+    non-existing resource. This situation cannot happen when the interaction between the client and the server happens
+    via the compiler/exporter, but we verify the behavior here to check the safety of the API endpoint.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent1,key=key2]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v={version}"],
+        },
+    ]
+    resource_sets = {rid2: "set-a"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    rid3 = "test::Resource[agent1,key=key3]"
+    resources_partial = [
+        {
+            "key": "key1",
+            "version": 0,
+            "id": f"{rid1},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v=0"],
+        },
+        {
+            "key": "key3",
+            "version": 0,
+            "id": f"{rid3},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": ["test::Resource[agent1,key=non_existing_resource]"],
+        },
+    ]
+    resource_sets = {rid2: "set-a", rid3: "set-a"}
+    resource_states = {rid2: const.ResourceState.available, rid3: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 400
+    assert (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=non_existing_resource]'}" in result.result["message"]
+    )
+
+
+async def test_put_partial_inter_set_dependency(server, client, environment, clienthelper) -> None:
+    """
+    Ensure that an exception is raised when the resources passed to the put_partial endpoint define a dependency
+    on a resource in another resource set. This situation cannot happen when the interaction between the client and
+    the server happens via the compiler/exporter, but we verify the behavior here to check the safety of the API endpoint.
+    """
+    version = await clienthelper.get_version()
+    rid1 = "test::Resource[agent1,key=key1]"
+    rid2 = "test::Resource[agent1,key=key2]"
+    resources = [
+        {
+            "key": "key1",
+            "version": version,
+            "id": f"{rid1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "version": version,
+            "id": f"{rid2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    resource_sets = {rid1: "set-a", rid2: "set-b"}
+    resource_states = {
+        rid1: const.ResourceState.available,
+        rid2: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "key2",
+            "version": 0,
+            "id": f"{rid2},v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [f"{rid1},v=0"],
+        },
+    ]
+    resource_sets = {rid2: "set-a"}
+    resource_states = {rid2: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+    )
+    assert result.code == 400
+    assert (
+        "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
+        "{'test::Resource[agent1,key=key1]'}" in result.result["message"]
+    )
+
+
+async def test_put_partial_purge_on_delete(server, client, environment, clienthelper, agent_factory) -> None:
+    """
+    Verify whether the put_partial endpoint composes the new version of the model correctly when resources are deleted that
+    had the purge_on_delete flag set to true.
+    """
+    # Enable purge_on_delete
+    await client.set_setting(environment, data.PURGE_ON_DELETE, True)
+
+    agent1 = await agent_factory(environment=environment, hostname="agent1", code_loader=False)
+    aclient1 = agent1._client
+    agent2 = await agent_factory(environment=environment, hostname="agent2", code_loader=False)
+    aclient2 = agent2._client
+
+    version = await clienthelper.get_version()
+    rid_shared = "test::Resource[agent1,key=shared]"
+    rid_updated1 = "test::Resource[agent1,key=updated1]"
+    rid_updated2 = "test::Resource[agent1,key=updated2]"
+    rid_unmodified1 = "test::Resource[agent1,key=unmodified1]"
+    rid_deleted1 = "test::Resource[agent1,key=deleted1]"
+    rid_deleted2 = "test::Resource[agent2,key=deleted2]"
+    resources = [
+        {
+            "key": "shared",
+            "version": version,
+            "id": f"{rid_shared},v={version}",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [],
+        },
+        {
+            "key": "updated_set1",
+            "version": version,
+            "id": f"{rid_updated1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [f"{rid_shared},v={version}"],
+        },
+        {
+            "key": "updated_set2",
+            "version": version,
+            "id": f"{rid_updated2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [f"{rid_shared},v={version}", f"{rid_updated1},v={version}"],
+        },
+        {
+            "key": "unmodified_set1",
+            "version": version,
+            "id": f"{rid_unmodified1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [f"{rid_shared},v={version}"],
+        },
+        {
+            "key": "deleted_set1",
+            "version": version,
+            "id": f"{rid_deleted1},v={version}",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [f"{rid_shared},v={version}"],
+        },
+        {
+            "key": "deleted_set2",
+            "version": version,
+            "id": f"{rid_deleted2},v={version}",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [f"{rid_deleted1},v={version}"],  # Cross-agent dependency
+        },
+    ]
+    resource_sets = {
+        rid_updated1: "updated",
+        rid_updated2: "updated",
+        rid_unmodified1: "unmodified",
+        rid_deleted1: "deleted",
+        rid_deleted2: "deleted",
+    }
+    resource_states = {
+        rid_shared: const.ResourceState.available,
+        rid_updated1: const.ResourceState.available,
+        rid_updated2: const.ResourceState.available,
+        rid_unmodified1: const.ResourceState.available,
+        rid_deleted1: const.ResourceState.available,
+        rid_deleted2: const.ResourceState.available,
+    }
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets=resource_sets,
+    )
+    assert result.code == 200
+
+    # Release
+    result = await client.release_version(environment, version)
+    assert result.code == 200
+
+    # Mark resources as deployed
+    for aclient, resource_ids in [
+        (aclient1, [rid_shared, rid_updated1, rid_updated2, rid_unmodified1, rid_deleted1]),
+        (aclient2, [rid_deleted2]),
+    ]:
+        result = await aclient.resource_action_update(
+            tid=environment,
+            resource_ids=[Id.set_version_in_id(rid, new_version=1) for rid in resource_ids],
+            action_id=uuid.uuid4(),
+            action=const.ResourceAction.deploy,
+            started=datetime.datetime.now(),
+            finished=datetime.datetime.now(),
+            status=const.ResourceState.deployed,
+            change=const.Change.updated,
+        )
+        assert result.code == 200
+
+    # Partial compile
+    resources_partial = [
+        {
+            "key": "shared",
+            "version": 0,
+            "id": f"{rid_shared},v=0",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [],
+        },
+        {
+            "key": "updated_set2",
+            "version": 0,
+            "id": f"{rid_updated2},v=0",
+            "send_event": False,
+            "purged": False,
+            "purge_on_delete": True,
+            "requires": [f"{rid_shared},v=0"],
+        },
+    ]
+    resource_sets = {rid_updated2: "updated"}
+    resource_states = {rid_shared: const.ResourceState.available, rid_updated2: const.ResourceState.available}
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state=resource_states,
+        unknowns=[],
+        version_info=None,
+        resource_sets=resource_sets,
+        removed_resource_sets=["deleted"],
+    )
+    assert result.code == 200
+
+    resources_in_model = await data.Resource.get_list(model=2)
+    assert len(resources_in_model) == 6
+
+    rid_to_resource = {res.resource_id: res for res in resources_in_model}
+    # rid_shared
+    assert sorted(rid_to_resource[rid_shared].attributes["requires"]) == sorted([rid_updated1, rid_deleted1])
+    assert rid_to_resource[rid_shared].provides == []
+    # rid_updated1
+    assert rid_to_resource[rid_updated1].attributes["requires"] == []
+    assert rid_to_resource[rid_updated1].provides == []
+    # rid_updated2
+    assert rid_to_resource[rid_updated2].attributes["requires"] == [rid_shared]
+    assert rid_to_resource[rid_updated2].provides == []
+    # rid_unmodified1
+    assert rid_to_resource[rid_unmodified1].attributes["requires"] == [rid_shared]
+    assert rid_to_resource[rid_unmodified1].provides == []
+    # rid_deleted1
+    assert rid_to_resource[rid_deleted1].attributes["requires"] == [rid_deleted2]
+    assert rid_to_resource[rid_deleted1].provides == []
+    # rid_deleted2
+    assert rid_to_resource[rid_deleted2].attributes["requires"] == []
+    assert rid_to_resource[rid_deleted2].provides == [rid_deleted1]
+
+
+async def test_is_suitable_for_partial_compiles(server, client, environment, clienthelper) -> None:
+    """
+    Test whether the put_version and the put_partial endpoint correctly sets the is_suitable_for_partial_compiles field
+    on a configurationmodel.
+    """
+
+    async def execute_put_version(set_cross_resource_set_dependency: bool) -> int:
+        """
+        Creates a new version using the put_partial endpoint.
+
+        :param set_cross_resource_set_dependency: True iff there is a cross resource set dependency in the new model version.
+        :return: The version of the new configurationmodel.
+        """
+        version = await clienthelper.get_version()
+        rid_shared = "test::Resource[agent1,key=shared]"
+        rid_set1 = "test::Resource[agent1,key=one]"
+        rid_set2 = "test::Resource[agent1,key=two]"
+        resources = [
+            {
+                "key": "shared",
+                "version": version,
+                "id": f"{rid_shared},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [],
+            },
+            {
+                "key": "set1",
+                "version": version,
+                "id": f"{rid_set1},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [f"{rid_shared},v={version}"],
+            },
+            {
+                "key": "set2",
+                "version": version,
+                "id": f"{rid_set2},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [f"{rid_shared},v={version}"],
+            },
+        ]
+        if set_cross_resource_set_dependency:
+            resources[2]["requires"].append(f"{rid_set1},v={version}")
+
+        resource_sets = {rid_set1: "set1", rid_set2: "set2"}
+        resource_states = {rid_set1: const.ResourceState.available, rid_set2: const.ResourceState.available}
+        result = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=resources,
+            resource_state=resource_states,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
+            resource_sets=resource_sets,
+        )
+        assert result.code == 200
+        return version
+
+    async def do_partial_compile(base_version: int, should_fail: bool) -> Optional[int]:
+        """
+        Create a new version of the model using the put_partial endpoint.
+
+        :param base_version: The expected base version for the partial compile.
+        :param should_fail: True iff the call to the put_partial endpoint should fail because the base version is not
+                            suitable for partial compiles because it has cross resource set dependencies.
+        :return: The new version of the model when should_fail is false, otherwise None is returned.
+        """
+        rid_set1 = "test::Resource[agent1,key=one]"
+        resources_partial = [
+            {
+                "key": "updated_set2",
+                "version": 0,
+                "id": f"{rid_set1},v=0",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": True,
+                "requires": [],
+            },
+        ]
+        resource_sets = {rid_set1: "set1"}
+        resource_states = {rid_set1: const.ResourceState.available}
+        result = await client.put_partial(
+            tid=environment,
+            resources=resources_partial,
+            resource_state=resource_states,
+            unknowns=[],
+            version_info=None,
+            resource_sets=resource_sets,
+            removed_resource_sets=["deleted"],
+        )
+        if not should_fail:
+            assert result.code == 200
+            return result.result["data"]
+        else:
+            assert result.code == 400
+            assert (
+                f"Base version {base_version} is not suitable for a partial compile. A dependency exists between resources"
+                " test::Resource[agent1,key=two] and test::Resource[agent1,key=one],"
+                " but they belong to different resource sets." in result.result["message"]
+            )
+            return None
+
+    version = await execute_put_version(set_cross_resource_set_dependency=False)
+    cm = await data.ConfigurationModel.get_version(environment, version)
+    assert cm.is_suitable_for_partial_compiles
+    version = await do_partial_compile(base_version=version, should_fail=False)
+    cm = await data.ConfigurationModel.get_version(environment, version)
+    assert cm.is_suitable_for_partial_compiles
+
+    version = await execute_put_version(set_cross_resource_set_dependency=True)
+    cm = await data.ConfigurationModel.get_version(environment, version)
+    assert not cm.is_suitable_for_partial_compiles
+    await do_partial_compile(base_version=version, should_fail=True)

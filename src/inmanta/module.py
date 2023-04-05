@@ -21,6 +21,7 @@ import enum
 import glob
 import importlib
 import logging
+import operator
 import os
 import re
 import subprocess
@@ -34,6 +35,7 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import ConfigParser
 from dataclasses import dataclass
+from functools import reduce
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
 from itertools import chain
@@ -956,6 +958,14 @@ class ModuleRepo:
         # same class is used for search path and remote repos, perhaps not optimal
         raise NotImplementedError("Abstract method")
 
+    def is_empty(self) -> bool:
+        """
+        Return true if this repo will never produce any repo.
+
+        Used to distinguish an empty compose repo from a non-empty one
+        """
+        return False
+
 
 class CompositeModuleRepo(ModuleRepo):
     def __init__(self, children: List[ModuleRepo]) -> None:
@@ -973,6 +983,9 @@ class CompositeModuleRepo(ModuleRepo):
             if result is not None:
                 return result
         return None
+
+    def is_empty(self) -> bool:
+        return reduce(operator.and_, (child.is_empty() for child in self.children), True)
 
 
 class LocalFileRepo(ModuleRepo):
@@ -996,6 +1009,10 @@ class LocalFileRepo(ModuleRepo):
             return path
         return None
 
+    def is_empty(self) -> bool:
+        # May have or receive items
+        return False
+
 
 class RemoteRepo(ModuleRepo):
     def __init__(self, baseurl: str) -> None:
@@ -1016,6 +1033,10 @@ class RemoteRepo(ModuleRepo):
 
     def path_for(self, name: str) -> Optional[str]:
         raise NotImplementedError("Should only be called on local repos")
+
+    def is_empty(self) -> bool:
+        # May have or receive items
+        return False
 
 
 def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
@@ -1530,7 +1551,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
           of the module to the URL.
         * package: When the type is set to package, the URL field should contain the URL of the Python package repository.
           The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-          compliant.
+          compliant. If more than one package url is configured, they will all be passed to pip. This is generally only
+          recommended if all configured indexes are under full control of the end user to protect against dependency
+          confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
+          `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
@@ -1552,7 +1576,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         result in an error.
         When a non-strict check is done, only version conflicts in a direct dependency will result in an error.
         All other violations will only result in a warning message.
-    :param agent_install_dependency_modules: [EXPERIMENTAL FEATURE] If true, when a module declares Python dependencies on
+    :param agent_install_dependency_modules: [EXPERT FEATURE] If true, when a module declares Python dependencies on
         other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
         if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
         for inter-module dependencies within handler code, even if the dependency module doesn't have any handlers that
@@ -1897,13 +1921,15 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             ),
         )
 
-        if self._metadata.downloadpath is not None:
-            self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
-            if self._metadata.downloadpath not in self._metadata.modulepath:
-                LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
+        if not self.module_source_v1.remote_repo.is_empty():
+            # This is only relevant if we have a V1 module source
+            if self._metadata.downloadpath is not None:
+                self._metadata.downloadpath = os.path.abspath(os.path.join(path, self._metadata.downloadpath))
+                if self._metadata.downloadpath not in self._metadata.modulepath:
+                    LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
 
-            if not os.path.exists(self._metadata.downloadpath):
-                os.mkdir(self._metadata.downloadpath)
+                if not os.path.exists(self._metadata.downloadpath):
+                    os.mkdir(self._metadata.downloadpath)
 
         self.virtualenv: env.ActiveEnv
         if venv_path is None:

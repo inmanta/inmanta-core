@@ -1,0 +1,5 @@
+import test_5790_follow_up_mod_a
+
+entity B extends test_5790_follow_up_mod_a::B:
+end
+implement B using std::none

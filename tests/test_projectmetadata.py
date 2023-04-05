@@ -15,11 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import logging
 from typing import List, Optional
 
 import pytest
 
-from inmanta.module import ModuleRepoType, ProjectMetadata, RelationPrecedenceRule
+from inmanta.module import ModuleRepoType, Project, ProjectMetadata, RelationPrecedenceRule
+from utils import assert_no_warning
 
 
 @pytest.mark.parametrize(
@@ -79,3 +81,20 @@ def test_relation_precedence_policy_parsing(
     else:
         with pytest.raises(ValueError):
             ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])
+
+
+def test_no_module_path(tmp_path, caplog):
+    with caplog.at_level(logging.WARNING):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                """
+    name: testproject
+    downloadpath: libs
+    repo:
+        - url: https://pypi.org/simple
+          type: package
+    """
+            )
+
+        Project(tmp_path, autostd=False)
+    assert_no_warning(caplog)

@@ -13,7 +13,8 @@ endif
 
 syn region Comment start="#" end="$" contains=Todo
 syn region String start="\"" skip="\\\"" end="\""
-syn region String start="\"\"\"" end="\"\"\""
+syn region String start="'" skip="\\'" end="'"
+syn region String start="\"\{3,5}" end="\"\{3,5}"
 syn region regex start="/" skip="\\/" end="/"
 syn match number "\<[0123456789]*\>'\@!"
 

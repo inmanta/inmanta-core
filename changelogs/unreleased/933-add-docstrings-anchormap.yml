@@ -1,0 +1,8 @@
+description: adds docstrings to the anchormap so that the vscode extension can display them on hover
+issue-nr: 933
+issue-repo: vscode-inmanta
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
+

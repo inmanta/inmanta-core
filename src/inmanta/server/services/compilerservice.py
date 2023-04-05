@@ -870,7 +870,6 @@ class CompilerService(ServerSlice):
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "requested.desc",
     ) -> ReturnValue[Sequence[model.CompileReport]]:
-
         try:
             handler = CompileReportView(env, limit, filter, sort, first_id, last_id, start, end)
             return await handler.execute()

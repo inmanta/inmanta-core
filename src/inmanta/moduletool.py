@@ -20,6 +20,7 @@ import configparser
 import datetime
 import enum
 import inspect
+import itertools
 import logging
 import os
 import py_compile
@@ -38,6 +39,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
 
 import click
+import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
@@ -82,7 +84,6 @@ if TYPE_CHECKING:
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -104,17 +105,21 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         dest="no_strict_deps_check",
         action="store_true",
         default=False,
-        help="When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
-        "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-        "--strict-deps-check option.",
+        help=(
+            "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
+            "All other version conflicts will result in a warning. This option is mutually exclusive with the "
+            "--strict-deps-check option."
+        ),
     )
     parser.add_argument(
         "--strict-deps-check",
         dest="strict_deps_check",
         action="store_true",
         default=False,
-        help="When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-        "This option is mutually exclusive with the --no-strict-deps-check option.",
+        help=(
+            "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
+            "This option is mutually exclusive with the --no-strict-deps-check option."
+        ),
     )
 
 
@@ -193,7 +198,9 @@ class ModuleLikeTool(object):
                     LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
                     return None
 
-                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+                # We do not support revision for deprecated methods
+                revision = False
+                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
                 if change_type:
                     outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
                 else:
@@ -216,19 +223,10 @@ class ChangeType(enum.Enum):
     MAJOR: str = "major"
     MINOR: str = "minor"
     PATCH: str = "patch"
-
-    def less(self) -> Optional["ChangeType"]:
-        """
-        Returns the change type that is one less than this one.
-        """
-        if self == ChangeType.MAJOR:
-            return ChangeType.MINOR
-        if self == ChangeType.MINOR:
-            return ChangeType.PATCH
-        return None
+    REVISION: str = "revision"
 
     def __lt__(self, other: "ChangeType") -> bool:
-        order: List[ChangeType] = [ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
+        order: List[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
         if other not in order:
             return NotImplemented
         return order.index(self) < order.index(other)
@@ -237,7 +235,7 @@ class ChangeType(enum.Enum):
     def diff(cls, *, low: Version, high: Version) -> Optional["ChangeType"]:
         """
         Returns the order of magnitude of the change type diff between two versions.
-        Return None if the versions are less than a patch separated from each other.
+        Return None if the versions are less than a patch / a revision (if 4 digit version number) separated from each other.
         For example, a dev release and a post release for the same version number are less
         than a patch separated from each other.
         """
@@ -251,17 +249,24 @@ class ChangeType(enum.Enum):
             return cls.MINOR
         if high.micro > low.micro:
             return cls.PATCH
+        if len(high.base_version.split(".")) >= 4:
+            high_revision = int(high.base_version.split(".")[3])
+            # We are switching from 3 digits to 4
+            if len(low.base_version.split(".")) < 4 or high_revision > int(low.base_version.split(".")[3]):
+                return cls.REVISION
         raise Exception("Couldn't determine version change type diff: this state should be unreachable")
 
     @classmethod
-    def parse_from_bools(cls, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
+    def parse_from_bools(cls, revision: bool, patch: bool, minor: bool, major: bool) -> Optional["ChangeType"]:
         """
         Create a ChangeType for the type of which the boolean is set to True. If none
         of the boolean arguments is set to True, None is returned. If more
         than one boolean argument is set to True, a ValueError is raised.
         """
-        if sum([patch, minor, major]) > 1:
-            raise ValueError("Only one argument of patch, minor or major can be set to True at the same time.")
+        if sum([revision, patch, minor, major]) > 1:
+            raise ValueError("Only one argument of revision, patch, minor or major can be set to True at the same time.")
+        if revision:
+            return ChangeType.REVISION
         if patch:
             return ChangeType.PATCH
         if minor:
@@ -278,21 +283,34 @@ class VersionOperation:
         Bump the release part of the given version with this ChangeType and apply the given version_tag to it.
         If the given version has a different version tag set, it will be ignored.
         """
-        parts = [int(x) for x in version.base_version.split(".")]
-        while len(parts) < 3:
-            parts.append(0)
-        if change_type is ChangeType.PATCH:
-            parts[2] += 1
-        if change_type is ChangeType.MINOR:
-            parts[1] += 1
-            parts[2] = 0
-        if change_type is ChangeType.MAJOR:
-            parts[0] += 1
-            parts[1] = 0
-            parts[2] = 0
-        # Reset remaining digits to zero
-        if len(parts) > 3:
-            parts[3:] = [0 for _ in range(len(parts) - 3)]
+        bump_index: int
+        if change_type is ChangeType.REVISION:
+            bump_index = 3
+        elif change_type is ChangeType.PATCH:
+            bump_index = 2
+        elif change_type is ChangeType.MINOR:
+            bump_index = 1
+        elif change_type is ChangeType.MAJOR:
+            bump_index = 0
+        else:
+            raise RuntimeError(f"Unsupported change type: {change_type}!")
+
+        base_parts = [int(x) for x in version.base_version.split(".")]
+        # use 4th digit only if it already existed or if it is being bumped
+        nb_digits: int = max(bump_index + 1, 3, len(base_parts))
+        parts = list(
+            more_itertools.take(
+                nb_digits,
+                itertools.chain(
+                    base_parts[: bump_index + 1],
+                    itertools.repeat(0),
+                ),
+            )
+        )
+        parts[bump_index] += 1
+
+        while len(parts) > 3 and parts[-1] == 0:
+            parts.pop()
 
         return cls._to_version(parts, version_tag)
 
@@ -683,10 +701,10 @@ When a stable release is done, this command:
   version.
 When a development release is done using the --dev option, this command:
 * Does a commit that updates the current version of the module to a development version that is a patch, minor or major version
-  ahead of the previous stable release. The size of the increment is determined by the --patch, --minor or --major argument
-  (--patch is the default). When a CHANGELOG.md file is present in the root of the module directory then the version number in
-  the changelog is also updated accordingly. The changelog file is always populated with the associated stable version and
-  not a development version.
+  ahead of the previous stable release. The size of the increment is determined by the --revision, --patch, --minor or
+  --major argument (--patch is the default). When a CHANGELOG.md file is present in the root of the module
+  directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
+  the associated stable version and not a development version.
             """.strip(),
             formatter_class=RawTextHelpFormatter,
         )
@@ -715,6 +733,12 @@ When a development release is done using the --dev option, this command:
             help="Do a patch version bump compared to the previous stable release.",
             action="store_true",
         )
+        release.add_argument(
+            "--revision",
+            dest="revision",
+            help="Do a revision version bump compared to the previous stable release (only with 4 digits version).",
+            action="store_true",
+        )
         release.add_argument("-m", "--message", help="Commit message")
         release.add_argument(
             "-c",
@@ -722,6 +746,7 @@ When a development release is done using the --dev option, this command:
             help="This changelog message will be written to the changelog file. If the -m option is not provided, "
             "this message will also be used as the commit message.",
         )
+        release.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
     def add(self, module_req: str, v1: bool = False, v2: bool = False, override: bool = False) -> None:
         """
@@ -912,7 +937,6 @@ version: 0.0.1dev0"""
         names: Sequence[str] = sorted(project.modules.keys())
         specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
-
             mod: Module = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
@@ -1175,9 +1199,11 @@ version: 0.0.1dev0"""
         self,
         dev: bool,
         message: Optional[str] = None,
+        revision: bool = False,
         patch: bool = False,
         minor: bool = False,
         major: bool = False,
+        commit_all: bool = False,
         changelog_message: Optional[str] = None,
     ) -> None:
         """
@@ -1185,9 +1211,9 @@ version: 0.0.1dev0"""
         """
 
         # Validate patch, minor, major
-        nb_version_bump_arguments_set = sum([patch, minor, major])
+        nb_version_bump_arguments_set = sum([revision, patch, minor, major])
         if nb_version_bump_arguments_set > 1:
-            raise click.UsageError("Only one of --patch, --minor and --major can be set at the same time.")
+            raise click.UsageError("Only one of --revision, --patch, --minor and --major can be set at the same time.")
 
         # Make module
         module_dir = os.path.abspath(os.getcwd())
@@ -1209,7 +1235,7 @@ version: 0.0.1dev0"""
             ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
         )
 
-        requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(patch, minor, major)
+        requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
             # Dev always bumps
             requested_version_bump = ChangeType.PATCH
@@ -1242,8 +1268,8 @@ version: 0.0.1dev0"""
             gitprovider.commit(
                 repo=module_dir,
                 message=changelog_message if changelog_message else message if message else f"Bump version to {new_version}",
-                commit_all=True,
-                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
+                commit_all=commit_all,
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
         else:
@@ -1256,8 +1282,8 @@ version: 0.0.1dev0"""
             gitprovider.commit(
                 repo=module_dir,
                 message=message if message else f"Release version {module.metadata.get_full_version()}",
-                commit_all=True,
-                add=[module.get_metadata_file_path()] + [changelog.get_path()] if changelog else [],
+                commit_all=commit_all,
+                add=[module.get_metadata_file_path()] + ([changelog.get_path()] if changelog else []),
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
@@ -1523,7 +1549,6 @@ build-backend = "setuptools.build_meta"
 
 
 class V2ModuleBuilder:
-
     DISABLE_ISOLATED_ENV_BUILDER_CACHE: bool = False
 
     def __init__(self, module_path: str) -> None:
@@ -1668,7 +1693,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
         result: Set[str] = set()
-        for (dirpath, dirnames, filenames) in os.walk(directory):
+        for dirpath, dirnames, filenames in os.walk(directory):
             if should_ignore(os.path.basename(dirpath)):
                 # ignore whole subdirectory
                 continue

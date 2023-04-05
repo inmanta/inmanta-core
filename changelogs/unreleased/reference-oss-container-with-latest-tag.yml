@@ -1,0 +1,4 @@
+---
+description: Make sure that the `Install Inmanta with Docker` documentation uses the latest tag instead of a specific version tag for the OSS container.
+change-type: patch
+destination-branches: [master, iso6]

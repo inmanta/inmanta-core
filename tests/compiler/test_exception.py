@@ -16,10 +16,15 @@
     Contact: code@inmanta.com
 """
 import os
+import re
+import textwrap
 
-import inmanta.compiler as compiler
-from inmanta.ast import DoubleSetException, MultiException
+import pytest
+
+from inmanta import compiler
+from inmanta.ast import DoubleSetException, MultiException, NotFoundException
 from inmanta.config import Config
+from inmanta.execute import scheduler
 
 
 def test_multi_excn(snippetcompiler):
@@ -250,3 +255,87 @@ implement A using std::none
         """,
         """Syntax error: The use of default constructors is no longer supported ({dir}/main.cf:2:9)""",
     )
+
+
+def test_multi_line_constructor(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity ManyFields:
+    string a
+    string b
+    string c
+end
+
+implement ManyFields using std::none
+
+ManyFields(
+    a = "A",
+    b = "B",
+    c = "C",
+    d = "D",
+)
+""",
+        """no attribute d on type __config__::ManyFields (reported in d ({dir}/main.cf:14:5))""",  # noqa: E501
+    )
+
+
+def load_types() -> None:
+    comp: compiler.Compiler = compiler.Compiler()
+    sched: scheduler.Scheduler = scheduler.Scheduler()
+
+    (statements, blocks) = comp.compile()
+    sched.define_types(comp, statements, blocks)
+
+
+@pytest.mark.parametrize_any(
+    "namespace",
+    [
+        "doesnotexist",
+        "doesnotexist::doesnotexist",
+        "std::doesnotexist",
+        "alias::can_not_access_subnamespace_on_alias",
+    ],
+)
+def test_reference_nonexisting_namespace(snippetcompiler, namespace: str) -> None:
+    """
+    Verify that an appropriate exception is raised when a namespace is referenced that doesn't exist in the model.
+    The exception should be raised even in the type checking phase for diagnostic purposes (e.g. VSCode language server).
+    """
+    # AST loading should succeed
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            f"""
+            import std as alias
+
+            {namespace}::x
+            """.strip(
+                "\n"
+            )
+        ),
+        install_project=True,
+    )
+    with pytest.raises(
+        NotFoundException,
+        match=re.escape(
+            f"Namespace {namespace} not found. Try importing it with `import {namespace}`"
+            f" (reported in {namespace}::x ({snippetcompiler.project_dir}/main.cf:3:1))"
+        ),
+    ):
+        load_types()
+
+
+def test_namespace_alias(snippetcompiler) -> None:
+    """
+    Verify that referencing an import alias does not get mistakenly interpreted as referencing a non-existing namespace.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import std as alias
+
+        alias::x
+        alias::count([])
+        """,
+        install_project=True,
+    )
+    # verify that this does not fail
+    load_types()

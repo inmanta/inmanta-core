@@ -29,6 +29,7 @@ from inmanta.ast import (
     Namespace,
     NotFoundException,
     RuntimeException,
+    WithComment,
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
@@ -51,7 +52,7 @@ if TYPE_CHECKING:
 import inmanta.ast.attribute
 
 
-class Entity(NamedType):
+class Entity(NamedType, WithComment):
     """
     This class models a defined entity in the domain model of the configuration model.
 
@@ -61,8 +62,6 @@ class Entity(NamedType):
     :param name: The name of this entity. This name can not be changed
         after this object has been created
     """
-
-    comment: Optional[str]
 
     def __init__(self, name: str, namespace: Namespace, comment: Optional[str] = None) -> None:
         NamedType.__init__(self)
@@ -187,15 +186,15 @@ class Entity(NamedType):
 
     attributes: "Dict[str,Attribute]" = property(get_attributes, set_attributes, None, None)
 
-    def is_parent(self, entity: "Entity") -> bool:
+    def is_parent(self, parent_candidate: "Entity") -> bool:
         """
-        Check if the given entity is a parent of this entity. Does not consider an entity its own parent.
+        Check if the given parent_candidate entity is a parent of this entity. Does not consider an entity its own parent.
         """
-        if entity in self.parent_entities:
+        if parent_candidate in self.parent_entities:
             return True
         else:
             for parent in self.parent_entities:
-                if parent.is_parent(entity):
+                if parent.is_parent(parent_candidate):
                     return True
         return False
 
@@ -214,6 +213,12 @@ class Entity(NamedType):
         for entity in self.parent_entities:
             parents.extend(entity.get_all_parent_entities())
         return set(parents)
+
+    def get_all_child_entities(self) -> "Set[Entity]":
+        children = [x for x in self.child_entities]
+        for entity in self.child_entities:
+            children.extend(entity.get_all_child_entities())
+        return set(children)
 
     def get_all_attribute_names(self) -> "List[str]":
         """
@@ -297,11 +302,14 @@ class Entity(NamedType):
         self.add_instance(out)
         return out
 
-    def is_subclass(self, cls: "Entity") -> bool:
+    def is_subclass(self, subclass_candidate: "Entity", *, strict: bool = True) -> bool:
         """
-        Is the given class a subclass of this class. Does not consider entities a subclass of themselves.
+        Check if the given subclass_candidate entity is a subclass of this class.
+        Does not consider entities a subclass of themselves in strict mode (the default).
+
+        :param strict: Only return True for entities that are a strict subtype, i.e. not of the same type.
         """
-        return cls.is_parent(self)
+        return (not strict and subclass_candidate == self) or subclass_candidate.is_parent(self)
 
     def validate(self, value: object) -> bool:
         """

@@ -84,7 +84,7 @@ from inmanta.server.validate_filter import (
     InvalidFilter,
     LogLevelFilter,
 )
-from inmanta.types import SimpleTypes
+from inmanta.types import JsonType, SimpleTypes
 from inmanta.util import datetime_utc_isoformat
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
@@ -794,11 +794,12 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                   WHERE resource.environment = $1 AND resource_id = $2 AND cm.released = TRUE
                 )
             """,
-            select_clause="SELECT attribute_hash, date, attributes",
+            select_clause="SELECT attribute_hash, date, attributes, model",
             from_clause="""
             FROM (SELECT
                     attribute_hash,
                     min(date) as date,
+                    min(model) as model,
                         (SELECT distinct on (attribute_hash) attributes
                             FROM resourcewithsequenceids
                             WHERE resourcewithsequenceids.attribute_hash = rs.attribute_hash
@@ -813,11 +814,20 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return query_builder
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[ResourceHistory]:
+        def get_attributes(record: Record) -> JsonType:
+            attributes = json.loads(record["attributes"])
+            if "version" not in attributes:
+                # Due to a bug, the version field has always been present in the attributes dictionary.
+                # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+                # version field is present in the attributes dictionary served out via the API.
+                attributes["version"] = record["model"]
+            return attributes
+
         return [
             ResourceHistory(
                 resource_id=self.rid,
                 attribute_hash=record["attribute_hash"],
-                attributes=json.loads(record["attributes"]),
+                attributes=get_attributes(record),
                 date=record["date"],
                 requires=[Id.parse_id(rid).resource_str() for rid in json.loads(record["attributes"]).get("requires", [])],
             )

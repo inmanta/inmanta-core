@@ -669,7 +669,7 @@ class AgentManager(ServerSlice, SessionListener):
     ) -> data.Agent:
         """
         This method creates a new agent (agent in the model) in the database.
-        If an active agent instance exists for the given agent, it is marked as a the
+        If an active agent instance exists for the given agent, it is marked as the
         primary instance for that agent in the database.
 
         Note: This method must be called under session lock
@@ -841,7 +841,6 @@ class AgentManager(ServerSlice, SessionListener):
                 resource_id not in self._fact_resource_block_set
                 or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
             ):
-
                 agents = await data.ConfigurationModel.get_agents(env.id, version)
                 await self._autostarted_agent_manager._ensure_agents(env, agents)
 
@@ -1014,16 +1013,9 @@ class AutostartedAgentManager(ServerSlice):
         if self._stopping:
             raise ShutdownInProgress()
 
-        agent_map: Dict[str, str]
-        agent_map = cast(
+        agent_map: Dict[str, str] = cast(
             Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
         )  # we know the type of this map
-
-        # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
-        # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
-        if "internal" not in agent_map:
-            agent_map["internal"] = "local:"
-            await env.set(data.AUTOSTART_AGENT_MAP, dict(agent_map), connection=connection)
 
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
@@ -1080,7 +1072,8 @@ class AutostartedAgentManager(ServerSlice):
         try:
             proc = await self._fork_inmanta(
                 [
-                    "-vvvv",
+                    "--log-file-level",
+                    "DEBUG",
                     "--timed-logs",
                     "--config",
                     config_path,

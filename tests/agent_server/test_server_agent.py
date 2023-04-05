@@ -524,6 +524,8 @@ async def test_dual_agent(resource_container, server, client, clienthelper, envi
     myagent = agent.Agent(
         hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
     )
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
     await myagent.add_end_point_name("agent1")
     await myagent.add_end_point_name("agent2")
     await myagent.start()
@@ -787,7 +789,7 @@ async def test_unkown_parameters(resource_container, environment, client, server
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
-    await server.get_slice(SLICE_PARAM).renew_expired_facts()
+    await server.get_slice(SLICE_PARAM).renew_facts()
 
     env_id = uuid.UUID(environment)
     params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
@@ -2745,7 +2747,7 @@ async def test_push_incremental_deploy(
     await agent.stop()
 
 
-@pytest.mark.parametrize("push, agent_trigger_method", [(True, None), (True, const.AgentTriggerMethod.push_full_deploy)])
+@pytest.mark.parametrize("push, agent_trigger_method", [(True, const.AgentTriggerMethod.push_full_deploy)])
 async def test_push_full_deploy(
     resource_container, environment, server, client, clienthelper, no_agent_backoff, push, agent_trigger_method, async_finalizer
 ):

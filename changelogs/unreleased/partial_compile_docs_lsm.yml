@@ -1,0 +1,6 @@
+description: Add documentation for partial compiles on LSM
+issue-nr: 571
+issue-repo: lsm
+change-type: patch
+destination-branches: [master, iso6]
+

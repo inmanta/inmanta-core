@@ -18,6 +18,7 @@
 import warnings
 
 import toml
+from inmanta.config import AuthJWTConfig
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -103,6 +104,7 @@ import inmanta.app
 import inmanta.compiler as compiler
 import inmanta.compiler.config
 import inmanta.main
+import inmanta.user_setup
 from inmanta import config, const, data, env, loader, protocol, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
@@ -118,6 +120,7 @@ from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server, SliceStartupException
+from inmanta.server.services import orchestrationservice
 from inmanta.server.services.compilerservice import CompilerService, CompileRun
 from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
@@ -511,6 +514,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
     compiler.Finalizers.reset_finalizers()
+    AuthJWTConfig.reset()
 
 
 @pytest.fixture()
@@ -554,7 +558,7 @@ def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
-    config.Config.set("auth_jwt_default", "client_types", "agent,compiler")
+    config.Config.set("auth_jwt_default", "client_types", "agent,compiler,api")
     config.Config.set("auth_jwt_default", "key", "rID3kG4OwGpajIsxnGDhat4UFcMkyFZQc1y3oKQTPRs")
     config.Config.set("auth_jwt_default", "expire", "0")
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
@@ -1746,3 +1750,16 @@ def index_with_pkgs_containing_optional_deps() -> str:
                 publish_index=pip_index,
             )
         yield pip_index.url
+
+
+@pytest.fixture(scope="session", autouse=True)
+def disable_version_and_agent_cleanup_job():
+    """
+    Disable the cleanup job ran by the Inmanta server that cleans up old model version and agent records that are no longer
+    used. Enabling this cleanup for the test suite causes race conditions in tests cases that create agent records without an
+    associated model version.
+    """
+    old_perform_cleanup = orchestrationservice.PERFORM_CLEANUP
+    orchestrationservice.PERFORM_CLEANUP = False
+    yield
+    orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup

@@ -42,7 +42,7 @@ except ImportError:
 
 # This code needs to stay Py2 compatible without any external libs
 if False:
-    from typing import Dict, List, Optional, Tuple, Union
+    from typing import Dict, List, Optional, Tuple, Union  # noqa: F401
 
 
 class IOBase(object):

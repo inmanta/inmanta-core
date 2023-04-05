@@ -27,12 +27,14 @@ import itertools
 import logging
 import os
 import socket
+import threading
 import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
@@ -699,3 +701,35 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
 
     async def __aexit__(self, *excinfo: object) -> None:
         pass
+
+
+async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
+    """
+    Asynchronously join a set of threadpools
+
+    idea borrowed from BaseEventLoop.shutdown_default_executor
+
+    We implemented this method because:
+    1. ThreadPoolExecutor.shutdown(wait=True)` is a blocking call, blocking the ioloop.
+       This doesn't work because we often have back-and-forth between the ioloop and the thread
+       due to our `ResourceHandler.run_sync` method.
+    2.The python sdk has no support for async awaiting threadpool shutdown (except for the default pool)
+    """
+
+    loop = asyncio.get_event_loop()
+    future = loop.create_future()
+
+    def join() -> None:
+        for threadpool in threadpools:
+            try:
+                threadpool.shutdown(wait=True)
+            except Exception:
+                LOGGER.exception("Exception during threadpool shutdown")
+        loop.call_soon_threadsafe(future.set_result, None)
+
+    thread = threading.Thread(target=join)
+    thread.start()
+    try:
+        await future
+    finally:
+        thread.join()

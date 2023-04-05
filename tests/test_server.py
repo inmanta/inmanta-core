@@ -33,7 +33,7 @@ from inmanta import const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
-from inmanta.data.model import AttributeStateChange, LogLine
+from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import (
@@ -868,6 +868,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             date=datetime.now(),
             total=1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         res1 = data.Resource.new(
@@ -994,6 +995,7 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1096,6 +1098,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1138,6 +1141,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1301,6 +1305,7 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1339,6 +1344,7 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1405,3 +1411,158 @@ async def test_redirect_dashboard_to_console(server, path):
     )
     response = await http_client.fetch(request, raise_error=False)
     assert result_url == response.effective_url
+
+
+async def test_cleanup_old_agents(server):
+    """
+    This test is testing the functionality of cleaning up old agents in the database.
+    The test creates 2 environments and adds agents with various properties (some used in a version,
+    some in the agent map, and some with the primary ID set), and then tests that
+    the cleanup function correctly removes only the agents that meet the criteria for deletion.
+    """
+
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
+    await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
+
+    process_sid = uuid.uuid4()
+    await data.AgentProcess(hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()).insert()
+
+    id_primary = uuid.uuid4()
+    await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env1.id).insert()
+
+    version = 1
+    await data.ConfigurationModel(
+        environment=env1.id,
+        version=version,
+        date=datetime.now(),
+        total=1,
+        released=True,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    ).insert()
+
+    path = "/etc/file1"
+    resource_id = f"std::File[agent4,path={path}]"
+
+    await data.Resource.new(
+        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"path": path}
+    ).insert()
+
+    # should get purged
+    await data.Agent(
+        environment=env1.id,
+        name="agent1",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # should not get purged as the id_primary is set -> not down
+    await data.Agent(environment=env1.id, name="agent2", paused=False, id_primary=id_primary).insert()
+    # should not get purged as it is in the agent map
+    await data.Agent(
+        environment=env1.id,
+        name="agent3",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # should not get purged as it is used in a version of the ConfigurationModel
+    await data.Agent(
+        environment=env1.id,
+        name="agent4",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # agent with "agent2" as name but in another env will get purged:
+    await data.Agent(
+        environment=env2.id,
+        name="agent2",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # agent with "agent1" as name but being present in the agent_map and in another env will not get purged:
+    await data.Agent(
+        environment=env2.id,
+        name="agent1",
+        paused=False,
+        id_primary=None,
+    ).insert()
+
+    agents_before_purge = await data.Agent.get_list()
+    assert len(agents_before_purge) == 6
+
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+    agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
+    assert len(agents_after_purge) == 4
+    expected_agents_after_purge = [
+        (env1.id, "agent2"),
+        (env1.id, "agent3"),
+        (env1.id, "agent4"),
+        (env2.id, "agent1"),
+    ]
+    assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
+
+
+async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper) -> None:
+    """
+    Due to a bug, the version of a resource was always included in the attribute dictionary.
+    This issue has been patched in the database, but at the API boundary we still serve the version
+    field in the attributes dictionary for backwards compatibility. This test verifies that behavior.
+    """
+    version = await clienthelper.get_version()
+    resource_id = "test::Resource[agent1,key=key1]"
+    resources = [
+        {
+            "id": f"{resource_id},v={version}",
+            "att": "val",
+            "version": version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+    attributes_on_api = {k: v for k, v in resources[0].items() if k != "id"}
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
+    # Verify that the version field is not present in the attributes dictionary in the database.
+    result = await data.Resource.get_list()
+    assert len(result) == 1
+    resource_dao = result[0]
+    assert "version" not in resource_dao.attributes
+
+    # Ensure that the serialization of the resource DAO contains the version field in the attributes dictionary
+    resource_dto = resource_dao.to_dto()
+    assert resource_dto.attributes["version"] == version
+    resource_dct = resource_dao.to_dict()
+    assert resource_dct["attributes"]["version"] == version
+
+    # Retrieve the resource via the API and ensure that the version field is present in the attributes dictionary
+    result = await client.resource_history(environment, resource_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["attributes"] == attributes_on_api
+
+    result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == attributes_on_api
+
+    result = await client.resource_details(tid=environment, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == attributes_on_api

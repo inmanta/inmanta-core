@@ -163,7 +163,6 @@ def resource_container_b():
 
 
 async def test_resource_evolution(server, client, environment, no_agent_backoff, snippetcompiler, monkeypatch, async_finalizer):
-
     provider = resource_container_a()
 
     agent = await get_agent(server, environment, "agent1")

@@ -386,6 +386,7 @@ def get_default_nodename() -> str:
 nodename = Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
 feature_file_config = Option("config", "feature-file", None, "The loacation of the inmanta feature file.", is_str_opt)
 
+
 ###############################
 # Transport Config
 ###############################
@@ -428,6 +429,11 @@ class AuthJWTConfig(object):
     issuers: Dict[str, "AuthJWTConfig"] = {}
 
     validate_cert: bool
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.sections = {}
+        cls.issuers = {}
 
     @classmethod
     def list(cls) -> List[str]:

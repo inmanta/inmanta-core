@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import textwrap
+
 import pytest
 
 from inmanta import compiler
@@ -74,7 +76,6 @@ def condition_block_with_self(request):
         if mode % 2 == 0:
             var = f"self.{var}"
         if mode == 1 or mode == 2:
-
             return f"""
 implementation printt for A:
     std::print("true")
@@ -385,7 +386,7 @@ y = A()
     assert result in out
 
 
-def test_3026_is_defined_gradual(snippetcompiler, capsys):
+def test_3026_is_defined_gradual(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
@@ -410,6 +411,33 @@ test = a.optional
     # A.optional is a candidate for freezing as well. It has the same potential to be selected as A.list
     # (until #2793 has been implemented).
     # As a result this snippet is likely to fail without gradual execution for `is defined`.
+    compiler.do_compile()
+
+
+def test_5458_is_defined_progress_potential(snippetcompiler) -> None:
+    """
+    Verify that, even though `is defined` is gradual, the compiler considers its variable to have progress potential as long
+    as its empty, to recognize that the statement can be resolved either when it receives at least one value, or none at all.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.x [0:] -- A
+            A.y [0:] -- A
+
+            implement A using std::none
+
+
+            a = A()
+            if not a.x is defined:
+                a.y += A()
+            end
+            """.strip(
+                "\n"
+            )
+        )
+    )
     compiler.do_compile()
 
 
