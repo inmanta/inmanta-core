@@ -309,7 +309,7 @@ class Entity(NamedType, WithComment):
 
         :param strict: Only return True for entities that are a strict subtype, i.e. not of the same type.
         """
-        return not strict and subclass_candidate == self or subclass_candidate.is_parent(self)
+        return (not strict and subclass_candidate == self) or subclass_candidate.is_parent(self)
 
     def validate(self, value: object) -> bool:
         """
