@@ -5883,14 +5883,18 @@ class User(BaseDocument):
 
 class UnmanagedResource(BaseDocument):
     """
-    discovered resources
     :param environment: the environment of the resource
     :param agent: the uuid of the agent that discovered the resource
-    :param discovered_resource_name: The name of the resource
+    :param unmanaged_resource_name: The name of the resource
     :param value: The actual resource
     """
 
-    __primary_key__ = ("environment", "discovered_resource_name", "agent")
+    environment: uuid.UUID
+    agent: uuid.UUID
+    unmanaged_resource_name: str
+    value: Dict[str, str]
+
+    __primary_key__ = ("environment", "unmanaged_resource_name", "agent")
 
 
 _classes = [

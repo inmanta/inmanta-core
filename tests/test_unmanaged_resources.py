@@ -18,13 +18,6 @@
 from inmanta.agent import agent
 
 
-async def test_discovery_resource(
-    resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer
-):
-    resource_container.Provider.reset()
-    myagent = agent.Agent(
-        hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
-    )
-    await myagent.add_end_point_name("agent1")
-    await myagent.add_end_point_name("agent2")
-    await myagent.start()
+async def test_discovery_resource(server, client, environment):
+    result = await client.unmanaged_resources_create(environment, "test", {"value1": "test1", "value2": "test2"})
+    print(result)

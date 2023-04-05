@@ -17,12 +17,12 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-CREATE TABLE IF NOT EXISTS public.discoveredresources (
+CREATE TABLE IF NOT EXISTS public.unmanagedresource (
     environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
-    agent uuid NOT NULL REFERENCES agent(id_primary) ON DELETE CASCADE,
-    discovered_resource_name VARCHAR NOT NULL,
+    agent uuid NOT NULL REFERENCES agentinstance(id) ON DELETE CASCADE,
+    unmanaged_resource_name VARCHAR NOT NULL,
     values jsonb NOT NULL,
-    PRIMARY KEY (environment, agent, discovered_resource_name)
+    PRIMARY KEY (environment, agent, unmanaged_resource_name)
 );
     """
 
