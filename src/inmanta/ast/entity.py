@@ -302,12 +302,14 @@ class Entity(NamedType, WithComment):
         self.add_instance(out)
         return out
 
-    def is_subclass(self, subclass_candidate: "Entity") -> bool:
+    def is_subclass(self, subclass_candidate: "Entity", *, strict: bool = True) -> bool:
         """
         Check if the given subclass_candidate entity is a subclass of this class.
-        Does not consider entities a subclass of themselves.
+        Does not consider entities a subclass of themselves in strict mode (the default).
+
+        :param strict: Only return True for entities that are a strict subtype, i.e. not of the same type.
         """
-        return subclass_candidate.is_parent(self)
+        return not strict and subclass_candidate == self or subclass_candidate.is_parent(self)
 
     def validate(self, value: object) -> bool:
         """
