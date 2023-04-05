@@ -2754,6 +2754,7 @@ class Parameter(BaseDocument):
             query += " AND metadata @> $" + str(query_param_index) + "::jsonb"
             dict_value = {key: value}
             values.append(cls._get_value(dict_value))
+        query += " ORDER BY name"
         result = await cls.select_query(query, values)
         return result
 
@@ -4722,7 +4723,7 @@ class ConfigurationModel(BaseDocument):
     def to_dict(self) -> JsonType:
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
-        dct["done"] = self._done
+        dct["done"] = self.done
         return dct
 
     @classmethod

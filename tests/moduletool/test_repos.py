@@ -19,7 +19,7 @@ import os
 
 import pytest
 
-from inmanta.module import InvalidMetadata, LocalFileRepo, RemoteRepo, gitprovider
+from inmanta.module import CompositeModuleRepo, InvalidMetadata, LocalFileRepo, RemoteRepo, gitprovider
 
 
 def test_file_co(git_modules_dir, modules_repo):
@@ -53,6 +53,7 @@ def test_remote_repo_good2(tmpdir, modules_repo):
     result = repo.clone("test-repository", coroot)
     assert result
     assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
+    assert not repo.is_empty()
 
 
 def test_remote_repo_bad(tmpdir, modules_repo):
@@ -63,6 +64,7 @@ def test_remote_repo_bad(tmpdir, modules_repo):
         assert not result
     msg = e.value.msg
     assert msg == "Wrong repo path at https://github.com/{}/{} : should only contain at most one {} pair"
+    assert not repo.is_empty()
 
 
 def test_local_repo_bad(tmpdir, modules_repo):
@@ -70,3 +72,19 @@ def test_local_repo_bad(tmpdir, modules_repo):
     coroot = os.path.join(tmpdir, "clone_local_good")
     result = repo.clone("thatotherthing", coroot)
     assert not result
+
+
+def test_composite_repo_empty():
+    repo = LocalFileRepo("test")
+
+    empty = CompositeModuleRepo([])
+    assert empty.is_empty()
+
+    also_empty = CompositeModuleRepo([empty])
+    assert also_empty.is_empty()
+
+    composed = CompositeModuleRepo([repo])
+    assert not composed.is_empty()
+
+    composed = CompositeModuleRepo([repo, empty])
+    assert not composed.is_empty()

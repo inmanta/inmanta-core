@@ -1,0 +1,8 @@
+---
+description: Added diagrams to the documentation that explain the limitations regarding inter-resource set dependencies when partial compiles are enabled.
+issue-nr: 5679
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"

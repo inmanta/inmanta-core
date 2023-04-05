@@ -682,8 +682,6 @@ class OrchestrationService(protocol.ServerSlice):
 
         LOGGER.debug("Successfully stored version %d", version)
 
-        self.resource_service.clear_env_cache(env)
-
     async def _trigger_auto_deploy(
         self,
         env: data.Environment,
