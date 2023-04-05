@@ -65,8 +65,8 @@ the DSL. This can be used to create plugins that use python reserved names such 
         print("inmanta")
 
 
-A more complex plugin accepts arguments and returns a value. The following example creates a plugin
-that converts a string to uppercase:
+A more complex plugin accepts arguments and returns a value. Regular arguments and keyword-only arguments are both supported.
+The following example creates a plugin that converts a string to uppercase:
 
 .. code-block:: python
     :linenos:
