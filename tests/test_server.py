@@ -560,6 +560,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
     assert result.code == 401
 
 
+@pytest.mark.asyncio
 async def test_token_without_auth(server, client, environment):
     """Generating a token when auth is not enabled is not allowed"""
     token = await client.create_token(environment, ["api"], idempotent=True)

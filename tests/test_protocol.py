@@ -2159,14 +2159,15 @@ async def test_return_value_with_meta(unused_tcp_port, postgres_db, database_nam
     assert response.result["metadata"].get("warnings") is not None
 
 
+@pytest.mark.asyncio
 async def test_get_description_foreach_http_status_code() -> None:
     """
     Test whether the `MethodProperties.get_description_foreach_http_status_code()` method works as expected.
     """
 
     class ProjectServer(ServerSlice):
-        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
-        def test_method1(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api])
+        def test_method1(id: str) -> Dict[str, str]:  # NOQA
             """
             Create a new project
 
@@ -2175,8 +2176,8 @@ async def test_get_description_foreach_http_status_code() -> None:
             :raises 500: A server error.
             """
 
-        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
-        def test_method2(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api])
+        def test_method2(id: str) -> Dict[str, str]:  # NOQA
             """
             Create a new project
 

@@ -1148,6 +1148,7 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
     assert exception_message in str(excinfo.value)
 
 
+@pytest.mark.asyncio
 async def test_are_agents_active(server, client, environment, agent_factory) -> None:
     """
     Ensure that the `AgentManager.are_agents_active()` method returns True when an agent
@@ -1177,6 +1178,7 @@ async def test_are_agents_active(server, client, environment, agent_factory) -> 
     await retry_limited(agentmanager.are_agents_active, tid=env_id, endpoints=[agent_name], timeout=10)
 
 
+@pytest.mark.asyncio
 async def test_dont_start_paused_agent(server, client, environment, caplog) -> None:
     """
     Ensure that the AutostartedAgentManager doesn't try to start an agent that is paused (inmanta/inmanta-core#4398).
@@ -1220,6 +1222,7 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     assert "took too long to start" not in caplog.text
 
 
+@pytest.mark.asyncio
 async def test_auto_started_agent_log_in_debug_mode(server, environment):
     """
     Test the logging of an autostarted agent
