@@ -1463,3 +1463,46 @@ def {exporter_name}(exporter: Exporter) -> None:
     assert f"{used_exporter} ran" in out
     assert f"{unused_exporter} ran" not in out
     assert compile.version is None
+
+
+@pytest.mark.parametrize("only_clear_environment", [True, False])
+async def test_status_compilerservice_task_queue(
+    server, client, environment: str, mocked_compiler_service_block, only_clear_environment: bool
+) -> None:
+    """
+    Verify that the size of the compiler queue, reported by the /serverstatus API endpoint, is correctly
+    updated when an environment is cleared or deleted.
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    compilerservice = server.get_slice(SLICE_COMPILER)
+
+    # Make sure that the compiler service doesn't execute any compile.
+    # This would decrement the queue length counter, which is undesired for this test case.
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+
+    async def get_length_compiler_queue_from_status_endpoint() -> int:
+        result = await client.get_server_status()
+        assert result.code == 200
+        for current_slice in result.result["data"]["slices"]:
+            if current_slice["name"] == "core.compiler":
+                return current_slice["status"]["task_queue"]
+        raise Exception("Status endpoint didn't report the status of the compiler service.")
+
+    # Verify initial state
+    assert await get_length_compiler_queue_from_status_endpoint() == 0
+
+    # Add element to compile queue
+    compile_id, _ = await compilerservice.request_recompile(env, force_update=True, do_export=False, remote_id=uuid.uuid4())
+    assert await get_length_compiler_queue_from_status_endpoint() == 1
+
+    # Action on environment that empties the compile queue
+    if only_clear_environment:
+        result = await client.environment_clear(environment)
+        assert result.code == 200
+    else:
+        result = await client.environment_delete(environment)
+        assert result.code == 200
+
+    # Verify compile queue is empty
+    assert await get_length_compiler_queue_from_status_endpoint() == 0

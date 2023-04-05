@@ -28,6 +28,7 @@ import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
 from collections.abc import Mapping
+from collections import defaultdict
 from functools import partial
 from itertools import chain
 from logging import Logger
@@ -506,10 +507,10 @@ class CompilerService(ServerSlice):
         self.listeners: List[CompileStateListener] = []
         self._scheduled_full_compiles: Dict[uuid.UUID, Tuple[TaskMethod, str]] = {}
         # cache the queue count for DB-less and lock-less access to number of tasks
-        self._queue_count_cache: int = 0
+        self._queue_count_cache: dict[uuid.UUID, int] = defaultdict(lambda: 0)
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
-        return {"task_queue": self._queue_count_cache, "listeners": len(self.listeners)}
+        return {"task_queue": sum(self._queue_count_cache.values()), "listeners": len(self.listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:
         self.listeners.append(listener)
@@ -621,6 +622,7 @@ class CompilerService(ServerSlice):
             failed_compile_message=failed_compile_message,
         )
         await compile.insert()
+        self._queue_count_cache[env.id] += 1
         await self._queue(compile)
         return compile.id, None
 
@@ -645,7 +647,6 @@ class CompilerService(ServerSlice):
             # don't execute any compiles in a halted environment
             if env.halted:
                 return
-            self._queue_count_cache += 1
             if compile.environment not in self._recompiles or self._recompiles[compile.environment].done():
                 task = self.add_background_task(self._run(compile))
                 self._recompiles[compile.environment] = task
@@ -680,9 +681,10 @@ class CompilerService(ServerSlice):
 
     async def _recover(self) -> None:
         """Restart runs after server restart"""
+        env_id_to_compile_queue_length = await data.Compile.get_next_compiles_count()
+        self._queue_count_cache = defaultdict(lambda: 0, env_id_to_compile_queue_length)
         # one run per env max to get started
         runs = await data.Compile.get_next_run_all()
-        self._queue_count_cache = await data.Compile.get_next_compiles_count() - len(runs)
         for run in runs:
             await self._queue(run)
         unhandled = await data.Compile.get_unhandled_compiles()
@@ -757,7 +759,7 @@ class CompilerService(ServerSlice):
         Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
         those as completed as well.
         """
-        self._queue_count_cache -= 1
+        self._queue_count_cache[compile.environment] -= 1
         await self._auto_recompile_wait(compile)
 
         compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
@@ -790,10 +792,10 @@ class CompilerService(ServerSlice):
         ]
 
         await asyncio.gather(*awaitables)
+        self._queue_count_cache[compile.environment] -= len(merge_candidates)
         if self.is_stopping():
             return
         self.add_background_task(self._notify_listeners(compile))
-        self._queue_count_cache -= len(merge_candidates)
         for merge_candidate in merge_candidates:
             self.add_background_task(self._notify_listeners(merge_candidate))
         await self._dequeue(compile.environment)
@@ -882,3 +884,12 @@ class CompilerService(ServerSlice):
         if not details:
             raise NotFound("The compile with the given id does not exist.")
         return details
+
+    def reset_compile_queue_counter_for(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is cleared or deleted.
+
+        :param env: The environment that is cleared
+        """
+        if env.id in self._queue_count_cache:
+            del self._queue_count_cache[env.id]

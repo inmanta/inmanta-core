@@ -486,6 +486,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
+        self.compiler_service.reset_compile_queue_counter_for(env)
 
     @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
@@ -512,6 +513,7 @@ class EnvironmentService(protocol.ServerSlice):
         await env.delete_cascade(only_content=True)
 
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
+        self.compiler_service.reset_compile_queue_counter_for(env)
 
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):

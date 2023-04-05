@@ -3607,10 +3607,17 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_next_compiles_count(cls) -> int:
-        """Get the number of compiles in the queue for ALL environments"""
-        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled AND completed IS NULL")
-        return result
+    async def get_next_compiles_count(cls) -> abc.Mapping[uuid.UUID, int]:
+        """Return a dictionary that maps the environment id to the length of the compiler queue for that environment."""
+        result = await cls._fetch_query(
+            f"""
+                SELECT environment, count(*) AS count
+                FROM {cls.table_name()}
+                WHERE NOT handled AND completed IS NULL
+                GROUP BY environment
+            """
+        )
+        return {r["environment"]: r["count"] for r in result}
 
     @classmethod
     async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
