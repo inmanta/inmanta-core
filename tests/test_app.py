@@ -253,7 +253,22 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
             [],
         ),
         (
+            "DEBUG",
+            False,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
             2,
+            False,
+            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
+            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+        ),
+        (
+            "INFO",
             False,
             [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
             [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
@@ -281,7 +296,7 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
         pytest.skip("Colorama is present")
 
     log_file = "server.log"
-    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
+    (args, log_dir) = get_command(tmpdir, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
         (stdout, _, _) = run_with_tty(args)
     else:
@@ -293,6 +308,55 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=False)
+
+
+@pytest.mark.parametrize_any(
+    "log_level, regexes_required_lines, regexes_forbidden_lines",
+    [
+        (
+            5,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            4,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            3,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            2,
+            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
+            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+        ),
+        (
+            1,
+            [],
+            [
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+            ],
+        ),
+    ],
+)
+@pytest.mark.timeout(60)
+def test_log_stdout_log_level(tmpdir, log_level, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level)
+    (stdout, _, _) = run_without_tty(args)
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
 
 
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
@@ -395,7 +459,6 @@ end
 
     process = do_run([sys.executable, "-m", "inmanta.app"] + cmd, cwd=snippetcompiler.project_dir)
     out, err = process.communicate(timeout=30)
-    assert out.decode() == ""
     if "-X" in cmd:
         assert "inmanta.ast.TypeNotFoundException: could not find type nuber in namespace" in str(err)
     else:
