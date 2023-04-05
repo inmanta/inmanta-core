@@ -1,0 +1,5 @@
+description: Changed the behavior of constructor namespace inference to always prefer local types
+change-type: patch
+destination-branches:
+  - master
+  - iso6

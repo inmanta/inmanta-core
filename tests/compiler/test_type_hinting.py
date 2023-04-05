@@ -63,7 +63,10 @@ implement One using std::none
 
 
 def test_basic_type_hint_name_collision(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
+    """
+    Verify that local types are preferred, even if they do not match the type, resulting in an appropriate exception.
+    """
+    snippetcompiler.setup_for_error(
         """
 import elaboratev1module
 
@@ -79,8 +82,11 @@ implement elaboratev1module::A using std::none
 implement A using std::none
 
         """,
+        (
+            "Can not assign a value of type __config__::A to a variable of type elaboratev1module::A"
+            " (reported in Construct(A) ({dir}/main.cf:10))"
+        ),
     )
-    (_, scopes) = compiler.do_compile()
 
 
 def test_basic_type_hint_attribute_collision(snippetcompiler):
