@@ -27,7 +27,7 @@ import py
 import pytest
 from pkg_resources import Requirement
 
-from inmanta import const, loader, plugins, resources
+from inmanta import compiler, const, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
@@ -1406,7 +1406,8 @@ cross_module_dependency::call_to_triple_from_another_mod('triple this string')
         excludes=["inmanta_plugins.cross_module_dependency", "inmanta_plugins.minimalv2module", "inmanta_plugins.anothermod"],
     )
 
-    snippetcompiler.do_export()
+    types, _ = compiler.do_compile()
+
     out, _ = capsys.readouterr()
     output = out.strip()
 
@@ -1426,9 +1427,50 @@ cross_module_dependency::call_to_triple_from_another_mod('triple this string')
         includes=["inmanta_plugins.cross_module_dependency", "inmanta_plugins.anothermod"],
         excludes=["inmanta_plugins.minimalv2module"],
     )
-
+    # Check that the flag_plugin Plugin object is kept in PluginMeta
     check_name_space(
         name_space=plugins.PluginMeta.get_functions(),
-        includes=["cross_module_dependency::print_message", "cross_module_dependency::call_to_triple_from_another_mod"],
+        includes=[
+            "cross_module_dependency::print_message",
+            "cross_module_dependency::call_to_triple_from_another_mod",
+            "anothermod::flag_plugin",
+        ],
+        excludes=[],
+    )
+    # ...but that the corresponding statement is NOT created
+    check_name_space(
+        name_space=types,
+        includes=[
+            "cross_module_dependency::print_message",
+            "cross_module_dependency::call_to_triple_from_another_mod",
+        ],
         excludes=["anothermod::flag_plugin"],
     )
+
+
+def test_cross_module_dependency_sub_module(local_module_package_index: str, snippetcompiler, capsys) -> None:
+    """
+    This test checks that the plugins of a top-level module still work even if one of its sub-modules is not loaded.
+    """
+
+    snippetcompiler.setup_for_snippet(
+        """
+import complex_module_dependencies_mod2
+
+complex_module_dependencies_mod2::cmd_mod2()
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            InmantaModuleRequirement.parse("complex_module_dependencies_mod2").get_python_package_requirement(),
+        ],
+        autostd=False,
+    )
+
+    compiler.do_compile()
+
+    out, _ = capsys.readouterr()
+    output = out.strip()
+
+    expected_output: str = "Hello from complex_module_dependencies_mod2"
+
+    assert expected_output in output
