@@ -27,7 +27,6 @@ import traceback
 import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
-from collections import defaultdict
 from collections.abc import Mapping
 from functools import partial
 from itertools import chain
@@ -49,9 +48,9 @@ from inmanta.protocol import encode_token, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
-from inmanta.server.services import environmentservice
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
+from inmanta.server.services import environmentservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import TaskMethod, ensure_directory_exist
@@ -912,4 +911,3 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def recalculate_queue_count_cache(self) -> None:
         async with self._queue_count_cache_lock:
             self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues()
-
