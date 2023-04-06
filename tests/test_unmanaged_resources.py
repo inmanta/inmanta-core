@@ -15,17 +15,34 @@
 
     Contact: code@inmanta.com
 """
-import uuid
 
 
-async def test_discovery_resource_single(server, client, agent, environment):
-    result = await client.unmanaged_resources_create(
-        environment, agent.name, "unmanaged_res", {"value1": "test1", "value2": "test2"}
+async def test_discovery_resource_create_single(server, client, agent, environment):
+    result = await client.unmanaged_resource_create(
+        environment, "test::Resource[agent1,key=key],v=1", {"value1": "test1", "value2": "test2"}
     )
     assert result.code == 200
 
-    discovered_resource = await client.unmanaged_resources_get(environment, agent.name, "unmanaged_res")
-    assert discovered_resource.agent == agent.name
-    assert discovered_resource.environement == environment
-    assert discovered_resource.unmanaged_resource_name == "unmanaged_res"
-    assert discovered_resource.value == {"value1": "test1", "value2": "test2"}
+    result = await client.unmanaged_resources_get(environment, "test::Resource[agent1,key=key],v=1")
+    assert result.code == 200
+
+    assert result.result["data"]["environment"] == environment
+    assert result.result["data"]["unmanaged_resource_id"] == "test::Resource[agent1,key=key],v=1"
+    assert result.result["data"]["values"] == {"value1": "test1", "value2": "test2"}
+
+
+async def test_unmanaged_resource_create_batch(server, client, agent, environment):
+    resources = [
+        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2],v=1", "values": {"value1": "test3", "value2": "test4"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key2=key3],v=1", "values": {"value1": "test5", "value2": "test6"}},
+    ]
+    result = await client.unmanaged_resource_create_batch(environment, resources)
+    assert result.code == 200
+
+    for res in resources:
+        result = await client.unmanaged_resources_get(environment, res["unmanaged_resource_id"])
+        assert result.code == 200
+        assert result.result["data"]["environment"] == environment
+        assert result.result["data"]["unmanaged_resource_id"] == res["unmanaged_resource_id"]
+        assert result.result["data"]["values"] == res["values"]

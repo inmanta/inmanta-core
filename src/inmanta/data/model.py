@@ -731,15 +731,24 @@ class LoginReturn(BaseModel):
 
 class UnmanagedResource(BaseModel):
     """
-    A container for UnmanagedResource as returned by the /unmanaged endpoint.
+    :param unmanaged_resource_id: The name of the resource
+    :param values: The actual resource
+    """
 
+    unmanaged_resource_id: ResourceVersionIdStr
+    values: Dict[str, str]
+
+    @classmethod
+    @validator("unmanaged_resource_id")
+    def unmanaged_resource_id_is_resource_version_id(cls, v):
+        if resources.Id.is_resource_version_id(v):
+            return v
+        raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
+
+
+class UnmanagedResourceWithEnv(UnmanagedResource):
+    """
     :param environment: the environment of the resource
-    :param agent: the uuid of the agent that discovered the resource
-    :param unmanaged_resource_name: The name of the resource
-    :param value: The actual resource
     """
 
     environment: uuid.UUID
-    agent: uuid.UUID
-    unmanaged_resource_name: str
-    value: Dict[str, str]

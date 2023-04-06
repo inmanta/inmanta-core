@@ -21,7 +21,7 @@ import logging
 import os
 import uuid
 from collections import abc, defaultdict
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
@@ -43,6 +43,7 @@ from inmanta.data.model import (
     ResourceLog,
     ResourceType,
     ResourceVersionIdStr,
+    UnmanagedResource,
     VersionedResource,
     VersionedResourceDetails,
 )
@@ -1039,27 +1040,33 @@ class ResourceService(protocol.ServerSlice):
             raise NotFound("The resource with the given id does not exist")
         return resource
 
-    @handle(methods_v2.unmanaged_resources_create)
-    async def unmanaged_resources_create(
-        self, env: data.Environment, agent: str, unmanaged_resource_name: str, value: Dict[str, str]
-    ):
-        unmanaged_resources = data.UnmanagedResource(
-            environment=env, agent=agent, unmanaged_resource_name=unmanaged_resource_name, value=value
-        )
-        (column_names, values) = unmanaged_resources._get_column_names_and_values()
-        column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterize_sql_string = "$1,$2,$3,$4"
-        query = f"""INSERT INTO {unmanaged_resources.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})
-                ON CONFLICT (environment,agent,unmanaged_resource_name) DO UPDATE SET value = $4;
-            """
-        await unmanaged_resources._execute_query(query, *values)
+    @handle(methods_v2.unmanaged_resource_create)
+    async def unmanaged_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: Dict[str, str]):
+        unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
+        await data.UnmanagedResource(
+            environment=env, unmanaged_resource_id=unmanaged_resource.unmanaged_resource_id, values=unmanaged_resource.values
+        ).insert()
+
+    @handle(methods_v2.unmanaged_resource_create_batch)
+    async def unmanaged_resources_create_batch(self, env: data.Environment, unmanaged_resources: List[UnmanagedResource]):
+        resources: Sequence[data.UnmanagedResource] = []
+        for unmanaged_resource in unmanaged_resources:
+            unmanaged_resource = data.UnmanagedResource(
+                environment=env,
+                unmanaged_resource_id=unmanaged_resource.unmanaged_resource_id,
+                values=unmanaged_resource.values,
+            )
+            resources.append(unmanaged_resource)
+        await data.UnmanagedResource.insert_many(resources)
 
     @handle(methods_v2.unmanaged_resources_get, env="tid")
-    async def unmanaged_resources_get(self, env: data.Environment, agent: str, unmanaged_resource_name: str):
-        result = await data.UnmanagedResource.get_one(
-            environment=env.id, agent=agent, unmanaged_resource_name=unmanaged_resource_name
-        )
+    async def unmanaged_resources_get(self, env: data.Environment, unmanaged_resource_id: str):
+        result = await data.UnmanagedResource.get_one(environment=env.id, unmanaged_resource_id=unmanaged_resource_id)
         if not result:
-            raise NotFound(f"unmanaged_resource with name {unmanaged_resource_name} not found for agent {agent} in env {env}")
+            raise NotFound(f"unmanaged_resource with name {unmanaged_resource_id} not found in env {env}")
         dto = result.to_dto()
         return dto
+
+    @handle(methods_v2.unmanaged_resources_get_batch, env="tid")
+    async def unmanaged_resources_get_batch(self, env: data.Environment):
+        return

@@ -5884,24 +5884,21 @@ class User(BaseDocument):
 class UnmanagedResource(BaseDocument):
     """
     :param environment: the environment of the resource
-    :param agent: the uuid of the agent that discovered the resource
-    :param unmanaged_resource_name: The name of the resource
-    :param value: The actual resource
+    :param unmanaged_resource_id: The id of the resource
+    :param values: The values associated with the unmanaged_resource
     """
 
     environment: uuid.UUID
-    agent: str
-    unmanaged_resource_name: str
-    value: Dict[str, str]
+    unmanaged_resource_id: str
+    values: Dict[str, str]
 
-    __primary_key__ = ("environment", "unmanaged_resource_name", "agent")
+    __primary_key__ = ("environment", "unmanaged_resource_id")
 
-    def to_dto(self) -> m.UnmanagedResource:
-        return m.UnmanagedResource(
+    def to_dto(self) -> m.UnmanagedResourceWithEnv:
+        return m.UnmanagedResourceWithEnv(
             environment=self.environment,
-            agent=self.agent,
-            unmanaged_resource_name=self.unmanaged_resource_name,
-            value=self.value,
+            unmanaged_resource_id=self.unmanaged_resource_id,
+            values=self.values,
         )
 
 

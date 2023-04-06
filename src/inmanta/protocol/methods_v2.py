@@ -19,14 +19,14 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import PrimitiveTypes
 
-from ..data.model import ResourceIdStr
+from ..data.model import ResourceIdStr, UnmanagedResource
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
@@ -1380,7 +1380,7 @@ def set_password(username: str, password: str) -> None:
 
 
 @typedmethod(
-    path="/unmanaged",
+    path="/unmanaged/<unmanaged_resource_id>",
     validate_sid=False,
     operation="POST",
     agent_server=True,
@@ -1388,27 +1388,56 @@ def set_password(username: str, password: str) -> None:
     client_types=[ClientType.agent],
     api_version=2,
 )
-def unmanaged_resources_create(env: uuid.UUID, agent: str, unmanaged_resource_name: str, value: Dict[str, str]) -> None:
+def unmanaged_resource_create(env: uuid.UUID, unmanaged_resource_id: str, values: Dict[str, str]) -> None:
     """
-    Send discovered resource to the server
+    create a discovered resource in the DB
     :param env: The id of the environment this resource belongs to
-    :param agent: The name of the agent that discovered the resource
-    :param unmanaged_resource_name: The name of the unmanaged resource
-    :param value: The values associated with the unmanaged_resource
+    :param unmanaged_resource_id: The id of the unmanaged resource
+    :param values: The values associated with the unmanaged_resource
     """
 
 
 @typedmethod(
-    path="/unmanaged",
+    path="/unmanaged/",
+    validate_sid=False,
+    operation="POST",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[UnmanagedResource]) -> None:
+    """
+    Send multiple discovered resources to the server
+    :param env: The id of the environment this resource belongs to
+    :param unmanaged_resources: List of UnmanagedResource containing the unmanaged_resource_id and values for each resource
+    """
+
+
+@typedmethod(
+    path="/unmanaged/<unmanaged_resource_id>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get(tid: uuid.UUID, agent: str, unmanaged_resource_name: str) -> model.UnmanagedResource:
+def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model.UnmanagedResourceWithEnv:
     """
     Get a single discovered resource
-    :param tid: the id of the environment if in which to get the unmanaged resource.
-    :param agent: The name of the agent that discovered the resource
-    :param unmanaged_resource_name: The name of the unmanaged resource
+    :param tid: the id of the environment in which to get the unmanaged resource.
+    :param unmanaged_resource_id: The id of the unmanaged resource to get
+    """
+
+
+@typedmethod(
+    path="/unmanaged/",
+    operation="GET",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api],
+    api_version=2,
+)
+def unmanaged_resources_get_batch(tid: uuid.UUID) -> List[model.UnmanagedResourceWithEnv]:
+    """
+    Get the unmanaged resources with paging
+    :param tid: the id of the environment in which to get the unmanaged resources.
     """
