@@ -96,7 +96,6 @@ from click import testing
 from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import build.env
 import inmanta
@@ -1423,9 +1422,7 @@ def cli(caplog):
     # https://github.com/pytest-dev/pytest/issues/10553
     with caplog.at_level(logging.FATAL):
         # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-        asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-        o = CLI()
-        yield o
+        yield CLI()
 
 
 class AsyncCleaner(object):
