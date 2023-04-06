@@ -3611,11 +3611,11 @@ class Compile(BaseDocument):
         """
         Return the total length of all the compile queues on the Inmanta server.
 
-        :param exclude_started_compiles: True iff don't count compiles started running, but are not finished yet.
+        :param exclude_started_compiles: True iff don't count compiles that started running, but are not finished yet.
         """
         query = f"SELECT count(*) FROM {cls.table_name()} WHERE completed IS NULL"
         if exclude_started_compiles:
-            query += " AND started IS NOT NULL"
+            query += " AND started IS NULL"
         return await cls._fetch_int(query)
 
     @classmethod

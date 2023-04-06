@@ -504,7 +504,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         self._global_lock = asyncio.locks.Lock()
         self.listeners: List[CompileStateListener] = []
         self._scheduled_full_compiles: Dict[uuid.UUID, Tuple[TaskMethod, str]] = {}
-        # In-memory cache to keep track of the total length of the compile queue.
+        # In-memory cache to keep track of the total length of all the compile queues on this Inmanta server.
         # This cache is used by the /serverstatus endpoint.
         self._queue_count_cache: int = 0
         self._queue_count_cache_lock = asyncio.locks.Lock()
