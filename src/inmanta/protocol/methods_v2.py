@@ -1436,9 +1436,11 @@ def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get_batch(tid: uuid.UUID) -> List[model.UnmanagedResource]:
+def unmanaged_resources_get_batch(
+    tid: uuid.UUID = None, start_resource_id: str = None, end_resource_id: str = None, limit: int = None
+) -> List[model.UnmanagedResource]:
     """
-    TODO
     Get the unmanaged resources with paging
     :param tid: the id of the environment in which to get the unmanaged resources.
+
     """
