@@ -30,8 +30,8 @@ async def has_purge_on_delete_key_in_settings_dct(postgresql_client) -> bool:
     result = await postgresql_client.fetch(
         f"""
             SELECT 1
-            FROM {data.Environment.table_name()} AS e
-            WHERE a.settings ? 'purge_on_delete'
+            FROM {data.Environment.table_name()}
+            WHERE settings ? 'purge_on_delete'
             """
     )
     return len(result) > 0
@@ -45,7 +45,7 @@ async def test_removal_of_purge_on_delete_setting(
     Verify that the database migration script removes the purge_on_delete key from the settings dictionary
     of the environment table.
     """
-    assert has_purge_on_delete_key_in_settings_dct(postgresql_client)
+    assert await has_purge_on_delete_key_in_settings_dct(postgresql_client)
     await migrate_db_from()
-    assert has_purge_on_delete_key_in_settings_dct(postgresql_client)
+    assert not await has_purge_on_delete_key_in_settings_dct(postgresql_client)
 
