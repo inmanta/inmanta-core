@@ -21,7 +21,7 @@ import logging
 import os
 import uuid
 from collections import abc, defaultdict
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
@@ -1077,9 +1077,9 @@ class ResourceService(protocol.ServerSlice):
             raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
 
         if start_resource_id and not Id.is_resource_version_id(start_resource_id):
-            raise BadRequest(f"the start_resource_id is not formatted correctly")
+            raise BadRequest("the start_resource_id is not formatted correctly")
         if end_resource_id and not Id.is_resource_version_id(end_resource_id):
-            raise BadRequest(f"the end_resource_id is not formatted correctly")
+            raise BadRequest("the end_resource_id is not formatted correctly")
 
         resources = await data.UnmanagedResource.get_list_paged(
             page_by_column="unmanaged_resource_id",
