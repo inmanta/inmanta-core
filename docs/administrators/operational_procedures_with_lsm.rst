@@ -36,9 +36,8 @@
        Often, the model requires a correct API definition to compile.
        To break this cycle, developers have to provide an alternative entry point into the code (other than `main.cf`) that loads only the definitions.
        We will assume this file is called `loader.cf`
-    5. Verify that environment safety setting are on (this should always be the case)
+    5. Verify that environment safety settings are on (this should always be the case)
 
-       * `purge_on_delete = False`
        * `protected_environment = True`
 
     6. Temporarily disable auto_deploy
@@ -138,7 +137,6 @@
 
     3. Verify that environment safety settings are on (should always be the case)
 
-       * `purge_on_delete = False`
        * `protected_environment = True`
 
     4. Temporarily disable auto_deploy
