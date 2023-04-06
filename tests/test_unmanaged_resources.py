@@ -31,6 +31,12 @@ async def test_discovery_resource_create_single(server, client, agent, environme
     assert result.result["data"]["values"] == {"value1": "test1", "value2": "test2"}
 
 
+async def test_discovery_resource_bad_res_id(server, client, agent, environment):
+    # TODO it seems my validator doesn't work, haven't found out why yet
+    result = await client.unmanaged_resource_create(environment, "test", {"value1": "test1", "value2": "test2"})
+    assert result.code != 200
+
+
 async def test_unmanaged_resource_create_batch(server, client, agent, environment):
     resources = [
         {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},

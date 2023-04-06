@@ -1425,7 +1425,7 @@ def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model
     """
     Get a single discovered resource
     :param tid: the id of the environment in which to get the unmanaged resource.
-    :param unmanaged_resource_id: The id of the unmanaged resource to get
+    :param unmanaged_resource_id: The id of the unmanaged resource
     """
 
 
@@ -1438,6 +1438,7 @@ def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model
 )
 def unmanaged_resources_get_batch(tid: uuid.UUID) -> List[model.UnmanagedResourceWithEnv]:
     """
+    TODO
     Get the unmanaged resources with paging
     :param tid: the id of the environment in which to get the unmanaged resources.
     """

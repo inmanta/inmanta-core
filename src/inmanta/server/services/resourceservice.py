@@ -1069,4 +1069,5 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.unmanaged_resources_get_batch, env="tid")
     async def unmanaged_resources_get_batch(self, env: data.Environment):
+        # todo
         return
