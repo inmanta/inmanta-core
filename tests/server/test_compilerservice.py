@@ -815,7 +815,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.result["queue"][0]["remote_id"] == str(remote_id1)
     assert result.code == 200
     # None in the queue, all running
-    assert compilerslice._queue_count_cache == 0
+    await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
 
     # request a compile
     remote_id2 = uuid.uuid4()
@@ -827,7 +827,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.result["queue"][1]["remote_id"] == str(remote_id2)
     assert result.code == 200
     # 1 in the queue, 1 running
-    assert compilerslice._queue_count_cache == 1
+    await retry_limited(lambda: compilerslice._queue_count_cache == 1, 10)
 
     # request a compile with do_export=True
     remote_id3 = uuid.uuid4()
@@ -838,7 +838,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.result["queue"][2]["remote_id"] == str(remote_id3)
     assert result.code == 200
     # 2 in the queue, 1 running
-    assert compilerslice._queue_count_cache == 2
+    await retry_limited(lambda: compilerslice._queue_count_cache == 2, 10)
 
     # request a compile with do_export=False -> expect merge with compile2
     remote_id4 = uuid.uuid4()
@@ -849,7 +849,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.result["queue"][3]["remote_id"] == str(remote_id4)
     assert result.code == 200
     # 3 in the queue, 1 running
-    assert compilerslice._queue_count_cache == 3
+    await retry_limited(lambda: compilerslice._queue_count_cache == 3, 10)
 
     # request a compile with do_export=True -> expect merge with compile3, expect force_update == True for the compile
     remote_id5 = uuid.uuid4()
@@ -863,7 +863,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.result["queue"][5]["remote_id"] == str(remote_id6)
     assert result.code == 200
     # 5 in the queue, 1 running
-    assert compilerslice._queue_count_cache == 5
+    await retry_limited(lambda: compilerslice._queue_count_cache == 5, 10)
 
     async def has_matching_compile_report(first_compile_id: uuid.UUID, second_compile_id: uuid.UUID) -> bool:
         return await compilerslice.get_report(first_compile_id) == await compilerslice.get_report(second_compile_id)
@@ -877,7 +877,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     assert result.result["queue"][0]["remote_id"] == str(remote_id2)
     assert result.code == 200
     # 4 in the queue, 1 running
-    assert compilerslice._queue_count_cache == 4
+    await retry_limited(lambda: compilerslice._queue_count_cache == 4, 10)
 
     # finish second compile
     await run_compile_and_wait_until_compile_is_done(compilerslice, mocked_compiler_service_block, env.id)
@@ -886,7 +886,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     # Use try_limited to prevent a race condition.
     await retry_limited(lambda: has_matching_compile_report(compile_id2, compile_id4), timeout=10)
     # 2 in the queue, 1 running
-    assert compilerslice._queue_count_cache == 2
+    await retry_limited(lambda: compilerslice._queue_count_cache == 2, 10)
 
     # finish third compile
     # prevent race conditions where compile is not yet in queue
@@ -905,7 +905,7 @@ async def test_compileservice_queue(mocked_compiler_service_block: queue.Queue, 
     await retry_limited(lambda: has_matching_compile_report(compile_id3, compile_id6), timeout=10)
 
     # 0 in the queue, 0 running
-    assert compilerslice._queue_count_cache == 0
+    await retry_limited(lambda: compilerslice._queue_count_cache == 0, 10)
 
     # api should return none
     result = await client.get_compile_queue(environment)
@@ -1460,35 +1460,48 @@ def {exporter_name}(exporter: Exporter) -> None:
 
 
 @pytest.mark.parametrize("only_clear_environment", [True, False])
+@pytest.mark.parametrize("compile_is_running", [True, False])
 async def test_status_compilerservice_task_queue(
-    server, client, environment: str, mocked_compiler_service_block, only_clear_environment: bool
+    server, client, environment: str, mocked_compiler_service_block, only_clear_environment: bool, compile_is_running: bool
 ) -> None:
     """
     Verify that the size of the compiler queue, reported by the /serverstatus API endpoint, is correctly
     updated when an environment is cleared or deleted.
+
+    :param only_clear_environment: If True, verify the behavior when the environment is cleared.
+                                   Otherwise, verify the behavior when the environment is deleted.
+    :param compile_is_running: True iff the environment will be cleared or deleted when a compile is running.
     """
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     compilerservice = server.get_slice(SLICE_COMPILER)
 
-    # Make sure that the compiler service doesn't execute any compile.
-    # This would decrement the queue length counter, which is undesired for this test case.
-    result = await client.halt_environment(environment)
-    assert result.code == 200
+    if not compile_is_running:
+        # Halt the environment so that the compiler service doesn't pick up the requested compiles.
+        result = await client.halt_environment(environment)
+        assert result.code == 200
 
-    async def get_length_compiler_queue_from_status_endpoint() -> int:
+    async def verify_length_compile_queue(expected_length: int) -> bool:
+        """
+        Return True iff the /serverstatus endpoint returns `expected_length` as the length of the compile queue.
+        """
         result = await client.get_server_status()
         assert result.code == 200
         for current_slice in result.result["data"]["slices"]:
             if current_slice["name"] == "core.compiler":
-                return current_slice["status"]["task_queue"]
+                return current_slice["status"]["task_queue"] == expected_length
         raise Exception("Status endpoint didn't report the status of the compiler service.")
 
     # Verify initial state
-    assert await get_length_compiler_queue_from_status_endpoint() == 0
+    assert await verify_length_compile_queue(expected_length=0)
 
-    # Add element to compile queue
-    compile_id, _ = await compilerservice.request_recompile(env, force_update=False, do_export=False, remote_id=uuid.uuid4())
-    assert await get_length_compiler_queue_from_status_endpoint() == 1
+    # Request two compiles
+    for _ in range(2):
+        await compilerservice.request_recompile(env, force_update=False, do_export=False, remote_id=uuid.uuid4())
+
+    if compile_is_running:
+        await retry_limited(verify_length_compile_queue, timeout=10, expected_length=1)
+    else:
+        await retry_limited(verify_length_compile_queue, timeout=10, expected_length=2)
 
     # Action on environment that empties the compile queue
     if only_clear_environment:
@@ -1499,4 +1512,4 @@ async def test_status_compilerservice_task_queue(
         assert result.code == 200
 
     # Verify compile queue is empty
-    assert await get_length_compiler_queue_from_status_endpoint() == 0
+    await retry_limited(verify_length_compile_queue, timeout=10, expected_length=0)
