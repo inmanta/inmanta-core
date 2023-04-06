@@ -32,6 +32,7 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import pydantic
 import pytest
 import tornado
+import utils
 from pydantic.types import StrictBool
 from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -111,12 +112,7 @@ async def test_client_files_lost(client):
 
 
 async def test_sync_client_files(client):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-
     done = []
-    limit = 100
-    sleep = 0.01
 
     def do_test():
         sync_client = protocol.SyncClient("client")
@@ -139,14 +135,7 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    thread = threading.Thread(target=do_test)
-    thread.start()
-
-    while len(done) == 0 and limit > 0:
-        await gen.sleep(sleep)
-        limit -= 1
-
-    thread.join()
+    await utils.off_main_thread(do_test)
     assert len(done) > 0
 
 

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import inspect
 import logging
 import socket
@@ -22,7 +23,7 @@ import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import defaultdict
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Set, Tuple, Union  # noqa: F401
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
 from urllib import parse
 
 from tornado import ioloop
@@ -433,15 +434,16 @@ class SyncClient(object):
                 return method(*args, **kwargs)
 
             try:
+                loop: asyncio.AbstractEventLoop
                 if self._ioloop is None:
-                    # No specific IOLoop if given, so we assume we can start one in this context
-                    return ioloop.IOLoop.current().run_sync(method_call, self.timeout)
+                    loop = util.ensure_event_loop()
                 else:
                     # a specific IOloop is passed
                     # we unwrap the tornado loop to get the native python loop
                     # and safely tap into it using run_coroutine_threadsafe
                     assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
-                    return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
+                    loop = self._ioloop.asyncio_loop
+                return run_coroutine_threadsafe(method_call(), loop).result(self.timeout)
             except TimeoutError:
                 raise ConnectionRefusedError()
 
