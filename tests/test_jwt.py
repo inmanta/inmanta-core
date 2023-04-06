@@ -143,6 +143,7 @@ async def slow_jwks(unused_tcp_port):
     await server.close_all_connections()
 
 
+@pytest.mark.asyncio
 async def test_rs256_invalid_config_timeout(tmp_path, slow_jwks):
     """
     Test that an error is raised when the timeout to download the rs256 public key is exceeded
