@@ -37,7 +37,6 @@ from pydantic.types import StrictBool
 from tornado import gen, web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, const, protocol
 from inmanta.const import ClientType

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import inspect
 import os
 import subprocess
@@ -125,20 +126,27 @@ class Context(object):
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
 
-    def run_sync(self, function: Callable[..., T], timeout: int = 5) -> T:
+    def run_sync(self, function: Callable[[], abc.Awaitable[T]], timeout: int = 5) -> T:
         """
-        Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
-        main use for this function is to use the inmanta internal rpc to communicate with the server.
+        Execute the async function and return its result. This method uses this thread's event loop if there is one, otherwise
+        it takes care of starting and stopping a new one. The main use for this function is to use the inmanta internal rpc to
+        communicate with the server.
 
         :param function: The async function to execute. This function should return a yieldable object.
         :param timeout: A timeout for the async function.
         :return: The result of the async call.
         :raises ConnectionRefusedError: When the function timeouts this exception is raised.
         """
-        from tornado.ioloop import IOLoop, TimeoutError
-
+        with_timeout: abc.Awaitable[T] = asyncio.wait_for(function(), timeout)
         try:
-            return IOLoop.current().run_sync(function, timeout)
+            # TODO: alternatively, just call `util.ensure_event_loop()` before starting the scheduling phase of the compiler.
+            try:
+                loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+            except RuntimeError:
+                # no active loop: use asyncio.run to start and clean up event loop
+                return asyncio.run(with_timeout)
+            else:
+                loop.run_until_complete(with_timeout)
         except TimeoutError:
             raise ConnectionRefusedError()
 
