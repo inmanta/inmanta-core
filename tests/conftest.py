@@ -63,6 +63,7 @@ import asyncio
 import concurrent
 import csv
 import datetime
+import functools
 import json
 import logging
 import os
@@ -82,7 +83,7 @@ import uuid
 import venv
 from collections import abc
 from configparser import ConfigParser
-from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
 
 import asyncpg
 import pkg_resources
@@ -990,10 +991,33 @@ def pytest_runtest_makereport(item, call):
             )
 
 
+T = TypeVar("T")
+
+
 async def off_main_thread(func):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-    return await asyncio.get_event_loop().run_in_executor(None, func)
+    def asyncio_thread_wrapper(func: abc.Callable[[], T]) -> T:
+        """
+        Wrap a synchronous function that accesses the asyncio event loop so it is able to run in a separate thread.
+
+        The function is scheduled on a thread in a thread pool. This thread may or may not already have an event loop, depending
+        on whether it has been used to run async functions before (e.g. through this wrapper). This wrapper ensures an event
+        loop exists for the thread it gets executed on, if need be by creating a new one and registering it with asyncio's
+        active event loop policy.
+
+        This wrapping may become irrelevant for future Python versions, as implicit thread creation on the main thread has been
+        deprecated in Python 3.10, resulting in the same behavior for the main thread as currently exists for separate threads.
+        When core, extensions and their libraries adapt to this new behavior, separate threads should no longer receive special
+        treatment. See #5389.
+        """
+        try:
+            # nothing needs to be done if this thread already has an event loop
+            asyncio.get_event_loop()
+        except RuntimeError:
+            # asyncio.set_event_loop sets the event loop for this thread only
+            asyncio.set_event_loop(asyncio.new_event_loop())
+        return func()
+
+    return await asyncio.get_event_loop().run_in_executor(None, functools.partial(asyncio_thread_wrapper, func))
 
 
 class ReentrantVirtualEnv(VirtualEnv):
