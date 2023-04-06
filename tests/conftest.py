@@ -1391,7 +1391,6 @@ def cli(caplog):
     # due to mysterious interference when juggling with sys.stdout
     # https://github.com/pytest-dev/pytest/issues/10553
     with caplog.at_level(logging.FATAL):
-        # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
         yield CLI()
 
 

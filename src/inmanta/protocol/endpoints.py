@@ -434,16 +434,21 @@ class SyncClient(object):
                 return method(*args, **kwargs)
 
             try:
-                loop: asyncio.AbstractEventLoop
                 if self._ioloop is None:
-                    loop = util.ensure_event_loop()
+                    try:
+                        loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        # TODO: timeout
+                        return asyncio.run(method_call())
+                    else:
+                        # TODO: timeout
+                        return loop.run_until_complete(method_call())
                 else:
                     # a specific IOloop is passed
                     # we unwrap the tornado loop to get the native python loop
                     # and safely tap into it using run_coroutine_threadsafe
                     assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
-                    loop = self._ioloop.asyncio_loop
-                return run_coroutine_threadsafe(method_call(), loop).result(self.timeout)
+                    return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
             except TimeoutError:
                 raise ConnectionRefusedError()
 
