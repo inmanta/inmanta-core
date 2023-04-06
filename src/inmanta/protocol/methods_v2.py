@@ -1408,7 +1408,7 @@ def unmanaged_resource_create(env: uuid.UUID, unmanaged_resource_id: str, values
 )
 def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[UnmanagedResource]) -> None:
     """
-    Send multiple discovered resources to the server
+    create multiple discovered resource in the DB
     :param env: The id of the environment this resource belongs to
     :param unmanaged_resources: List of UnmanagedResource containing the unmanaged_resource_id and values for each resource
     """
@@ -1442,5 +1442,8 @@ def unmanaged_resources_get_batch(
     """
     Get the unmanaged resources with paging
     :param tid: the id of the environment in which to get the unmanaged resources.
+    :param start_resource_id: the unmanaged_resource_id from which to start the paging
+    :param end_resource_id: the unmanaged_resource_id where to finish the paging
+    :param limit: the maximal number of resources to return
 
     """
