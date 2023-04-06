@@ -30,12 +30,6 @@ async def test_discovery_resource_create_single(server, client, agent, environme
     assert result.result["data"]["values"] == {"value1": "test1", "value2": "test2"}
 
 
-async def test_discovery_resource_bad_res_id(server, client, agent, environment):
-    # TODO it seems my validator doesn't work, haven't found out why yet
-    result = await client.unmanaged_resource_create(environment, "test", {"value1": "test1", "value2": "test2"})
-    assert result.code != 200
-
-
 async def test_unmanaged_resource_create_batch(server, client, agent, environment):
     resources = [
         {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},
@@ -50,3 +44,18 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
         assert result.code == 200
         assert result.result["data"]["unmanaged_resource_id"] == res["unmanaged_resource_id"]
         assert result.result["data"]["values"] == res["values"]
+
+
+async def test_discovery_resource_bad_res_id(server, client, agent, environment):
+    result = await client.unmanaged_resource_create(environment, "test", {"value1": "test1", "value2": "test2"})
+    assert result.code == 500
+    assert "data validation error" in result.result["message"]
+
+    resources = [
+        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2],v=1", "values": {"value1": "test3", "value2": "test4"}},
+        {"unmanaged_resource_id": "test", "values": {"value1": "test5", "value2": "test6"}},
+    ]
+    result = await client.unmanaged_resource_create_batch(environment, resources)
+    assert result.code == 400
+    assert "Failed to validate argument" in result.result["message"]

@@ -738,7 +738,6 @@ class UnmanagedResource(BaseModel):
     unmanaged_resource_id: ResourceVersionIdStr
     values: Dict[str, str]
 
-    @classmethod
     @validator("unmanaged_resource_id")
     def unmanaged_resource_id_is_resource_version_id(cls, v):
         if resources.Id.is_resource_version_id(v):
