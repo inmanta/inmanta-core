@@ -50,7 +50,7 @@ from inmanta.server import (
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
-from inmanta.server.services.compilerservice import CompilerService
+from inmanta.server.services import compilerservice
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
@@ -147,9 +147,12 @@ class EnvironmentService(protocol.ServerSlice):
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
-        self.compiler_service = cast(CompilerService, server.get_slice(SLICE_COMPILER))
+        self.compiler_service = cast(compilerservice.CompilerService, server.get_slice(SLICE_COMPILER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
+        self.register_listener_for_multiple_actions(
+            self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
+        )
 
     async def start(self) -> None:
         await super().start()
@@ -486,7 +489,6 @@ class EnvironmentService(protocol.ServerSlice):
 
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
-        self.compiler_service.reset_compile_queue_counter_for(env.id)
 
     @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
@@ -513,7 +515,6 @@ class EnvironmentService(protocol.ServerSlice):
         await env.delete_cascade(only_content=True)
 
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
-        self.compiler_service.reset_compile_queue_counter_for(env.id)
 
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):

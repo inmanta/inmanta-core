@@ -3607,17 +3607,16 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_next_compiles_count(cls) -> abc.Mapping[uuid.UUID, int]:
-        """Return a dictionary that maps the environment id to the length of the compiler queue for that environment."""
-        result = await cls._fetch_query(
-            f"""
-                SELECT environment, count(*) AS count
-                FROM {cls.table_name()}
-                WHERE NOT handled AND completed IS NULL
-                GROUP BY environment
-            """
-        )
-        return {r["environment"]: r["count"] for r in result}
+    async def get_total_length_of_all_compile_queues(cls, exclude_started_compiles: bool = True) -> int:
+        """
+        Return the total length of all the compile queues on the Inmanta server.
+
+        :param exclude_started_compiles: True iff don't count compiles started running, but are not finished yet.
+        """
+        query = f"SELECT count(*) FROM {cls.table_name()} WHERE completed IS NULL"
+        if exclude_started_compiles:
+            query += " AND started IS NOT NULL"
+        return await cls._fetch_int(query)
 
     @classmethod
     async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
