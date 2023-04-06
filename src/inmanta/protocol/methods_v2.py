@@ -19,7 +19,7 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
@@ -1421,7 +1421,7 @@ def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[Un
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model.UnmanagedResourceWithEnv:
+def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model.UnmanagedResource:
     """
     Get a single discovered resource
     :param tid: the id of the environment in which to get the unmanaged resource.
@@ -1436,7 +1436,7 @@ def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get_batch(tid: uuid.UUID) -> List[model.UnmanagedResourceWithEnv]:
+def unmanaged_resources_get_batch(tid: uuid.UUID) -> List[model.UnmanagedResource]:
     """
     TODO
     Get the unmanaged resources with paging

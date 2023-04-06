@@ -26,7 +26,6 @@ async def test_discovery_resource_create_single(server, client, agent, environme
     result = await client.unmanaged_resources_get(environment, "test::Resource[agent1,key=key],v=1")
     assert result.code == 200
 
-    assert result.result["data"]["environment"] == environment
     assert result.result["data"]["unmanaged_resource_id"] == "test::Resource[agent1,key=key],v=1"
     assert result.result["data"]["values"] == {"value1": "test1", "value2": "test2"}
 
@@ -49,6 +48,5 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
     for res in resources:
         result = await client.unmanaged_resources_get(environment, res["unmanaged_resource_id"])
         assert result.code == 200
-        assert result.result["data"]["environment"] == environment
         assert result.result["data"]["unmanaged_resource_id"] == res["unmanaged_resource_id"]
         assert result.result["data"]["values"] == res["values"]

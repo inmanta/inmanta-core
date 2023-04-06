@@ -744,11 +744,3 @@ class UnmanagedResource(BaseModel):
         if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
-
-
-class UnmanagedResourceWithEnv(UnmanagedResource):
-    """
-    :param environment: the environment of the resource
-    """
-
-    environment: uuid.UUID

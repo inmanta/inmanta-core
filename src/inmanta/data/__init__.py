@@ -5894,9 +5894,8 @@ class UnmanagedResource(BaseDocument):
 
     __primary_key__ = ("environment", "unmanaged_resource_id")
 
-    def to_dto(self) -> m.UnmanagedResourceWithEnv:
-        return m.UnmanagedResourceWithEnv(
-            environment=self.environment,
+    def to_dto(self) -> m.UnmanagedResource:
+        return m.UnmanagedResource(
             unmanaged_resource_id=self.unmanaged_resource_id,
             values=self.values,
         )
