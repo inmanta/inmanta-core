@@ -787,7 +787,7 @@ async def test_unkown_parameters(resource_container, environment, client, server
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
-    await server.get_slice(SLICE_PARAM).renew_expired_facts()
+    await server.get_slice(SLICE_PARAM).renew_facts()
 
     env_id = uuid.UUID(environment)
     params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)

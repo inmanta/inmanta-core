@@ -18,11 +18,11 @@
 import asyncio
 import asyncio.subprocess
 import getpass
-import itertools
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
 import uuid
 from collections import abc
@@ -168,29 +168,33 @@ async def simple_environments(client: protocol.Client) -> abc.AsyncIterator[abc.
 
 
 @pytest.fixture
-async def compiled_environments(
-    client: protocol.Client, environment_factory: EnvironmentFactory
-) -> abc.AsyncIterator[abc.Sequence[data.model.Environment]]:
+async def compiled_environments(client: protocol.Client) -> abc.AsyncIterator[abc.Sequence[data.model.Environment]]:
     """
     Initialize some environments with an empty main.cf and trigger a single compile.
     """
-    nb_environments: int = 3
-    environments: abc.Sequence[data.model.Environment] = [
-        (await environment_factory.create_environment(name=f"env-{i}")).to_dto() for i in range(nb_environments)
-    ]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        nb_environments: int = 3
+        environments: abc.Sequence[data.model.Environment] = [
+            (
+                await EnvironmentFactory(os.path.join(tmpdirname, f"env-{i}"), project_name=f"project-{i}").create_environment(
+                    name=f"env-{i}"
+                )
+            ).to_dto()
+            for i in range(nb_environments)
+        ]
 
-    for env in environments:
-        result: protocol.Result = await client.notify_change(env.id)
-        assert result.code == 200
+        for env in environments:
+            result: protocol.Result = await client.notify_change(env.id)
+            assert result.code == 200
 
-    async def all_compiles_done() -> bool:
-        return all(
-            result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
-        )
+        async def all_compiles_done() -> bool:
+            return all(
+                result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
+            )
 
-    await utils.retry_limited(all_compiles_done, 15)
+        await utils.retry_limited(all_compiles_done, 15)
 
-    yield environments
+        yield environments
 
 
 def test_workon_source_check() -> None:
@@ -203,8 +207,9 @@ def test_workon_source_check() -> None:
     )
     assert process.returncode == 1
     assert process.stdout == ""
-    assert process.stderr.strip() == (
-        f"ERROR: This script is meant to be sourced rather than executed directly: `source '{WORKON_REGISTER}'`"
+    assert (
+        process.stderr.strip()
+        == f"ERROR: This script is meant to be sourced rather than executed directly: `source '{WORKON_REGISTER}'`"
     )
 
 
@@ -309,8 +314,9 @@ async def test_workon_list_no_api(
     """
     result: CliResult = await workon_bash("inmanta-workon --list")
     assert result.exit_code == 0, (result.stderr, result.stdout)
-    assert result.stderr.strip() == (
-        "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+    assert (
+        result.stderr.strip()
+        == "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
     )
     assert result.stdout.strip() == "\n".join(sorted(str(env.id) for env in compiled_environments))
 
@@ -342,14 +348,16 @@ async def test_workon_list_no_api_no_environments(
     result: CliResult = await workon_bash("inmanta-workon --list")
     if server_dir_exists:
         assert result.exit_code == 0, (result.stderr, result.stdout)
-        assert result.stderr.strip() == (
-            "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+        assert (
+            result.stderr.strip()
+            == "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
         )
         assert result.stdout == ""
     else:
         assert result.exit_code == 0
-        assert result.stderr.strip() == (
-            "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
+        assert (
+            result.stderr.strip()
+            == "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
             "\n"
             f"WARNING: no environments directory found at '{tmpdir}/doesnotexist/server/environments'. This is expected if no"
             " environments have been compiled yet. Otherwise, make sure you use this function on the server host."
@@ -370,8 +378,8 @@ async def test_workon_list_invalid_config(
     workon_workdir.join(".inmanta.cfg").write("this is not compatible with the cfg format")
     result: CliResult = await workon_bash("inmanta-workon --list")
     assert result.exit_code == 1, (result.stderr, result.stdout)
-    assert result.stderr.strip() == (
-        "ERROR: Failed to determine server bind port. Is the server config valid?"
+    assert (
+        result.stderr.strip() == "ERROR: Failed to determine server bind port. Is the server config valid?"
         "\n"
         "WARNING: Failed to connect through inmanta-cli, falling back to file-based environment discovery."
         "\n"
@@ -483,12 +491,20 @@ async def test_workon(
         workon_bash,
         str(compiled_environments[0].id),
         expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
     # by name
     await assert_workon_state(
         workon_bash,
         compiled_environments[1].name,
         expected_dir=workon_environments_dir.join(str(compiled_environments[1].id)),
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
     # .env dir missing
     env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[2].id))
@@ -585,6 +601,10 @@ async def test_workon_broken_cli(
         workon_bash,
         str(compiled_environments[0].id),
         expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
     # by name
     await assert_workon_state(
@@ -647,7 +667,10 @@ async def test_workon_non_unique_name(
                 [
                     [project_name, str(env.project_id), env.name, str(env.id)]
                     for (project_name, env) in sorted(
-                        (("second_project", new_env), *zip(itertools.repeat("test"), compiled_environments)),
+                        (
+                            ("second_project", new_env),
+                            *zip((f"project-{i}" for i in range(len(compiled_environments))), compiled_environments),
+                        ),
                         key=lambda t: (t[1].project_id, t[1].name, t[1].id),
                     )
                 ],
@@ -663,7 +686,7 @@ async def test_workon_compile(
     workon_environments_dir: py.path.local,
     compiled_environments: abc.Sequence[data.model.Environment],
     # no need to run this test in a separate venv: either it works as expected and does not affect the outer venv, or this
-    # fixutre will catch it
+    # fixture will catch it
     guard_testing_venv: None,
 ) -> None:
     """
@@ -699,6 +722,10 @@ async def test_workon_compile(
         expected_dir=workon_environments_dir.join(str(compiled_environments[0].id)),
         invert_python_assert=True,
         invert_ps1_assert=True,
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed.\n"
+        ),
     )
 
 
@@ -723,6 +750,10 @@ async def test_workon_deactivate(
         expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed."
+        ),
     )
     # ownership warning on deactivate
     await assert_workon_state(
@@ -735,8 +766,11 @@ async def test_workon_deactivate(
         invert_python_assert=True,
         invert_ps1_assert=True,
         expect_stderr=(
-            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `find '{env_dir}'"
-            r" ! -user 'root' -exec chown 'root':'root' {} \;` as root."
+            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be"
+            " able to run pip install or inmanta project install).\nWARNING: Make sure you exit the current environment by"
+            " running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks"
+            " are performed.\nWARNING: Some files in the environment are not owned by the root user. To fix this, run `chown"
+            f" -R root:root '{env_dir}'` as root."
         ),
     )
     # ownership warning on activation of a different environment
@@ -765,10 +799,118 @@ async def test_workon_deactivate(
         invert_ps1_assert=True,  # see mock PS1 in post_activate script
         # expect warnings for env 0 and env 1 but not for env 2 because it is still active
         expect_stderr=(
-            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `find '{env_dir}'"
-            r" ! -user 'root' -exec chown 'root':'root' {} \;` as root."
-            "\n"
-            f"WARNING: Some files in the environment are not owned by the root user. To fix this, run `find '{env1_dir}'"
-            r" ! -user 'root' -exec chown 'root':'root' {} \;` as root."
+            "WARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write access (to be"
+            " able to run pip install or inmanta project install).\nWARNING: Make sure you exit the current environment by"
+            " running the 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks"
+            " are performed.\nWARNING: The inmanta-workon tool should be run as either root or the inmanta user to have write"
+            " access (to be able to run pip install or inmanta project install).\nWARNING: Some files in the environment are"
+            f" not owned by the root user. To fix this, run `chown -R root:root '{env_dir}'` as root.\nWARNING: Make sure you"
+            " exit the current environment by running the 'deactivate' command rather than simply exiting the shell. This"
+            " ensures the proper permission checks are performed.\nWARNING: The inmanta-workon tool should be run as either"
+            " root or the inmanta user to have write access (to be able to run pip install or inmanta project"
+            " install).\nWARNING: Some files in the environment are not owned by the root user. To fix this, run `chown -R"
+            f" root:root '{env1_dir}'` as root.\nWARNING: Make sure you exit the current environment by running the"
+            " 'deactivate' command rather than simply exiting the shell. This ensures the proper permission checks are"
+            " performed."
+        ),
+    )
+
+
+@pytest.mark.slowtest
+async def test_workon_sets_inmanta_config_environment(
+    server: Server,
+    workon_workdir: py.path.local,
+    workon_bash: Bash,
+    workon_environments_dir: py.path.local,
+    compiled_environments: abc.Sequence[data.model.Environment],
+) -> None:
+    """
+    Verify that INMANTA_CONFIG_ENVIRONMENT is correctly reset to its previous value.
+    """
+    outer_env_id: uuid.UUID = uuid.uuid4()
+    inner_env_id: uuid.UUID = compiled_environments[0].id
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    # simple deactivate
+    await assert_workon_state(
+        workon_bash,
+        str(inner_env_id),
+        pre_activate=textwrap.dedent(
+            f"""
+            # Set INMANTA_CONFIG_ENVIRONMENT to the outer env's id
+            export INMANTA_CONFIG_ENVIRONMENT={outer_env_id}
+            """.strip(
+                "\n"
+            )
+        ),
+        post_activate=textwrap.dedent(
+            f"""
+            # After activation, verify INMANTA_CONFIG_ENVIRONMENT is set to the inner env's id
+            if [ ! "${{INMANTA_CONFIG_ENVIRONMENT}}" = "{inner_env_id}" ] ; then
+                exit 1
+            fi
+            deactivate
+            # After deactivation, verify INMANTA_CONFIG_ENVIRONMENT has been set back to the outer env's id
+            if [ ! "${{INMANTA_CONFIG_ENVIRONMENT}}" = "{outer_env_id}" ] ; then
+                exit 1
+            fi
+            """.strip(
+                "\n"
+            )
+        ),
+        expected_dir=env_dir,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed."
+        ),
+    )
+
+
+@pytest.mark.slowtest
+async def test_workon_sets_inmanta_config_environment_empty_outer(
+    server: Server,
+    workon_workdir: py.path.local,
+    workon_bash: Bash,
+    workon_environments_dir: py.path.local,
+    compiled_environments: abc.Sequence[data.model.Environment],
+) -> None:
+    """
+    Verify that INMANTA_CONFIG_ENVIRONMENT is correctly unset if non-existent prior to activation.
+    """
+    inner_env_id: uuid.UUID = compiled_environments[0].id
+    env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
+    await assert_workon_state(
+        workon_bash,
+        str(inner_env_id),
+        pre_activate=textwrap.dedent(
+            """
+            # Make sure INMANTA_CONFIG_ENVIRONMENT is not set
+            unset INMANTA_CONFIG_ENVIRONMENT
+            """.strip(
+                "\n"
+            )
+        ),
+        post_activate=textwrap.dedent(
+            f"""
+            # After activation, verify INMANTA_CONFIG_ENVIRONMENT is set to the inner env's id
+            if [ ! "${{INMANTA_CONFIG_ENVIRONMENT}}" = "{inner_env_id}" ] ; then
+                exit 1
+            fi
+            deactivate
+            # After deactivation, verify INMANTA_CONFIG_ENVIRONMENT has been unset
+            if [ -n "${{INMANTA_CONFIG_ENVIRONMENT:-}}" ] ; then
+                exit 1
+            fi
+            """.strip(
+                "\n"
+            )
+        ),
+        expected_dir=env_dir,
+        invert_python_assert=True,
+        invert_ps1_assert=True,
+        expect_stderr=(
+            "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
+            " the shell. This ensures the proper permission checks are performed."
         ),
     )

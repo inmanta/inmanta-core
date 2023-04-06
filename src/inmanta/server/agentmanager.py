@@ -1014,16 +1014,9 @@ class AutostartedAgentManager(ServerSlice):
         if self._stopping:
             raise ShutdownInProgress()
 
-        agent_map: Dict[str, str]
-        agent_map = cast(
+        agent_map: Dict[str, str] = cast(
             Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
         )  # we know the type of this map
-
-        # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
-        # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
-        if "internal" not in agent_map:
-            agent_map["internal"] = "local:"
-            await env.set(data.AUTOSTART_AGENT_MAP, dict(agent_map), connection=connection)
 
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
@@ -1080,7 +1073,8 @@ class AutostartedAgentManager(ServerSlice):
         try:
             proc = await self._fork_inmanta(
                 [
-                    "-vvvv",
+                    "--log-file-level",
+                    "DEBUG",
                     "--timed-logs",
                     "--config",
                     config_path,

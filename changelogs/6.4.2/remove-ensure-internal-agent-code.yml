@@ -1,0 +1,4 @@
+---
+description: Remove the code in the AutostartedAgentManager that ensure that the internal agent is present in the autostarted_agent_map. This code that safely be removed because a validator was added on the update path of the `autostart_agent_map` in Apr 21, 2020. So this check was included in the initial release of ISO4.
+change-type: patch
+destination-branches: [master, iso6, iso5]

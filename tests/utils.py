@@ -236,7 +236,7 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
     Assert there are no warning, except from the list of loggers to allow
     """
     for record in caplog.records:
-        assert record.levelname != "WARNING" or (record.name in loggers_to_allow)
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
 
 
 def configure(unused_tcp_port, database_name, database_port):
