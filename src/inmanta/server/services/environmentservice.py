@@ -54,7 +54,6 @@ from inmanta.server.services.compilerservice import CompilerService
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
-from inmanta.util import get_compiler_version
 
 LOGGER = logging.getLogger(__name__)
 

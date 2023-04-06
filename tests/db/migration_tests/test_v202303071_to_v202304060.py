@@ -48,4 +48,3 @@ async def test_removal_of_purge_on_delete_setting(
     assert await has_purge_on_delete_key_in_settings_dct(postgresql_client)
     await migrate_db_from()
     assert not await has_purge_on_delete_key_in_settings_dct(postgresql_client)
-

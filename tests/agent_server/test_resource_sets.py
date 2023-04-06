@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import datetime
 import uuid
 from collections import abc
 from typing import Optional
@@ -24,7 +23,7 @@ from typing import Optional
 import utils
 from inmanta import const, data
 from inmanta.protocol.common import Result
-from inmanta.resources import Id, ResourceIdStr
+from inmanta.resources import ResourceIdStr
 from inmanta.util import get_compiler_version
 
 

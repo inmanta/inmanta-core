@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 from asyncpg import Connection
+
 from inmanta.data import Environment
 
 

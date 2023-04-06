@@ -4614,7 +4614,6 @@ class Resource(BaseDocument):
             provides=self.provides,
         )
 
-
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
         status_subquery = """
