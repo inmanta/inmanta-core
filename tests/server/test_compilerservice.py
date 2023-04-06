@@ -169,8 +169,6 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         async def run(self, force_update: Optional[bool] = False):
             print("Start Run: ", self.request.id, self.request.environment)
 
-            now = datetime.datetime.now().astimezone()
-            await self.request.update_fields(started=now)
             self.started = True
             await self.lock.acquire()
             self.done = True
@@ -199,17 +197,13 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
 
     async def compiler_cache_consistent(expected: int) -> None:
         async def inner() -> bool:
-            not_done = await data.Compile.get_next_compiles_count()
-            running = sum(1 for task in cs._recompiles.values() if not task.done())
-            print(
-                expected,
-                cs._queue_count_cache,
-                not_done - running,
-                not_done,
-                running,
-            )
-            return cs._queue_count_cache == (not_done - running) == expected
+            async with cs._queue_count_cache_lock:
+                not_done = await data.Compile.get_total_length_of_all_compile_queues()
+                print(expected, cs._queue_count_cache, not_done)
+                return cs._queue_count_cache == not_done == expected
 
+        # Use retry_limited here, because after the runner has finished executing, it might take
+        # some time until the compiler service has registered the data in the database.
         await retry_limited(inner, 1)
 
     # manual setup of server
@@ -936,7 +930,7 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
     result = await client.get_compile_queue(environment)
     assert result.code == 200
     assert len(result.result["queue"]) == 1
-    assert compilerslice._queue_count_cache == 0
+    assert compilerslice._queue_count_cache == 1
 
     result = await client.is_compiling(environment)
     assert result.code == 204
