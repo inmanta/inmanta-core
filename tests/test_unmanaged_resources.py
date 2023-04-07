@@ -21,16 +21,18 @@ async def test_discovery_resource_single(server, client, agent, environment):
     """
     Test that an unmanaged resource can be created and retrieved successfully for a single resource.
     """
+    unmanaged_resource_id = "test::Resource[agent1,key=key],v=1"
+    values = {"value1": "test1", "value2": "test2"}
     result = await client.unmanaged_resource_create(
-        environment, "test::Resource[agent1,key=key],v=1", {"value1": "test1", "value2": "test2"}
+        environment, unmanaged_resource_id, values
     )
     assert result.code == 200
 
-    result = await client.unmanaged_resources_get(environment, "test::Resource[agent1,key=key],v=1")
+    result = await client.unmanaged_resources_get(environment, unmanaged_resource_id)
     assert result.code == 200
 
-    assert result.result["data"]["unmanaged_resource_id"] == "test::Resource[agent1,key=key],v=1"
-    assert result.result["data"]["values"] == {"value1": "test1", "value2": "test2"}
+    assert result.result["data"]["unmanaged_resource_id"] == unmanaged_resource_id
+    assert result.result["data"]["values"] == values
 
 
 async def test_unmanaged_resource_create_batch(server, client, agent, environment):
