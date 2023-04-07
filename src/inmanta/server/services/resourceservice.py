@@ -25,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
+from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
@@ -1042,7 +1043,13 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.unmanaged_resource_create, env="tid")
     async def unmanaged_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: JsonType) -> None:
-        unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
+        try:
+            unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
+        except ValidationError as e:
+            error_msg = f"Failed to validate argument\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise BadRequest(error_msg, {"validation_errors": e.errors()})
+
         await unmanaged_resource.to_dao(env.id).insert()
 
     @handle(methods_v2.unmanaged_resource_create_batch, env="tid")

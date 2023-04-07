@@ -36,6 +36,14 @@ async def test_discovery_resource_single(server, client, agent, environment):
     assert result.result["data"]["unmanaged_resource_id"] == unmanaged_resource_id
     assert result.result["data"]["values"] == values
 
+    # try to store the same resource a second time
+    result = await agent._client.unmanaged_resource_create(
+        tid=environment,
+        unmanaged_resource_id=unmanaged_resource_id,
+        values=values,
+    )
+    assert result.code == 500
+
 
 async def test_unmanaged_resource_create_batch(server, client, agent, environment):
     """
@@ -54,6 +62,15 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
         assert result.code == 200
         assert result.result["data"]["unmanaged_resource_id"] == res["unmanaged_resource_id"]
         assert result.result["data"]["values"] == res["values"]
+
+    # try to store a batch with 2 times the same resource
+    resources = [
+        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4],v=1", "values": {"value1": "test7", "value2": "test8"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4],v=1", "values": {"value1": "test9", "value2": "test10"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key6=key6],v=1", "values": {"value1": "test11", "value2": "test12"}},
+    ]
+    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
+    assert result.code == 500
 
 
 async def test_unmanaged_resource_get_paging(server, client, agent, environment):
@@ -119,15 +136,17 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     """
     Test that exceptions are raised when creating unmanaged resources with invalid IDs.
     """
-    result = await agent._client.unmanaged_resource_create(environment, "test", {"value1": "test1", "value2": "test2"})
-    assert result.code == 500
-    assert "data validation error" in result.result["message"]
+    result = await agent._client.unmanaged_resource_create(
+        tid=environment, unmanaged_resource_id="test", values={"value1": "test1", "value2": "test2"}
+    )
+    assert result.code == 400
+    assert "Failed to validate argument" in result.result["message"]
 
     resources = [
         {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},
         {"unmanaged_resource_id": "test::Resource[agent1,key2=key2],v=1", "values": {"value1": "test3", "value2": "test4"}},
         {"unmanaged_resource_id": "test", "values": {"value1": "test5", "value2": "test6"}},
     ]
-    result = await client.unmanaged_resource_create_batch(environment, resources)
+    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
     assert result.code == 400
     assert "Failed to validate argument" in result.result["message"]
