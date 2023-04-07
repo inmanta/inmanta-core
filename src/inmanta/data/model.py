@@ -739,7 +739,8 @@ class UnmanagedResource(BaseModel):
     values: Dict[str, str]
 
     @validator("unmanaged_resource_id")
-    def unmanaged_resource_id_is_resource_version_id(cls, v):
+    @classmethod
+    def unmanaged_resource_id_is_resource_version_id(cls, v: ResourceVersionIdStr) -> Optional[Any]:
         if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
