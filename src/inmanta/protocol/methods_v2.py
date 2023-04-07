@@ -1403,7 +1403,8 @@ def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[Un
 )
 def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model.UnmanagedResource:
     """
-    Get a single discovered resource
+    Get a single discovered resource.
+
     :param tid: the id of the environment in which to get the unmanaged resource.
     :param unmanaged_resource_id: The id of the unmanaged resource
     """
