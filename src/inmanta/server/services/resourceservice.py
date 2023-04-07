@@ -1045,9 +1045,7 @@ class ResourceService(protocol.ServerSlice):
         self, env: data.Environment, unmanaged_resource_id: str, values: Dict[str, str]
     ) -> None:
         unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
-        await data.UnmanagedResource(
-            environment=env, unmanaged_resource_id=unmanaged_resource.unmanaged_resource_id, values=unmanaged_resource.values
-        ).insert()
+        await unmanaged_resource.to_dao(env).insert()
 
     @handle(methods_v2.unmanaged_resource_create_batch)
     async def unmanaged_resources_create_batch(
@@ -1055,11 +1053,7 @@ class ResourceService(protocol.ServerSlice):
     ) -> None:
         resources: List[data.UnmanagedResource] = []
         for res in unmanaged_resources:
-            unmanaged_resource = data.UnmanagedResource(
-                environment=env,
-                unmanaged_resource_id=res.unmanaged_resource_id,
-                values=res.values,
-            )
+            unmanaged_resource = res.to_dao(env)
             resources.append(unmanaged_resource)
         await data.UnmanagedResource.insert_many(resources)
 

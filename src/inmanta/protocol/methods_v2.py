@@ -1361,7 +1361,6 @@ def set_password(username: str, password: str) -> None:
 
 @typedmethod(
     path="/unmanaged/<unmanaged_resource_id>",
-    validate_sid=False,
     operation="POST",
     agent_server=True,
     arg_options=methods.ENV_OPTS,
@@ -1379,7 +1378,6 @@ def unmanaged_resource_create(tid: uuid.UUID, unmanaged_resource_id: str, values
 
 @typedmethod(
     path="/unmanaged/",
-    validate_sid=False,
     operation="POST",
     agent_server=True,
     arg_options=methods.ENV_OPTS,
