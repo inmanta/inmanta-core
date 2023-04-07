@@ -249,26 +249,6 @@ def resume_environment(tid: uuid.UUID) -> None:
 
 @typedmethod(
     path="/decommission/<id>",
-    operation="POST",
-    arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},
-    client_types=[ClientType.api],
-    api_version=2,
-)
-def environment_decommission(id: uuid.UUID, metadata: Optional[model.ModelMetadata] = None) -> int:
-    """
-    Decommission an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
-    removal.
-
-    :param id: The uuid of the environment.
-    :param metadata: Optional metadata associated with the decommissioning
-
-    :raises NotFound: The given environment doesn't exist.
-    :raises Forbidden: The given environment is protected.
-    """
-
-
-@typedmethod(
-    path="/decommission/<id>",
     operation="DELETE",
     arg_options={"id": methods.ArgOption(getter=methods.convert_environment)},
     client_types=[ClientType.api],
