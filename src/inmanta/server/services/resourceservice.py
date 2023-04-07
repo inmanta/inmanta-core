@@ -57,7 +57,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1040,21 +1040,25 @@ class ResourceService(protocol.ServerSlice):
             raise NotFound("The resource with the given id does not exist")
         return resource
 
-    @handle(methods_v2.unmanaged_resource_create)
-    async def unmanaged_resource_create(
-        self, env: data.Environment, unmanaged_resource_id: str, values: Dict[str, str]
-    ) -> None:
+    @handle(methods_v2.unmanaged_resource_create, env="tid")
+    async def unmanaged_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: JsonType) -> None:
         unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
-        await unmanaged_resource.to_dao(env).insert()
+        await data.UnmanagedResource(
+            environment=env.id, unmanaged_resource_id=unmanaged_resource.unmanaged_resource_id, values=unmanaged_resource.values
+        ).insert()
 
-    @handle(methods_v2.unmanaged_resource_create_batch)
+    @handle(methods_v2.unmanaged_resource_create_batch, env="tid")
     async def unmanaged_resources_create_batch(
         self, env: data.Environment, unmanaged_resources: List[UnmanagedResource]
     ) -> None:
-        resources: List[data.UnmanagedResource] = []
-        for res in unmanaged_resources:
-            unmanaged_resource = res.to_dao(env)
-            resources.append(unmanaged_resource)
+        resources: List[data.UnmanagedResource] = [
+            data.UnmanagedResource(
+                environment=env.id,
+                unmanaged_resource_id=res.unmanaged_resource_id,
+                values=res.values,
+            )
+            for res in unmanaged_resources
+        ]
         await data.UnmanagedResource.insert_many(resources)
 
     @handle(methods_v2.unmanaged_resources_get, env="tid")

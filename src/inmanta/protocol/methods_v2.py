@@ -24,7 +24,7 @@ from typing import Dict, List, Literal, Optional, Union
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
-from inmanta.types import PrimitiveTypes
+from inmanta.types import JsonType, PrimitiveTypes
 
 from ..data.model import ResourceIdStr, UnmanagedResource
 from . import methods
@@ -1367,10 +1367,10 @@ def set_password(username: str, password: str) -> None:
     client_types=[ClientType.agent],
     api_version=2,
 )
-def unmanaged_resource_create(tid: uuid.UUID, unmanaged_resource_id: str, values: Dict[str, str]) -> None:
+def unmanaged_resource_create(tid: uuid.UUID, unmanaged_resource_id: str, values: JsonType) -> None:
     """
     create a discovered resource.
-    :param env: The id of the environment this resource belongs to
+    :param tid: The id of the environment this resource belongs to
     :param unmanaged_resource_id: The id of the unmanaged resource
     :param values: The values associated with the unmanaged_resource
     """
@@ -1384,10 +1384,10 @@ def unmanaged_resource_create(tid: uuid.UUID, unmanaged_resource_id: str, values
     client_types=[ClientType.agent],
     api_version=2,
 )
-def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[UnmanagedResource]) -> None:
+def unmanaged_resource_create_batch(tid: uuid.UUID, unmanaged_resources: List[UnmanagedResource]) -> None:
     """
     create multiple discovered resource in the DB
-    :param env: The id of the environment this resource belongs to
+    :param tid: The id of the environment this resource belongs to
     :param unmanaged_resources: List of UnmanagedResources containing the unmanaged_resource_id and values for each resource
     """
 

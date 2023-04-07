@@ -23,7 +23,7 @@ async def test_discovery_resource_single(server, client, agent, environment):
     """
     unmanaged_resource_id = "test::Resource[agent1,key=key],v=1"
     values = {"value1": "test1", "value2": "test2"}
-    result = await client.unmanaged_resource_create(environment, unmanaged_resource_id, values)
+    result = await agent._client.unmanaged_resource_create(environment, unmanaged_resource_id, values)
     assert result.code == 200
 
     result = await client.unmanaged_resources_get(environment, unmanaged_resource_id)
@@ -42,7 +42,7 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
         {"unmanaged_resource_id": "test::Resource[agent1,key2=key2],v=1", "values": {"value1": "test3", "value2": "test4"}},
         {"unmanaged_resource_id": "test::Resource[agent1,key3=key3],v=1", "values": {"value1": "test5", "value2": "test6"}},
     ]
-    result = await client.unmanaged_resource_create_batch(environment, resources)
+    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
     assert result.code == 200
 
     for res in resources:
@@ -65,7 +65,7 @@ async def test_unmanaged_resource_get_paging(server, client, agent, environment)
         {"unmanaged_resource_id": "test::Resource[agent1,key5=key5],v=1", "values": {"value1": "test9", "value2": "test10"}},
         {"unmanaged_resource_id": "test::Resource[agent1,key6=key6],v=1", "values": {"value1": "test11", "value2": "test12"}},
     ]
-    result = await client.unmanaged_resource_create_batch(environment, resources)
+    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
     assert result.code == 200
 
     result = await client.unmanaged_resources_get_batch(
@@ -115,7 +115,7 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     """
     Test that exceptions are raised when creating unmanaged resources with invalid IDs.
     """
-    result = await client.unmanaged_resource_create(environment, "test", {"value1": "test1", "value2": "test2"})
+    result = await agent._client.unmanaged_resource_create(environment, "test", {"value1": "test1", "value2": "test2"})
     assert result.code == 500
     assert "data validation error" in result.result["message"]
 
