@@ -724,7 +724,7 @@ class UnmanagedResource(BaseModel):
     :param values: The actual resource
     """
 
-    unmanaged_resource_id: str
+    unmanaged_resource_id: ResourceIdStr
     values: Dict[str, str]
 
     @validator("unmanaged_resource_id")
