@@ -1370,7 +1370,7 @@ def set_password(username: str, password: str) -> None:
 )
 def unmanaged_resource_create(env: uuid.UUID, unmanaged_resource_id: str, values: Dict[str, str]) -> None:
     """
-    create a discovered resource in the DB
+    create a discovered resource.
     :param env: The id of the environment this resource belongs to
     :param unmanaged_resource_id: The id of the unmanaged resource
     :param values: The values associated with the unmanaged_resource
