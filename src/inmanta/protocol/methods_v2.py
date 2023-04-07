@@ -1368,7 +1368,7 @@ def set_password(username: str, password: str) -> None:
     client_types=[ClientType.agent],
     api_version=2,
 )
-def unmanaged_resource_create(env: uuid.UUID, unmanaged_resource_id: str, values: Dict[str, str]) -> None:
+def unmanaged_resource_create(tid: uuid.UUID, unmanaged_resource_id: str, values: Dict[str, str]) -> None:
     """
     create a discovered resource.
     :param env: The id of the environment this resource belongs to
