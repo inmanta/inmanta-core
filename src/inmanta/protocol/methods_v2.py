@@ -1390,7 +1390,7 @@ def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[Un
     """
     create multiple discovered resource in the DB
     :param env: The id of the environment this resource belongs to
-    :param unmanaged_resources: List of UnmanagedResource containing the unmanaged_resource_id and values for each resource
+    :param unmanaged_resources: List of UnmanagedResources containing the unmanaged_resource_id and values for each resource
     """
 
 
