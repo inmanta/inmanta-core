@@ -465,7 +465,12 @@ class Resource(BaseResource, metaclass=ResourceMeta):
 
 
 @stable_api
-class PurgeableResource(Resource):
+class PurgeableResourceSuper:
+    pass
+
+
+@stable_api
+class PurgeableResource(Resource, PurgeableResourceSuper):
     """
     See :inmanta:entity:`std::PurgeableResource` for more information.
     """
@@ -706,13 +711,27 @@ class PydanticResource(BaseModel):
     unknowns: List[str] = []  # ???
 
     @classmethod
+    def create_from_model(
+        cls, exporter: "export.Exporter", entity_name: str, model_object: "proxy.DynamicProxy"
+    ) -> "PydanticResource":
+        """
+        Build a resource from a given configuration model entity
+        """
+        resource_cls, options = resource.get_class(entity_name)
+        if resource_cls is None or options is None:
+            raise TypeError("No resource class registered for entity %s" % entity_name)
+        obj = resource_cls.construct_from_model(entity_name, exporter, model_object, options)
+
+        return obj
+
+    @classmethod
     def construct_from_model(cls, entity_name, exporter, model_object, options):
         out = cls.from_orm(model_object)
         out._entity_name = entity_name
         out._attribute_name = options["name"]
         out._agent_attribute = options["agent"]
-        out.id
         out._model = model_object
+        out.id
         return out
 
     @classmethod
@@ -734,11 +753,30 @@ class PydanticResource(BaseModel):
     @property
     def id(self):
         if self._id is None:
+            path_elements: List[str] = self._agent_attribute.split(".")
+            agent_value = self._model
+            for el in path_elements:
+                try:
+                    # TODO cleanup this hack
+                    if isinstance(agent_value, list):
+                        agent_value = agent_value[0]
+
+                    agent_value = getattr(agent_value, el)
+
+                except proxy.UnsetException as e:
+                    raise e
+                except proxy.UnknownException as e:
+                    raise e
+                except Exception:
+                    raise Exception(
+                        "Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
+                        % (self, self._agent_attribute, el)
+                    )
             self._id = Id(
                 self._entity_name,
-                getattr(self, self._agent_attribute),
+                agent_value,
                 self._attribute_name,
-                getattr(self, self._attribute_name),
+                getattr(self._model, self._attribute_name),
             )
         return self._id
 
