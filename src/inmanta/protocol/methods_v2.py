@@ -1417,7 +1417,7 @@ def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model
     api_version=2,
 )
 def unmanaged_resources_get_batch(
-    tid: uuid.UUID = None, start_resource_id: str = None, end_resource_id: str = None, limit: int = None
+    tid: uuid.UUID, start_resource_id: Optional[str] = None, end_resource_id: Optional[str] = None, limit: Optional[int] = None
 ) -> List[model.UnmanagedResource]:
     """
     Get the unmanaged resources with paging
