@@ -1,4 +1,4 @@
-description: Implement a first storage backend for the unmanaged resources
+description: Implement storage backend for the unmanaged resources
 issue-nr: 5690
 change-type: minor
 destination-branches: [master]

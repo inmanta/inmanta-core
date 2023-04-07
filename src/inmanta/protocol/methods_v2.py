@@ -1368,9 +1368,9 @@ def set_password(username: str, password: str) -> None:
     client_types=[ClientType.agent],
     api_version=2,
 )
-def unmanaged_resource_create(env: uuid.UUID, unmanaged_resource_id: str, values: Dict[str, str]) -> None:
+def unmanaged_resource_create(tid: uuid.UUID, unmanaged_resource_id: str, values: Dict[str, str]) -> None:
     """
-    create a discovered resource in the DB
+    create a discovered resource.
     :param env: The id of the environment this resource belongs to
     :param unmanaged_resource_id: The id of the unmanaged resource
     :param values: The values associated with the unmanaged_resource
@@ -1390,7 +1390,7 @@ def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[Un
     """
     create multiple discovered resource in the DB
     :param env: The id of the environment this resource belongs to
-    :param unmanaged_resources: List of UnmanagedResource containing the unmanaged_resource_id and values for each resource
+    :param unmanaged_resources: List of UnmanagedResources containing the unmanaged_resource_id and values for each resource
     """
 
 
@@ -1403,7 +1403,8 @@ def unmanaged_resource_create_batch(env: uuid.UUID, unmanaged_resources: List[Un
 )
 def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model.UnmanagedResource:
     """
-    Get a single discovered resource
+    Get a single discovered resource.
+
     :param tid: the id of the environment in which to get the unmanaged resource.
     :param unmanaged_resource_id: The id of the unmanaged resource
     """

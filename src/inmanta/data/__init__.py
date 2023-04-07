@@ -5790,7 +5790,7 @@ class UnmanagedResource(BaseDocument):
     """
 
     environment: uuid.UUID
-    unmanaged_resource_id: str
+    unmanaged_resource_id: m.ResourceIdStr
     values: Dict[str, str]
 
     __primary_key__ = ("environment", "unmanaged_resource_id")
