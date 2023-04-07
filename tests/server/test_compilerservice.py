@@ -1324,6 +1324,7 @@ async def test_notification_on_failed_pull_during_compile(
     assert str(compile_id) in compile_failed_notification["uri"]
 
 
+@pytest.mark.slowtest
 async def test_uninstall_python_packages(
     environment_factory: EnvironmentFactory, server, client, tmpdir, monkeypatch, local_module_package_index: str
 ) -> None:
