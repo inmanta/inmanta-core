@@ -98,7 +98,7 @@ async def test_unmanaged_resource_get_paging(server, client, agent, environment)
         assert result.result["data"][i - 3]["unmanaged_resource_id"] == resources[i]["unmanaged_resource_id"]
         assert result.result["data"][i - 3]["values"] == resources[i]["values"]
 
-    # will not get resources after end_resource_id
+    # Verify no resource with a resource_id comming after end_resource_id will be returned.
     result = await client.unmanaged_resources_get_batch(
         environment,
         start_resource_id="test::Resource[agent1,key2=key2],v=1",
