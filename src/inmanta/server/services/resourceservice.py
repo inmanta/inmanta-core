@@ -1043,22 +1043,13 @@ class ResourceService(protocol.ServerSlice):
     @handle(methods_v2.unmanaged_resource_create, env="tid")
     async def unmanaged_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: JsonType) -> None:
         unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
-        await data.UnmanagedResource(
-            environment=env.id, unmanaged_resource_id=unmanaged_resource.unmanaged_resource_id, values=unmanaged_resource.values
-        ).insert()
+        await unmanaged_resource.to_dao(env.id).insert()
 
     @handle(methods_v2.unmanaged_resource_create_batch, env="tid")
     async def unmanaged_resources_create_batch(
         self, env: data.Environment, unmanaged_resources: List[UnmanagedResource]
     ) -> None:
-        resources: List[data.UnmanagedResource] = [
-            data.UnmanagedResource(
-                environment=env.id,
-                unmanaged_resource_id=res.unmanaged_resource_id,
-                values=res.values,
-            )
-            for res in unmanaged_resources
-        ]
+        resources: List[data.UnmanagedResource] = [res.to_dao(env.id) for res in unmanaged_resources]
         await data.UnmanagedResource.insert_many(resources)
 
     @handle(methods_v2.unmanaged_resources_get, env="tid")

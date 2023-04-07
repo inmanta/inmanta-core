@@ -5791,7 +5791,7 @@ class UnmanagedResource(BaseDocument):
 
     environment: uuid.UUID
     unmanaged_resource_id: m.ResourceIdStr
-    values: JsonType
+    values: dict[str, str]
 
     __primary_key__ = ("environment", "unmanaged_resource_id")
 

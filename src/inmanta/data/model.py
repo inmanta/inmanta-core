@@ -28,7 +28,7 @@ from pydantic.fields import ModelField
 
 import inmanta
 import inmanta.ast.export as ast_export
-from inmanta import const, protocol, resources
+from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -728,7 +728,14 @@ class UnmanagedResource(BaseModel):
 
     @validator("unmanaged_resource_id")
     @classmethod
-    def unmanaged_resource_id_is_resource_version_id(cls, v: str) -> Optional[Any]:
-        if resources.Id.is_resource_version_id(v):
+    def unmanaged_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
+        if resources.Id.is_resource_id(v):
             return v
-        raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
+        raise ValueError(f"id {v} is not of type ResourceIdStr")
+
+    def to_dao(self, env: uuid) -> "data.UnmanagedResource":
+        return data.UnmanagedResource(
+            unmanaged_resource_id=self.unmanaged_resource_id,
+            values=self.values,
+            environment=env,
+        )

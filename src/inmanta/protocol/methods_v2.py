@@ -1366,13 +1366,18 @@ def set_password(username: str, password: str) -> None:
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.agent],
     api_version=2,
+    varkw=True,
 )
-def unmanaged_resource_create(tid: uuid.UUID, unmanaged_resource_id: str, values: JsonType) -> None:
+def unmanaged_resource_create(
+    tid: uuid.UUID, unmanaged_resource_id: str, **kwargs: object  # bypass the type checking for the values
+) -> None:
     """
     create a discovered resource.
     :param tid: The id of the environment this resource belongs to
     :param unmanaged_resource_id: The id of the unmanaged resource
     :param values: The values associated with the unmanaged_resource
+    :param **kwargs: The following arguments are supported:
+           values: The values associated with the unmanaged_resource
     """
 
 
