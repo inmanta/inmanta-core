@@ -50,7 +50,7 @@ from inmanta.server import (
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
-from inmanta.server.services.compilerservice import CompilerService
+from inmanta.server.services import compilerservice
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
@@ -146,9 +146,14 @@ class EnvironmentService(protocol.ServerSlice):
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
-        self.compiler_service = cast(CompilerService, server.get_slice(SLICE_COMPILER))
+        self.compiler_service = cast(compilerservice.CompilerService, server.get_slice(SLICE_COMPILER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
+        # Register the compiler service here to the environment service listener. Registering it within the compiler service
+        # would result in a circular dependency between the environment slice and the compiler service slice.
+        self.register_listener_for_multiple_actions(
+            self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
+        )
 
     async def start(self) -> None:
         await super().start()
