@@ -48,6 +48,7 @@ async def env_with_resources(server, client):
             total=1,
             released=i != 1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -57,7 +58,7 @@ async def env_with_resources(server, client):
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-                attributes={"path": path, "v": version},
+                attributes={"path": path, "v": version, "version": version},
                 status=ResourceState.deployed,
             )
             await res.insert()
@@ -80,6 +81,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     await create_resource("agent1", "/tmp/file7", "std::File", [3], environment=env2.id)
@@ -272,10 +274,10 @@ async def test_versioned_resource_details(server, client, env_with_resources):
     resource_id = result.result["data"][0]["resource_id"]
     result = await client.versioned_resource_details(env_with_resources.id, version=2, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 2}
+    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 2, "version": 2}
     result = await client.versioned_resource_details(env_with_resources.id, version=3, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 3}
+    assert result.result["data"]["attributes"] == {"path": "/etc/file1", "v": 3, "version": 3}
     result = await client.versioned_resource_details(env_with_resources.id, version=4, rid=resource_id)
     assert result.code == 404
 

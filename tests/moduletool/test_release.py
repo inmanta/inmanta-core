@@ -371,7 +371,7 @@ def test_add_changelog_entry(tmpdir, modules_dir: str, monkeypatch, initial_chan
         ("1.0.1.dev0", "1.0.1.dev", "1.1.0.dev", "2.0.0.dev"),
         ("1.1.2.dev0", "1.1.2.dev", "1.1.2.dev", "2.0.0.dev"),
         ("2.0.0.dev", "2.0.0.dev", "2.0.0.dev", "2.0.0.dev"),
-        ("1.0.1.4.6.dev0", "1.0.1.4.6.dev0", "1.1.0.0.0.dev0", "2.0.0.0.0.dev0"),
+        ("1.0.1.4.6.dev0", "1.0.1.4.6.dev0", "1.1.0.dev0", "2.0.0.dev0"),
     ],
 )
 def test_bump_dev_version_distance_already_met(
@@ -411,6 +411,53 @@ def test_bump_dev_version_distance_already_met(
     assert str(Module.from_path(path_module).version) == str(Version(after_minor_increment))
     module_tool.release(dev=True, major=True, message="Commit changes")
     assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
+    assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
+
+
+@pytest.mark.parametrize(
+    "initial_version, after_revision_increment, after_patch_increment, after_minor_increment, after_major_increment",
+    [
+        ("1.0.1.4", "1.0.1.5.dev0", "1.0.2.dev0", "1.1.0.dev0", "2.0.0.dev0"),
+        ("1.2.3", "1.2.3.1.dev0", "1.2.4.dev0", "1.3.0.dev0", "2.0.0.dev0"),
+    ],
+)
+def test_bump_dev_version_four_digits(
+    tmpdir,
+    modules_dir: str,
+    monkeypatch,
+    initial_version: str,
+    after_revision_increment: str,
+    after_patch_increment: str,
+    after_minor_increment: str,
+    after_major_increment: str,
+) -> None:
+    """
+    Ensure that the `inmanta module release --dev` command doesn't increment the version when
+    the current version is already sufficiently separated from the previous stable release.
+    This test also verifies the behavior when the release part of the version number is longer
+    than three numbers.
+    """
+    module_name = "mod"
+    path_module = os.path.join(tmpdir, module_name)
+    v1_module_from_template(
+        source_dir=os.path.join(modules_dir, "minimalv1module"),
+        dest_dir=path_module,
+        new_version=Version(initial_version),
+        new_name=module_name,
+    )
+    gitprovider.git_init(repo=path_module)
+    gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
+    gitprovider.tag(repo=path_module, tag=initial_version)
+
+    monkeypatch.chdir(path_module)
+    module_tool = ModuleTool()
+    module_tool.release(dev=True, revision=True, message="Commit changes")
+    assert str(Module.from_path(path_module).version) == str(Version(after_revision_increment))
+    module_tool.release(dev=True, patch=True, message="Commit changes")
+    assert str(Module.from_path(path_module).version) == str(Version(after_patch_increment))
+    module_tool.release(dev=True, minor=True, message="Commit changes")
+    assert str(Module.from_path(path_module).version) == str(Version(after_minor_increment))
+    module_tool.release(dev=True, major=True, message="Commit changes")
     assert str(Module.from_path(path_module).version) == str(Version(after_major_increment))
 
 
@@ -461,7 +508,7 @@ def test_too_many_version_bump_arguments() -> None:
     module_tool = ModuleTool()
     with pytest.raises(click.UsageError) as exc_info:
         module_tool.release(dev=False, minor=True, major=True, message="Commit changes")
-    assert "Only one of --patch, --minor and --major can be set at the same time." in exc_info.value.message
+    assert "Only one of --revision, --patch, --minor and --major can be set at the same time." in exc_info.value.message
 
 
 def test_epoch_value_larger_than_zero(tmpdir, modules_dir: str, monkeypatch) -> None:

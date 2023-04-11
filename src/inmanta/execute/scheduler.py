@@ -23,7 +23,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any, Deque, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from inmanta import plugins
-from inmanta.ast import Anchor, CompilerException, CycleException, Location, MultiException, RuntimeException
+from inmanta.ast import Anchor, AnchorTarget, CompilerException, CycleException, Location, MultiException, RuntimeException
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.entity import Entity, Implementation
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
@@ -212,7 +212,7 @@ class Scheduler(object):
             k for k in [t.register_types() for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None
         ]
 
-        for (name, type_symbol) in newtypes:
+        for name, type_symbol in newtypes:
             types_and_impl[name] = type_symbol
 
         # now that we have objects for all types, populate them
@@ -262,9 +262,9 @@ class Scheduler(object):
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-    def anchormap(
+    def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
-    ) -> Sequence[Tuple[Location, Location]]:
+    ) -> Sequence[Tuple[Location, AnchorTarget]]:
         prev = time.time()
 
         # first evaluate all definitions, this should be done in one iteration
@@ -280,13 +280,24 @@ class Scheduler(object):
             if anchor is not None
         )
 
-        rangetorange = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
-        rangetorange = [(f, t) for f, t in rangetorange if t is not None]
+        range_to_anchor_target = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
+        range_to_anchor_target = [(f, t) for f, t in range_to_anchor_target if t is not None]
 
         now = time.time()
         LOGGER.debug("Anchormap took %f seconds", now - prev)
 
-        return rangetorange
+        return range_to_anchor_target
+
+    def anchormap(
+        self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
+    ) -> Sequence[Tuple[Location, Location]]:
+        """
+        This methode exists for backward compatibility with inmantals
+        """
+        range_to_anchor_target = self.get_anchormap(compiler, statements, blocks)
+        range_to_range = [(f, t.location) for f, t in range_to_anchor_target]
+
+        return range_to_range
 
     def find_wait_cycle(self, attributes_with_precedence_rule: List[RelationAttribute], allwaiters: Set[Waiter]) -> bool:
         """

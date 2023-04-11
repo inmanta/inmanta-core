@@ -25,7 +25,16 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol
-from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException
+from inmanta.ast import (
+    CompilerException,
+    LocatableString,
+    Location,
+    Namespace,
+    Range,
+    RuntimeException,
+    TypeNotFoundException,
+    WithComment,
+)
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -181,7 +190,7 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
-class Plugin(NamedType, metaclass=PluginMeta):
+class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     """
     This class models a plugin that can be called from the language.
     """
@@ -211,6 +220,9 @@ class Plugin(NamedType, metaclass=PluginMeta):
         except OSError:
             # In case of bytecompiled code there is no source line
             line = 1
+
+        if self.__class__.__function__.__doc__:
+            self.comment = self.__class__.__function__.__doc__
 
         self.location = Location(filename, line)
 

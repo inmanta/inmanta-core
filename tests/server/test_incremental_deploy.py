@@ -131,7 +131,6 @@ class MultiVersionSetup(object):
         return rid
 
     async def setup_agent(self, server, environment):
-
         agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
         endpoints = list(self.results.keys())
@@ -245,7 +244,7 @@ async def test_deploy(server, agent: Agent, environment, caplog):
                     "key": "key2",
                     "id": "test::Resource[agent1,key=key2],v=%d" % version,
                     "send_event": False,
-                    "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+                    "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
                     "purged": False,
                 },
                 {

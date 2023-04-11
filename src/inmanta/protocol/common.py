@@ -63,6 +63,7 @@ from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
+from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
 
@@ -247,7 +248,7 @@ class ReturnValue(Generic[T]):
         return repr(self)
 
 
-class Response(object):
+class Response:
     """
     A response object of a call
     """
@@ -327,6 +328,12 @@ class UrlPath(object):
 
         return path
 
+    def has_path_variable(self, var_name: str) -> bool:
+        """
+        Return True iff the given var_name is a path parameter of this UrlPath.
+        """
+        return var_name in self._vars
+
 
 class InvalidMethodDefinition(Exception):
     """This exception is raised when the definition of a method is invalid."""
@@ -337,7 +344,6 @@ VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNon
 
 
 class MethodArgumentsBaseModel(pydantic.BaseModel):
-
     _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
         validator_timezone_aware_timestamps
     )
@@ -381,6 +387,7 @@ class MethodProperties(object):
         typed: bool = False,
         envelope_key: str = const.ENVELOPE_KEY,
         strict_typing: bool = True,
+        enforce_auth: bool = True,
         varkw: bool = False,
     ) -> None:
         """
@@ -403,6 +410,8 @@ class MethodProperties(object):
         :param typed: Is the method definition typed or not
         :param envelope_key: The envelope key to use
         :param strict_typing: If true, does not allow `Any` when validating argument types
+        :param enforce_auth: When set to true authentication is enforced on this endpoint. When set to false, authentication is
+                             not enforced, even if auth is enabled.
         :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                       responsible for the validation.
         """
@@ -427,6 +436,7 @@ class MethodProperties(object):
         self._envelope = envelope
         self._envelope_key = envelope_key
         self._strict_typing = strict_typing
+        self._enforce_auth = enforce_auth
         self.function = function
         self._varkw: bool = varkw
         self._varkw_name: Optional[str] = None
@@ -446,6 +456,10 @@ class MethodProperties(object):
     def varkw(self) -> bool:
         """Does the method allow for a variable number of key/value arguments."""
         return self._varkw
+
+    @property
+    def enforce_auth(self) -> bool:
+        return self._enforce_auth
 
     def validate_arguments(self, values: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -675,12 +689,12 @@ class MethodProperties(object):
         return self._operation
 
     @property
+    @stable_api
     def arg_options(self) -> Dict[str, ArgOption]:
         return self._arg_options
 
     @property
     def timeout(self) -> Optional[int]:
-
         return self._timeout
 
     @property
@@ -715,12 +729,14 @@ class MethodProperties(object):
     def api_version(self) -> int:
         return self._api_version
 
+    @stable_api
     def get_long_method_description(self) -> Optional[str]:
         """
         Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._parsed_docstring.long_description
 
+    @stable_api
     def get_short_method_description(self) -> Optional[str]:
         """
         Return the first paragraph of the description present in the docstring of the method.
@@ -782,7 +798,7 @@ class MethodProperties(object):
         for raise_statement in self._parsed_docstring.raises:
             exception_name = raise_statement.type_name
             status_code = self._get_http_status_code_for_exception(exception_name)
-            result[status_code] = raise_statement.description
+            result[status_code] = raise_statement.description if raise_statement.description is not None else ""
 
         return result
 
@@ -871,6 +887,21 @@ class MethodProperties(object):
         """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2"""
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
+
+    @stable_api
+    def get_openapi_parameter_type_for(self, param_name: str) -> Optional[openapi_model.ParameterType]:
+        """
+        Return the openapi ParameterType for the parameter with the given param_name or None when the parameter
+        with the given name is not an OpenAPI parameter (but a RequestBodyParameter for example).
+        """
+        if param_name in self.arg_options and self.arg_options[param_name].header:
+            return openapi_model.ParameterType.header
+        elif self._path.has_path_variable(param_name):
+            return openapi_model.ParameterType.path
+        elif self.arguments_in_url():
+            return openapi_model.ParameterType.query
+        else:
+            return None
 
 
 class UrlMethod(object):
@@ -977,6 +1008,12 @@ def encode_token(
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
     if cfg is None:
         raise Exception("No JWT signing configuration available.")
+
+    for ct in client_types:
+        if ct not in cfg.client_types:
+            raise Exception(
+                f"The signing config does not support the requested client type {ct}. Only {cfg.client_types} are allowed."
+            )
 
     payload: Dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
 

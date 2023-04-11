@@ -101,7 +101,7 @@ def project_delete(id: uuid.UUID) -> None:
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
 def project_list(environment_details: bool = False) -> List[model.Project]:
     """
-    Returns a list of projects
+    Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
     :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
@@ -318,7 +318,7 @@ def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent
 )
 def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
     """
-    List the settings in the current environment
+    List the settings in the current environment ordered by name alphabetically.
     """
 
 
@@ -818,7 +818,7 @@ def resource_logs(
 )
 def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Fact]:
     """
-    Get the facts related to a specific resource
+    Get the facts related to a specific resource. The results are sorted alphabetically by name.
     :param tid: The id of the environment
     :param rid: Id of the resource
     :return: The facts related to this resource
@@ -1327,4 +1327,53 @@ def get_environment_metrics(
     :param start_interval: The start of the time window for which the metrics should be returned.
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
+    """
+
+
+@typedmethod(path="/login", operation="POST", client_types=[ClientType.api], enforce_auth=False, api_version=2)
+def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
+    """Login a user. When the login succeeds an authentication header is returned with the Bearer token set.
+
+    :param username: The user to login
+    :param password: The password of this user
+    :raises UnauthorizedException: Raised when the login failed or if server authentication is not enabled
+    """
+
+
+@typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
+def list_users() -> List[model.User]:
+    """List all users
+
+    :return: A list of all users"""
+
+
+@typedmethod(path="/user/<username>", operation="DELETE", client_types=[ClientType.api], api_version=2)
+def delete_user(username: str) -> None:
+    """Delete a user from the system with given username.
+
+    :param username: The username to delete
+    :raises NotFound: Raised when the user does not exist
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
+
+
+@typedmethod(path="/user", operation="POST", client_types=[ClientType.api], api_version=2)
+def add_user(username: str, password: str) -> model.User:
+    """Add a new user to the system
+
+    :param username: The username of the new user. The username cannot be an empty string.
+    :param password: The password of this new user. The password should be at least 8 characters long.
+    :raises Conflict: Raised when there is already a user with this user_name
+    :raises BadRequest: Raised when server authentication is not enabled
+    """
+
+
+@typedmethod(path="/user/<username>/password", operation="PATCH", client_types=[ClientType.api], api_version=2)
+def set_password(username: str, password: str) -> None:
+    """Change the password of a user
+
+    :param username: The username of the user
+    :param password: The password of this new user. The password should be at least 8 characters long.
+    :raises NotFound: Raised when the user does not exist
+    :raises BadRequest: Raised when server authentication is not enabled
     """

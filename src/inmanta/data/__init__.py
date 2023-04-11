@@ -70,7 +70,7 @@ from crontab import CronTab
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
+from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -1554,7 +1554,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = f"INSERT INTO {self.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})"
+        query = (
+            f"INSERT INTO {self.table_name()} "
+            f"({column_names_as_sql_string}) "
+            f"VALUES ({values_as_parameterize_sql_string})"
+        )
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
@@ -1618,7 +1622,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
-            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
+            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
@@ -2066,7 +2070,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @staticmethod
     def _combine_filter_statements(statements_and_values: Iterable[Tuple[str, List[object]]]) -> Tuple[str, List[object]]:
-        statements: Tuple[str]
+        filter_statements: Tuple[str]
         values: Tuple[List[object]]
         filter_statements, values = zip(*statements_and_values)  # type: ignore
         return (
@@ -2471,11 +2475,11 @@ class Environment(BaseDocument):
         ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
             name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
             typ="enum",
-            default=const.AgentTriggerMethod.push_full_deploy.name,
+            default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use. "
-            f"If {PUSH_ON_AUTO_DEPLOY} is enabled, "
-            f"{AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} overrides this setting",
+            doc="The agent trigger method to use when no specific method is specified in the API call. "
+            "This determines the behavior of the 'Promote' button. "
+            f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
@@ -2887,6 +2891,7 @@ class Parameter(BaseDocument):
             query += " AND metadata @> $" + str(query_param_index) + "::jsonb"
             dict_value = {key: value}
             values.append(cls._get_value(dict_value))
+        query += " ORDER BY name"
         result = await cls.select_query(query, values)
         return result
 
@@ -2941,6 +2946,46 @@ class UnknownParameter(BaseDocument):
             metadata=self.metadata,
             resolved=self.resolved,
         )
+
+    @classmethod
+    async def get_unknowns_to_copy_in_partial_compile(
+        cls,
+        environment: uuid.UUID,
+        source_version: int,
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
+        rids_in_partial_compile: abc.Set[ResourceIdStr],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> List["UnknownParameter"]:
+        """
+        Returns a subset of the unknowns in source_version of environment. It returns the unknowns that:
+            * Are not associated with a resource
+            * Are associated with a resource that:
+               - don't belong to the resource set updated_resource_sets and deleted_resource_sets
+               - and, don't have a resource_id in rids_in_partial_compile (An unknown might belong to a shared resource that
+                 is not exported by the partial compile)
+        """
+        query = f"""
+            SELECT u.*
+            FROM {cls.table_name()} AS u LEFT JOIN {Resource.table_name()} AS r
+                ON u.environment=r.environment AND u.version=r.model AND u.resource_id=r.resource_id
+            WHERE
+                u.environment=$1
+                AND u.version=$2
+                AND u.resolved IS FALSE
+                AND (r.resource_id IS NULL OR NOT r.resource_id=ANY($4))
+                AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(
+                query,
+                environment,
+                source_version,
+                list(updated_resource_sets | deleted_resource_sets),
+                list(rids_in_partial_compile),
+            )
+            return [cls(from_postgres=True, **uk) for uk in result]
 
 
 class AgentProcess(BaseDocument):
@@ -3122,7 +3167,6 @@ class AgentInstance(BaseDocument):
         """
         if not endpoints:
             return
-
         async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""
@@ -3333,7 +3377,7 @@ class Agent(BaseDocument):
                                            primary. If the session id is None, the Agent doesn't have a primary anymore.
         :param now: Timestamp of this failover
         """
-        for (endpoint, sid) in endpoints_with_new_primary:
+        for endpoint, sid in endpoints_with_new_primary:
             # Lock mode is required because we will update in this transaction
             # Deadlocks with cleanup otherwise
             agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
@@ -3356,6 +3400,31 @@ class Agent(BaseDocument):
                 SET id_primary=NULL
                 WHERE id_primary IS NOT NULL
         """
+        await cls._execute_query(query, connection=connection)
+
+    @classmethod
+    async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        query = """
+DELETE FROM public.agent AS a
+WHERE (environment, name) NOT IN (
+    SELECT DISTINCT environment_id as environment, agent as name
+    FROM (
+        -- agent is in the agent map
+        SELECT e.id as environment_id, map.key as agent
+        FROM public.environment e
+        CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
+    ) in_agent_map
+)
+-- have no primary ID set (that are down)
+AND id_primary IS NULL
+-- not used by any version
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.resource AS re
+    WHERE a.environment=re.environment
+    AND a.name=re.agent
+);
+"""
         await cls._execute_query(query, connection=connection)
 
 
@@ -4238,6 +4307,11 @@ class Resource(BaseDocument):
             record["attributes"]["requires"] = [
                 resources.Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]
             ]
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in record["attributes"]:
+            record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     @classmethod
@@ -4527,6 +4601,28 @@ class Resource(BaseDocument):
 
         return cls(**attr)
 
+    def copy_for_partial_compile(self, new_version: int) -> "Resource":
+        """
+        Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
+        The new instance will have the given version.
+        """
+        new_resource_state = ResourceState.undefined if self.status is ResourceState.undefined else ResourceState.available
+        return Resource(
+            environment=self.environment,
+            model=new_version,
+            resource_id=self.resource_id,
+            resource_type=self.resource_type,
+            resource_id_value=self.resource_id_value,
+            agent=self.agent,
+            last_deploy=None,
+            attributes=self.attributes.copy(),
+            attribute_hash=self.attribute_hash,
+            status=new_resource_state,
+            last_non_deploying_status=const.NonDeployingResourceState[new_resource_state.name],
+            resource_set=self.resource_set,
+            provides=self.provides,
+        )
+
     @classmethod
     async def get_deleted_resources(
         cls,
@@ -4638,8 +4734,9 @@ class Resource(BaseDocument):
 
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
-        first.model as first_model, latest.resource_id as latest_resource_id, latest.resource_type,
-        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status
+        first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
+        latest.resource_type, latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes,
+        latest.status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
@@ -4665,6 +4762,11 @@ class Resource(BaseDocument):
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
         attributes = json.loads(record["attributes"])
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in attributes:
+            attributes["version"] = record["latest_model"]
         requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
 
         # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
@@ -4728,6 +4830,95 @@ class Resource(BaseDocument):
             results[row["status"]] = row["count"]
         return m.ResourceDeploySummary.create_from_db_result(results)
 
+    @classmethod
+    async def copy_resources_from_unchanged_resource_set(
+        cls,
+        environment: uuid.UUID,
+        source_version: int,
+        destination_version: int,
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> abc.Set[m.ResourceIdStr]:
+        """
+        Copy the resources that belong to an unchanged resource set of a partial compile,
+        from source_version to destination_version. This method doesn't copy shared resources.
+        """
+        query = f"""
+            INSERT INTO {cls.table_name()}(
+                environment,
+                model,
+                resource_id,
+                resource_type,
+                resource_id_value,
+                agent,
+                status,
+                attributes,
+                attribute_hash,
+                resource_set,
+                provides
+            )(
+                SELECT
+                    r.environment,
+                    $3,
+                    r.resource_id,
+                    r.resource_type,
+                    r.resource_id_value,
+                    r.agent,
+                    (
+                        CASE WHEN r.status='undefined'::resourcestate
+                        THEN 'undefined'::resourcestate
+                        ELSE 'available'::resourcestate
+                        END
+                    ) AS status,
+                    r.attributes AS attributes,
+                    r.attribute_hash,
+                    r.resource_set,
+                    r.provides
+                FROM {cls.table_name()} AS r
+                WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
+            )
+            RETURNING resource_id
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(
+                query,
+                environment,
+                source_version,
+                destination_version,
+                updated_resource_sets | deleted_resource_sets,
+            )
+            return {record["resource_id"] for record in result}
+
+    @classmethod
+    async def get_resources_in_resource_sets(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        resource_sets: abc.Set[str],
+        include_shared_resources: bool = False,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> abc.Mapping[ResourceIdStr, "Resource"]:
+        """
+        Returns the resource in the given environment and version that belong to any of the given resource sets.
+        This method also returns the resources in the share resource set iff the include_shared_resources boolean
+        is set to True.
+        """
+        if include_shared_resources:
+            resource_set_filter_statement = "(r.resource_set IS NULL OR r.resource_set=ANY($3))"
+        else:
+            resource_set_filter_statement = "r.resource_set=ANY($3)"
+        query = f"""
+            SELECT *
+            FROM {cls.table_name()} AS r
+            WHERE r.environment=$1 AND r.model=$2 AND {resource_set_filter_statement}
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(query, environment, version, resource_sets)
+            return {record["resource_id"]: cls(from_postgres=True, **record) for record in result}
+
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
@@ -4748,6 +4939,14 @@ class Resource(BaseDocument):
         self.make_hash()
         await super(Resource, self).update_fields(connection=connection, **kwargs)
 
+    def get_requires(self) -> abc.Sequence[ResourceIdStr]:
+        """
+        Returns the content of the requires field in the attributes.
+        """
+        if "requires" not in self.attributes:
+            return []
+        return list(self.attributes["requires"])
+
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
@@ -4760,6 +4959,12 @@ class Resource(BaseDocument):
         if "requires" in self.attributes:
             version = self.model
             attributes["requires"] = [resources.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
+
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in self.attributes:
+            attributes["version"] = self.model
 
         return m.Resource(
             environment=self.environment,
@@ -4790,6 +4995,9 @@ class ConfigurationModel(BaseDocument):
     :param result: The result of the deployment. Success or error.
     :param version_info: Version metadata
     :param total: The total number of resources
+    :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
+                                             partial compile. In other words, the value is True iff no cross resource set
+                                             dependencies exist between the resources.
     """
 
     __primary_key__ = ("version", "environment")
@@ -4803,6 +5011,7 @@ class ConfigurationModel(BaseDocument):
     deployed: bool = False
     result: const.VersionState = const.VersionState.pending
     version_info: Optional[Dict[str, Any]] = None
+    is_suitable_for_partial_compiles: bool
 
     total: int = 0
 
@@ -4826,6 +5035,129 @@ class ConfigurationModel(BaseDocument):
         if self.deployed:
             return self.total
         return self._done
+
+    @classmethod
+    async def create_for_partial_compile(
+        cls,
+        env_id: uuid.UUID,
+        version: int,
+        total: int,
+        version_info: Optional[JsonType],
+        undeployable: abc.Sequence[ResourceIdStr],
+        skipped_for_undeployable: abc.Sequence[ResourceIdStr],
+        partial_base: int,
+        rids_in_partial_compile: abc.Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
+    ) -> "ConfigurationModel":
+        """
+        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigururationModel will
+        contain all the undeployables and skipped_for_undeployables present in the partial_base version that are not part of
+        the partial compile, i.e. not present in rids_in_partial_compile.
+        """
+        query = f"""
+            WITH base_version_exists AS (
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM {cls.table_name()} AS c1
+                    WHERE c1.environment=$1 AND c1.version=$8
+                ) AS base_version_found
+            ),
+            rids_undeployable_base_version AS (
+                SELECT DISTINCT unnest(c2.undeployable) AS rid
+                FROM {cls.table_name()} AS c2
+                WHERE c2.environment=$1 AND c2.version=$8
+            ),
+            rids_skipped_for_undeployable_base_version AS (
+                SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
+                FROM {cls.table_name()} AS c3
+                WHERE c3.environment=$1 AND c3.version=$8
+            )
+            INSERT INTO {cls.table_name()}(
+                environment,
+                version,
+                date,
+                total,
+                version_info,
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                is_suitable_for_partial_compiles
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                (
+                    SELECT array_agg(rid)
+                    FROM (
+                        -- Undeployables in previous version of the model that are not part of the partial compile.
+                        (
+                            SELECT rid
+                            FROM rids_undeployable_base_version AS undepl
+                            WHERE NOT undepl.rid=ANY($9)
+                        )
+                        UNION
+                        -- Undeployables part of the partial compile.
+                        (
+                            SELECT DISTINCT rid FROM unnest($6::varchar[]) AS undeploy_filtered_new(rid)
+                        )
+                    ) AS all_undeployable
+                ),
+                (
+                    SELECT array_agg(rid)
+                    FROM (
+                        -- skipped_for_undeployables in previous version of the model that are not part of the partial
+                        -- compile.
+                        (
+                            SELECT skipped.rid
+                            FROM rids_skipped_for_undeployable_base_version AS skipped
+                            WHERE NOT skipped.rid=ANY($9)
+                        )
+                        UNION
+                        -- Skipped_for_undeployables part of the partial compile.
+                        (
+                            SELECT DISTINCT rid FROM unnest($7::varchar[]) AS skipped_filtered_new(rid)
+                        )
+                    ) AS all_skipped
+                ),
+                $8,
+                True
+            )
+            RETURNING
+                (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
+                environment,
+                version,
+                date,
+                total,
+                version_info,
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                released,
+                deployed,
+                result,
+                is_suitable_for_partial_compiles
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetchrow(
+                query,
+                env_id,
+                version,
+                datetime.datetime.now().astimezone(),
+                total,
+                cls._get_value(version_info),
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                list(rids_in_partial_compile),
+            )
+            # Make mypy happy
+            assert result is not None
+            if not result["base_version_found"]:
+                raise Exception(f"Model with version {partial_base} not found in environment {env_id}")
+            fields = {name: val for name, val in result.items() if name != "base_version_found"}
+            return cls(from_postgres=True, **fields)
 
     @classmethod
     async def _get_status_field(cls, environment: uuid.UUID, values: str) -> Dict[str, str]:
@@ -5122,7 +5454,7 @@ class ConfigurationModel(BaseDocument):
 
         for version in versions:
             # todo in next version
-            next = []
+            next: list[abc.Mapping[str, object]] = []
 
             vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
@@ -5245,6 +5577,27 @@ class ConfigurationModel(BaseDocument):
             values=values,
         )
         return query_builder.build()
+
+    async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Make the total field of this ConfigurationModel in-line with the number
+        of resources that are associated with it.
+        """
+        query = f"""
+            UPDATE {self.table_name()} AS c_outer
+            SET total=(
+                SELECT COUNT(*)
+                FROM {self.table_name()} AS c INNER JOIN {Resource.table_name()} AS r
+                     ON c.environment = r.environment AND c.version=r.model
+                WHERE c.environment=$1 AND c.version=$2
+            )
+            WHERE c_outer.environment=$1 AND c_outer.version=$2
+            RETURNING total
+        """
+        new_total = await self._fetchval(query, self.environment, self.version, connection=connection)
+        if new_total is None:
+            raise KeyError(f"Configurationmodel {self.version} in environment {self.environment} was deleted.")
+        self.total = new_total
 
 
 class Code(BaseDocument):
@@ -5507,6 +5860,27 @@ class EnvironmentMetricsTimer(BaseDocument):
     __primary_key__ = ("environment", "metric_name", "category", "timestamp")
 
 
+class User(BaseDocument):
+    """A user that can authenticate against inmanta"""
+
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    username: str
+    password_hash: str
+    auth_method: AuthMethod
+
+    @classmethod
+    def table_name(cls) -> str:
+        """
+        Return the name of table. we call it inmanta_user to differentiate it from the pg user table.
+        """
+        return "inmanta_user"
+
+    def to_dao(self) -> m.User:
+        return m.User(username=self.username, auth_method=self.auth_method)
+
+
 _classes = [
     Project,
     Environment,
@@ -5525,6 +5899,7 @@ _classes = [
     Notification,
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
+    User,
 ]
 
 

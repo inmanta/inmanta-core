@@ -46,6 +46,7 @@ async def env_with_logs(client, server, environment: str):
             total=1,
             released=i != 1 and i != 9,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         cm_time_idx += 1
         await cm.insert()
@@ -300,7 +301,6 @@ async def test_filter_validation(server, client, filter, expected_status, env_wi
 
 
 async def test_log_without_kwargs(server, client, environment: str):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,
@@ -308,6 +308,7 @@ async def test_log_without_kwargs(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     res1 = data.Resource.new(
@@ -357,7 +358,6 @@ async def test_log_without_kwargs(server, client, environment: str):
 
 
 async def test_log_nested_kwargs(server, client, environment: str):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,
@@ -365,6 +365,7 @@ async def test_log_nested_kwargs(server, client, environment: str):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     res1 = data.Resource.new(

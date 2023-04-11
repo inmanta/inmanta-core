@@ -22,11 +22,13 @@ import logging
 import uuid
 from collections import abc
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
+import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
+    AmbiguousTypeException,
     AttributeReferenceAnchor,
     DuplicateException,
     Locatable,
@@ -36,6 +38,7 @@ from inmanta.ast import (
     NotFoundException,
     Range,
     RuntimeException,
+    TypeNotFoundException,
     TypeReferenceAnchor,
     TypingException,
 )
@@ -176,11 +179,11 @@ class GradualFor(ResultCollector[object]):
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen = set()  # type: Set[int]
+        self.seen: set[int] = set()
 
-    def receive_result(self, value: object, location: ResultVariable) -> None:
+    def receive_result(self, value: object, location: ResultVariable) -> bool:
         if id(value) in self.seen:
-            return
+            return False
         self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
@@ -190,6 +193,7 @@ class GradualFor(ResultCollector[object]):
         assert isinstance(loopvar, ResultVariable)
         loopvar.set_value(value, self.stmt.location)
         xc.emit(self.queue)
+        return False
 
 
 class For(RequiresEmitStatement):
@@ -471,6 +475,7 @@ class Constructor(ExpressionStatement):
     __slots__ = (
         "class_type",
         "__attributes",
+        "__attribute_locations",
         "__wrapped_kwarg_attributes",
         "location",
         "type",
@@ -492,6 +497,7 @@ class Constructor(ExpressionStatement):
         super().__init__()
         self.class_type = class_type
         self.__attributes = {}  # type: Dict[str,ExpressionStatement]
+        self.__attribute_locations: Dict[str, LocatableString] = {}
         self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
@@ -520,16 +526,24 @@ class Constructor(ExpressionStatement):
         )
 
     def _normalize_rhs(self, index_attributes: abc.Set[str]) -> None:
-        for (k, v) in self.__attributes.items():
+        assert self.type is not None  # Make mypy happy
+        for k, v in self.__attributes.items():
+            attr = self.type.get_attribute(k)
+            if attr is None:
+                raise TypingException(
+                    self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
+                )
+            type_hint = attr.get_type().get_base_type()
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
-            v.normalize(lhs_attribute=AttributeAssignmentLHS(self._self_ref, k) if k not in index_attributes else None)
+            v.normalize(
+                lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
+            )
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        mytype: "Entity" = self.namespace.get_type(self.class_type)
-        self.type = mytype
+        self.type = self._resolve_type(lhs_attribute)
 
         inindex: abc.MutableSet[str] = set()
 
@@ -557,10 +571,12 @@ class Constructor(ExpressionStatement):
 
         self._normalize_rhs(inindex)
 
-        for (k, v) in all_attributes.items():
+        for k, v in all_attributes.items():
             attribute = self.type.get_attribute(k)
             if attribute is None:
-                raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+                raise TypingException(
+                    self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
+                )
             if k not in inindex:
                 self._indirect_attributes[k] = v
             else:
@@ -569,6 +585,64 @@ class Constructor(ExpressionStatement):
         self._own_eager_promises = list(
             chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
+
+    def _resolve_type(self, lhs_attribute: Optional[AttributeAssignmentLHS]) -> "Entity":
+        """Type hint handling"""
+
+        # First normal resolution
+        resolver_failure: Optional[TypeNotFoundException] = None
+        local_type: "Optional[Entity]" = None
+        try:
+            tp = self.namespace.get_type(self.class_type)
+            assert isinstance(
+                tp, inmanta.ast.entity.Entity
+            ), "Should not happen because all entity types start with a capital letter"
+            local_type = tp
+        except TypeNotFoundException as e:
+            resolver_failure = e
+
+        # Do we have hint context?
+        # We only work with unqualified names for hinting
+        if lhs_attribute is not None and lhs_attribute.type_hint is not None:
+            # We can do type hinting here
+            type_hint = lhs_attribute.type_hint
+            if not isinstance(type_hint, inmanta.ast.entity.Entity):
+                # This is a type error, we are a constructor for an entity but we should not be!
+                raise TypingException(
+                    self,
+                    f"Can not assign a value of type {self.class_type} "
+                    f"to a variable of type {str(lhs_attribute.type_hint)}",
+                )
+            elif local_type is not None:
+                # always prefer local type, raise an exception if it is of an incorrect type
+                if not type_hint.is_subclass(local_type, strict=False):
+                    raise TypingException(
+                        self,
+                        f"Can not assign a value of type {str(local_type)} "
+                        f"to a variable of type {str(lhs_attribute.type_hint)}",
+                    )
+                return local_type
+            elif "::" not in str(self.class_type):
+                # Consider the hint type
+                base_types = [type_hint]
+                # Find all correct types with the matching unqualified name
+                candidates = {
+                    entity
+                    for entity in chain(base_types, type_hint.get_all_child_entities())
+                    if entity.name == str(self.class_type)
+                }
+                if len(candidates) > 1:
+                    # To many options, inheritance may cause this to break a working model due to dependency update
+                    raise AmbiguousTypeException(self.class_type, list(candidates))
+                elif len(candidates) == 1:
+                    # One, nice
+                    return next(iter(candidates))
+        elif local_type is not None:
+            return local_type
+
+        # No matching types found: pretend nothing happened, reraise original exception
+        assert resolver_failure is not None  # make mypy happy
+        raise resolver_failure
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(
@@ -605,7 +679,7 @@ class Constructor(ExpressionStatement):
         if graph is not None:
             node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
             # TODO: also add wrapped_kwargs
-            for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
+            for k, v in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
                 node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
         return requires
@@ -623,7 +697,7 @@ class Constructor(ExpressionStatement):
         # kwargs
         kwarg_attrs: dict[str, object] = {}
         for kwargs in self.wrapped_kwargs:
-            for (k, v) in kwargs.execute(requires, resolver, queue):
+            for k, v in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
                     raise RuntimeException(
                         self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
@@ -654,7 +728,7 @@ class Constructor(ExpressionStatement):
             if (
                 inverse is not None
                 and inverse.name not in self._direct_attributes
-                # in case of a double set, prefer kwargs: double set will be raised when the bidirictional relation is set by
+                # in case of a double set, prefer kwargs: double set will be raised when the bidirectional relation is set by
                 # the LHS
                 and inverse.name not in kwarg_attrs
                 and inverse.name in chain.from_iterable(type_class.get_indices())
@@ -668,7 +742,7 @@ class Constructor(ExpressionStatement):
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
         return late_args
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
         """
         Evaluate this statement.
         """
@@ -776,6 +850,7 @@ class Constructor(ExpressionStatement):
         name = str(lname)
         if name not in self.__attributes:
             self.__attributes[name] = value
+            self.__attribute_locations[name] = lname
             self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
             self.anchors.extend(value.get_anchors())
         else:

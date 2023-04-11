@@ -32,6 +32,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.entity import Entity
     from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
@@ -142,6 +143,33 @@ class Range(Location):
         return False
 
 
+class AnchorTarget(object):
+    """AnchorTarget is used purely at the periphery of the compiler"""
+
+    __slots__ = ("location", "docstring")
+
+    def __init__(
+        self,
+        location: Location,
+        docstring: Optional[str] = None,
+    ) -> None:
+        """
+        Create a new AnchorTarget instance.
+        :param location: the location of the target of the anchor
+        :param docstring: the docstring attached to the target
+        """
+        self.location = location
+        self.docstring = docstring
+
+
+class WithComment(object):
+    """
+    Mixin class for AST nodes that can have a comment attached to them.
+    """
+
+    comment: Optional[str] = None
+
+
 class Locatable(object):
     __slots__ = ("_location",)
 
@@ -152,7 +180,7 @@ class Locatable(object):
         assert location is not None and location.lnr > 0
         self._location = location
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Optional[Location]:
         assert self._location is not None
         return self._location
 
@@ -212,7 +240,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         raise NotImplementedError()
 
 
@@ -222,9 +250,13 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
-        return t.get_location()
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class AttributeReferenceAnchor(Anchor):
@@ -234,13 +266,17 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         # assert isinstance(instancetype, Entity)
         entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
-        return entity_attribute.get_location()
+        location = entity_attribute.get_location()
+        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class Namespaced(Locatable):
@@ -321,16 +357,16 @@ class Namespace(Namespaced):
                 raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
 
+    def lookup_namespace(self, name: str) -> Import:
+        if name not in self.visible_namespaces:
+            raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
+        return self.visible_namespaces[name]
+
     def lookup(self, name: str) -> "Union[Type, ResultVariable]":
         if "::" not in name:
             return self.get_scope().direct_lookup(name)
-
         parts = name.rsplit("::", 1)
-
-        if parts[0] not in self.visible_namespaces:
-            raise NotFoundException(None, name, "Variable %s not found" % parts[0])
-
-        return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
+        return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
     def get_type(self, typ: LocatableString) -> "Type":
         name: str = str(typ)
@@ -633,6 +669,23 @@ class TypeNotFoundException(RuntimeException):
 
     def importantance(self) -> int:
         return 20
+
+
+class AmbiguousTypeException(TypeNotFoundException):
+    """Exception raised when a type is referenced that does not exist"""
+
+    def __init__(self, type: LocatableString, candidates: List["Entity"]) -> None:
+        candidates = sorted(candidates, key=lambda x: x.get_full_name())
+        RuntimeException.__init__(
+            self,
+            stmt=None,
+            msg="Could not determine namespace for type %s. %d possible candidates exists: [%s]."
+            " To resolve this, use the fully qualified name instead of the short name."
+            % (type, len(candidates), ", ".join([x.get_full_name() for x in candidates])),
+        )
+        self.candidates = candidates
+        self.type = type
+        self.set_location(type.get_location())
 
 
 def stringify_exception(exn: Exception) -> str:

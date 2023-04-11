@@ -102,7 +102,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
             minimal = sorted(minimal, key=keyfunc)
             actual = sorted(actual, key=keyfunc)
-        for (m, a) in zip(minimal, actual):
+        for m, a in zip(minimal, actual):
             assert_equal_ish(m, a, sortby)
     elif minimal is UNKWN:
         return
@@ -237,7 +237,7 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
     Assert there are no warning, except from the list of loggers to allow
     """
     for record in caplog.records:
-        assert record.levelname != "WARNING" or (record.name in loggers_to_allow)
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
 
 
 def configure(unused_tcp_port, database_name, database_port):

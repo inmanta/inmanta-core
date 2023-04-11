@@ -1,0 +1,12 @@
+entity A:
+end
+
+A.b [1] -- B
+
+entity B:
+    int n = 0
+end
+
+
+implement A using std::none
+implement B using std::none

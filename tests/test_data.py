@@ -188,7 +188,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         await agent.insert()
 
         version = int(time.time())
-        cm = data.ConfigurationModel(version=version, environment=env.id)
+        cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
         await cm.insert()
 
         resource_ids = []
@@ -222,7 +222,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         assert func(await data.AgentInstance.get_by_id(agent_instances[0].id))
         assert func(await data.AgentInstance.get_by_id(agent_instances[1].id))
         assert func(await data.Agent.get_one(environment=agent.environment, name=agent.name))
-        for (environment, resource_version_id) in resource_ids:
+        for environment, resource_version_id in resource_ids:
             id = Id.parse_id(resource_version_id)
             assert func(await data.Resource.get_one(environment=environment, resource_id=id.resource_str(), model=id.version))
         assert func(await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version))
@@ -300,7 +300,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     await agent.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(version=version, environment=env.id)
+    cm = data.ConfigurationModel(version=version, environment=env.id, is_suitable_for_partial_compiles=False)
     await cm.insert()
 
     resource_ids = []
@@ -391,7 +391,7 @@ async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    for (deprecated_option, new_option) in [
+    for deprecated_option, new_option in [
         (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL),
         (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME),
     ]:
@@ -725,7 +725,14 @@ async def test_config_model(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     # create resources
@@ -747,7 +754,12 @@ async def test_model_list(init_dataclasses_and_load_schema):
 
     for version in range(1, 20):
         cm = data.ConfigurationModel(
-            environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={}
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=0,
+            version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -780,7 +792,12 @@ async def test_model_get_latest_version(init_dataclasses_and_load_schema):
     cms = []
     for version in range(1, 5):
         cm = data.ConfigurationModel(
-            environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={}
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=0,
+            version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         cms.append(cm)
@@ -805,7 +822,14 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     assert cm.done == 0
@@ -843,7 +867,14 @@ async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resourc
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     assert cm.done == 0
@@ -883,7 +914,14 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
 
     for env in [env1, env2]:
         for i in range(2):
-            cm = data.ConfigurationModel(environment=env.id, version=i, date=datetime.datetime.now(), total=0, version_info={})
+            cm = data.ConfigurationModel(
+                environment=env.id,
+                version=i,
+                date=datetime.datetime.now(),
+                total=0,
+                version_info={},
+                is_suitable_for_partial_compiles=False,
+            )
             await cm.insert()
 
             for r in range(3):
@@ -924,7 +962,9 @@ async def test_model_serialization(init_dataclasses_and_load_schema):
 
     version = int(time.time())
     now = datetime.datetime.now().astimezone()
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=now, total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id, version=version, date=now, total=1, version_info={}, is_suitable_for_partial_compiles=False
+    )
     await cm.insert()
 
     assert cm.done == 0
@@ -961,7 +1001,14 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=0,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     path = "/etc/file"
@@ -996,12 +1043,22 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
     await env_prod.insert()
 
     now = datetime.datetime.now()
-    await data.ConfigurationModel(environment=env_dev.id, version=4, total=0, date=now, released=True).insert()
-    await data.ConfigurationModel(environment=env_dev.id, version=7, total=0, date=now, released=True).insert()
-    await data.ConfigurationModel(environment=env_dev.id, version=9, total=0, date=now, released=False).insert()
+    await data.ConfigurationModel(
+        environment=env_dev.id, version=4, total=0, date=now, released=True, is_suitable_for_partial_compiles=False
+    ).insert()
+    await data.ConfigurationModel(
+        environment=env_dev.id, version=7, total=0, date=now, released=True, is_suitable_for_partial_compiles=False
+    ).insert()
+    await data.ConfigurationModel(
+        environment=env_dev.id, version=9, total=0, date=now, released=False, is_suitable_for_partial_compiles=False
+    ).insert()
 
-    await data.ConfigurationModel(environment=env_prod.id, version=15, total=0, date=now, released=False).insert()
-    await data.ConfigurationModel(environment=env_prod.id, version=11, total=0, date=now, released=False).insert()
+    await data.ConfigurationModel(
+        environment=env_prod.id, version=15, total=0, date=now, released=False, is_suitable_for_partial_compiles=False
+    ).insert()
+    await data.ConfigurationModel(
+        environment=env_prod.id, version=11, total=0, date=now, released=False, is_suitable_for_partial_compiles=False
+    ).insert()
 
     assert await data.ConfigurationModel.get_version_nr_latest_version(env_dev.id) == 7
     assert await data.ConfigurationModel.get_version_nr_latest_version(env_prod.id) is None
@@ -1027,7 +1084,14 @@ async def test_mark_done(init_dataclasses_and_load_schema, resource_state, versi
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=2, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=2,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     assert cm.done == 0
@@ -1103,6 +1167,7 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1133,6 +1198,7 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
             version_info={},
             released=False,
             deployed=False,
+            is_suitable_for_partial_compiles=False,
         )
         await cm2.insert()
 
@@ -1146,7 +1212,14 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
 
     # model 3
     version += 1
-    cm3 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={})
+    cm3 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=0,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm3.insert()
 
     to_purge = await data.Resource.get_deleted_resources(env.id, version, set())
@@ -1173,6 +1246,7 @@ async def test_issue_422(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1194,6 +1268,7 @@ async def test_issue_422(init_dataclasses_and_load_schema):
         version_info={},
         released=False,
         deployed=False,
+        is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
 
@@ -1207,7 +1282,14 @@ async def test_issue_422(init_dataclasses_and_load_schema):
 
     # model 3
     version += 1
-    cm3 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={})
+    cm3 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=0,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm3.insert()
 
     to_purge = await data.Resource.get_deleted_resources(env.id, version, set())
@@ -1236,6 +1318,7 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
         version_info={},
         released=False,
         deployed=False,
+        is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
     res11 = data.Resource.new(
@@ -1255,6 +1338,7 @@ async def test_get_latest_resource(init_dataclasses_and_load_schema, postgresql_
         version_info={},
         released=False,
         deployed=False,
+        is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
     res12 = data.Resource.new(
@@ -1296,6 +1380,7 @@ async def test_get_resources(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1338,6 +1423,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     for i in range(1, 11):
@@ -1360,6 +1446,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     for i in range(11, 21):
@@ -1381,6 +1468,7 @@ async def test_model_get_resources_for_version(init_dataclasses_and_load_schema)
             version_info={},
             released=True,
             deployed=True,
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -1430,6 +1518,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
             version_info={},
             released=True,
             deployed=True,
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         for i in range(1, 3):
@@ -1462,6 +1551,7 @@ async def test_get_resources_in_latest_version(init_dataclasses_and_load_schema)
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     resources = await data.Resource.get_resources_in_latest_version(
@@ -1478,13 +1568,23 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=3, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=3,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     async def insert_resource(env_id, version, agent_name, path, status):
         resource_version_id = f"std::File[{agent_name},path={path}],v={version}"
         resource = data.Resource.new(
-            environment=env_id, resource_version_id=resource_version_id, attributes={"path": path}, status=status
+            environment=env_id,
+            resource_version_id=resource_version_id,
+            attributes={"path": path, "version": version},
+            status=status,
         )
         await resource.insert()
 
@@ -1496,7 +1596,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     assert len(result) == 3
     assert sorted([r.agent for r in result]) == ["agent1", "agent1", "agent2"]
     for r in result:
-        assert len(r.attributes) == 1
+        assert len(r.attributes) == 2
 
     result = await data.Resource.get_resources_for_version(env.id, version, agent="agent2")
     assert len(result) == 1
@@ -1506,7 +1606,7 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
     assert len(result) == 3
     assert sorted([r["agent"] for r in result]) == ["agent1", "agent1", "agent2"]
     for r in result:
-        assert len(r["attributes"]) == 1
+        assert len(r["attributes"]) == 2
 
 
 async def test_escaped_resources(init_dataclasses_and_load_schema):
@@ -1525,6 +1625,7 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1560,6 +1661,7 @@ async def test_resource_provides(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1610,6 +1712,7 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
             version_info={},
             released=True,
             deployed=True,
+            is_suitable_for_partial_compiles=False,
         )
         await cm1.insert()
 
@@ -1672,6 +1775,7 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm1.insert()
 
@@ -1702,6 +1806,7 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         version_info={},
         released=False,
         deployed=False,
+        is_suitable_for_partial_compiles=False,
     )
     await cm2.insert()
     res21 = data.Resource.new(
@@ -1729,6 +1834,7 @@ async def test_resources_report(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm3.insert()
 
@@ -1790,6 +1896,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1868,7 +1975,12 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
 
     version = int(time.time())
     cm = data.ConfigurationModel(
-        environment=env.id, version=version, date=datetime.datetime.now().astimezone(), total=1, version_info={}
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now().astimezone(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1956,7 +2068,14 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = 1
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     res1 = data.Resource.new(
@@ -1990,7 +2109,14 @@ async def test_code(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     code1 = data.Code(environment=env.id, resource="std::File", version=version, source_refs={"ref": "ref"})
@@ -2000,7 +2126,14 @@ async def test_code(init_dataclasses_and_load_schema):
     await code2.insert()
 
     version2 = version + 1
-    cm2 = data.ConfigurationModel(environment=env.id, version=version2, date=datetime.datetime.now(), total=1, version_info={})
+    cm2 = data.ConfigurationModel(
+        environment=env.id,
+        version=version2,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm2.insert()
 
     code3 = data.Code(environment=env.id, resource="std::Directory", version=version2, source_refs={})
@@ -2009,7 +2142,7 @@ async def test_code(init_dataclasses_and_load_schema):
     # Test behavior of copy_versions. Create second environment to verify the method is restricted to the first one
     env2 = data.Environment(name="dev2", project=project.id, repo_url="", repo_branch="")
     await env2.insert()
-    await data.ConfigurationModel(environment=env2.id, version=code3.version).insert()
+    await data.ConfigurationModel(environment=env2.id, version=code3.version, is_suitable_for_partial_compiles=False).insert()
     await data.Code(environment=env2.id, resource="std::File", version=code3.version, source_refs={}).insert()
     await data.Code.copy_versions(env.id, code3.version, code3.version + 1)
 
@@ -2132,7 +2265,14 @@ async def test_dryrun(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = 1
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     dryrun = await data.DryRun.create(env.id, version, 10, 5)
@@ -2335,6 +2475,9 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
     # Join tables on resource and resource action is not in the classes list
     assert len(table_names_in_classes_list) + 2 == len(table_names_in_database)
     for item in table_names_in_classes_list:
+        # The DB table name for the User class is named inmanta_user
+        if item == "user":
+            item = "inmanta_user"
         assert item in table_names_in_database
 
 
@@ -2354,6 +2497,7 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -2442,6 +2586,7 @@ async def test_resources_json(init_dataclasses_and_load_schema):
         version_info={},
         released=True,
         deployed=True,
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -2489,7 +2634,14 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
 
     # Add multiple versions of model
@@ -2500,6 +2652,7 @@ async def test_query_resource_actions_simple(init_dataclasses_and_load_schema):
             date=datetime.datetime.now() + datetime.timedelta(minutes=i),
             total=1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -2675,7 +2828,14 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    cm = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    )
     await cm.insert()
     # Add multiple versions of model
     for i in range(1, 12):
@@ -2685,6 +2845,7 @@ async def test_query_resource_actions_non_unique_timestamps(init_dataclasses_and
             date=datetime.datetime.now(),
             total=1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -2829,7 +2990,7 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
         assert expected_states == rvid_to_resource_state
 
     # V1
-    cm = data.ConfigurationModel(version=1, environment=env.id)
+    cm = data.ConfigurationModel(version=1, environment=env.id, is_suitable_for_partial_compiles=False)
     await cm.insert()
 
     rid_r1_v1 = "std::File[agent1,path=/etc/file1]"
@@ -2882,7 +3043,7 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     await assert_last_non_deploying_state(env.id, rvid_r4_v1, expected_states={})
 
     # V2
-    cm = data.ConfigurationModel(version=2, environment=env.id)
+    cm = data.ConfigurationModel(version=2, environment=env.id, is_suitable_for_partial_compiles=False)
     await cm.insert()
 
     rid_r2_v2 = "std::File[agent1,path=/etc/file2]"

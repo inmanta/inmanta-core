@@ -40,6 +40,7 @@ async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     ).insert()
 
     path = "/etc/file1"

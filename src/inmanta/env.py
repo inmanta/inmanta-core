@@ -109,7 +109,6 @@ class ConflictingRequirements(CompilerException):
     """
 
     def __init__(self, message: str, conflicts: Optional[Set[VersionConflict]] = None):
-
         CompilerException.__init__(self, msg=message)
         self.conflicts = conflicts
 
@@ -1008,11 +1007,11 @@ class ActiveEnv(PythonEnvironment):
             in_scope, constraints
         )
 
-        dist_info: DistInfoDistribution
+        working_set: abc.Iterable[DistInfoDistribution] = pkg_resources.working_set
         # add all requirements of all in scope packages installed in this environment
         all_constraints: Set[Requirement] = set(constraints if constraints is not None else []).union(
             requirement
-            for dist_info in pkg_resources.working_set
+            for dist_info in working_set
             if in_scope.fullmatch(dist_info.key)
             for requirement in dist_info.requires()
         )

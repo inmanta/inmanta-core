@@ -11,6 +11,7 @@ def unknown() -> "any":
 
 @plugin
 def length(string: "string") -> "number":
+    """returns the length of the string"""
     return len(string)
 
 

@@ -1,0 +1,9 @@
+---
+description: Improve the performance of the `put_partial` endpoint
+issue-nr: 4743
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: "It's required to run a full compile on any environment that uses partial compiles after upgrading the server."

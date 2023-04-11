@@ -29,6 +29,7 @@ from inmanta.ast import (
     Namespaced,
     OptionalValueException,
     RuntimeException,
+    WithComment,
 )
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -48,7 +49,7 @@ from inmanta.execute.runtime import (
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
-    from inmanta.ast.type import NamedType  # noqa: F401
+    from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
 
 
@@ -205,6 +206,7 @@ class RequiresEmitStatement(DynamicStatement):
 class AttributeAssignmentLHS:
     instance: "Reference"
     attribute: str
+    type_hint: Optional["Type"] = None
 
 
 class ExpressionStatement(RequiresEmitStatement):
@@ -572,16 +574,13 @@ class DefinitionStatement(Statement):
         Statement.__init__(self)
 
 
-class TypeDefinitionStatement(DefinitionStatement, Named):
-    comment: Optional[str]
-
+class TypeDefinitionStatement(DefinitionStatement, Named, WithComment):
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
         self.name = name
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
-        self.comment = None
 
     def register_types(self) -> Tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)

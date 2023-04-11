@@ -9,7 +9,7 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<40",
+    "cryptography>=36,<41",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.16",
     "email-validator~=1.0",
@@ -27,6 +27,7 @@ requires = [
     "pydantic~=1.0,!=1.9.0a1",
     "pyformance~=0.4",
     "PyJWT~=2.0",
+    "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
     "texttable~=1.0",
@@ -43,7 +44,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "8.2.0"
+version = "8.3.0"
 
 setup(
     version=version,
@@ -90,6 +91,7 @@ setup(
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
+            "inmanta-initial-user-setup = inmanta.user_setup:main",
         ],
     },
 )

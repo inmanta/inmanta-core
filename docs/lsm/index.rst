@@ -25,6 +25,7 @@
         allocation/*
         embedded_entities/*
         inter_service_relations/*
+        partial_compiles/partial_compiles.rst
         troubleshooting/*
         limitations/*
         lifecycle/*
@@ -211,6 +212,8 @@
     resource set for each service instance. To add resources to the instance's resource set, simply add them to its
     ``owned_resources`` relation and make sure to select the ``parents`` implementation for your service entities. LSM will then
     make sure to populate the resource set and to correctly trigger related compiles and exports.
+
+    For more advanced scenarios, refer to :ref:`the lsm partial compile section<partial_compile_lsm_sec>`.
 
     For a more generic introduction to partial compiles (without lsm), including resource set semantics, modelling guidelines
     and how to approach testing, refer to the generic :ref:`partial compiles<partial_compile>` section.

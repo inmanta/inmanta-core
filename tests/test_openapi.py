@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import enum
 import inspect
 import json
 from datetime import datetime
@@ -25,7 +26,7 @@ import pytest
 from openapi_spec_validator import openapi_v30_spec_validator
 from pydantic.networks import AnyHttpUrl, AnyUrl, PostgresDsn
 
-from inmanta.const import ResourceAction
+from inmanta.const import ClientType, ResourceAction
 from inmanta.data import model
 from inmanta.data.model import EnvironmentSetting
 from inmanta.protocol import method
@@ -37,7 +38,7 @@ from inmanta.protocol.openapi.converter import (
     OpenApiTypeConverter,
     OperationHandler,
 )
-from inmanta.protocol.openapi.model import MediaType, Schema
+from inmanta.protocol.openapi.model import MediaType, OpenApiDataTypes, ParameterType, Schema
 from inmanta.server import SLICE_SERVER
 from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
@@ -55,11 +56,11 @@ def feature_manager(server: Server) -> FeatureManager:
 
 @pytest.fixture(scope="function")
 def api_methods_fixture(clean_reset):
-    @method(path="/simpleoperation", client_types=["api", "agent"], envelope=True)
+    @method(path="/simpleoperation", client_types=[ClientType.api, ClientType.agent], envelope=True)
     def post_method() -> str:
         return ""
 
-    @method(path="/simpleoperation", client_types=["agent"], operation="GET")
+    @method(path="/simpleoperation", client_types=[ClientType.agent], operation="GET")
     def get_method():
         pass
 
@@ -68,7 +69,7 @@ def api_methods_fixture(clean_reset):
         "non_header": ArgOption(getter=lambda x, y: "test"),
     }
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options)
+    @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
         This is a brief description.
@@ -86,7 +87,13 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options, operation="GET")
+    @method(
+        path="/operation/<id>",
+        client_types=[ClientType.api, ClientType.agent],
+        envelope=True,
+        arg_options=arg_options,
+        operation="GET",
+    )
     def dummy_get_with_parameters(header: str, non_header: str, param: int, id: UUID) -> str:
         """
         This is a brief description.
@@ -104,11 +111,17 @@ def api_methods_fixture(clean_reset):
         """
         return ""
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options)
+    @method(path="/operation/<id>", client_types=[ClientType.api, ClientType.agent], envelope=True, arg_options=arg_options)
     def dummy_post_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
         return ""
 
-    @method(path="/operation/<id>", client_types=["api", "agent"], envelope=True, arg_options=arg_options, operation="GET")
+    @method(
+        path="/operation/<id>",
+        client_types=[ClientType.api, ClientType.agent],
+        envelope=True,
+        arg_options=arg_options,
+        operation="GET",
+    )
     def dummy_get_with_parameters_no_docstring(header: str, non_header: str, param: int, id: UUID) -> str:
         return ""
 
@@ -119,7 +132,7 @@ def api_methods_fixture(clean_reset):
 
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
-        client_types=["api", "agent"],
+        client_types=[ClientType.api, ClientType.agent],
         envelope=True,
         arg_options=arg_options_partial_doc,
     )
@@ -137,7 +150,7 @@ def api_methods_fixture(clean_reset):
 
     @method(
         path="/operation/<id_doc>/<id_no_doc>",
-        client_types=["api", "agent"],
+        client_types=[ClientType.api, ClientType.agent],
         envelope=True,
         arg_options=arg_options_partial_doc,
         operation="GET",
@@ -152,6 +165,17 @@ def api_methods_fixture(clean_reset):
         :param param_doc: A parameter.
         :param id_doc: The id of the resource.
         """
+        return ""
+
+    @method(
+        path="/default/<id>",
+        client_types=[ClientType.api],
+        envelope=True,
+        operation="GET",
+    )
+    def dummy_get_with_default_values(
+        no_def: int, id: int = 5, param: str = "test", fl: float = 0.1, opt: Optional[str] = None
+    ) -> str:
         return ""
 
 
@@ -722,3 +746,77 @@ def test_openapi_schema() -> None:
     assert not Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
     person_schema.properties["address"] = schemas["address"]
     assert Schema(**{"$ref": ref_prefix + "person"}).recursive_resolve(ref_prefix, schemas, update={}) == person_schema
+
+
+def test_get_openapi_parameter_type_for(api_methods_fixture: None) -> None:
+    """
+    Verify whether the MethodProperties.get_openapi_parameter_type_for() method works as expected.
+    """
+    assert len(MethodProperties.methods["dummy_post_with_parameters_no_docstring"]) == 1
+    method_properties = MethodProperties.methods["dummy_post_with_parameters_no_docstring"][0]
+    assert method_properties.get_openapi_parameter_type_for("id") is ParameterType.path
+    assert method_properties.get_openapi_parameter_type_for("header") is ParameterType.header
+    assert method_properties.get_openapi_parameter_type_for("non_header") is None
+    assert method_properties.get_openapi_parameter_type_for("param") is None
+
+    assert len(MethodProperties.methods["dummy_get_with_parameters_no_docstring"]) == 1
+    method_properties = MethodProperties.methods["dummy_get_with_parameters_no_docstring"][0]
+    assert method_properties.get_openapi_parameter_type_for("id") is ParameterType.path
+    assert method_properties.get_openapi_parameter_type_for("header") is ParameterType.header
+    assert method_properties.get_openapi_parameter_type_for("non_header") is ParameterType.query
+    assert method_properties.get_openapi_parameter_type_for("param") is ParameterType.query
+
+
+def test_get_openapi_type_of_parameter(api_methods_fixture: None) -> None:
+    """
+    Verify whether the OpenApiTypeConverter.get_openapi_type_of_parameter() method works as expected.
+    """
+    type_converter = OpenApiTypeConverter()
+    assert len(MethodProperties.methods["dummy_get_with_default_values"]) == 1
+    method_properties = MethodProperties.methods["dummy_get_with_default_values"][0]
+    param_dct = inspect.signature(method_properties.function).parameters
+    for param_name, data_type, default_value, nullable in [
+        ("no_def", OpenApiDataTypes.INTEGER.value, None, False),
+        ("id", OpenApiDataTypes.INTEGER.value, 5, False),
+        ("param", OpenApiDataTypes.STRING.value, "test", False),
+        ("fl", OpenApiDataTypes.NUMBER.value, 0.1, False),
+        ("opt", OpenApiDataTypes.STRING.value, None, True),
+    ]:
+        schema = type_converter.get_openapi_type_of_parameter(param_dct[param_name])
+        assert schema.type == data_type
+        assert schema.default == default_value
+        assert schema.nullable if nullable else not schema.nullable
+
+
+def test_get_openapi_type_for_on_enum() -> None:
+    """
+    Ensure that the type field is populated correctly when OpenApiTypeConverter.get_openapi_type() is called on an Enum.
+    """
+
+    class StrValEnum(enum.Enum):
+        A = "a"
+        B = "b"
+
+    class IntValEnum(enum.Enum):
+        A = 1
+        B = 2
+
+    class FloatValEnum(enum.Enum):
+        A = 1
+        B = 2.0
+
+    class BoolValEnum(enum.Enum):
+        A = True
+        B = False
+
+    openapi_type_converter = OpenApiTypeConverter()
+
+    for python_type, openapi_type in [
+        (StrValEnum, OpenApiDataTypes.STRING.value),
+        (IntValEnum, OpenApiDataTypes.INTEGER.value),
+        (FloatValEnum, OpenApiDataTypes.NUMBER.value),
+        (BoolValEnum, OpenApiDataTypes.BOOLEAN.value),
+    ]:
+        schema = openapi_type_converter.get_openapi_type(python_type)
+        resolved_schema = schema.resolve(openapi_type_converter.ref_prefix, openapi_type_converter.components.schemas)
+        assert resolved_schema.type == openapi_type
