@@ -1432,9 +1432,9 @@ def unmanaged_resources_get_batch(
     """
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
-    :param first_id: The resource_id to use as a continuation token for paging, in combination with the 'start' value,
+    :param first_id: The unmanaged_resource_id to use as a continuation token for paging, in combination with the 'start' value,
             because the order by column might contain non-unique values
-    :param last_id: The resource_id to use as a continuation token for paging, in combination with the 'end' value,
+    :param last_id: The unmanaged_resource_id to use as a continuation token for paging, in combination with the 'end' value,
             because the order by column might contain non-unique values
     :param start: The lower limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.

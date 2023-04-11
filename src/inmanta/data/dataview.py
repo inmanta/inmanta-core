@@ -1217,12 +1217,12 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
         )
         return query_builder
 
-    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.UnmanagedResource]:
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
             model.UnmanagedResource(
                 unmanaged_resource_id=res.unmanaged_resource_id,
                 values=res.values,
-            )
+            ).dict()
             for res in records
         ]
 
@@ -1236,6 +1236,5 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
 
         paging_boundaries = None
         if dtos:
-            dtos_dict = [dto.dict() for dto in dtos]
-            paging_boundaries = self.order.get_paging_boundaries(dtos_dict[0], dtos_dict[-1])
+            paging_boundaries = self.order.get_paging_boundaries(dtos[0], dtos[-1])
         return dtos, paging_boundaries
