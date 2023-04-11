@@ -51,6 +51,7 @@ from inmanta.data import (
     ResourceLogOrder,
     ResourceOrder,
     SimpleQueryBuilder,
+    UnmanagedResourceOrder,
     VersionedResourceOrder,
     model,
 )
@@ -202,7 +203,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         sql_query, values = query_builder.build()
 
         records = await data.Resource.select_query(sql_query, values, no_obj=True)
-
         dtos = self.construct_dtos(records)
 
         paging_boundaries = None
@@ -1174,3 +1174,68 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             )
             for agent in records
         ]
+
+
+class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedResource]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        sort: str = "unmanaged_resource_id.asc",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+    ) -> None:
+        super().__init__(
+            order=UnmanagedResourceOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=first_id,
+            last_id=last_id,
+            start=start,
+            end=end,
+            filter=None,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        """
+        Return the specification of the allowed filters, see FilterValidator
+        """
+        return {}
+
+    def get_base_url(self) -> str:
+        return "/api/v2/unmanaged"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        query_builder = SimpleQueryBuilder(
+            select_clause="SELECT environment, unmanaged_resource_id, values",
+            from_clause=f" FROM {data.UnmanagedResource.table_name()}",
+            filter_statements=["environment = $1"],
+            values=[self.environment.id],
+        )
+        return query_builder
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[model.UnmanagedResource]:
+        return [
+            model.UnmanagedResource(
+                unmanaged_resource_id=res.unmanaged_resource_id,
+                values=res.values,
+            )
+            for res in records
+        ]
+
+    async def get_data(self) -> Tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
+        query_builder = self.get_base_query()
+        query_builder = self.clip_to_page(query_builder)
+        sql_query, values = query_builder.build()
+
+        records = await data.UnmanagedResource.select_query(sql_query, values)
+        dtos = self.construct_dtos(records)
+
+        paging_boundaries = None
+        if dtos:
+            dtos_dict = [dto.dict() for dto in dtos]
+            paging_boundaries = self.order.get_paging_boundaries(dtos_dict[0], dtos_dict[-1])
+        return dtos, paging_boundaries

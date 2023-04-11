@@ -15,6 +15,11 @@
 
     Contact: code@inmanta.com
 """
+import json
+
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+
+from inmanta.server.config import get_bind_port
 
 
 async def test_discovery_resource_single(server, client, agent, environment):
@@ -79,57 +84,65 @@ async def test_unmanaged_resource_get_paging(server, client, agent, environment)
     with various paging options, and verifies that the expected resources are returned.
     """
     resources = [
-        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2],v=1", "values": {"value1": "test3", "value2": "test4"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key3=key3],v=1", "values": {"value1": "test5", "value2": "test6"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4],v=1", "values": {"value1": "test7", "value2": "test8"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key5=key5],v=1", "values": {"value1": "test9", "value2": "test10"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key6=key6],v=1", "values": {"value1": "test11", "value2": "test12"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key3=key3]", "values": {"value1": "test5", "value2": "test6"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test7", "value2": "test8"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key5=key5]", "values": {"value1": "test9", "value2": "test10"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
     ]
+
     result = await agent._client.unmanaged_resource_create_batch(environment, resources)
     assert result.code == 200
 
     result = await client.unmanaged_resources_get_batch(
-        environment, start_resource_id="aaa", end_resource_id="test::Resource[agent1,key3=key3],v=1", limit=2
+        environment,
     )
-    assert result.code == 400
-    assert "the start_resource_id is not formatted" in result.result["message"]
+    assert result.code == 200
+    assert len(result.result["data"]) == 6
 
-    result = await client.unmanaged_resources_get_batch(
-        environment, start_resource_id="test::Resource[agent1,key1=key1],v=1", end_resource_id="aaa", limit=2
-    )
-    assert result.code == 400
-    assert "the end_resource_id is not formatted" in result.result["message"]
-
-    # will not get more than limit resources
     result = await client.unmanaged_resources_get_batch(environment, limit=2)
     assert result.code == 200
     assert len(result.result["data"]) == 2
-    for i in range(0, 2):
-        assert result.result["data"][i]["unmanaged_resource_id"] == resources[i]["unmanaged_resource_id"]
-        assert result.result["data"][i]["values"] == resources[i]["values"]
+    assert result.result["data"] == resources[:2]
 
-    # will not get resources before start_resource_id
-    result = await client.unmanaged_resources_get_batch(
-        environment, start_resource_id="test::Resource[agent1,key3=key3],v=1", limit=3
-    )
-    assert result.code == 200
-    assert len(result.result["data"]) == 3
-    for i in range(3, 6):
-        assert result.result["data"][i - 3]["unmanaged_resource_id"] == resources[i]["unmanaged_resource_id"]
-        assert result.result["data"][i - 3]["values"] == resources[i]["values"]
+    assert result.result["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
+    assert result.result["links"].get("next") is not None
+    assert result.result["links"].get("prev") is None
 
-    # Verify no resource with a resource_id comming after end_resource_id will be returned.
-    result = await client.unmanaged_resources_get_batch(
-        environment,
-        start_resource_id="test::Resource[agent1,key2=key2],v=1",
-        end_resource_id="test::Resource[agent1,key4=key4],v=1",
-        limit=3,
+    port = get_bind_port()
+    base_url = "http://localhost:%s" % (port,)
+    http_client = AsyncHTTPClient()
+
+    # Test link for next page
+    url = f"""{base_url}{result.result["links"]["next"]}"""
+    assert "limit=2" in url
+    request = HTTPRequest(
+        url=url,
+        headers={"X-Inmanta-tid": environment},
     )
-    assert result.code == 200
-    assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["unmanaged_resource_id"] == resources[2]["unmanaged_resource_id"]
-    assert result.result["data"][0]["values"] == resources[2]["values"]
+    response = await http_client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    assert response["data"] == resources[2:4]
+    assert response["links"].get("prev") is not None
+    assert response["links"].get("next") is not None
+    assert response["metadata"] == {"total": 6, "before": 2, "after": 2, "page_size": 2}
+
+    # Test link for previous page
+    url = f"""{base_url}{response["links"]["prev"]}"""
+    assert "limit=2" in url
+    request = HTTPRequest(
+        url=url,
+        headers={"X-Inmanta-tid": environment},
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    assert response["data"] == resources[0:2]
+    assert response["links"].get("prev") is None
+    assert response["links"].get("next") is not None
+    assert response["metadata"] == {"total": 6, "before": 0, "after": 4, "page_size": 2}
 
 
 async def test_discovery_resource_bad_res_id(server, client, agent, environment):

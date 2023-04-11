@@ -905,6 +905,22 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
+class UnmanagedResourceOrder(AbstractDatabaseOrderV2):
+    """Represents the ordering by which unmanaged resources should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {
+            ColumnNameStr("unmanaged_resource_id"): StringColumn,
+        }
+
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("unmanaged_resource_id"), StringColumn)
+
+
 class BaseQueryBuilder(ABC):
     """Provides a way to build up a sql query from its parts.
     Each method returns a new query builder instance, with the additional parameters processed"""

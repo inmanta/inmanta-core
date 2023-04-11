@@ -31,7 +31,13 @@ from tornado.httputil import url_concat
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
-from inmanta.data.dataview import ResourceHistoryView, ResourceLogsView, ResourcesInVersionView, ResourceView
+from inmanta.data.dataview import (
+    ResourceHistoryView,
+    ResourceLogsView,
+    ResourcesInVersionView,
+    ResourceView,
+    UnmanagedResourceView,
+)
 from inmanta.data.model import (
     AttributeStateChange,
     LatestReleasedResource,
@@ -1067,30 +1073,28 @@ class ResourceService(protocol.ServerSlice):
         dto = result.to_dto()
         return dto
 
-    @handle(methods_v2.unmanaged_resources_get_batch, env="tid")
+    @protocol.handle(methods_v2.unmanaged_resources_get_batch, env="tid")
     async def unmanaged_resources_get_batch(
-        self, env: data.Environment, start_resource_id: str, end_resource_id: str, limit: int
-    ) -> List[UnmanagedResource]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"Limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        if start_resource_id and not Id.is_resource_version_id(start_resource_id):
-            raise BadRequest("the start_resource_id is not formatted correctly")
-        if end_resource_id and not Id.is_resource_version_id(end_resource_id):
-            raise BadRequest("the end_resource_id is not formatted correctly")
-
-        resources = await data.UnmanagedResource.get_list_paged(
-            page_by_column="unmanaged_resource_id",
-            order_by_column="unmanaged_resource_id",
-            order="ASC",
-            limit=limit,
-            start=start_resource_id,
-            end=end_resource_id,
-            no_obj=False,
-            connection=None,
-            environment=env.id,
-        )
-
-        return [res.to_dto() for res in resources]
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        first_id: Optional[str] = None,
+        last_id: Optional[str] = None,
+        sort: str = "unmanaged_resource_id.asc",
+    ) -> ReturnValue[Sequence[UnmanagedResource]]:
+        try:
+            handler = UnmanagedResourceView(
+                environment=env,
+                limit=limit,
+                sort=sort,
+                first_id=first_id,
+                last_id=last_id,
+                start=start,
+                end=end,
+            )
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e

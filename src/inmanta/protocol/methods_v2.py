@@ -1414,20 +1414,36 @@ def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model
 
 
 @typedmethod(
-    path="/unmanaged/",
+    path="/unmanaged",
     operation="GET",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
     api_version=2,
 )
 def unmanaged_resources_get_batch(
-    tid: uuid.UUID, start_resource_id: Optional[str] = None, end_resource_id: Optional[str] = None, limit: Optional[int] = None
+    tid: uuid.UUID,
+    limit: Optional[int] = None,
+    first_id: Optional[model.ResourceVersionIdStr] = None,
+    last_id: Optional[model.ResourceVersionIdStr] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    sort: str = "unmanaged_resource_id.asc",
 ) -> List[model.UnmanagedResource]:
     """
-    Get the unmanaged resources with paging
-    :param tid: the id of the environment in which to get the unmanaged resources.
-    :param start_resource_id: the unmanaged_resource_id from which to start the paging
-    :param end_resource_id: the unmanaged_resource_id where to finish the paging
-    :param limit: the maximal number of resources to return
-
+    :param tid: The id of the environment this resource belongs to
+    :param limit: Limit the number of instances that are returned
+    :param first_id: The resource_id to use as a continuation token for paging, in combination with the 'start' value,
+            because the order by column might contain non-unique values
+    :param last_id: The resource_id to use as a continuation token for paging, in combination with the 'end' value,
+            because the order by column might contain non-unique values
+    :param start: The lower limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param end: The upper limit for the order by column (exclusive).
+                Only one of 'start' and 'end' should be specified at the same time.
+    :param sort: Return the results sorted according to the parameter value.
+            The following sorting attributes are supported: 'unmanaged_resource_id'.
+            The following orders are supported: 'asc', 'desc'
+    :return: A list of all matching released resources
+    :raise NotFound: This exception is raised when the referenced environment is not found
+    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
