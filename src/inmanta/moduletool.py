@@ -584,7 +584,7 @@ class ModuleTool(ModuleLikeTool):
         subparser.add_parser("list", help="List all modules used in this project in a table")
 
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
-        do.add_argument("command", metavar="command", help="the command to  execute")
+        do.add_argument("command", metavar="command", help="the command to execute")
 
         install: ArgumentParser = subparser.add_parser(
             "install",
