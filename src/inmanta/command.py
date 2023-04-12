@@ -21,7 +21,7 @@ import argparse
 from typing import Callable, Dict, List, Optional
 
 FunctionType = Callable[[argparse.Namespace], None]
-ParserConfigType = Callable[[argparse.ArgumentParser], None]
+ParserConfigType = Callable[[argparse.ArgumentParser, argparse.ArgumentParser], None]
 
 
 class CLIException(Exception):
