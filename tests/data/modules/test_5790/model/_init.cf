@@ -1,0 +1,9 @@
+entity A:
+end
+
+entity B:
+    int n = 0
+end
+
+A.b [1] -- B
+

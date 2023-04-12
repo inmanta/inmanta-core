@@ -1,0 +1,7 @@
+---
+description: The purge_on_delete feature and the `POST /decommission/<id>` endpoints have been removed.
+issue-nr: 5677
+change-type: major
+destination-branches: [master]
+sections:
+  upgrade-note: "{{description}}"
