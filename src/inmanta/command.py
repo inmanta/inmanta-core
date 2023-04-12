@@ -21,7 +21,7 @@ import argparse
 from typing import Callable, Dict, List, Optional
 
 FunctionType = Callable[[argparse.Namespace], None]
-ParserConfigType = Callable[[argparse.ArgumentParser, argparse.ArgumentParser], None]
+ParserConfigType = Callable[[argparse.ArgumentParser], None]
 
 
 class CLIException(Exception):
@@ -34,6 +34,19 @@ class ShowUsageException(Exception):
     """
     Raise this exception to show the usage message of the given level
     """
+
+
+def add_verbosity_option(parser: argparse.ArgumentParser, long_name_only: bool = False) -> None:
+    name_or_flags = ["-v", "--verbose"]
+    if long_name_only:
+        name_or_flags = ["--verbose"]
+    parser.add_argument(
+        *name_or_flags,
+        action="count",
+        default=argparse.SUPPRESS,
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
+    )
 
 
 class Commander(object):
