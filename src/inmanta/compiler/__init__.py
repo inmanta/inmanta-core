@@ -196,8 +196,15 @@ class Compiler(object):
 
         project.log_installed_modules()
 
+        # This lookup variable provides efficiency in the loop below by skipping iterations for plugins
+        # that are part of modules that are not imported in the model.
+        non_imported_modules: set[str] = set()
+
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
+            if cls.__module__ in non_imported_modules:
+                continue
+
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
@@ -213,11 +220,13 @@ class Compiler(object):
                 ns = ns.get_child(part)
 
             if ns is None:
-                raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
-
-            name = name.split("::")[-1]
-            statement = PluginStatement(ns, name, cls)
-            statements.append(statement)
+                # This plugin is part of a module that is not imported in the model. We mark this module as such
+                # so that future iterations on other plugins from this module can be skipped.
+                non_imported_modules.add(cls.__module__)
+            else:
+                name = name.split("::")[-1]
+                statement = PluginStatement(ns, name, cls)
+                statements.append(statement)
 
         # add the entity type (hack?)
         ns = self.__root_ns.get_child_or_create("std")
