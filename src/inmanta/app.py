@@ -298,7 +298,7 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-def compiler_config(parser: argparse.ArgumentParser) -> None:
+def compiler_config(parser: argparse.ArgumentParser, shared_args_parser: argparse.ArgumentParser) -> None:
     """
     Configure the compiler of the export function
     """
@@ -420,7 +420,7 @@ def list_commands(options: argparse.Namespace) -> None:
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: argparse.ArgumentParser) -> None:
+def help_parser_config(parser: argparse.ArgumentParser, shared_args_parser: argparse.ArgumentParser) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
@@ -452,7 +452,7 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
+def deploy_parser_config(parser: argparse.ArgumentParser, shared_args_parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
@@ -471,7 +471,7 @@ def deploy(options: argparse.Namespace) -> None:
         run.stop()
 
 
-def export_parser_config(parser: argparse.ArgumentParser) -> None:
+def export_parser_config(parser: argparse.ArgumentParser, shared_args_parser: argparse.ArgumentParser) -> None:
     """
     Configure the compiler of the export function
     """
@@ -681,6 +681,7 @@ log_levels = {
 
 def cmd_parser() -> argparse.ArgumentParser:
     # create the argument compiler
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
     parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default=None)
@@ -725,11 +726,25 @@ def cmd_parser() -> argparse.ArgumentParser:
         default=False,
         required=False,
     )
+
+    shared_args_parser = argparse.ArgumentParser(add_help=False)
+    shared_args_parser.add_argument(
+        "-v",
+        "--verbose",
+        dest="subcmd_verbosity",
+        action="count",
+        default=0,
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
+    )
+
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
-        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
+        cmd_subparser = subparsers.add_parser(
+            cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"], parents=[shared_args_parser]
+        )
         if cmd_options["parser_config"] is not None:
-            cmd_options["parser_config"](cmd_subparser)
+            cmd_options["parser_config"](cmd_subparser, shared_args_parser)
         cmd_subparser.set_defaults(func=cmd_options["function"])
         cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
 
@@ -845,7 +860,8 @@ def app() -> None:
         if options.timed:
             formatter = _get_log_formatter_for_stream_handler(timed=True)
             stream_handler.setFormatter(formatter)
-        log_level = _convert_cli_log_level(options.verbose)
+        verbosity: int = max(options.verbose, options.subcmd_verbosity)
+        log_level = _convert_cli_log_level(verbosity)
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)

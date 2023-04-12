@@ -334,7 +334,7 @@ class VersionOperation:
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser) -> None:
+    def parser_config(cls, parser: ArgumentParser, shared_args_parser: ArgumentParser) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
         freeze.add_argument(
@@ -556,7 +556,7 @@ class ModuleTool(ModuleLikeTool):
         self._mod_handled_list = set()
 
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser) -> None:
+    def modules_parser_config(cls, parser: ArgumentParser, shared_args_parser: argparse.ArgumentParser) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
 
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
@@ -567,6 +567,7 @@ class ModuleTool(ModuleLikeTool):
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
             f"Either --v1 or --v2 has to be set.",
+            parents=[shared_args_parser],
         )
         add.add_argument(
             "module_req",
@@ -581,13 +582,22 @@ class ModuleTool(ModuleLikeTool):
             action="store_true",
         )
 
-        subparser.add_parser("list", help="List all modules used in this project in a table")
+        subparser.add_parser(
+            "list",
+            help="List all modules used in this project in a table",
+            parents=[shared_args_parser],
+        )
 
-        do = subparser.add_parser("do", help="Execute a command on all loaded modules")
+        do = subparser.add_parser(
+            "do",
+            help="Execute a command on all loaded modules",
+            parents=[shared_args_parser],
+        )
         do.add_argument("command", metavar="command", help="the command to execute")
 
         install: ArgumentParser = subparser.add_parser(
             "install",
+            parents=[shared_args_parser],
             help="Install a module in the active Python environment.",
             description="""
 Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context
@@ -603,12 +613,24 @@ mode.
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
         install.add_argument("path", nargs="?", help="The path to the module.")
 
-        subparser.add_parser("status", help="Run a git status on all modules and report")
+        subparser.add_parser(
+            "status",
+            help="Run a git status on all modules and report",
+            parents=[shared_args_parser],
+        )
 
-        subparser.add_parser("push", help="Run a git push on all modules and report")
+        subparser.add_parser(
+            "push",
+            help="Run a git push on all modules and report",
+            parents=[shared_args_parser],
+        )
 
         # not currently working
-        subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
+        subparser.add_parser(
+            "verify",
+            help="Verify dependencies and frozen module versions",
+            parents=[shared_args_parser],
+        )
 
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
@@ -629,13 +651,21 @@ mode.
         commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
         commit.set_defaults(tag=False)
 
-        create = subparser.add_parser("create", help="Create a new module")
+        create = subparser.add_parser(
+            "create",
+            help="Create a new module",
+            parents=[shared_args_parser],
+        )
         create.add_argument("name", help="The name of the module")
         create.add_argument(
             "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
         )
 
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in module.yml")
+        freeze = subparser.add_parser(
+            "freeze",
+            help="Set all version numbers in module.yml",
+            parents=[shared_args_parser],
+        )
         freeze.add_argument(
             "-o",
             "--outfile",
@@ -658,7 +688,11 @@ mode.
             default=None,
         )
 
-        build = subparser.add_parser("build", help="Build a Python package from a V2 module.")
+        build = subparser.add_parser(
+            "build",
+            help="Build a Python package from a V2 module.",
+            parents=[shared_args_parser],
+        )
         build.add_argument(
             "path",
             help="The path to the module that should be built. By default, the current working directory is used.",
@@ -688,10 +722,15 @@ mode.
             dest="byte_code",
         )
 
-        subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
+        subparser.add_parser(
+            "v1tov2",
+            help="Convert a V1 module to a V2 module in place",
+            parents=[shared_args_parser],
+        )
 
         release = subparser.add_parser(
             "release",
+            parents=[shared_args_parser],
             help="Release a new stable or dev release for this module.",
             description="""
 When a stable release is done, this command:
