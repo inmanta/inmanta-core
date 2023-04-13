@@ -36,15 +36,13 @@ class ShowUsageException(Exception):
     """
 
 
-def add_verbosity_option(parser: argparse.ArgumentParser, long_name_only: bool = False) -> None:
-    name_or_flags = ["-v", "--verbose"]
-    if long_name_only:
-        name_or_flags = ["--verbose"]
+def add_verbosity_option(parser: argparse.ArgumentParser) -> None:
     # The default=argparse.SUPPRESS ensures we don't override the value set in an outer command when it is not set
     # in a sub-command. e.g. if we would set default=0 here, then for `inmanta -vvv module install`, the verbosity level
     # would default to 0 since it is not explicitly set in the `install` command.
     parser.add_argument(
-        *name_or_flags,
+        "-v",
+        "--verbose",
         action="count",
         default=argparse.SUPPRESS,
         help="Log level for messages going to the console. Default is warnings,"

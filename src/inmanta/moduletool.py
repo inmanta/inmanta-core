@@ -570,8 +570,6 @@ class ModuleTool(ModuleLikeTool):
 
         verbosity_parser = argparse.ArgumentParser(add_help=False)
         add_verbosity_option(verbosity_parser)
-        long_verbosity_parser = argparse.ArgumentParser(add_help=False)
-        add_verbosity_option(long_verbosity_parser, long_name_only=True)
 
         add_help_msg = "Add a module dependency to an Inmanta module or project."
         add = subparser.add_parser(
@@ -644,15 +642,13 @@ mode.
             parents=[verbosity_parser],
         )
 
-        commit = subparser.add_parser(
-            "commit", help="Commit all changes in the current module.", parents=[long_verbosity_parser]
-        )
+        commit = subparser.add_parser("commit", help="Commit all changes in the current module.", parents=[verbosity_parser])
         commit.add_argument("-m", "--message", help="Commit message", required=True)
         commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
         commit.add_argument("--major", dest="major", help="make a major release", action="store_true")
         commit.add_argument("--minor", dest="minor", help="make a major release", action="store_true")
         commit.add_argument("--patch", dest="patch", help="make a major release", action="store_true")
-        commit.add_argument("-v", "--version", help="Version to use on tag")
+        commit.add_argument("--version", help="Version to use on tag")
         commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
         commit.add_argument(
             "-t",

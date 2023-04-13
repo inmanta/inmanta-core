@@ -369,7 +369,7 @@ async def test_version_argument(modules_repo):
     mod = module.ModuleV1(None, module_path)
     assert mod.version == version.Version("1.2")
 
-    args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "-v", "1.3.1", "-r"]
+    args = [sys.executable, "-m", "inmanta.app", "module", "commit", "-m", "msg", "--version", "1.3.1", "-r"]
     process = await asyncio.subprocess.create_subprocess_exec(
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=module_path
     )
