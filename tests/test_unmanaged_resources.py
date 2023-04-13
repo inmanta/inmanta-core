@@ -75,7 +75,7 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
         {"unmanaged_resource_id": "test::Resource[agent1,key6=key6],v=1", "values": {"value1": "test11", "value2": "test12"}},
     ]
     result = await agent._client.unmanaged_resource_create_batch(environment, resources)
-    assert result.code == 500
+    assert result.code == 409
 
 
 async def test_unmanaged_resource_get_paging(server, client, agent, environment):
