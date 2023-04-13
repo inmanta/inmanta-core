@@ -1404,7 +1404,7 @@ def unmanaged_resource_create_batch(tid: uuid.UUID, unmanaged_resources: List[Un
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model.UnmanagedResource:
+def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: ResourceIdStr) -> model.UnmanagedResource:
     """
     Get a single discovered resource.
 
@@ -1423,8 +1423,6 @@ def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: str) -> model
 def unmanaged_resources_get_batch(
     tid: uuid.UUID,
     limit: Optional[int] = None,
-    first_id: Optional[model.ResourceVersionIdStr] = None,
-    last_id: Optional[model.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     sort: str = "unmanaged_resource_id.asc",
@@ -1432,10 +1430,6 @@ def unmanaged_resources_get_batch(
     """
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
-    :param first_id: The unmanaged_resource_id to use as a continuation token for paging, in combination with the 'start' value,
-            because the order by column might contain non-unique values
-    :param last_id: The unmanaged_resource_id to use as a continuation token for paging, in combination with the 'end' value,
-            because the order by column might contain non-unique values
     :param start: The lower limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param end: The upper limit for the order by column (exclusive).

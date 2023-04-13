@@ -905,7 +905,7 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
-class UnmanagedResourceOrder(AbstractDatabaseOrderV2):
+class UnmanagedResourceOrder(SingleDatabaseOrder):
     """Represents the ordering by which unmanaged resources should be sorted"""
 
     @classmethod
@@ -914,11 +914,6 @@ class UnmanagedResourceOrder(AbstractDatabaseOrderV2):
         return {
             ColumnNameStr("unmanaged_resource_id"): StringColumn,
         }
-
-    @property
-    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
-        """Name and type of the id column of this database order"""
-        return (ColumnNameStr("unmanaged_resource_id"), StringColumn)
 
 
 class BaseQueryBuilder(ABC):

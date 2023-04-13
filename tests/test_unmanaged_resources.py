@@ -26,7 +26,7 @@ async def test_discovery_resource_single(server, client, agent, environment):
     """
     Test that an unmanaged resource can be created and retrieved successfully for a single resource.
     """
-    unmanaged_resource_id = "test::Resource[agent1,key=key],v=1"
+    unmanaged_resource_id = "test::Resource[agent1,key=key]"
     values = {"value1": "test1", "value2": "test2"}
     result = await agent._client.unmanaged_resource_create(
         tid=environment,
@@ -47,7 +47,9 @@ async def test_discovery_resource_single(server, client, agent, environment):
         unmanaged_resource_id=unmanaged_resource_id,
         values=values,
     )
-    assert result.code == 500
+    assert result.code == 409
+    error_message = f"Request conflicts with the current state of the resource: Key (environment, unmanaged_resource_id)=({environment}, test::Resource[agent1,key=key]) already exists."
+    assert error_message in result.result["message"]
 
 
 async def test_unmanaged_resource_create_batch(server, client, agent, environment):
@@ -55,9 +57,9 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
     Test that a batch of unmanaged resources can be created
     """
     resources = [
-        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2],v=1", "values": {"value1": "test3", "value2": "test4"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key3=key3],v=1", "values": {"value1": "test5", "value2": "test6"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key3=key3]", "values": {"value1": "test5", "value2": "test6"}},
     ]
     result = await agent._client.unmanaged_resource_create_batch(environment, resources)
     assert result.code == 200
@@ -70,12 +72,14 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
 
     # try to store a batch with 2 times the same resource
     resources = [
-        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4],v=1", "values": {"value1": "test7", "value2": "test8"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4],v=1", "values": {"value1": "test9", "value2": "test10"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key6=key6],v=1", "values": {"value1": "test11", "value2": "test12"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test7", "value2": "test8"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test9", "value2": "test10"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
     ]
     result = await agent._client.unmanaged_resource_create_batch(environment, resources)
     assert result.code == 409
+    error_message = f"Request conflicts with the current state of the resource: Key (environment, unmanaged_resource_id)=({environment}, test::Resource[agent1,key4=key4]) already exists."
+    assert error_message in result.result["message"]
 
 
 async def test_unmanaged_resource_get_paging(server, client, agent, environment):
@@ -156,8 +160,8 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     assert "Failed to validate argument" in result.result["message"]
 
     resources = [
-        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1],v=1", "values": {"value1": "test1", "value2": "test2"}},
-        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2],v=1", "values": {"value1": "test3", "value2": "test4"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
+        {"unmanaged_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
         {"unmanaged_resource_id": "test", "values": {"value1": "test5", "value2": "test6"}},
     ]
     result = await agent._client.unmanaged_resource_create_batch(environment, resources)

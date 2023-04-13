@@ -1184,14 +1184,12 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
         sort: str = "unmanaged_resource_id.asc",
         start: Optional[str] = None,
         end: Optional[str] = None,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
     ) -> None:
         super().__init__(
             order=UnmanagedResourceOrder.parse_from_string(sort),
             limit=limit,
-            first_id=first_id,
-            last_id=last_id,
+            first_id=None,
+            last_id=None,
             start=start,
             end=end,
             filter=None,
@@ -1220,21 +1218,8 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
             model.UnmanagedResource(
-                unmanaged_resource_id=res.unmanaged_resource_id,
-                values=res.values,
+                unmanaged_resource_id=res["unmanaged_resource_id"],
+                values=json.loads(res["values"]),
             ).dict()
             for res in records
         ]
-
-    async def get_data(self) -> Tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
-        query_builder = self.get_base_query()
-        query_builder = self.clip_to_page(query_builder)
-        sql_query, values = query_builder.build()
-
-        records = await data.UnmanagedResource.select_query(sql_query, values)
-        dtos = self.construct_dtos(records)
-
-        paging_boundaries = None
-        if dtos:
-            paging_boundaries = self.order.get_paging_boundaries(dtos[0], dtos[-1])
-        return dtos, paging_boundaries

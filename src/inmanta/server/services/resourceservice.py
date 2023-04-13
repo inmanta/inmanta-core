@@ -1052,21 +1052,27 @@ class ResourceService(protocol.ServerSlice):
         try:
             unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
         except ValidationError as e:
+            # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg, {"validation_errors": e.errors()})
-
-        await unmanaged_resource.to_dao(env.id).insert()
+        try:
+            await unmanaged_resource.to_dao(env.id).insert()
+        except UniqueViolationError as e:
+            raise Conflict(message=e.detail)
 
     @handle(methods_v2.unmanaged_resource_create_batch, env="tid")
     async def unmanaged_resources_create_batch(
         self, env: data.Environment, unmanaged_resources: List[UnmanagedResource]
     ) -> None:
         resources: List[data.UnmanagedResource] = [res.to_dao(env.id) for res in unmanaged_resources]
-        await data.UnmanagedResource.insert_many(resources)
+        try:
+            await data.UnmanagedResource.insert_many(resources)
+        except UniqueViolationError as e:
+            raise Conflict(message=e.detail)
 
     @handle(methods_v2.unmanaged_resources_get, env="tid")
-    async def unmanaged_resources_get(self, env: data.Environment, unmanaged_resource_id: str) -> UnmanagedResource:
+    async def unmanaged_resources_get(self, env: data.Environment, unmanaged_resource_id: ResourceIdStr) -> UnmanagedResource:
         result = await data.UnmanagedResource.get_one(environment=env.id, unmanaged_resource_id=unmanaged_resource_id)
         if not result:
             raise NotFound(f"unmanaged_resource with name {unmanaged_resource_id} not found in env {env}")
@@ -1080,8 +1086,6 @@ class ResourceService(protocol.ServerSlice):
         limit: Optional[int] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
         sort: str = "unmanaged_resource_id.asc",
     ) -> ReturnValue[Sequence[UnmanagedResource]]:
         try:
@@ -1089,8 +1093,6 @@ class ResourceService(protocol.ServerSlice):
                 environment=env,
                 limit=limit,
                 sort=sort,
-                first_id=first_id,
-                last_id=last_id,
                 start=start,
                 end=end,
             )
