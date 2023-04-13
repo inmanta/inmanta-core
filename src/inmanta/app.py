@@ -306,10 +306,10 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors_subcommand",
+        dest="errors",
         help="Show stack traces for compile errors",
         action="store_true",
-        default=False,
+        default=argparse.SUPPRESS,
     )
     parser.add_argument("--server_address", dest="server", help="The address of the server hosting the environment")
     parser.add_argument("--server_port", dest="port", help="The port of the server hosting the environment")
@@ -414,7 +414,7 @@ def compile_project(options: argparse.Namespace) -> None:
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
 
 
-@command("list-commands", help_msg="Print out an overview of all commands", parser_config=add_verbosity_option)
+@command("list-commands", help_msg="Print out an overview of all commands")
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
@@ -503,10 +503,10 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors_subcommand",
+        dest="errors",
         help="Show stack traces for compile errors",
         action="store_true",
-        default=False,
+        default=argparse.SUPPRESS,
     )
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
     parser.add_argument(
@@ -878,9 +878,7 @@ def app() -> None:
         return
 
     def report(e: BaseException) -> None:
-        minus_x_set_top_level_command = options.errors
-        minus_x_set_subcommand = hasattr(options, "errors_subcommand") and options.errors_subcommand
-        if not minus_x_set_top_level_command and not minus_x_set_subcommand:
+        if not options.errors:
             if isinstance(e, CompilerException):
                 print(e.format_trace(indent="  "), file=sys.stderr)
             else:
