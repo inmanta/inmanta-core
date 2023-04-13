@@ -58,9 +58,8 @@ Context
 
 Pre-Upgrade steps
 ++++++++++++++++++
-1. Verify that environment safety setting are on (this should always be the case)
+1. Verify that environment safety settings are on (this should always be the case)
 
-    * `purge_on_delete = False`
     * `protected_environment = True`
 
 2. Temporarily disable auto_deploy
@@ -118,7 +117,6 @@ Procedure
 1. Cross check all settings in the environment settings tab with the development team.
 2. Verify that environment safety settings are on (should always be the case)
 
-   * `purge_on_delete = False`
    * `protected_environment = True`
 
 3. Temporarily disable auto_deploy
@@ -213,9 +211,8 @@ Upgrade of service model on the orchestrator
 
    * Pre-Upgrade steps:
 
-   1. Verify that environment safety setting are on (this should always be the case)
+   1. Verify that environment safety settings are on (this should always be the case)
 
-       * [ ] `purge_on_delete = False`
        * [ ] `protected_environment = True`
 
    2. Temporarily disable auto_deploy

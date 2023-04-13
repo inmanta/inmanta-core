@@ -249,29 +249,6 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
 
 
-#  Decomission an environment
-
-
-@method(
-    path="/decommission/<id>",
-    operation="POST",
-    arg_options={"id": ArgOption(getter=convert_environment)},
-    client_types=[const.ClientType.api],
-    api_version=1,
-)
-def decomission_environment(id: uuid.UUID, metadata: dict = None):
-    """
-    Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
-    removal.
-
-    :param id: The uuid of the environment.
-    :param metadata: Optional metadata associated with the decommissioning
-
-    :raises NotFound: The given environment doesn't exist.
-    :raises Forbidden: The given environment is protected.
-    """
-
-
 @method(
     path="/decommission/<id>",
     operation="DELETE",
