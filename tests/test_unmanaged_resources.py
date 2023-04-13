@@ -48,7 +48,11 @@ async def test_discovery_resource_single(server, client, agent, environment):
         values=values,
     )
     assert result.code == 409
-    error_message = f"Request conflicts with the current state of the resource: Key (environment, unmanaged_resource_id)=({environment}, test::Resource[agent1,key=key]) already exists."
+    error_message = (
+        "Request conflicts with the current state of the resource: "
+        f"Key (environment, unmanaged_resource_id)=({environment}, "
+        "test::Resource[agent1,key=key]) already exists."
+    )
     assert error_message in result.result["message"]
 
 
@@ -78,7 +82,11 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
     ]
     result = await agent._client.unmanaged_resource_create_batch(environment, resources)
     assert result.code == 409
-    error_message = f"Request conflicts with the current state of the resource: Key (environment, unmanaged_resource_id)=({environment}, test::Resource[agent1,key4=key4]) already exists."
+    error_message = (
+        "Request conflicts with the current state of the resource: "
+        f"Key (environment, unmanaged_resource_id)=({environment}, "
+        "test::Resource[agent1,key4=key4]) already exists."
+    )
     assert error_message in result.result["message"]
 
 
