@@ -496,7 +496,7 @@ class ResourceHandler(object):
             except Exception as e:
                 f.set_exception(e)
 
-        self._ioloop.call_soon(run)
+        self._ioloop.call_soon_threadsafe(run)
 
         return f.result()
 
