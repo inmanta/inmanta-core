@@ -1067,3 +1067,87 @@ class HandlerNotAvailableException(Exception):
     This exception is thrown when a resource handler cannot perform its job. For example, the admin interface
     it connects to is not available.
     """
+
+
+class HandlerLogger(typing.Protocol):
+    """
+    This protocol defines a part of the interface of the inmanta HandlerContext object
+    that can be used to log messages to the server.  It is used in different helper
+    functions across a handler code base.
+
+    When such helper class is used in another context than an agent, they can create
+    another object than the HandlerContext, which simply implements those helper methods,
+    and still be able to use the helper method.
+
+    """
+
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
+        ...
+
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
+        ...
+
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
+        ...
+
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
+        ...
+
+    def exception(
+        self, msg: str, *args: object, exc_info: bool = True, **kwargs: object
+    ) -> None:
+        ...
+
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
+        ...
+
+
+class LoggerWrapper:
+    """
+    This class implements the HandlerLogger interface
+
+    It can be used in the tests of a module to be able to use the handler helpers, outside of the context of an agent.
+    """
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self.logger = logger
+
+    def log_msg(
+        self,
+        level: int,
+        msg: str,
+        args: typing.Sequence[object],
+        kwargs: typing.Dict[str, object],
+    ) -> None:
+        if len(args) > 0:
+            raise Exception("Args not supported")
+        if "exc_info" in kwargs:
+            exc_info = kwargs["exc_info"]
+            del kwargs["exc_info"]
+        else:
+            exc_info = False
+
+        if kwargs:
+            self.logger.log(level, msg, kwargs, exc_info=exc_info)
+        else:
+            self.logger.log(level, msg, exc_info=exc_info)
+
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
+        self.log_msg(logging.DEBUG, msg, args, kwargs)
+
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
+        self.log_msg(logging.INFO, msg, args, kwargs)
+
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
+        self.log_msg(logging.WARNING, msg, args, kwargs)
+
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
+        self.log_msg(logging.ERROR, msg, args, kwargs)
+
+    def exception(
+        self, msg: str, *args: object, exc_info: bool = True, **kwargs: object
+    ) -> None:
+        self.error(msg, *args, exc_info=exc_info, **kwargs)
+
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
+        self.log_msg(logging.CRITICAL, msg, args, kwargs)
