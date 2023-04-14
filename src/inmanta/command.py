@@ -89,6 +89,8 @@ class Commander(object):
 class command(object):  # noqa: N801
     """
     A decorator that registers an export function
+
+    :param verbose_opt_out: Set this to true to prevent automatically adding the verbose option to the registered command.
     """
 
     def __init__(
