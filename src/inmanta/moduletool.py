@@ -334,7 +334,7 @@ class VersionOperation:
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
+    def parser_config(cls, parser: ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml", parents=parent_parsers)
@@ -559,7 +559,7 @@ class ModuleTool(ModuleLikeTool):
         self._mod_handled_list = set()
 
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
+    def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
