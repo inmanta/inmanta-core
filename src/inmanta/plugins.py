@@ -25,7 +25,7 @@ from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
-from inmanta import const, protocol
+from inmanta import const, protocol, util
 from inmanta.ast import (
     CompilerException,
     LocatableString,
@@ -128,8 +128,8 @@ class Context(object):
 
     def run_sync(self, function: Callable[[], abc.Awaitable[T]], timeout: int = 5) -> T:
         """
-        Execute the async function and return its result. This method uses this thread's event loop if there is one, otherwise
-        it takes care of starting and stopping a new one. The main use for this function is to use the inmanta internal rpc to
+        Execute the async function and return its result. This method uses this thread's current (not running) event loop if
+        there is one, otherwise it creates a new one. The main use for this function is to use the inmanta internal rpc to
         communicate with the server.
 
         :param function: The async function to execute. This function should return a yieldable object.
@@ -139,14 +139,7 @@ class Context(object):
         """
         with_timeout: abc.Awaitable[T] = asyncio.wait_for(function(), timeout)
         try:
-            # TODO: alternatively, just call `util.ensure_event_loop()` before starting the scheduling phase of the compiler.
-            try:
-                loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
-            except RuntimeError:
-                # no active loop: use asyncio.run to start and clean up event loop
-                return asyncio.run(with_timeout)
-            else:
-                loop.run_until_complete(with_timeout)
+            util.ensure_event_loop().run_until_complete(with_timeout)
         except TimeoutError:
             raise ConnectionRefusedError()
 

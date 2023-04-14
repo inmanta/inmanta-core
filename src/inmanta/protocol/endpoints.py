@@ -21,12 +21,12 @@ import logging
 import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
-from collections import defaultdict
+from collections import abc, defaultdict
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
 from urllib import parse
 
-from tornado import ioloop
+import tornado.ioloop
 from tornado.platform.asyncio import BaseAsyncIOLoop
 
 from inmanta import config as inmanta_config
@@ -399,7 +399,7 @@ class SyncClient(object):
         name: Optional[str] = None,
         timeout: int = 120,
         client: Optional[Client] = None,
-        ioloop: Optional[ioloop.IOLoop] = None,
+        ioloop: Optional[tornado.ioloop.IOLoop] = None,
     ) -> None:
         """
         either name or client is required.
@@ -409,15 +409,22 @@ class SyncClient(object):
         :param client: the client to use for this sync_client
         :param timeout: http timeout on all requests
 
-        :param ioloop: the specific (running) ioloop to schedule this request on.
-        if no ioloop is passed,we assume there is no running ioloop in the context where this syncclient is used.
+        :param ioloop: the specific (running) ioloop to schedule this request on. The loop should run on a different thread
+            than the one the client methods are called on. If no ioloop is passed, we assume there is no running ioloop in the
+            context where this syncclient is used.
         """
         if (name is None) == (client is None):
             # Exactly one must be set
             raise Exception("Either name or client needs to be provided.")
 
         self.timeout = timeout
-        self._ioloop = ioloop
+        self._ioloop: Optional[asyncio.AbstractEventLoop]
+        if ioloop is not None:
+            assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
+            # we unwrap the tornado loop to get the native python loop
+            self._ioloop = ioloop.asyncio_loop
+        else:
+            self._ioloop = None
         if client is None:
             assert name is not None  # Make mypy happy
             self.name = name
@@ -428,27 +435,16 @@ class SyncClient(object):
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
-            method: Callable[..., Coroutine[Any, Any, common.Result]] = getattr(self._client, name)
-
-            def method_call() -> Coroutine[Any, Any, common.Result]:
-                return method(*args, **kwargs)
+            method: Callable[..., abc.Awaitable[common.Result]] = getattr(self._client, name)
+            with_timeout: Coroutine[Any, Any, common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
 
             try:
                 if self._ioloop is None:
-                    try:
-                        loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        # TODO: timeout
-                        return asyncio.run(method_call())
-                    else:
-                        # TODO: timeout
-                        return loop.run_until_complete(method_call())
+                    # no loop is running: create a loop for this thread if it doesn't exist already and run it
+                    return util.ensure_event_loop().run_until_complete(with_timeout)
                 else:
-                    # a specific IOloop is passed
-                    # we unwrap the tornado loop to get the native python loop
-                    # and safely tap into it using run_coroutine_threadsafe
-                    assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
-                    return run_coroutine_threadsafe(method_call(), self._ioloop.asyncio_loop).result(self.timeout)
+                    # loop is running on different thread
+                    return run_coroutine_threadsafe(with_timeout, self._ioloop).result()
             except TimeoutError:
                 raise ConnectionRefusedError()
 
