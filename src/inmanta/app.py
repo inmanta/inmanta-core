@@ -299,7 +299,7 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-def compiler_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
+def compiler_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -421,7 +421,7 @@ def list_commands(options: argparse.Namespace) -> None:
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
+def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
@@ -453,7 +453,7 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
+def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
@@ -472,7 +472,7 @@ def deploy(options: argparse.Namespace) -> None:
         run.stop()
 
 
-def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
+def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
