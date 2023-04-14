@@ -1093,9 +1093,7 @@ class HandlerLogger(typing.Protocol):
     def error(self, msg: str, *args: object, **kwargs: object) -> None:
         ...
 
-    def exception(
-        self, msg: str, *args: object, exc_info: bool = True, **kwargs: object
-    ) -> None:
+    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
         ...
 
     def critical(self, msg: str, *args: object, **kwargs: object) -> None:
@@ -1144,9 +1142,7 @@ class LoggerWrapper:
     def error(self, msg: str, *args: object, **kwargs: object) -> None:
         self.log_msg(logging.ERROR, msg, args, kwargs)
 
-    def exception(
-        self, msg: str, *args: object, exc_info: bool = True, **kwargs: object
-    ) -> None:
+    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
         self.error(msg, *args, exc_info=exc_info, **kwargs)
 
     def critical(self, msg: str, *args: object, **kwargs: object) -> None:
