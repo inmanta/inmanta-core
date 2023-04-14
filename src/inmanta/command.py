@@ -36,20 +36,6 @@ class ShowUsageException(Exception):
     """
 
 
-def add_verbosity_option(parser: argparse.ArgumentParser) -> None:
-    # The default=argparse.SUPPRESS ensures we don't override the value set in an outer command when it is not set
-    # in a sub-command. e.g. if we would set default=0 here, then for `inmanta -vvv module install`, the verbosity level
-    # would default to 0 since it is not explicitly set in the `install` command.
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=argparse.SUPPRESS,
-        help="Log level for messages going to the console. Default is warnings,"
-        "-v warning, -vv info, -vvv debug and -vvvv trace",
-    )
-
-
 class Commander(object):
     """
     This class handles commands
@@ -66,6 +52,7 @@ class Commander(object):
         parser_config: Optional[ParserConfigType],
         require_project: bool = False,
         aliases: List[str] = [],
+        verbose_opt_out: bool = False,
     ) -> None:
         """
         Add a new export function
@@ -79,6 +66,7 @@ class Commander(object):
             "parser_config": parser_config,
             "require_project": require_project,
             "aliases": aliases,
+            "verbose_opt_out": verbose_opt_out,
         }
 
     config = None
@@ -110,16 +98,20 @@ class command(object):  # noqa: N801
         parser_config: Optional[ParserConfigType] = None,
         require_project: bool = False,
         aliases: List[str] = [],
+        verbose_opt_out: bool = False,
     ) -> None:
         self.name = name
         self.help = help_msg
         self.require_project = require_project
         self.parser_config = parser_config
         self.aliases = aliases
+        self.verbose_opt_out = verbose_opt_out
 
     def __call__(self, function: FunctionType) -> FunctionType:
         """
         The wrapping
         """
-        Commander.add(self.name, function, self.help, self.parser_config, self.require_project, self.aliases)
+        Commander.add(
+            self.name, function, self.help, self.parser_config, self.require_project, self.aliases, self.verbose_opt_out
+        )
         return function

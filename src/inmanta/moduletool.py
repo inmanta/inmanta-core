@@ -53,7 +53,7 @@ import toml
 from build.env import IsolatedEnvBuilder
 from inmanta import const, env
 from inmanta.ast import CompilerException
-from inmanta.command import CLIException, ShowUsageException, add_verbosity_option
+from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
 from inmanta.module import (
     DummyProject,
@@ -334,14 +334,10 @@ class VersionOperation:
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser) -> None:
-        add_verbosity_option(parser)
+    def parser_config(cls, parser: ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
-        verbosity_parser = argparse.ArgumentParser(add_help=False)
-        add_verbosity_option(verbosity_parser)
-
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml", parents=[verbosity_parser])
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml", parents=parent_parsers)
         freeze.add_argument(
             "-o",
             "--outfile",
@@ -363,7 +359,7 @@ class ProjectTool(ModuleLikeTool):
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
-        init = subparser.add_parser("init", help="Initialize directory structure for a project", parents=[verbosity_parser])
+        init = subparser.add_parser("init", help="Initialize directory structure for a project", parents=parent_parsers)
         init.add_argument("--name", "-n", help="The name of the new project", required=True)
         init.add_argument("--output-dir", "-o", help="Output directory path", default="./")
         init.add_argument(
@@ -382,7 +378,7 @@ to be updated to the latest compatible version.
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the different Inmanta modules.
         """.strip(),
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
         add_deps_check_arguments(install)
 
@@ -398,7 +394,7 @@ Update all modules to the latest version compatible with the module version cons
 This command might reinstall Python packages in the development venv if the currently installed versions are not the latest
 compatible with the dependencies specified by the updated modules.
             """.strip(),
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
         add_deps_check_arguments(update)
 
@@ -563,13 +559,9 @@ class ModuleTool(ModuleLikeTool):
         self._mod_handled_list = set()
 
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser) -> None:
+    def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
-        add_verbosity_option(parser)
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-
-        verbosity_parser = argparse.ArgumentParser(add_help=False)
-        add_verbosity_option(verbosity_parser)
 
         add_help_msg = "Add a module dependency to an Inmanta module or project."
         add = subparser.add_parser(
@@ -577,7 +569,7 @@ class ModuleTool(ModuleLikeTool):
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
             f"Either --v1 or --v2 has to be set.",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
         add.add_argument(
             "module_req",
@@ -595,19 +587,19 @@ class ModuleTool(ModuleLikeTool):
         subparser.add_parser(
             "list",
             help="List all modules used in this project in a table",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
 
         do = subparser.add_parser(
             "do",
             help="Execute a command on all loaded modules",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
         do.add_argument("command", metavar="command", help="the command to execute")
 
         install: ArgumentParser = subparser.add_parser(
             "install",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
             help="Install a module in the active Python environment.",
             description="""
 Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context
@@ -626,20 +618,20 @@ mode.
         subparser.add_parser(
             "status",
             help="Run a git status on all modules and report",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
 
         subparser.add_parser(
             "push",
             help="Run a git push on all modules and report",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
 
         # not currently working
         subparser.add_parser(
             "verify",
             help="Verify dependencies and frozen module versions",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
 
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
@@ -664,7 +656,7 @@ mode.
         create = subparser.add_parser(
             "create",
             help="Create a new module",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
         create.add_argument("name", help="The name of the module")
         create.add_argument(
@@ -674,7 +666,7 @@ mode.
         freeze = subparser.add_parser(
             "freeze",
             help="Set all version numbers in module.yml",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
         freeze.add_argument(
             "-o",
@@ -701,7 +693,7 @@ mode.
         build = subparser.add_parser(
             "build",
             help="Build a Python package from a V2 module.",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
         build.add_argument(
             "path",
@@ -735,12 +727,12 @@ mode.
         subparser.add_parser(
             "v1tov2",
             help="Convert a V1 module to a V2 module in place",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
         )
 
         release = subparser.add_parser(
             "release",
-            parents=[verbosity_parser],
+            parents=parent_parsers,
             help="Release a new stable or dev release for this module.",
             description="""
 When a stable release is done, this command:

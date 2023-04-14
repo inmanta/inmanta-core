@@ -41,11 +41,12 @@ import threading
 import time
 import traceback
 import typing
+from argparse import ArgumentParser
 from asyncio import ensure_future
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Coroutine, Dict, Optional
+from typing import Any, Callable, Coroutine, Dict, Optional, Sequence
 
 import colorlog
 from colorlog.formatter import LogColors
@@ -57,7 +58,7 @@ import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
-from inmanta.command import CLIException, Commander, ShowUsageException, add_verbosity_option, command
+from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
@@ -118,7 +119,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         return head + "".join(indent + line for line in tail)
 
 
-@command("server", help_msg="Start the inmanta server", parser_config=add_verbosity_option)
+@command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
@@ -154,7 +155,7 @@ def start_server(options: argparse.Namespace) -> None:
         exit(EXIT_START_FAILED)
 
 
-@command("agent", help_msg="Start the inmanta agent", parser_config=add_verbosity_option)
+@command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
 
@@ -298,7 +299,7 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-def compiler_config(parser: argparse.ArgumentParser) -> None:
+def compiler_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -352,7 +353,6 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
     )
 
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    add_verbosity_option(parser)
     moduletool.add_deps_check_arguments(parser)
 
 
@@ -414,18 +414,18 @@ def compile_project(options: argparse.Namespace) -> None:
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
 
 
-@command("list-commands", help_msg="Print out an overview of all commands")
+@command("list-commands", help_msg="Print out an overview of all commands", verbose_opt_out=True)
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: argparse.ArgumentParser) -> None:
+def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
-@command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
+@command("help", help_msg="show a help message and exit", parser_config=help_parser_config, verbose_opt_out=True)
 def help_command(options: argparse.Namespace) -> None:
     if options.subcommand is None:
         cmd_parser().print_help()
@@ -453,10 +453,9 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
+def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    add_verbosity_option(parser)
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -473,11 +472,10 @@ def deploy(options: argparse.Namespace) -> None:
         run.stop()
 
 
-def export_parser_config(parser: argparse.ArgumentParser) -> None:
+def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: Optional[Sequence[ArgumentParser]]) -> None:
     """
     Configure the compiler of the export function
     """
-    add_verbosity_option(parser)
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
     parser.add_argument(
         "-j",
@@ -730,11 +728,26 @@ def cmd_parser() -> argparse.ArgumentParser:
         required=False,
     )
 
+    verbosity_parser = argparse.ArgumentParser(add_help=False)
+    verbosity_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=argparse.SUPPRESS,
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
+    )
+
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
-        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
+        parent_parsers: list[argparse.ArgumentParser] = []
+        if not cmd_options["verbose_opt_out"]:
+            parent_parsers.append(verbosity_parser)
+        cmd_subparser = subparsers.add_parser(
+            cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"], parents=parent_parsers
+        )
         if cmd_options["parser_config"] is not None:
-            cmd_options["parser_config"](cmd_subparser)
+            cmd_options["parser_config"](cmd_subparser, parent_parsers)
         cmd_subparser.set_defaults(func=cmd_options["function"])
         cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
 
