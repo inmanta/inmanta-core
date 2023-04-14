@@ -171,7 +171,7 @@ class ResourceAction(ResourceActionBase):
         else:
             # main execution
             try:
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     self.scheduler.agent.thread_pool,
                     provider.deploy,
                     ctx,
@@ -689,7 +689,7 @@ class AgentInstance(object):
         return True
 
     async def get_provider(self, resource: Resource) -> ResourceHandler:
-        provider = await asyncio.get_event_loop().run_in_executor(
+        provider = await asyncio.get_running_loop().run_in_executor(
             self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
         )
         provider.set_cache(self._cache)
@@ -795,7 +795,7 @@ class AgentInstance(object):
                             )
                         else:
                             try:
-                                await asyncio.get_event_loop().run_in_executor(
+                                await asyncio.get_running_loop().run_in_executor(
                                     self.thread_pool, provider.execute, ctx, resource, True
                                 )
 
@@ -866,7 +866,7 @@ class AgentInstance(object):
                 try:
                     self._cache.open_version(version)
                     provider = await self.get_provider(resource_obj)
-                    result = await asyncio.get_event_loop().run_in_executor(
+                    result = await asyncio.get_running_loop().run_in_executor(
                         self.thread_pool, provider.check_facts, ctx, resource_obj
                     )
 
@@ -973,7 +973,7 @@ class Agent(SessionEndpoint):
 
     # cache reference to THIS ioloop for handlers to push requests on it
     # defer to start, just to be sure
-    _io_loop: ioloop.IOLoop
+    _io_loop: asyncio.AbstractEventLoop
 
     def __init__(
         self,
@@ -1070,7 +1070,7 @@ class Agent(SessionEndpoint):
 
     async def start(self) -> None:
         # cache reference to THIS ioloop for handlers to push requests on it
-        self._io_loop = ioloop.IOLoop.current()
+        self._io_loop = asyncio.get_running_loop()
         await super(Agent, self).start()
 
     async def add_end_point_name(self, name: str) -> None:
@@ -1253,7 +1253,7 @@ class Agent(SessionEndpoint):
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
         async with self._loader_lock:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(self.thread_pool, self._env.install_from_list, requirements)
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
 

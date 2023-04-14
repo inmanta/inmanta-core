@@ -399,7 +399,7 @@ class SyncClient(object):
         name: Optional[str] = None,
         timeout: int = 120,
         client: Optional[Client] = None,
-        ioloop: Optional[tornado.ioloop.IOLoop] = None,
+        ioloop: Optional[asyncio.AbstractEventLoop] = None,
     ) -> None:
         """
         either name or client is required.
@@ -418,13 +418,7 @@ class SyncClient(object):
             raise Exception("Either name or client needs to be provided.")
 
         self.timeout = timeout
-        self._ioloop: Optional[asyncio.AbstractEventLoop]
-        if ioloop is not None:
-            assert isinstance(self._ioloop, BaseAsyncIOLoop)  # make mypy happy
-            # we unwrap the tornado loop to get the native python loop
-            self._ioloop = ioloop.asyncio_loop
-        else:
-            self._ioloop = None
+        self._ioloop: Optional[asyncio.AbstractEventLoop] = ioloop
         if client is None:
             assert name is not None  # Make mypy happy
             self.name = name

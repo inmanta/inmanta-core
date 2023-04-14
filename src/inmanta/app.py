@@ -54,7 +54,7 @@ from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
-from inmanta import const, module, moduletool, protocol
+from inmanta import const, module, moduletool, protocol, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -126,7 +126,7 @@ def start_server(options: argparse.Namespace) -> None:
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
-    asyncio.set_event_loop(asyncio.new_event_loop())
+    util.ensure_event_loop()
 
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
@@ -158,7 +158,7 @@ def start_server(options: argparse.Namespace) -> None:
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
 
-    asyncio.set_event_loop(asyncio.new_event_loop())
+    util.ensure_event_loop()
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
