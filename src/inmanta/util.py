@@ -41,7 +41,6 @@ from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
-from tornado.ioloop import IOLoop
 
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
