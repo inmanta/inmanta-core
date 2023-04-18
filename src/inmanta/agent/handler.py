@@ -22,6 +22,7 @@ import logging
 import traceback
 import typing
 import uuid
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, overload
@@ -159,7 +160,51 @@ def cache(
 
 
 @stable_api
-class HandlerContext(object):
+class HandlerLogger(ABC):
+    """
+
+    TODO: better docstring (from perspective of core, not handler)
+    This protocol defines a part of the interface of the inmanta HandlerContext object
+    that can be used to log messages to the server.  It is used in different helper
+    functions across a handler code base.
+
+    When such helper class is used in another context than an agent, they can create
+    another object than the HandlerContext, which simply implements those helper methods,
+    and still be able to use the helper method.
+
+    """
+
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.DEBUG, msg, args, kwargs)
+
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.INFO, msg, args, kwargs)
+
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.WARNING, msg, args, kwargs)
+
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.ERROR, msg, args, kwargs)
+
+    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
+        self.error(msg, *args, exc_info=exc_info, **kwargs)
+
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.CRITICAL, msg, args, kwargs)
+
+    @abstractmethod
+    def _log_msg(
+        self,
+        level: int,
+        msg: str,
+        *args,
+        **kwargs,
+    ) -> None:
+        raise NotImplementedError
+
+
+@stable_api
+class HandlerContext(object, HandlerLogger):
     """
     Context passed to handler methods for state related "things"
     """
@@ -355,6 +400,7 @@ class HandlerContext(object):
         return self._changes
 
     def log_msg(self, level: int, msg: str, args: Sequence[object], kwargs: Dict[str, object]) -> None:
+        LOGGER.warning("log_msg is being deprecated, please use...")  # TODO: better message
         if len(args) > 0:
             raise Exception("Args not supported")
         if "exc_info" in kwargs:
@@ -379,73 +425,6 @@ class HandlerContext(object):
         log = data.LogLine.log(level, msg, **kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
-
-    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'DEBUG'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        Keyword arguments should be JSON serializable.
-
-        ``logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)``
-        """
-        self.log_msg(logging.DEBUG, msg, args, kwargs)
-
-    def info(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'INFO'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        Keyword arguments should be JSON serializable.
-
-        ``logger.info("Houston, we have a %s", "interesting problem", exc_info=1)``
-        """
-        self.log_msg(logging.INFO, msg, args, kwargs)
-
-    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'WARNING'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        Keyword arguments should be JSON serializable.
-
-        ``logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)``
-        """
-        self.log_msg(logging.WARNING, msg, args, kwargs)
-
-    def error(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'ERROR'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        ``logger.error("Houston, we have a %s", "major problem", exc_info=1)``
-        """
-        self.log_msg(logging.ERROR, msg, args, kwargs)
-
-    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
-        """
-        Convenience method for logging an ERROR with exception information.
-        """
-        self.error(msg, *args, exc_info=exc_info, **kwargs)
-
-    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'CRITICAL'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        ``logger.critical("Houston, we have a %s", "major disaster", exc_info=1)``
-        """
-        self.log_msg(logging.CRITICAL, msg, args, kwargs)
 
 
 @stable_api
@@ -1069,39 +1048,10 @@ class HandlerNotAvailableException(Exception):
     """
 
 
-class HandlerLogger(typing.Protocol):
+@stable_api
+class LoggerWrapper(HandlerLogger):
     """
-    This protocol defines a part of the interface of the inmanta HandlerContext object
-    that can be used to log messages to the server.  It is used in different helper
-    functions across a handler code base.
-
-    When such helper class is used in another context than an agent, they can create
-    another object than the HandlerContext, which simply implements those helper methods,
-    and still be able to use the helper method.
-
-    """
-
-    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        ...
-
-    def info(self, msg: str, *args: object, **kwargs: object) -> None:
-        ...
-
-    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
-        ...
-
-    def error(self, msg: str, *args: object, **kwargs: object) -> None:
-        ...
-
-    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
-        ...
-
-    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
-        ...
-
-
-class LoggerWrapper:
-    """
+    TODO: better docstring (from perspective of core, not handler)
     This class implements the HandlerLogger interface
 
     It can be used in the tests of a module to be able to use the handler helpers, outside of the context of an agent.
@@ -1110,12 +1060,12 @@ class LoggerWrapper:
     def __init__(self, logger: logging.Logger) -> None:
         self.logger = logger
 
-    def log_msg(
+    def _log_msg(
         self,
         level: int,
         msg: str,
-        args: typing.Sequence[object],
-        kwargs: typing.Dict[str, object],
+        *args,
+        **kwargs,
     ) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
@@ -1129,21 +1079,3 @@ class LoggerWrapper:
             self.logger.log(level, msg, kwargs, exc_info=exc_info)
         else:
             self.logger.log(level, msg, exc_info=exc_info)
-
-    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        self.log_msg(logging.DEBUG, msg, args, kwargs)
-
-    def info(self, msg: str, *args: object, **kwargs: object) -> None:
-        self.log_msg(logging.INFO, msg, args, kwargs)
-
-    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
-        self.log_msg(logging.WARNING, msg, args, kwargs)
-
-    def error(self, msg: str, *args: object, **kwargs: object) -> None:
-        self.log_msg(logging.ERROR, msg, args, kwargs)
-
-    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
-        self.error(msg, *args, exc_info=exc_info, **kwargs)
-
-    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
-        self.log_msg(logging.CRITICAL, msg, args, kwargs)
