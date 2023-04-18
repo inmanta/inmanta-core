@@ -74,6 +74,7 @@ class resource(object):  # noqa: N801
                   ``host.name``
     """
 
+    # The _resources dict is accessed by the compile function in pytest-inmanta.
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
