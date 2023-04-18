@@ -1,4 +1,4 @@
-description: In a future release it will not be possible anymore to use an id_attribute called id
+description: In a future release it will not be possible anymore to use a resource with an id_attribute called id
 issue-nr: 367
 issue-repo: pytest-inmanta
 change-type: patch
