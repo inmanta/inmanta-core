@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import Namespace
@@ -157,3 +158,115 @@ world
     compiler.do_compile()
     out, err = capsys.readouterr()
     assert expected == out
+
+def test_fstring_interpol(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+arg = 123
+z="{{arg}}"
+std::print(z)
+        """,
+    )
+    expected = "123\n"
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert expected == out
+
+def test_fstring(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+arg = 123
+z="arg {{arg}} aa"
+std::print(z)
+        """,
+    )
+    expected = "arg 123 aa\n"
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert expected == out
+
+
+#
+# Expected :'{123}\n'
+# Actual   :'123\n'
+
+
+def test_fstring_sandbox(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+arg = 123
+z=f"{arg}"
+std::print(z)
+        """,
+    )
+    expected = "123\n"
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected
+
+
+def test_fstring_sandbox2(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Foo:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end
+
+implement Foo using std::none
+
+a=Foo(bar={})
+b=Foo(bar={"a":z})
+c=Foo(bar={}, blah={"z":"y"})
+z=5
+
+std::print(f"str is : {b.bar['a']}")
+# std::print(b.bar["a"])
+        """,
+    )
+    expected = "\n"
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected
+
+
+def test_fstring_sandbox3(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+arg = 12.23455
+z=f"{arg:.4f}"
+std::print(z)
+        """,
+    )
+    expected = "12.2346\n"
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected
+
+@pytest.mark.parametrize(
+    "f_string,expected_output",
+    [
+        (r"f'{arg}'", "123\n"),
+        (r"f'{arg}{arg}{arg}'", "123123123\n"),
+        (r"f'{arg:@>5}'", "@@123\n"),
+        (r"f'{arg:^5}'", " 123 \n"),
+    ],
+)
+def test_fstring_sandbox4(snippetcompiler, capsys, f_string, expected_output):
+    snippetcompiler.setup_for_snippet(
+        f"""
+arg = 123
+z={f_string}
+std::print(z)
+        """,
+    )
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected_output
+

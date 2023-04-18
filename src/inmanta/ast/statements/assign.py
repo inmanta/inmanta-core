@@ -17,7 +17,8 @@
 """
 
 # pylint: disable-msg=W0613
-
+import logging
+import string
 import typing
 from collections.abc import Iterator
 from itertools import chain
@@ -73,6 +74,7 @@ if TYPE_CHECKING:
     from inmanta.ast.variables import Reference  # noqa: F401
 
 T = TypeVar("T")
+LOGGER = logging.getLogger(__name__)
 
 
 class CreateList(ReferenceStatement):
@@ -555,17 +557,34 @@ class ShortIndexLookup(IndexLookup):
         )
 
 
-class StringFormat(ReferenceStatement):
+class FormattedString(ReferenceStatement):
     """
-    Create a new string by doing a string interpolation
+    This class is an abstraction around a single-line string containing references to variables.
     """
-
     __slots__ = ("_format_string", "_variables")
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
+        LOGGER.debug(f"IUNTI FormattedString format_string %s var: %s", format_string, ",".join([v[1] for v in variables]))
         ReferenceStatement.__init__(self, [k for (k, _) in variables])
         self._format_string = format_string
         self._variables = variables
+
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> None:
+        super().execute(requires, resolver, queue)
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
+
+    def __repr__(self) -> str:
+        return "Format(%s)" % self._format_string
+
+
+class StringInterpolationFormat(FormattedString):
+    """
+    Create a new string by doing a string interpolation
+    """
+    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
+        super().__init__(format_string, variables)
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -581,8 +600,30 @@ class StringFormat(ReferenceStatement):
 
         return result_string
 
-    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
-        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
-    def __repr__(self) -> str:
-        return "Format(%s)" % self._format_string
+class StringFormatV2(FormattedString):
+    """
+    Create a new string by using python build in formatting
+    """
+    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
+        super().__init__(format_string, variables)
+
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
+        formatter = string.Formatter()
+
+        kwargs = {}
+        for _var, str_id in self._variables:
+            value = _var.execute(requires, resolver, queue)
+            if isinstance(value, Unknown):
+                return Unknown(self)
+            if isinstance(value, float) and (value - int(value)) == 0:
+                value = int(value)
+
+            kwargs[str_id] = value
+
+        result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
+
+        return result_string
+
+
