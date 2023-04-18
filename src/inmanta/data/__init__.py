@@ -905,6 +905,17 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
+class UnmanagedResourceOrder(SingleDatabaseOrder):
+    """Represents the ordering by which unmanaged resources should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {
+            ColumnNameStr("unmanaged_resource_id"): StringColumn,
+        }
+
+
 class BaseQueryBuilder(ABC):
     """Provides a way to build up a sql query from its parts.
     Each method returns a new query builder instance, with the additional parameters processed"""
@@ -5887,6 +5898,26 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
+class UnmanagedResource(BaseDocument):
+    """
+    :param environment: the environment of the resource
+    :param unmanaged_resource_id: The id of the resource
+    :param values: The values associated with the unmanaged_resource
+    """
+
+    environment: uuid.UUID
+    unmanaged_resource_id: m.ResourceIdStr
+    values: dict[str, str]
+
+    __primary_key__ = ("environment", "unmanaged_resource_id")
+
+    def to_dto(self) -> m.UnmanagedResource:
+        return m.UnmanagedResource(
+            unmanaged_resource_id=self.unmanaged_resource_id,
+            values=self.values,
+        )
+
+
 _classes = [
     Project,
     Environment,
@@ -5906,6 +5937,7 @@ _classes = [
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     User,
+    UnmanagedResource,
 ]
 
 
