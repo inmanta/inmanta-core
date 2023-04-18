@@ -2317,35 +2317,35 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
         )
         await cm.insert()
 
-    # ResourceAction 1
-    log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
-    action_id = uuid.uuid4()
-    ra1 = data.ResourceAction(
-        environment=env.id,
-        version=version,
-        resource_version_ids=["id1"],
-        action_id=action_id,
-        action=const.ResourceAction.store,
-        started=timestamp_eight_days_ago,
-        finished=datetime.datetime.now(),
-        messages=[log_line_ra1],
-    )
-    await ra1.insert()
+        # ResourceAction 1
+        log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
+        action_id = uuid.uuid4()
+        ra1 = data.ResourceAction(
+            environment=env.id,
+            version=version,
+            resource_version_ids=["id1"],
+            action_id=action_id,
+            action=const.ResourceAction.store,
+            started=timestamp_eight_days_ago,
+            finished=datetime.datetime.now(),
+            messages=[log_line_ra1],
+        )
+        await ra1.insert()
 
-    # ResourceAction 2
-    log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
-    action_id = uuid.uuid4()
-    ra2 = data.ResourceAction(
-        environment=env.id,
-        version=version,
-        resource_version_ids=["id2"],
-        action_id=action_id,
-        action=const.ResourceAction.store,
-        started=timestamp_six_days_ago,
-        finished=datetime.datetime.now(),
-        messages=[log_line_ra2],
-    )
-    await ra2.insert()
+        # ResourceAction 2
+        log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
+        action_id = uuid.uuid4()
+        ra2 = data.ResourceAction(
+            environment=env.id,
+            version=version,
+            resource_version_ids=["id2"],
+            action_id=action_id,
+            action=const.ResourceAction.store,
+            started=timestamp_six_days_ago,
+            finished=datetime.datetime.now(),
+            messages=[log_line_ra2],
+        )
+        await ra2.insert()
 
     # Make the retention time for the second environment shorter than the default 7 days
     await envs[1].set(data.RESOURCE_ACTION_LOGS_RETENTION, value=2)
