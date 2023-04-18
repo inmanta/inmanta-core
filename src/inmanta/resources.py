@@ -629,6 +629,14 @@ class Id(object):
         result = PARSE_RVID_REGEX.search(value)
         return result is not None
 
+    @classmethod
+    def is_resource_id(cls, value: str) -> bool:
+        """
+        Check whether the given value is a resource id
+        """
+        result = PARSE_ID_REGEX.search(value)
+        return result is not None
+
     def is_resource_version_id_obj(self) -> bool:
         """
         Check whether this object represents a resource version id
