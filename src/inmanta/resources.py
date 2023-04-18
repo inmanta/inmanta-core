@@ -75,6 +75,7 @@ class resource(object):  # noqa: N801
     """
 
     # The _resources dict is accessed by the compile function in pytest-inmanta.
+    # see https://github.com/inmanta/pytest-inmanta/pull/381
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
