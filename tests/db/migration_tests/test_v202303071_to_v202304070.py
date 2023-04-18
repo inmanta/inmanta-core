@@ -24,7 +24,7 @@ import pytest
 from inmanta.data import Environment, UnmanagedResource
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202304060.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202303071.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     get_tables_in_db: Callable[[], Awaitable[List[str]]],
