@@ -681,7 +681,7 @@ class AgentInstance(object):
             return False
         if time.time() < self._get_resource_timeout:
             self.logger.info(
-                "Attempting to get resources during backoff %g seconds left, last download took %d seconds",
+                "Attempting to get resources during backoff %g seconds left, last download took %f seconds",
                 self._get_resource_timeout - time.time(),
                 self._get_resource_duration,
             )
