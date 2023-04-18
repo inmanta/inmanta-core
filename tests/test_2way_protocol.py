@@ -147,7 +147,9 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
 async def check_sessions(sessions):
     for s in sessions:
         a = await s.client.get_agent_status_x("X")
-        assert a.get_result()["status"] == "ok"
+        assert a.code == 200, a.result
+        result = a.get_result()
+        assert result["status"] == "ok", result
 
 
 @pytest.mark.slowtest
