@@ -3823,9 +3823,9 @@ class ResourceAction(BaseDocument):
         for env in environments:
             time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
             keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
+            query = "DELETE FROM " + cls.table_name() + " WHERE environment=$1 AND started < $2"
             value = cls._get_value(keep_logs_until)
-            await cls._execute_query(query, value)
+            await cls._execute_query(query, env.id, value)
 
     @classmethod
     async def query_resource_actions(
