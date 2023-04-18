@@ -2295,23 +2295,29 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
+    envs = []
 
-    version = 1
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        deployed=True,
-    )
-    await cm.insert()
+    timestamp_eight_days_ago = datetime.datetime.now().astimezone() - datetime.timedelta(days=8)
+    timestamp_six_days_ago = datetime.datetime.now().astimezone() - datetime.timedelta(days=6)
+
+    for i in range(2):
+        env = data.Environment(name=f"dev-{i}", project=project.id, repo_url="", repo_branch="")
+        await env.insert()
+        envs.append(env)
+
+        version = 1
+        cm = data.ConfigurationModel(
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=1,
+            version_info={},
+            released=True,
+            deployed=True,
+        )
+        await cm.insert()
 
     # ResourceAction 1
-    timestamp_ra1 = datetime.datetime.now() - datetime.timedelta(days=8)
     log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
     action_id = uuid.uuid4()
     ra1 = data.ResourceAction(
@@ -2320,14 +2326,13 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
         resource_version_ids=["id1"],
         action_id=action_id,
         action=const.ResourceAction.store,
-        started=timestamp_ra1,
+        started=timestamp_eight_days_ago,
         finished=datetime.datetime.now(),
         messages=[log_line_ra1],
     )
     await ra1.insert()
 
     # ResourceAction 2
-    timestamp_ra2 = datetime.datetime.now() - datetime.timedelta(days=6)
     log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
     action_id = uuid.uuid4()
     ra2 = data.ResourceAction(
@@ -2336,17 +2341,21 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
         resource_version_ids=["id2"],
         action_id=action_id,
         action=const.ResourceAction.store,
-        started=timestamp_ra2,
+        started=timestamp_six_days_ago,
         finished=datetime.datetime.now(),
         messages=[log_line_ra2],
     )
     await ra2.insert()
 
-    assert len(await data.ResourceAction.get_list()) == 2
+    # Make the retention time for the second environment shorter than the default 7 days
+    await envs[1].set(data.RESOURCE_ACTION_LOGS_RETENTION, value=2)
+
+    assert len(await data.ResourceAction.get_list()) == 4  # Two ra's in each environment
     await data.ResourceAction.purge_logs()
-    assert len(await data.ResourceAction.get_list()) == 1
+    assert len(await data.ResourceAction.get_list()) == 1  # One ra in the first environment and none in the second environment
     remaining_resource_action = (await data.ResourceAction.get_list())[0]
-    assert remaining_resource_action.action_id == ra2.action_id
+    assert remaining_resource_action.environment == envs[0].id
+    assert remaining_resource_action.started == timestamp_six_days_ago
 
 
 @pytest.mark.asyncio
