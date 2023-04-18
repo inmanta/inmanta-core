@@ -36,7 +36,7 @@ from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Type
 
 import click
 import more_itertools
@@ -334,7 +334,7 @@ class VersionOperation:
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
+    def parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml", parents=parent_parsers)
@@ -559,7 +559,7 @@ class ModuleTool(ModuleLikeTool):
         self._mod_handled_list = set()
 
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
+    def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
@@ -975,7 +975,7 @@ version: 0.0.1dev0"""
         project = Project.get()
         project.get_complete_ast()
 
-        names: Sequence[str] = sorted(project.modules.keys())
+        names: abc.Sequence[str] = sorted(project.modules.keys())
         specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
             mod: Module = Project.get().modules[name]
