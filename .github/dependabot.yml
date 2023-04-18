@@ -9,3 +9,12 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+- target-branch: iso6
+  package-ecosystem: pip
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  allow:
+    # Allow both direct and indirect updates for all packages
+    - dependency-type: "all"
