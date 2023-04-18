@@ -43,10 +43,11 @@ import traceback
 import typing
 from argparse import ArgumentParser
 from asyncio import ensure_future
+from collections import abc
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Coroutine, Dict, Optional, Sequence
+from typing import Any, Callable, Coroutine, Dict, Optional
 
 import colorlog
 from colorlog.formatter import LogColors
@@ -299,7 +300,7 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-def compiler_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
+def compiler_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -414,18 +415,18 @@ def compile_project(options: argparse.Namespace) -> None:
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
 
 
-@command("list-commands", help_msg="Print out an overview of all commands", verbose_opt_out=True)
+@command("list-commands", help_msg="Print out an overview of all commands", add_verbose_flag=False)
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
+def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
-@command("help", help_msg="show a help message and exit", parser_config=help_parser_config, verbose_opt_out=True)
+@command("help", help_msg="show a help message and exit", parser_config=help_parser_config, add_verbose_flag=False)
 def help_command(options: argparse.Namespace) -> None:
     if options.subcommand is None:
         cmd_parser().print_help()
@@ -453,7 +454,7 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
+def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
@@ -472,7 +473,7 @@ def deploy(options: argparse.Namespace) -> None:
         run.stop()
 
 
-def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: Sequence[ArgumentParser]) -> None:
+def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -741,7 +742,7 @@ def cmd_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
         parent_parsers: list[argparse.ArgumentParser] = []
-        if not cmd_options["verbose_opt_out"]:
+        if cmd_options["add_verbose_flag"]:
             parent_parsers.append(verbosity_parser)
         cmd_subparser = subparsers.add_parser(
             cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"], parents=parent_parsers
