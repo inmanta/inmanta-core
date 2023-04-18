@@ -1,0 +1,7 @@
+description: Add the "-v" / "--verbose" option to Inmanta commands and sub-commands to set the verbosity of the console output.
+issue-nr: 5755
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
