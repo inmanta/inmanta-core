@@ -962,7 +962,7 @@ def create_string_format(format_string: LocatableString, variables: List[Tuple[s
         ref = Reference(ref_locatable_string)
         ref.location = ref_locatable_string.location
         ref.namespace = namespace
-        if len(var_parts) > 1:
+        if len(var_parts) > 1 and not use_v2_format:
             attribute_offsets: Iterator[int] = accumulate(
                 var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1
             )

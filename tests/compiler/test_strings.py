@@ -215,6 +215,7 @@ entity Foo:
   dict bar
   dict foo = {}
   dict blah = {"a":"a"}
+  int n = 2
 end
 
 implement Foo using std::none
@@ -222,13 +223,16 @@ implement Foo using std::none
 a=Foo(bar={})
 b=Foo(bar={"a":z})
 c=Foo(bar={}, blah={"z":"y"})
+d=Foo(bar={}, n =z)
 z=5
 
-std::print(f"str is : {b.bar['a']}")
-# std::print(b.bar["a"])
+std::print(f"str is : {d.n}")
+std::print("str is : {{d.n}}")
         """,
     )
     expected = "\n"
+# kwargs = {'d.n': __config__::Foo 7fe96a3705e0}
+#     kwargs = {'d.n': 5}
 
     compiler.do_compile()
     out, err = capsys.readouterr()
