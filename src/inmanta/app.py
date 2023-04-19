@@ -41,7 +41,9 @@ import threading
 import time
 import traceback
 import typing
+from argparse import ArgumentParser
 from asyncio import ensure_future
+from collections import abc
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
@@ -298,7 +300,7 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-def compiler_config(parser: argparse.ArgumentParser) -> None:
+def compiler_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -306,10 +308,10 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors_subcommand",
+        dest="errors",
         help="Show stack traces for compile errors",
         action="store_true",
-        default=False,
+        default=argparse.SUPPRESS,
     )
     parser.add_argument("--server_address", dest="server", help="The address of the server hosting the environment")
     parser.add_argument("--server_port", dest="port", help="The port of the server hosting the environment")
@@ -413,18 +415,18 @@ def compile_project(options: argparse.Namespace) -> None:
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
 
 
-@command("list-commands", help_msg="Print out an overview of all commands")
+@command("list-commands", help_msg="Print out an overview of all commands", add_verbose_flag=False)
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: argparse.ArgumentParser) -> None:
+def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
-@command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
+@command("help", help_msg="show a help message and exit", parser_config=help_parser_config, add_verbose_flag=False)
 def help_command(options: argparse.Namespace) -> None:
     if options.subcommand is None:
         cmd_parser().print_help()
@@ -452,7 +454,7 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
+def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
@@ -471,7 +473,7 @@ def deploy(options: argparse.Namespace) -> None:
         run.stop()
 
 
-def export_parser_config(parser: argparse.ArgumentParser) -> None:
+def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -500,10 +502,10 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors_subcommand",
+        dest="errors",
         help="Show stack traces for compile errors",
         action="store_true",
-        default=False,
+        default=argparse.SUPPRESS,
     )
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
     parser.add_argument(
@@ -681,6 +683,7 @@ log_levels = {
 
 def cmd_parser() -> argparse.ArgumentParser:
     # create the argument compiler
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
     parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default=None)
@@ -725,11 +728,27 @@ def cmd_parser() -> argparse.ArgumentParser:
         default=False,
         required=False,
     )
+
+    verbosity_parser = argparse.ArgumentParser(add_help=False)
+    verbosity_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=argparse.SUPPRESS,
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
+    )
+
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
-        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
+        parent_parsers: list[argparse.ArgumentParser] = []
+        if cmd_options["add_verbose_flag"]:
+            parent_parsers.append(verbosity_parser)
+        cmd_subparser = subparsers.add_parser(
+            cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"], parents=parent_parsers
+        )
         if cmd_options["parser_config"] is not None:
-            cmd_options["parser_config"](cmd_subparser)
+            cmd_options["parser_config"](cmd_subparser, parent_parsers)
         cmd_subparser.set_defaults(func=cmd_options["function"])
         cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
 
@@ -873,9 +892,7 @@ def app() -> None:
         return
 
     def report(e: BaseException) -> None:
-        minus_x_set_top_level_command = options.errors
-        minus_x_set_subcommand = hasattr(options, "errors_subcommand") and options.errors_subcommand
-        if not minus_x_set_top_level_command and not minus_x_set_subcommand:
+        if not options.errors:
             if isinstance(e, CompilerException):
                 print(e.format_trace(indent="  "), file=sys.stderr)
             else:

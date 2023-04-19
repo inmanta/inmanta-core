@@ -25,12 +25,19 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
+from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
-from inmanta.data.dataview import ResourceHistoryView, ResourceLogsView, ResourcesInVersionView, ResourceView
+from inmanta.data.dataview import (
+    ResourceHistoryView,
+    ResourceLogsView,
+    ResourcesInVersionView,
+    ResourceView,
+    UnmanagedResourceView,
+)
 from inmanta.data.model import (
     AttributeStateChange,
     LatestReleasedResource,
@@ -43,6 +50,7 @@ from inmanta.data.model import (
     ResourceLog,
     ResourceType,
     ResourceVersionIdStr,
+    UnmanagedResource,
     VersionedResource,
     VersionedResourceDetails,
 )
@@ -56,7 +64,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1038,3 +1046,57 @@ class ResourceService(protocol.ServerSlice):
         if not resource:
             raise NotFound("The resource with the given id does not exist")
         return resource
+
+    @handle(methods_v2.unmanaged_resource_create, env="tid")
+    async def unmanaged_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: JsonType) -> None:
+        try:
+            unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
+        except ValidationError as e:
+            # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
+            error_msg = f"Failed to validate argument\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise BadRequest(error_msg, {"validation_errors": e.errors()})
+        try:
+            await unmanaged_resource.to_dao(env.id).insert()
+        except UniqueViolationError as e:
+            raise Conflict(message=e.detail)
+
+    @handle(methods_v2.unmanaged_resource_create_batch, env="tid")
+    async def unmanaged_resources_create_batch(
+        self, env: data.Environment, unmanaged_resources: List[UnmanagedResource]
+    ) -> None:
+        resources: List[data.UnmanagedResource] = [res.to_dao(env.id) for res in unmanaged_resources]
+        try:
+            await data.UnmanagedResource.insert_many(resources)
+        except UniqueViolationError as e:
+            raise Conflict(message=e.detail)
+
+    @handle(methods_v2.unmanaged_resources_get, env="tid")
+    async def unmanaged_resources_get(self, env: data.Environment, unmanaged_resource_id: ResourceIdStr) -> UnmanagedResource:
+        result = await data.UnmanagedResource.get_one(environment=env.id, unmanaged_resource_id=unmanaged_resource_id)
+        if not result:
+            raise NotFound(f"unmanaged_resource with name {unmanaged_resource_id} not found in env {env}")
+        dto = result.to_dto()
+        return dto
+
+    @protocol.handle(methods_v2.unmanaged_resources_get_batch, env="tid")
+    async def unmanaged_resources_get_batch(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        sort: str = "unmanaged_resource_id.asc",
+    ) -> ReturnValue[Sequence[UnmanagedResource]]:
+        try:
+            handler = UnmanagedResourceView(
+                environment=env,
+                limit=limit,
+                sort=sort,
+                start=start,
+                end=end,
+            )
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
