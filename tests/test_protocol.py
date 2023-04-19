@@ -134,7 +134,7 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    await utils.off_main_thread(do_test)
+    await asyncio.get_running_loop().run_in_executor(None, do_test)
     assert len(done) > 0
 
 

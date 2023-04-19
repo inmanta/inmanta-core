@@ -139,7 +139,7 @@ class Context(object):
         """
         with_timeout: abc.Awaitable[T] = asyncio.wait_for(function(), timeout)
         try:
-            util.ensure_event_loop().run_until_complete(with_timeout)
+            return util.ensure_event_loop().run_until_complete(with_timeout)
         except TimeoutError:
             raise ConnectionRefusedError()
 

@@ -18,7 +18,6 @@
 import asyncio
 import configparser
 import datetime
-import functools
 import json
 import logging
 import os
