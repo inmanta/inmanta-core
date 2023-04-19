@@ -5727,7 +5727,6 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
-        # TODO HALTED
         environments = await Environment.get_list()
         for env in environments:
             time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
