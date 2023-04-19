@@ -4036,11 +4036,20 @@ class ResourceAction(BaseDocument):
     @classmethod
     async def purge_logs(cls) -> None:
         environments = await Environment.get_list()
-        # TODO HALTED
         for env in environments:
             time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
             keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            query = "DELETE FROM " + cls.table_name() + " WHERE environment=$1 AND started < $2"
+            query = f"""
+            WITH non_halted_envs AS (
+              SELECT id FROM public.environment WHERE NOT halted
+            )
+            DELETE FROM {cls.table_name()}
+            WHERE environment = $1
+              AND started < $2
+              AND environment IN (
+                SELECT id FROM non_halted_envs
+            );
+            """
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, env.id, value)
 
