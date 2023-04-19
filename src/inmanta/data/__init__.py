@@ -3635,8 +3635,15 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
-        # TODO HALTED
-        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
+        query = f"""
+        WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        DELETE FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) AND completed <= $1::timestamp with time zone;
+        """
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     @classmethod
