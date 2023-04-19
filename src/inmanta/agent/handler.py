@@ -211,7 +211,6 @@ class HandlerContext(IBasicLogging, object):
         action_id: Optional[uuid.UUID] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
-        super(HandlerContext, self).__init__()
         self._resource = resource
         self._dry_run = dry_run
         self._cache: Dict[str, Any] = {}
@@ -1075,13 +1074,11 @@ class HandlerNotAvailableException(Exception):
 @stable_api
 class KwargsLogger(IBasicLogging):
     """
-    This class implements the IBasicLogging interface and is a wrapper around a logging.Logger
-    to facilitate logging of keyword arguments.
-
+    This class implements the IBasicLogging interface and is a standalone wrapper
+    around a logging.Logger to facilitate logging of keyword arguments.
     """
 
     def __init__(self, logger: logging.Logger) -> None:
-        super(KwargsLogger, self).__init__()
         self.logger = logger
 
     def _log_msg(
