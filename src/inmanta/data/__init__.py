@@ -3080,6 +3080,9 @@ class AgentProcess(BaseDocument):
         query = f"""
             DELETE FROM {cls.table_name()} as a1
             WHERE a1.expired IS NOT NULL AND
+                  NOT EXISTS (
+                    SELECT id FROM environment WHERE id = a1.environment AND halted = true
+                  ) AND
                   (
                     -- Take nr_expired_records_to_keep into account
                     SELECT count(*)
@@ -3632,6 +3635,7 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
+        # TODO HALTED
         query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
@@ -4023,6 +4027,7 @@ class ResourceAction(BaseDocument):
     @classmethod
     async def purge_logs(cls) -> None:
         environments = await Environment.get_list()
+        # TODO HALTED
         for env in environments:
             time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
             keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
@@ -5704,6 +5709,7 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
+        # TODO HALTED
         environments = await Environment.get_list()
         for env in environments:
             time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
