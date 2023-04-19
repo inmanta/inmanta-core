@@ -352,16 +352,14 @@ class ResourceScheduler(object):
     2 - we don't need to figure out exactly when a run is done
     """
 
-    def __init__(
-        self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: asyncio.Semaphore
-    ) -> None:
+    def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache) -> None:
         self.generation: Dict[ResourceIdStr, ResourceActionBase] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
         self.name = name
-        self.ratelimiter = ratelimiter
+        self.ratelimiter = agent.ratelimiter
         self.version: int = 0
         # the reason the last run was started
         self.reason: str = ""
@@ -540,7 +538,7 @@ class AgentInstance(object):
 
         # init
         self._cache = AgentCache(self)
-        self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
+        self._nq = ResourceScheduler(self, self._env_id, name, self._cache)
         self._time_triggered_actions: Set[ScheduledTask] = set()
         self._enabled = False
         self._stopped = False
@@ -982,14 +980,12 @@ class Agent(SessionEndpoint):
         code_loader: bool = True,
         environment: Optional[uuid.UUID] = None,
         poolsize: int = 1,
-        cricital_pool_size: int = 5,
     ):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.hostname = hostname
         self.poolsize = poolsize
         self.ratelimiter = asyncio.Semaphore(poolsize)
-        self.critical_ratelimiter = asyncio.Semaphore(cricital_pool_size)
         self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
         self._storage = self.check_storage()
