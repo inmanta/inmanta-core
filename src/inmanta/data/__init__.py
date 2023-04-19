@@ -3078,11 +3078,12 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
         query = f"""
-            DELETE FROM {cls.table_name()} as a1
+            WITH halted_env AS (
+                SELECT id FROM environment WHERE halted = true
+            )
+            DELETE FROM {cls.table_name()} AS a1
             WHERE a1.expired IS NOT NULL AND
-                  NOT EXISTS (
-                    SELECT id FROM environment WHERE id = a1.environment AND halted = true
-                  ) AND
+                  a1.environment NOT IN (SELECT id FROM halted_env) AND
                   (
                     -- Take nr_expired_records_to_keep into account
                     SELECT count(*)
@@ -3096,10 +3097,11 @@ class AgentProcess(BaseDocument):
                   -- Agent process only has expired agent instances
                   NOT EXISTS(
                     SELECT 1
-                    FROM {cls.table_name()} as agentprocess INNER JOIN {AgentInstance.table_name()} as agentinstance
-                         ON agentinstance.process = agentprocess.sid
-                    WHERE agentprocess.sid = a1.sid and agentinstance.expired IS NULL
-                  )
+                    FROM {cls.table_name()} AS agentprocess
+                    INNER JOIN {AgentInstance.table_name()} AS agentinstance
+                    ON agentinstance.process = agentprocess.sid
+                    WHERE agentprocess.sid = a1.sid AND agentinstance.expired IS NULL
+                  );
         """
         await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
