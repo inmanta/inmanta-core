@@ -23,9 +23,9 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import defaultdict, abc
+from collections import abc, defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -199,7 +199,7 @@ class IBasicLogging(ABC):
 
 
 @stable_api
-class HandlerContext(object, IBasicLogging):
+class HandlerContext(IBasicLogging, object):
     """
     Context passed to handler methods for state related "things"
     """
@@ -211,6 +211,7 @@ class HandlerContext(object, IBasicLogging):
         action_id: Optional[uuid.UUID] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
+        super(HandlerContext, self).__init__()
         self._resource = resource
         self._dry_run = dry_run
         self._cache: Dict[str, Any] = {}
@@ -423,13 +424,7 @@ class HandlerContext(object, IBasicLogging):
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
-    def _log_msg(
-        self,
-        level: int,
-        msg: str,
-        *args,
-        **kwargs
-    ) -> None:
+    def _log_msg(self, level: int, msg: str, *args, **kwargs) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
         if "exc_info" in kwargs:
@@ -454,6 +449,7 @@ class HandlerContext(object, IBasicLogging):
         log = data.LogLine.log(level, msg, **kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
+
 
 @stable_api
 class ResourceHandler(object):
@@ -1085,6 +1081,7 @@ class KwargsLogger(IBasicLogging):
     """
 
     def __init__(self, logger: logging.Logger) -> None:
+        super(KwargsLogger, self).__init__()
         self.logger = logger
 
     def _log_msg(
