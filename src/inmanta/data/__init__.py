@@ -5735,7 +5735,18 @@ class Notification(BaseDocument):
             LOGGER.info(
                 "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
             )
-            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
+
+            query = f"""
+            WITH non_halted_envs AS (
+              SELECT id FROM public.environment WHERE NOT halted
+            )
+            DELETE FROM {cls.table_name()}
+            WHERE created < $1
+              AND environment = $2
+              AND environment IN (
+                SELECT id FROM non_halted_envs
+            );
+            """
             await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
 
     def to_dto(self) -> m.Notification:
