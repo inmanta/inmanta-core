@@ -23,7 +23,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, abc
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, overload
 
@@ -160,37 +160,32 @@ def cache(
 
 
 @stable_api
-class HandlerLogger(ABC):
+class IBasicLogging(ABC):
+    """
+    Minimal logging interface exposing logging methods for commonly used
+    logging levels.
+
+    Child classes are responsible for implementing a _log_msg method with the
+    concrete logging implementation.
     """
 
-    TODO: better docstring (from perspective of core, not handler)
-    This protocol defines a part of the interface of the inmanta HandlerContext object
-    that can be used to log messages to the server.  It is used in different helper
-    functions across a handler code base.
-
-    When such helper class is used in another context than an agent, they can create
-    another object than the HandlerContext, which simply implements those helper methods,
-    and still be able to use the helper method.
-
-    """
-
-    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.DEBUG, msg, args, kwargs)
-
-    def info(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.INFO, msg, args, kwargs)
-
-    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.WARNING, msg, args, kwargs)
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.CRITICAL, msg, args, kwargs)
 
     def error(self, msg: str, *args: object, **kwargs: object) -> None:
         self._log_msg(logging.ERROR, msg, args, kwargs)
 
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.WARNING, msg, args, kwargs)
+
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.INFO, msg, args, kwargs)
+
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
+        self._log_msg(logging.DEBUG, msg, args, kwargs)
+
     def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
         self.error(msg, *args, exc_info=exc_info, **kwargs)
-
-    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.CRITICAL, msg, args, kwargs)
 
     @abstractmethod
     def _log_msg(
@@ -204,7 +199,7 @@ class HandlerLogger(ABC):
 
 
 @stable_api
-class HandlerContext(object, HandlerLogger):
+class HandlerContext(object, IBasicLogging):
     """
     Context passed to handler methods for state related "things"
     """
@@ -399,8 +394,10 @@ class HandlerContext(object, HandlerLogger):
     def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
 
-    def log_msg(self, level: int, msg: str, args: Sequence[object], kwargs: Dict[str, object]) -> None:
-        LOGGER.warning("log_msg is being deprecated, please use...")  # TODO: better message
+    def log_msg(self, level: int, msg: str, args: abc.Sequence[object], kwargs: abc.Mapping[str, object]) -> None:
+        LOGGER.warning(
+            "Direct calls to the log_msg method are being deprecated, please use the IBasicLogging interface instead."
+        )
         if len(args) > 0:
             raise Exception("Args not supported")
         if "exc_info" in kwargs:
@@ -426,6 +423,37 @@ class HandlerContext(object, HandlerLogger):
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
+    def _log_msg(
+        self,
+        level: int,
+        msg: str,
+        *args,
+        **kwargs
+    ) -> None:
+        if len(args) > 0:
+            raise Exception("Args not supported")
+        if "exc_info" in kwargs:
+            exc_info = kwargs["exc_info"]
+            kwargs["traceback"] = traceback.format_exc()
+        else:
+            exc_info = False
+
+        for k, v in kwargs.items():
+            try:
+                json_encode(v)
+            except TypeError:
+                if inmanta.RUNNING_TESTS:
+                    # Fail the test when the value is not serializable
+                    raise Exception(f"Failed to serialize argument for log message {k}={v}")
+                else:
+                    # In production, try to cast the non-serializable value to str to prevent the handler from failing.
+                    kwargs[k] = str(v)
+
+            except Exception as e:
+                raise Exception("Exception during serializing log message arguments") from e
+        log = data.LogLine.log(level, msg, **kwargs)
+        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
+        self._logs.append(log)
 
 @stable_api
 class ResourceHandler(object):
@@ -1049,12 +1077,11 @@ class HandlerNotAvailableException(Exception):
 
 
 @stable_api
-class LoggerWrapper(HandlerLogger):
+class KwargsLogger(IBasicLogging):
     """
-    TODO: better docstring (from perspective of core, not handler)
-    This class implements the HandlerLogger interface
+    This class implements the IBasicLogging interface and is a wrapper around a logging.Logger
+    to facilitate logging of keyword arguments.
 
-    It can be used in the tests of a module to be able to use the handler helpers, outside of the context of an agent.
     """
 
     def __init__(self, logger: logging.Logger) -> None:
