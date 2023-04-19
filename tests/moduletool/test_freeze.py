@@ -23,8 +23,8 @@ import sys
 import pytest
 
 from inmanta.ast import CompilerException
-from inmanta.moduletool import ModuleTool
 from inmanta.command import CLIException
+from inmanta.moduletool import ModuleTool
 from moduletool.common import install_project
 from test_app_cli import app
 
@@ -293,8 +293,7 @@ def test_module_freeze_on_v2_module(tmpdir, monkeypatch, use_min_m_option: bool)
     with pytest.raises(CLIException) as exc_info:
         app(cmd)
 
-    assert (
-        "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead."
-        in str(exc_info.value)
+    assert "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead." in str(
+        exc_info.value
     )
     assert exc_info.value.exitcode == 1

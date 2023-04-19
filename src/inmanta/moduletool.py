@@ -666,7 +666,7 @@ mode.
         freeze = subparser.add_parser(
             "freeze",
             help="Freeze all version numbers in module.yml. This command is only supported on v1 modules. On v2 modules use"
-                 " the pip freeze command instead.",
+            " the pip freeze command instead.",
             parents=parent_parsers,
         )
         freeze.add_argument(
@@ -1117,7 +1117,7 @@ version: 0.0.1dev0"""
         if (module and ModuleV2.from_path(module)) or ModuleV2.from_path(os.curdir):
             raise CLIException(
                 "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead.",
-                exitcode=1
+                exitcode=1,
             )
 
         # find module
