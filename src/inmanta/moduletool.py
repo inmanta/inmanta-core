@@ -531,7 +531,8 @@ mode.
         freeze = subparser.add_parser(
             "freeze",
             help="Freeze all version numbers in module.yml. This command is only supported on v1 modules. On v2 modules use"
-            " the pip freeze command instead.")
+            " the pip freeze command instead.",
+        )
         freeze.add_argument(
             "-o",
             "--outfile",
