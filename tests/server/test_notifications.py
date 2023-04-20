@@ -26,6 +26,7 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import const, data
+from inmanta.data import NOTIFICATION_RETENTION
 from inmanta.server import SLICE_NOTIFICATION
 from inmanta.server.config import get_bind_port
 from inmanta.server.protocol import Server
@@ -39,7 +40,7 @@ async def environment_with_notifications(server, environment: str):
     env_id = uuid.UUID(environment)
 
     for i in range(8):
-        created = (datetime.datetime.now().astimezone() - datetime.timedelta(days=1)).replace(hour=i)
+        created = (datetime.datetime.now().astimezone() - datetime.timedelta(days=500)).replace(hour=i)
         await data.Notification(
             title="Notification" if i % 2 else "Error",
             message="Something happened" if i % 2 else "Something bad happened",
@@ -385,3 +386,22 @@ async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, a
     # Only the latest one is kept
     assert len(short_retention_notifications) == 1
     assert short_retention_notifications[0].created == timestamps[2]
+
+
+@pytest.mark.parametrize("halted", [True, False])
+async def test_cleanup_notifications(server, postgresql_client, client, environment_with_notifications, halted):
+    # test that the notifications are only cleaned up if the env is not halted
+    env_id = environment_with_notifications
+    result = await client.list_notifications(env_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 8
+
+    if halted:
+        result = await client.halt_environment(env_id)
+        assert result.code == 200
+
+    await data.Notification.clean_up_notifications()
+
+    result = await client.list_notifications(env_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == (8 if halted else 0)

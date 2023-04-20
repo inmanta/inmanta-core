@@ -3637,6 +3637,7 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
+        # todo add tests
         query = f"""
         WITH non_halted_envs AS (
           SELECT id FROM public.environment WHERE NOT halted
