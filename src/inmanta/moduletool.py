@@ -528,7 +528,10 @@ mode.
             "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
         )
 
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in module.yml")
+        freeze = subparser.add_parser(
+            "freeze",
+            help="Freeze all version numbers in module.yml. This command is only supported on v1 modules. On v2 modules use"
+            " the pip freeze command instead.")
         freeze.add_argument(
             "-o",
             "--outfile",
@@ -921,6 +924,11 @@ version: 0.0.1dev0"""
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
+        if (module and ModuleV2.from_path(module)) or ModuleV2.from_path(os.curdir):
+            raise CLIException(
+                "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead.",
+                exitcode=1,
+            )
 
         # find module
         module_obj = self.get_module(module)
