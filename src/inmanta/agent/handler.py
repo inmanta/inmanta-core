@@ -192,9 +192,9 @@ class LoggerABC(ABC):
         self,
         level: int,
         msg: str,
-        *args,
-        exc_info: bool,
-        **kwargs,
+        *args: object,
+        exc_info: bool = False,
+        **kwargs: object,
     ) -> None:
         raise NotImplementedError
 
@@ -399,10 +399,10 @@ class HandlerContext(LoggerABC):
         LOGGER.warning("Direct calls to the log_msg method are being deprecated, please use the LoggerABC interface instead.")
         self._log_msg(level, msg, *args, **kwargs)
 
-    def _log_msg(self, level: int, msg: str, *args, exc_info: bool = False, **kwargs) -> None:
+    def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
-        if exc_info in kwargs:
+        if exc_info:
             kwargs["traceback"] = traceback.format_exc()
 
         for k, v in kwargs.items():
@@ -1057,9 +1057,9 @@ class PythonLogger(LoggerABC):
         self,
         level: int,
         msg: str,
-        *args,
+        *args: object,
         exc_info: bool = False,
-        **kwargs,
+        **kwargs: object,
     ) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
