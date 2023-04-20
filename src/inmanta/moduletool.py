@@ -1336,6 +1336,7 @@ version: 0.0.1dev0"""
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
             # bump to the next dev version
             self.release(dev=True, message="Bump version to next development version", patch=True)
+            print(f"The released version has {release_tag} as tag.")
 
 
 class ModuleChangelog:
