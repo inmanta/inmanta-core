@@ -620,8 +620,11 @@ class StringFormatV2(FormattedString):
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
 
+
             kwargs[str_id] = value
 
+        # f = formatter.get_field("d.n", args=None, kwargs=dico)
+        # lookup = {formatter.get_field(k, args=None, kwargs=kwargs) for k, v in kwargs}
         result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
 
         return result_string
