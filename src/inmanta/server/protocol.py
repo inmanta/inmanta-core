@@ -417,7 +417,7 @@ class Session(object):
         self._timeout = timout
         self._sessionstore: SessionManager = sessionstore
         self._seen: float = time.time()
-        self._callhandle = None
+        self._callhandle: Optional[asyncio.TimerHandle] = None
         self.expired: bool = False
 
         self.tid: uuid.UUID = tid
