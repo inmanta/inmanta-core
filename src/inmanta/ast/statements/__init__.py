@@ -141,7 +141,7 @@ class RequiresEmitStatement(DynamicStatement):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Emits this statement by scheduling its promises and scheduling a unit to wait on its requirements. Injects the
-        schedulred promise objects in the waiter's requires in order to pass it on to the execute method.
+        scheduled promise objects in the waiter's requires in order to pass it on to the execute method.
         """
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)

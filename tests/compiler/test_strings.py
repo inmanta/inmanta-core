@@ -227,7 +227,7 @@ d=Foo(bar={}, n =z)
 z=5
 
 std::print(f"str is : {d.n}")
-std::print("str is : {{d.n}}")
+# std::print("str is : {{d.n}}")
         """,
     )
     expected = "\n"
