@@ -27,10 +27,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
-
-from tornado import ioloop
-from tornado.concurrent import Future
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -62,11 +59,7 @@ class ResourceActionResult(object):
         return "%r" % self.cancel
 
 
-# https://mypy.readthedocs.io/en/latest/common_issues.html#using-classes-that-are-generic-in-stubs-but-not-at-runtime
-if TYPE_CHECKING:
-    ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
-else:
-    ResourceActionResultFuture = asyncio.Future
+ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
 
 
 class ResourceActionBase(abc.ABC):
@@ -84,7 +77,7 @@ class ResourceActionBase(abc.ABC):
         """
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource_id: Id = resource_id
-        self.future: ResourceActionResultFuture = Future()
+        self.future: ResourceActionResultFuture = asyncio.Future()
         # This variable is used to indicate that the future of a ResourceAction will get a value, because of a deploy
         # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False

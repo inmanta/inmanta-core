@@ -21,7 +21,6 @@ import datetime
 import json
 import os
 import random
-import threading
 import time
 import urllib.parse
 import uuid
@@ -32,9 +31,8 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import pydantic
 import pytest
 import tornado
-import utils
 from pydantic.types import StrictBool
-from tornado import gen, web
+from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
 

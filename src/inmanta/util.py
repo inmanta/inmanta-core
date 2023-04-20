@@ -244,7 +244,7 @@ class Scheduler(object):
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[ScheduledTask, TimerHandle] = {}
+        self._scheduled: Dict[ScheduledTask, asyncio.TimerHandle] = {}
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.

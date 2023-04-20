@@ -23,11 +23,8 @@ import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
 from urllib import parse
-
-import tornado.ioloop
-from tornado.platform.asyncio import BaseAsyncIOLoop
 
 from inmanta import config as inmanta_config
 from inmanta import util
