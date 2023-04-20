@@ -160,7 +160,7 @@ def cache(
 
 
 @stable_api
-class IBasicLogging(ABC):
+class LoggerABC(ABC):
     """
     Minimal logging interface exposing logging methods for commonly used
     logging levels.
@@ -199,7 +199,7 @@ class IBasicLogging(ABC):
 
 
 @stable_api
-class HandlerContext(IBasicLogging, object):
+class HandlerContext(LoggerABC, object):
     """
     Context passed to handler methods for state related "things"
     """
@@ -396,7 +396,7 @@ class HandlerContext(IBasicLogging, object):
 
     def log_msg(self, level: int, msg: str, args: abc.Sequence[object], kwargs: abc.Mapping[str, object]) -> None:
         LOGGER.warning(
-            "Direct calls to the log_msg method are being deprecated, please use the IBasicLogging interface instead."
+            "Direct calls to the log_msg method are being deprecated, please use the LoggerABC interface instead."
         )
         if len(args) > 0:
             raise Exception("Args not supported")
@@ -1072,9 +1072,9 @@ class HandlerNotAvailableException(Exception):
 
 
 @stable_api
-class KwargsLogger(IBasicLogging):
+class PythonLogger(LoggerABC):
     """
-    This class implements the IBasicLogging interface and is a standalone wrapper
+    This class implements the LoggerABC interface and is a standalone wrapper
     around a logging.Logger to facilitate logging of keyword arguments.
     """
 

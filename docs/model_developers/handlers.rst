@@ -125,7 +125,7 @@ For example:
         # ...
         ctx.debug("Creating loadbalancer with security group %(sg)s", sg=sg_id)
 
-In addition, the :class:`~inmanta.agent.handler.KwargsLogger` provides similar functionalities but without being
+In addition, the :class:`~inmanta.agent.handler.PythonLogger` provides similar functionalities but without being
 restricted to an Agent context.
 
 Caching
