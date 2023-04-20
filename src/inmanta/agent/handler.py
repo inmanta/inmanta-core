@@ -193,13 +193,14 @@ class LoggerABC(ABC):
         level: int,
         msg: str,
         *args,
+        exc_info: bool,
         **kwargs,
     ) -> None:
         raise NotImplementedError
 
 
 @stable_api
-class HandlerContext(LoggerABC, object):
+class HandlerContext(LoggerABC):
     """
     Context passed to handler methods for state related "things"
     """
@@ -395,42 +396,14 @@ class HandlerContext(LoggerABC, object):
         return self._changes
 
     def log_msg(self, level: int, msg: str, args: abc.Sequence[object], kwargs: abc.Mapping[str, object]) -> None:
-        LOGGER.warning(
-            "Direct calls to the log_msg method are being deprecated, please use the LoggerABC interface instead."
-        )
+        LOGGER.warning("Direct calls to the log_msg method are being deprecated, please use the LoggerABC interface instead.")
+        self._log_msg(level, msg, *args, **kwargs)
+
+    def _log_msg(self, level: int, msg: str, *args, exc_info: bool = False, **kwargs) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
-        if "exc_info" in kwargs:
-            exc_info = kwargs["exc_info"]
+        if exc_info in kwargs:
             kwargs["traceback"] = traceback.format_exc()
-        else:
-            exc_info = False
-
-        for k, v in dict(kwargs).items():
-            try:
-                json_encode(v)
-            except TypeError:
-                if inmanta.RUNNING_TESTS:
-                    # Fail the test when the value is not serializable
-                    raise Exception(f"Failed to serialize argument for log message {k}={v}")
-                else:
-                    # In production, try to cast the non-serializable value to str to prevent the handler from failing.
-                    kwargs[k] = str(v)
-
-            except Exception as e:
-                raise Exception("Exception during serializing log message arguments") from e
-        log = data.LogLine.log(level, msg, **kwargs)
-        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
-        self._logs.append(log)
-
-    def _log_msg(self, level: int, msg: str, *args, **kwargs) -> None:
-        if len(args) > 0:
-            raise Exception("Args not supported")
-        if "exc_info" in kwargs:
-            exc_info = kwargs["exc_info"]
-            kwargs["traceback"] = traceback.format_exc()
-        else:
-            exc_info = False
 
         for k, v in kwargs.items():
             try:
@@ -1074,8 +1047,7 @@ class HandlerNotAvailableException(Exception):
 @stable_api
 class PythonLogger(LoggerABC):
     """
-    This class implements the LoggerABC interface and is a standalone wrapper
-    around a logging.Logger to facilitate logging of keyword arguments.
+    This class implements the LoggerABC interface and is a standalone wrapper around a logging.Logger.
     """
 
     def __init__(self, logger: logging.Logger) -> None:
@@ -1086,15 +1058,11 @@ class PythonLogger(LoggerABC):
         level: int,
         msg: str,
         *args,
+        exc_info: bool = False,
         **kwargs,
     ) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
-        if "exc_info" in kwargs:
-            exc_info = kwargs["exc_info"]
-            del kwargs["exc_info"]
-        else:
-            exc_info = False
 
         if kwargs:
             self.logger.log(level, msg, kwargs, exc_info=exc_info)
