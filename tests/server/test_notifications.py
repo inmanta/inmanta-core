@@ -26,7 +26,6 @@ import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import const, data
-from inmanta.data import NOTIFICATION_RETENTION
 from inmanta.server import SLICE_NOTIFICATION
 from inmanta.server.config import get_bind_port
 from inmanta.server.protocol import Server
