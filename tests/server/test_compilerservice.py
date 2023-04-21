@@ -1566,8 +1566,3 @@ async def test_status_compilerservice_task_queue(
 
     # Verify compile queue is empty
     await retry_limited(verify_length_compile_queue, timeout=10, expected_length=0)
-
-
-async def test_schedule_full_compile(server, client, environment: str) -> None:
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    compilerservice = server.get_slice(SLICE_COMPILER)
