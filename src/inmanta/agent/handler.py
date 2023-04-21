@@ -170,19 +170,19 @@ class LoggerABC(ABC):
     """
 
     def critical(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.CRITICAL, msg, args, kwargs)
+        self._log_msg(logging.CRITICAL, msg, *args, **kwargs)
 
     def error(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.ERROR, msg, args, kwargs)
+        self._log_msg(logging.ERROR, msg, *args, **kwargs)
 
     def warning(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.WARNING, msg, args, kwargs)
+        self._log_msg(logging.WARNING, msg, *args, **kwargs)
 
     def info(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.INFO, msg, args, kwargs)
+        self._log_msg(logging.INFO, msg, *args, **kwargs)
 
     def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        self._log_msg(logging.DEBUG, msg, args, kwargs)
+        self._log_msg(logging.DEBUG, msg, *args, **kwargs)
 
     def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
         self.error(msg, *args, exc_info=exc_info, **kwargs)
