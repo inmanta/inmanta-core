@@ -563,11 +563,15 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
 
-            def create_task():
+            def create_task() -> TaskMethod:
                 if env.halted:
-                    return
+
+                    async def do_nothing() -> None:
+                        pass
+
+                    return do_nothing
                 else:
-                    partial(
+                    return partial(
                         self.request_recompile,
                         env,
                         force_update=False,
