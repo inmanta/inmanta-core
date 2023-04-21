@@ -133,7 +133,12 @@ class Server(protocol.ServerSlice):
             try:
                 return SliceStatus(name=slice_name, status=await asyncio.wait_for(slice.get_status(), 0.1))
             except TimeoutError:
-                return SliceStatus(name=slice_name, status={"error": f"timeout on data collection for {slice_name}, consult the server log for additional information"})
+                return SliceStatus(
+                    name=slice_name,
+                    status={
+                        "error": f"timeout on data collection for {slice_name}, consult the server log for additional information"
+                    },
+                )
             except Exception:
                 LOGGER.error(
                     f"The following error occured while trying to determine the status of slice {slice_name}",
