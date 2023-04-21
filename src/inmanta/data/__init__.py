@@ -4041,9 +4041,7 @@ class ResourceAction(BaseDocument):
             keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
             query = f"""
             DELETE FROM {cls.table_name()}
-            WHERE environment = $1
-              AND started < $2
-            );
+            WHERE environment = $1 AND started < $2;
             """
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, env.id, value)
@@ -5732,7 +5730,7 @@ class Notification(BaseDocument):
 
             query = f"""
             DELETE FROM {cls.table_name()}
-            WHERE created < $1 AND environment = $2
+            WHERE created < $1 AND environment = $2;
             """
             await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
 
