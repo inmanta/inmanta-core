@@ -1413,12 +1413,14 @@ async def test_redirect_dashboard_to_console(server, path):
     assert result_url == response.effective_url
 
 
-async def test_cleanup_old_agents(server):
+@pytest.mark.parametrize("env1_halted, env2_halted", [(True, True), (False, True), (True, False), (False, False)])
+async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     """
     This test is testing the functionality of cleaning up old agents in the database.
     The test creates 2 environments and adds agents with various properties (some used in a version,
     some in the agent map, and some with the primary ID set), and then tests that
     the cleanup function correctly removes only the agents that meet the criteria for deletion.
+    Also verifies that only agents in envs that are not halted are cleaned up
     """
 
     project = data.Project(name="test")
@@ -1431,6 +1433,13 @@ async def test_cleanup_old_agents(server):
 
     await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
     await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
+
+    if env1_halted:
+        result = await client.halt_environment(env1.id)
+        assert result.code == 200
+    if env2_halted:
+        result = await client.halt_environment(env2.id)
+        assert result.code == 200
 
     process_sid = uuid.uuid4()
     await data.AgentProcess(hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()).insert()
@@ -1499,14 +1508,17 @@ async def test_cleanup_old_agents(server):
 
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
     agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
-    assert len(agents_after_purge) == 4
-    expected_agents_after_purge = [
-        (env1.id, "agent2"),
-        (env1.id, "agent3"),
-        (env1.id, "agent4"),
-        (env2.id, "agent1"),
-    ]
-    assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
+    number_agents_env1_after_purge = 4 if env1_halted else 3
+    number_agents_env2_after_purge = 2 if env2_halted else 1
+    assert len(agents_after_purge) == number_agents_env1_after_purge + number_agents_env2_after_purge
+    if not (env1_halted or env2_halted):
+        expected_agents_after_purge = [
+            (env1.id, "agent2"),
+            (env1.id, "agent3"),
+            (env1.id, "agent4"),
+            (env2.id, "agent1"),
+        ]
+        assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
 
 
 async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper) -> None:

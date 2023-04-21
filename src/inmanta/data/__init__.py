@@ -3430,6 +3430,11 @@ AND NOT EXISTS (
     FROM public.resource AS re
     WHERE a.environment=re.environment
     AND a.name=re.agent
+)
+AND a.environment IN (
+    SELECT id
+    FROM public.environment
+    WHERE NOT halted
 );
 """
         await cls._execute_query(query, connection=connection)
