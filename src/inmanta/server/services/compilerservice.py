@@ -564,6 +564,11 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             }
 
             def create_task() -> TaskMethod:
+                """
+                Creates a new task for the full compile schedule.
+                If the environment is halted, the task does nothing.
+                Otherwise, it requests a recompile.
+                """
                 if env.halted:
 
                     async def do_nothing() -> list[None]:
