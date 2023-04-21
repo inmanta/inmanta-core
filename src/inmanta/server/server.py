@@ -136,7 +136,8 @@ class Server(protocol.ServerSlice):
                 return SliceStatus(
                     name=slice_name,
                     status={
-                        "error": f"timeout on data collection for {slice_name}, consult the server log for additional information"
+                        "error": f"timeout on data collection for {slice_name}, "
+                        "consult the server log for additional information"
                     },
                 )
             except Exception:
