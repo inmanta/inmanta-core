@@ -809,9 +809,16 @@ async def test_unkown_parameters(
 
         result = await client.get_param(env_id, "length", resource_id_wov)
         assert result.code == 200
+        msg = (
+            "Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] " f"in env {environment}"
+        )
+        log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
     else:
-        msg = f"Not Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] in env {env_id} as the env is halted"
+        msg = (
+            "Not Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] "
+            f"in env {environment} as the env is halted"
+        )
         log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
 

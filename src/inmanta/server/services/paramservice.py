@@ -102,14 +102,16 @@ class ParameterService(protocol.ServerSlice):
                 )
                 await u.delete()
             if u.environment in env_ids:
-                LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
+                LOGGER.debug(
+                    "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
+                )
                 await self.agentmanager.request_parameter(u.environment, u.resource_id)
             else:
                 LOGGER.debug(
                     "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
                     u.name,
                     u.resource_id,
-                    u.id,
+                    u.environment,
                 )
         LOGGER.info("Done renewing parameters")
 
