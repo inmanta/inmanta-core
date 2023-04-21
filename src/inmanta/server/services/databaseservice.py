@@ -116,7 +116,7 @@ class DatabaseService(protocol.ServerSlice):
     async def get_connection_status(self) -> bool:
         if self._pool is not None and not self._pool._closing and not self._pool._closed:
             try:
-                async with self._pool.acquire(timeout=10):
+                async with self._pool.acquire(timeout=5):
                     return True
             except Exception:
                 LOGGER.exception("Connection to PostgreSQL failed")
