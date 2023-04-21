@@ -566,8 +566,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             def create_task() -> TaskMethod:
                 if env.halted:
 
-                    async def do_nothing() -> None:
-                        pass
+                    async def do_nothing() -> list[None]:
+                        return []
 
                     return do_nothing
                 else:
