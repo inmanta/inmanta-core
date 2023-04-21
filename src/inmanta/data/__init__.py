@@ -4035,19 +4035,14 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def purge_logs(cls) -> None:
-        environments = await Environment.get_list()
+        environments = await Environment.get_list(halted=False)
         for env in environments:
             time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
             keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
             query = f"""
-            WITH non_halted_envs AS (
-              SELECT id FROM public.environment WHERE NOT halted
-            )
             DELETE FROM {cls.table_name()}
             WHERE environment = $1
               AND started < $2
-              AND environment IN (
-                SELECT id FROM non_halted_envs
             );
             """
             value = cls._get_value(keep_logs_until)
@@ -5727,7 +5722,7 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
-        environments = await Environment.get_list()
+        environments = await Environment.get_list(halted=False)
         for env in environments:
             time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
             keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
@@ -5736,15 +5731,8 @@ class Notification(BaseDocument):
             )
 
             query = f"""
-            WITH non_halted_envs AS (
-              SELECT id FROM public.environment WHERE NOT halted
-            )
             DELETE FROM {cls.table_name()}
-            WHERE created < $1
-              AND environment = $2
-              AND environment IN (
-                SELECT id FROM non_halted_envs
-            );
+            WHERE created < $1 AND environment = $2
             """
             await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
 
