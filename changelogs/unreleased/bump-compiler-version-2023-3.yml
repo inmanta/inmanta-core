@@ -1,6 +1,0 @@
----
-description: Bump the compiler version to 2023.3
-issue-nr: 592
-issue-repo: lsm
-change-type: patch
-destination-branches: [master, iso6]
