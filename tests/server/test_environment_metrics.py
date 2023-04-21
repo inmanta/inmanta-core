@@ -1481,11 +1481,14 @@ async def test_cleanup_environment_metrics(server, client, env1_halted, env2_hal
         == nmbr_environment_metricstimer_after_cleanup_env1 + nmbr_environment_metricstimer_after_cleanup_env2
     )
 
-    # # 2 metrics are removed from env1 per table
-    # for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
-    #     result = await data_cls.get_list(environment=env1.id)
-    #     assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:2]
-    # # 1 metric is removed from env2 per table
-    # for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
-    #     result = await data_cls.get_list(environment=env2.id)
-    #     assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:3]
+    # verify that the right metrics are cleaned up
+
+    if not (env2_halted or env1_halted):
+        # 2 metrics are removed from env1 per table
+        for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
+            result = await data_cls.get_list(environment=env1.id)
+            assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:2]
+        # 1 metric is removed from env2 per table
+        for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
+            result = await data_cls.get_list(environment=env2.id)
+            assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:3]

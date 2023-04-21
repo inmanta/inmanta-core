@@ -2879,7 +2879,15 @@ class Parameter(BaseDocument):
 
     @classmethod
     async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
-        query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
+        query = f"""
+         WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        SELECT * FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) and updated < $1;
+        """
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result

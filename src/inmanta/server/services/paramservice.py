@@ -93,16 +93,24 @@ class ParameterService(protocol.ServerSlice):
                 await self.agentmanager.request_parameter(param.environment, param.resource_id)
 
         unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
+        environments = await data.Environment.get_list(halted=False)
+        env_ids = [env.id for env in environments]
         for u in unknown_parameters:
             if u.environment is None:
                 LOGGER.warning(
                     "Found unknown parameter without environment (%s for resource %s). Deleting it.", u.name, u.resource_id
                 )
                 await u.delete()
-            else:
+            if u.environment in env_ids:
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
                 await self.agentmanager.request_parameter(u.environment, u.resource_id)
-
+            else:
+                LOGGER.debug(
+                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
+                    u.name,
+                    u.resource_id,
+                    u.id,
+                )
         LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")

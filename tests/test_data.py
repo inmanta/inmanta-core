@@ -2065,12 +2065,18 @@ async def test_code(init_dataclasses_and_load_schema):
     assert len(await data.Code.get_versions(env.id, code3.version + 1)) == 1
 
 
-async def test_parameter(init_dataclasses_and_load_schema):
+@pytest.mark.parametrize("halted", [True, False])
+async def test_parameter(server, client, halted):
+    # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
     project = data.Project(name="test")
     await project.insert()
 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
+
+    if halted:
+        result = await client.halt_environment(env.id)
+        assert result.code == 200
 
     time1 = datetime.datetime(2018, 7, 14, 12, 30)
     time2 = datetime.datetime(2018, 7, 16, 12, 30)
@@ -2088,13 +2094,15 @@ async def test_parameter(init_dataclasses_and_load_schema):
     updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 12, 12, 30))
     assert len(updated_before) == 0
     updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 14, 12, 30))
-    assert len(updated_before) == 1
-    assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
+    assert len(updated_before) == (0 if halted else 1)
+    if not halted:
+        assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
     updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 15, 12, 30))
     list_of_ids = [(x.environment, x.name) for x in updated_before]
-    assert len(updated_before) == 2
-    assert (parameters[0].environment, parameters[0].name) in list_of_ids
-    assert (parameters[2].environment, parameters[2].name) in list_of_ids
+    assert len(updated_before) == (0 if halted else 2)
+    if not halted:
+        assert (parameters[0].environment, parameters[0].name) in list_of_ids
+        assert (parameters[2].environment, parameters[2].name) in list_of_ids
 
 
 async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
