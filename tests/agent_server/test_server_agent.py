@@ -761,12 +761,13 @@ async def test_register_setting(environment, client, server, caplog):
 
 @pytest.mark.parametrize("halted", [True, False])
 async def test_unkown_parameters(
-    resource_container, environment, client, server, clienthelper, agent, no_agent_backoff, halted
+    resource_container, environment, client, server, clienthelper, agent, no_agent_backoff, halted, caplog
 ):
     """
     Test retrieving facts from the agent
     """
 
+    caplog.set_level(logging.DEBUG)
     resource_container.Provider.reset()
     await client.set_setting(environment, data.SERVER_COMPILE, False)
 
@@ -800,13 +801,18 @@ async def test_unkown_parameters(
     await server.get_slice(SLICE_PARAM).renew_facts()
 
     env_id = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-    while len(params) < 3:
+    if not halted:
         params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        while len(params) < 3:
+            params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
+            await asyncio.sleep(0.1)
 
-    result = await client.get_param(env_id, "length", resource_id_wov)
-    assert result.code == 200
+        result = await client.get_param(env_id, "length", resource_id_wov)
+        assert result.code == 200
+
+    else:
+        msg = f"Not Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] in env {env_id} as the env is halted"
+        log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
 
 async def test_fail(resource_container, client, agent, environment, clienthelper, async_finalizer, no_agent_backoff):
