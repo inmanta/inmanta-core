@@ -1334,9 +1334,9 @@ version: 0.0.1dev0"""
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
+            print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
             self.release(dev=True, message="Bump version to next development version", patch=True)
-            print(f"Tag created successfully: {release_tag}")
 
 
 class ModuleChangelog:
