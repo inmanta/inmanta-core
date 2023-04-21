@@ -759,10 +759,14 @@ async def test_register_setting(environment, client, server, caplog):
     assert result.result["value"] is False
 
 
-async def test_unkown_parameters(resource_container, environment, client, server, clienthelper, agent, no_agent_backoff):
+@pytest.mark.parametrize("halted", [True, False])
+async def test_unkown_parameters(
+    resource_container, environment, client, server, clienthelper, agent, no_agent_backoff, halted
+):
     """
     Test retrieving facts from the agent
     """
+
     resource_container.Provider.reset()
     await client.set_setting(environment, data.SERVER_COMPILE, False)
 
@@ -788,6 +792,10 @@ async def test_unkown_parameters(resource_container, environment, client, server
 
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
+
+    if halted:
+        result = await client.halt_environment(environment)
+        assert result.code == 200
 
     await server.get_slice(SLICE_PARAM).renew_facts()
 
