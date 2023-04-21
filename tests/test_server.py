@@ -1413,7 +1413,8 @@ async def test_redirect_dashboard_to_console(server, path):
     assert result_url == response.effective_url
 
 
-@pytest.mark.parametrize("env1_halted, env2_halted", [(True, True), (False, True), (True, False), (False, False)])
+@pytest.mark.parametrize("env1_halted", [True, False])
+@pytest.mark.parametrize("env2_halted", [True, False])
 async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     """
     This test is testing the functionality of cleaning up old agents in the database.

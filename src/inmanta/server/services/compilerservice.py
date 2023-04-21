@@ -562,9 +562,21 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 "type": "schedule",
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
-            recompile: TaskMethod = partial(
-                self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
-            )
+
+            def create_task():
+                if env.halted:
+                    return
+                else:
+                    partial(
+                        self.request_recompile,
+                        env,
+                        force_update=False,
+                        do_export=True,
+                        remote_id=uuid.uuid4(),
+                        metadata=metadata,
+                    )
+
+            recompile: TaskMethod = create_task()
             self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
             self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
 

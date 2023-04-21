@@ -1406,7 +1406,8 @@ async def test_metric_aggregation_no_date(
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None for _ in range(10)]
 
 
-@pytest.mark.parametrize("env1_halted, env2_halted", [(True, True), (False, True), (True, False), (False, False)])
+@pytest.mark.parametrize("env1_halted", [True, False])
+@pytest.mark.parametrize("env2_halted", [True, False])
 async def test_cleanup_environment_metrics(server, client, env1_halted, env2_halted) -> None:
     """
     Verify that the query to clean up old environment metrics is working correctly.
