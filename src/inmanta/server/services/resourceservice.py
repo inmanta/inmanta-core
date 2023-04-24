@@ -224,8 +224,8 @@ class ResourceService(protocol.ServerSlice):
         # Validate resource version id
         try:
             Id.parse_resource_version_id(resource_id)
-        except ValueError as exc:
-            return 404, {"message": str(exc)}
+        except ValueError:
+            return 400, {"message": f"{resource_id} is not a valid resource version id"}
 
         resv = await data.Resource.get(env.id, resource_id)
         if resv is None:
