@@ -4047,7 +4047,7 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def purge_logs(cls) -> None:
-        default_retention_time = "7"
+        default_retention_time = str(Environment._settings["resource_action_logs_retention"].default)
 
         query = f"""
             WITH non_halted_envs AS (
@@ -5736,20 +5736,20 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
-        # todo fix issue race condition
-        environments = await Environment.get_list(halted=False)
-        for env in environments:
-            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
-            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            LOGGER.info(
-                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
-            )
-
-            query = f"""
-            DELETE FROM {cls.table_name()}
-            WHERE created < $1 AND environment = $2;
-            """
-            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
+        default_retention_time = str(Environment._settings["notification_retention"].default)
+        LOGGER.info("Cleaning up notifications")
+        query = f"""
+                   WITH non_halted_envs AS (
+                       SELECT id, (COALESCE(settings->>'notification_retention', $1))::int AS retention_days
+                       FROM public.environment
+                       WHERE NOT halted
+                   )
+                   DELETE FROM {cls.table_name()}
+                   USING non_halted_envs
+                   WHERE environment = non_halted_envs.id
+                       AND created < now() AT TIME ZONE 'UTC' - (non_halted_envs.retention_days || ' days')::interval
+               """
+        await cls._execute_query(query, default_retention_time)
 
     def to_dto(self) -> m.Notification:
         return m.Notification(

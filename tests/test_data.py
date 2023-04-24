@@ -2357,8 +2357,8 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         assert item in table_names_in_database
 
 
-@pytest.mark.parametrize("env1_halted", [True])
-@pytest.mark.parametrize("env2_halted", [False])
+@pytest.mark.parametrize("env1_halted", [True, False])
+@pytest.mark.parametrize("env2_halted", [True, False])
 async def test_purgelog_test(server, client, env1_halted, env2_halted):
     project = data.Project(name="test")
     await project.insert()
