@@ -61,7 +61,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLogs
+from inmanta.logging import InmantaLogs, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -709,10 +709,6 @@ def print_versions_installed_components_and_exit() -> None:
     else:
         print("Extensions: No extensions found")
     sys.exit(0)
-
-
-def _is_on_tty() -> bool:
-    return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
 
 
 def app() -> None:

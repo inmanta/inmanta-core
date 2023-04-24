@@ -16,13 +16,19 @@
     Contact: code@inmanta.com
 """
 import logging
+import os
 import sys
 import typing
 
 import colorlog
 from colorlog.formatter import LogColors
 
-from inmanta.app import _is_on_tty
+from inmanta import const
+
+
+def _is_on_tty() -> bool:
+    return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
+
 
 """
 This dictionary maps the Inmanta log levels to the corresponding Python log levels
