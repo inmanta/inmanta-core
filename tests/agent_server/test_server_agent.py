@@ -760,7 +760,7 @@ async def test_register_setting(environment, client, server, caplog):
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_unkown_parameters(
+async def test_unknown_parameters(
     resource_container, environment, client, server, clienthelper, agent, no_agent_backoff, halted, caplog
 ):
     """
