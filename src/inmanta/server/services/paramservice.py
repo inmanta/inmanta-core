@@ -77,13 +77,16 @@ class ParameterService(protocol.ServerSlice):
 
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
 
+        environments = await data.Environment.get_list(halted=False)
+        env_ids = [env.id for env in environments]
+
         for param in params_to_renew:
             if param.environment is None:
                 LOGGER.warning(
                     "Found parameter without environment (%s for resource %s). Deleting it.", param.name, param.resource_id
                 )
                 await param.delete()
-            else:
+            if param.environment.environment in env_ids:
                 LOGGER.debug(
                     "Requesting new parameter value for %s of resource %s in env %s",
                     param.name,
@@ -91,17 +94,22 @@ class ParameterService(protocol.ServerSlice):
                     param.environment,
                 )
                 await self.agentmanager.request_parameter(param.environment, param.resource_id)
+            else:
+                LOGGER.debug(
+                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
+                    param.name,
+                    param.resource_id,
+                    param.environment,
+                )
 
         unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
-        environments = await data.Environment.get_list(halted=False)
-        env_ids = [env.id for env in environments]
         for u in unknown_parameters:
             if u.environment is None:
                 LOGGER.warning(
                     "Found unknown parameter without environment (%s for resource %s). Deleting it.", u.name, u.resource_id
                 )
                 await u.delete()
-            if u.environment in env_ids:
+            if u.environment.environment in env_ids:
                 LOGGER.debug(
                     "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
                 )

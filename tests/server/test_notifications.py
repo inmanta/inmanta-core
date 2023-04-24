@@ -35,22 +35,51 @@ from utils import retry_limited
 
 
 @pytest.fixture
-async def environment_with_notifications(server, environment: str):
-    env_id = uuid.UUID(environment)
+async def add_notifications(server, environment: str):
+    """
+    A fixture that returns a method for adding notifications to the specified environment.
+    """
 
-    for i in range(8):
-        created = (datetime.datetime.now().astimezone() - datetime.timedelta(days=500)).replace(hour=i)
-        await data.Notification(
-            title="Notification" if i % 2 else "Error",
-            message="Something happened" if i % 2 else "Something bad happened",
-            environment=env_id,
-            severity=const.NotificationSeverity.message if i % 2 else const.NotificationSeverity.error,
-            uri="/api/v2/notification",
-            created=created.astimezone(),
-            read=i in {2, 4},
-            cleared=i in {4, 5},
-        ).insert()
+    async def add_notifications_with_timestamp(days_old):
+        """
+        Adds 8 notifications to the database, each with a creation date `days_old` days in the past.
+        """
+        env_id = uuid.UUID(environment)
+        for i in range(8):
+            created = (datetime.datetime.now().astimezone() - datetime.timedelta(days=days_old)).replace(hour=i)
+            await data.Notification(
+                title="Notification" if i % 2 else "Error",
+                message="Something happened" if i % 2 else "Something bad happened",
+                environment=env_id,
+                severity=const.NotificationSeverity.message if i % 2 else const.NotificationSeverity.error,
+                uri="/api/v2/notification",
+                created=created.astimezone(),
+                read=i in {2, 4},
+                cleared=i in {4, 5},
+            ).insert()
 
+    return add_notifications_with_timestamp
+
+
+@pytest.fixture
+async def environment_with_notifications(add_notifications, environment: str):
+    """
+    A fixture that sets up a new environment with notifications for testing.
+    """
+    environment = uuid.UUID(environment)
+    await add_notifications(days_old=1)  # add notifications with timestamp 1 day before current time
+    yield environment
+
+
+@pytest.fixture
+async def halted_env_with_old_notifications(server, client, environment: str, add_notifications):
+    """
+    A fixture that sets up a halted environment with notifications older than 365 days for testing.
+    """
+    environment = uuid.UUID(environment)
+    result = await client.halt_environment(environment)
+    assert result.code == 200
+    await add_notifications(days_old=500)  # add notifications with timestamp 500 day before current time
     yield environment
 
 
@@ -388,15 +417,15 @@ async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, a
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_cleanup_notifications(server, postgresql_client, client, environment_with_notifications, halted):
+async def test_cleanup_notifications(server, postgresql_client, client, halted_env_with_old_notifications, halted):
     # test that the notifications are only cleaned up if the env is not halted
-    env_id = environment_with_notifications
+    env_id = halted_env_with_old_notifications
     result = await client.list_notifications(env_id)
     assert result.code == 200
     assert len(result.result["data"]) == 8
 
-    if halted:
-        result = await client.halt_environment(env_id)
+    if not halted:
+        result = await client.resume_environment(env_id)
         assert result.code == 200
 
     await data.Notification.clean_up_notifications()

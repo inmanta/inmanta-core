@@ -1074,6 +1074,11 @@ async def test_compileservice_cleanup_halted(server, client, environment, halted
     If the 'halted' parameter is true, it halts the environment and checks that both compile remain after cleanup.
     Otherwise, it checks that only one compile remain after cleanup (te new latest one).
     """
+
+    if halted:
+        result = await client.halt_environment(environment)
+        assert result.code == 200
+
     now = datetime.datetime.now()
     time_of_old_compile = now - datetime.timedelta(days=30)
     compile_id_old = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
@@ -1103,10 +1108,6 @@ async def test_compileservice_cleanup_halted(server, client, environment, halted
 
     compiles = await data.Compile.get_list()
     assert len(compiles) == 2
-
-    if halted:
-        result = await client.halt_environment(environment)
-        assert result.code == 200
 
     oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(seconds=50)
 

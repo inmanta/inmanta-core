@@ -1408,7 +1408,9 @@ async def test_metric_aggregation_no_date(
 
 @pytest.mark.parametrize("env1_halted", [True, False])
 @pytest.mark.parametrize("env2_halted", [True, False])
-async def test_cleanup_environment_metrics(server, client, env1_halted, env2_halted) -> None:
+async def test_cleanup_environment_metrics(
+    init_dataclasses_and_load_schema, postgresql_client, env1_halted, env2_halted
+) -> None:
     """
     Verify that the query to clean up old environment metrics is working correctly.
     """
@@ -1427,11 +1429,9 @@ async def test_cleanup_environment_metrics(server, client, env1_halted, env2_hal
     await env2.set(data.ENVIRONMENT_METRICS_RETENTION, 3)
 
     if env1_halted:
-        result = await client.halt_environment(env1.id)
-        assert result.code == 200
+        await env1.update_fields(halted=True)
     if env2_halted:
-        result = await client.halt_environment(env2.id)
-        assert result.code == 200
+        await env2.update_fields(halted=True)
 
     now = datetime.now().astimezone(tz=timezone.utc)
     timestamps_metrics = [
