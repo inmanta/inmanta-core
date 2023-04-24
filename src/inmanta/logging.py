@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2023 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -14,20 +14,6 @@
     limitations under the License.
 
     Contact: code@inmanta.com
-
-
-    Command line development guidelines
-    ###################################
-
-    do's and don'ts
-    ----------------
-    MUST NOT: sys.exit => use command.CLIException
-    SHOULD NOT: print( => use logger for messages, only print for final output
-
-
-    Entry points
-    ------------
-    @command annotation to register new command
 """
 import logging
 import sys
@@ -106,11 +92,11 @@ class InmantaLogs:
             handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
         else:
             handler = logging.StreamHandler(stream)
-        cls._set_format(options, handler)
-        cls._set_log_level(options, handler)
+        cls._set_default_format(options, handler)
+        cls._set_default_log_level(options, handler)
 
     @classmethod
-    def _set_format(cls, options, handler):
+    def _set_default_format(cls, options, handler):
         if options.log_file:
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
         else:
@@ -119,7 +105,7 @@ class InmantaLogs:
         handler.setFormatter(formatter)
 
     @classmethod
-    def _set_log_level(cls, options, stream_handler):
+    def _set_default_log_level(cls, options, stream_handler):
         if options.log_file:
             level = cls._convert_inmanta_log_level_to_python_log_level(options.log_file_level)
         else:
