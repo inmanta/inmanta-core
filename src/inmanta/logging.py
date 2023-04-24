@@ -30,14 +30,12 @@
     @command annotation to register new command
 """
 import logging
-import os
 import sys
 import typing
 
 import colorlog
 from colorlog.formatter import LogColors
 
-from inmanta import const
 from inmanta.app import _is_on_tty
 
 """
