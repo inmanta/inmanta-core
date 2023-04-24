@@ -109,7 +109,7 @@ class ParameterService(protocol.ServerSlice):
                     "Found unknown parameter without environment (%s for resource %s). Deleting it.", u.name, u.resource_id
                 )
                 await u.delete()
-            if u.environment.environment in env_ids:
+            if u.environment in env_ids:
                 LOGGER.debug(
                     "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
                 )

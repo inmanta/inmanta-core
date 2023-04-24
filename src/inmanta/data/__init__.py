@@ -82,7 +82,6 @@ LOGGER = logging.getLogger(__name__)
 DBLIMIT = 100000
 APILIMIT = 1000
 
-
 # TODO: disconnect
 # TODO: difference between None and not set
 
@@ -4048,16 +4047,20 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def purge_logs(cls) -> None:
-        environments = await Environment.get_list(halted=False)
-        for env in environments:
-            time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
-            keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            query = f"""
+        default_retention_time = "7"
+
+        query = f"""
+            WITH non_halted_envs AS (
+                SELECT id, (COALESCE(settings->>'resource_action_logs_retention', $1))::int AS retention_days
+                FROM public.environment
+                WHERE NOT halted
+            )
             DELETE FROM {cls.table_name()}
-            WHERE environment = $1 AND started < $2;
-            """
-            value = cls._get_value(keep_logs_until)
-            await cls._execute_query(query, env.id, value)
+            USING non_halted_envs
+            WHERE environment = non_halted_envs.id
+                AND started < now() AT TIME ZONE 'UTC' - (non_halted_envs.retention_days || ' days')::interval
+        """
+        await cls._execute_query(query, default_retention_time)
 
     @classmethod
     async def query_resource_actions(
@@ -5733,6 +5736,7 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
+        # todo fix issue race condition
         environments = await Environment.get_list(halted=False)
         for env in environments:
             time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
