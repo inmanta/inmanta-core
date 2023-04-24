@@ -2434,7 +2434,6 @@ async def test_purgelog_test(server, client, env1_halted, env2_halted):
             messages=[log_line_ra2],
         )
         await ra2.insert()
-    a = envs[1].id
     if env1_halted:
         result = await client.halt_environment(envs[0].id)
         assert result.code == 200
