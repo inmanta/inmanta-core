@@ -417,7 +417,7 @@ async def test_notification_cleanup_on_start(init_dataclasses_and_load_schema, a
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_cleanup_notifications(server, postgresql_client, client, halted_env_with_old_notifications, halted):
+async def test_cleanup_notifications(server, client, halted_env_with_old_notifications, halted):
     # test that the notifications are only cleaned up if the env is not halted
     env_id = halted_env_with_old_notifications
     result = await client.list_notifications(env_id)
