@@ -4052,7 +4052,7 @@ class ResourceAction(BaseDocument):
         query = f"""
             WITH non_halted_envs AS (
                 SELECT id, (COALESCE(settings->>'resource_action_logs_retention', $1))::int AS retention_days
-                FROM public.environment
+                FROM {Environment.table_name()}
                 WHERE NOT halted
             )
             DELETE FROM {cls.table_name()}
