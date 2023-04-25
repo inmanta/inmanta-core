@@ -78,7 +78,7 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
 
         environments = await data.Environment.get_list(halted=False)
-        env_ids = [env.id for env in environments]
+        ids_non_halted_envs = [env.id for env in environments]
 
         for param in params_to_renew:
             if param.environment is None:
