@@ -4051,7 +4051,7 @@ class ResourceAction(BaseDocument):
 
         query = f"""
             WITH non_halted_envs AS (
-                SELECT id, (COALESCE(settings->>'resource_action_logs_retention', $1))::int AS retention_days
+                SELECT id, (COALESCE((settings->>'resource_action_logs_retention')::int, $1)) AS retention_days
                 FROM {Environment.table_name()}
                 WHERE NOT halted
             )
@@ -5736,11 +5736,11 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
-        default_retention_time = str(Environment._settings[NOTIFICATION_RETENTION].default)
+        default_retention_time = Environment._settings[NOTIFICATION_RETENTION].default
         LOGGER.info("Cleaning up notifications")
         query = f"""
                    WITH non_halted_envs AS (
-                       SELECT id, (COALESCE(settings->>'notification_retention', $1))::int AS retention_days
+                       SELECT id, (COALESCE((settings->>'notification_retention')::int, $1)) AS retention_days
                        FROM {Environment.table_name()}
                        WHERE NOT halted
                    )
