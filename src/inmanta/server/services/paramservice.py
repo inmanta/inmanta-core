@@ -81,7 +81,7 @@ class ParameterService(protocol.ServerSlice):
         ids_non_halted_envs = [env.id for env in environments]
 
         for param in params_to_renew:
-            if param.environment.environment in ids_non_halted_envs:
+            if param.environment in ids_non_halted_envs:
                 LOGGER.debug(
                     "Requesting new parameter value for %s of resource %s in env %s",
                     param.name,

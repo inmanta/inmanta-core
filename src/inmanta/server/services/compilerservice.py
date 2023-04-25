@@ -563,32 +563,26 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
 
-            async def create_task() -> TaskMethod:
+            async def request_recompile() -> object:
                 """
                 Creates a new task for the full compile schedule.
                 If the environment is halted, the task does nothing.
                 Otherwise, it requests a recompile.
                 """
                 latest_env = await data.Environment.get_by_id(env.id)
-                if latest_env.halted:
+                if not latest_env or latest_env.halted:
+                    return []
 
-                    async def do_nothing() -> list[None]:
-                        return []
+                return await self.request_recompile(
+                    env,
+                    force_update=False,
+                    do_export=True,
+                    remote_id=uuid.uuid4(),
+                    metadata=metadata,
+                )
 
-                    return do_nothing
-                else:
-                    return partial(
-                        self.request_recompile,
-                        env,
-                        force_update=False,
-                        do_export=True,
-                        remote_id=uuid.uuid4(),
-                        metadata=metadata,
-                    )
-
-            recompile: TaskMethod = create_task()
-            self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
-            self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
+            self.schedule_cron(request_recompile, schedule_cron, cancel_on_stop=False)
+            self._scheduled_full_compiles[env.id] = (request_recompile, schedule_cron)
 
     async def request_recompile(
         self,
