@@ -781,6 +781,11 @@ async def test_unknown_parameters(
     resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
 
     unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
+
+    if halted:
+        result = await client.halt_environment(environment)
+        assert result.code == 200
+
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -793,10 +798,6 @@ async def test_unknown_parameters(
 
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
-
-    if halted:
-        result = await client.halt_environment(environment)
-        assert result.code == 200
 
     await server.get_slice(SLICE_PARAM).renew_facts()
 

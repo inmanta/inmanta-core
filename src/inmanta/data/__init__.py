@@ -5736,7 +5736,7 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
-        default_retention_time = Environment._settings[NOTIFICATION_RETENTION].default
+        default_retention_time = str(Environment._settings[NOTIFICATION_RETENTION].default)
         LOGGER.info("Cleaning up notifications")
         query = f"""
                    WITH non_halted_envs AS (
