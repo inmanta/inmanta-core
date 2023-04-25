@@ -82,7 +82,6 @@ LOGGER = logging.getLogger(__name__)
 DBLIMIT = 100000
 APILIMIT = 1000
 
-
 # TODO: disconnect
 # TODO: difference between None and not set
 
@@ -2887,8 +2886,19 @@ class Parameter(BaseDocument):
     metadata: Optional[JsonType] = None
 
     @classmethod
-    async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
-        query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
+    async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> List["Parameter"]:
+        """
+        Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
+        """
+        query = f"""
+         WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        SELECT * FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) and updated < $1;
+        """
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result
@@ -3087,8 +3097,12 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
         query = f"""
-            DELETE FROM {cls.table_name()} as a1
+            WITH halted_env AS (
+                SELECT id FROM environment WHERE halted = true
+            )
+            DELETE FROM {cls.table_name()} AS a1
             WHERE a1.expired IS NOT NULL AND
+                  a1.environment NOT IN (SELECT id FROM halted_env) AND
                   (
                     -- Take nr_expired_records_to_keep into account
                     SELECT count(*)
@@ -3102,10 +3116,11 @@ class AgentProcess(BaseDocument):
                   -- Agent process only has expired agent instances
                   NOT EXISTS(
                     SELECT 1
-                    FROM {cls.table_name()} as agentprocess INNER JOIN {AgentInstance.table_name()} as agentinstance
-                         ON agentinstance.process = agentprocess.sid
-                    WHERE agentprocess.sid = a1.sid and agentinstance.expired IS NULL
-                  )
+                    FROM {cls.table_name()} AS agentprocess
+                    INNER JOIN {AgentInstance.table_name()} AS agentinstance
+                    ON agentinstance.process = agentprocess.sid
+                    WHERE agentprocess.sid = a1.sid AND agentinstance.expired IS NULL
+                  );
         """
         await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
@@ -3434,6 +3449,11 @@ AND NOT EXISTS (
     FROM public.resource AS re
     WHERE a.environment=re.environment
     AND a.name=re.agent
+)
+AND a.environment IN (
+    SELECT id
+    FROM public.environment
+    WHERE NOT halted
 );
 """
         await cls._execute_query(query, connection=connection)
@@ -3641,7 +3661,15 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
-        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
+        query = f"""
+        WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        DELETE FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) AND completed <= $1::timestamp with time zone;
+        """
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     @classmethod
@@ -4031,13 +4059,20 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def purge_logs(cls) -> None:
-        environments = await Environment.get_list()
-        for env in environments:
-            time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
-            keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            query = "DELETE FROM " + cls.table_name() + " WHERE environment=$1 AND started < $2"
-            value = cls._get_value(keep_logs_until)
-            await cls._execute_query(query, env.id, value)
+        default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
+
+        query = f"""
+            WITH non_halted_envs AS (
+                SELECT id, (COALESCE((settings->>'resource_action_logs_retention')::int, $1)) AS retention_days
+                FROM {Environment.table_name()}
+                WHERE NOT halted
+            )
+            DELETE FROM {cls.table_name()}
+            USING non_halted_envs
+            WHERE environment = non_halted_envs.id
+                AND started < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+        """
+        await cls._execute_query(query, default_retention_time)
 
     @classmethod
     async def query_resource_actions(
@@ -5809,15 +5844,20 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
-        environments = await Environment.get_list()
-        for env in environments:
-            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
-            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            LOGGER.info(
-                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
-            )
-            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
-            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
+        default_retention_time = Environment._settings[NOTIFICATION_RETENTION].default
+        LOGGER.info("Cleaning up notifications")
+        query = f"""
+                   WITH non_halted_envs AS (
+                       SELECT id, (COALESCE((settings->>'notification_retention')::int, $1)) AS retention_days
+                       FROM {Environment.table_name()}
+                       WHERE NOT halted
+                   )
+                   DELETE FROM {cls.table_name()}
+                   USING non_halted_envs
+                   WHERE environment = non_halted_envs.id
+                       AND created < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+               """
+        await cls._execute_query(query, default_retention_time)
 
     def to_dto(self) -> m.Notification:
         return m.Notification(
