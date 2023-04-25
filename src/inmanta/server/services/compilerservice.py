@@ -28,7 +28,6 @@ import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
 from collections.abc import Mapping
-from functools import partial
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
