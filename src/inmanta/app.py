@@ -716,9 +716,10 @@ def app() -> None:
     Run the compiler
     """
     # Send logs to stdout
-    handler = InmantaLogs.get_default_handler()
+    stream_handler = InmantaLogs.get_basic_stream_handler()
     logging.root.handlers = []
-    logging.root.addHandler(handler)
+    logging.root.addHandler(stream_handler)
+    logging.root.setLevel(0)
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -726,8 +727,19 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    logging.captureWarnings(True)
+    # Log everything to a log_file if logfile is provided
+    if options.log_file:
+        watched_file_handler = InmantaLogs.get_watched_file_handler(options)
+        logging.root.addHandler(watched_file_handler)
+        logging.root.removeHandler(stream_handler)
+    else:
+        if options.timed:
+            formatter = InmantaLogs.get_log_formatter_for_stream_handler(timed=True)
+            stream_handler.setFormatter(formatter)
+        log_level = InmantaLogs.convert_cli_log_level(options.verbose)
+        stream_handler.setLevel(log_level)
 
+    logging.captureWarnings(True)
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
