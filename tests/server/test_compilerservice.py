@@ -1071,8 +1071,8 @@ async def test_compileservice_cleanup_halted(server, client, environment, halted
     Test that the cleanup process of the CompileService works correctly when the environment is halted.
 
     This test creates two compiles and inserts them into the database.
-    If the 'halted' parameter is true, it halts the environment and checks that both compile remain after cleanup.
-    Otherwise, it checks that only one compile remain after cleanup (te new latest one).
+    If the 'halted' parameter is true, it halts the environment and checks that both compiles remain after cleanup.
+    Otherwise, it checks that only one compile remains after cleanup (the new latest one).
     """
 
     if halted:
