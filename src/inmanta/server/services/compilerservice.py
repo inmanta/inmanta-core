@@ -570,7 +570,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 """
                 latest_env = await data.Environment.get_by_id(env.id)
                 if not latest_env or latest_env.halted:
-                    return []
+                    return None, []
 
                 return await self.request_recompile(
                     env,
