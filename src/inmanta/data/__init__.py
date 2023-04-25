@@ -4058,7 +4058,7 @@ class ResourceAction(BaseDocument):
             DELETE FROM {cls.table_name()}
             USING non_halted_envs
             WHERE environment = non_halted_envs.id
-                AND started < now() AT TIME ZONE 'UTC' - (non_halted_envs.retention_days || ' days')::interval
+                AND started < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
         """
         await cls._execute_query(query, default_retention_time)
 
@@ -5747,7 +5747,7 @@ class Notification(BaseDocument):
                    DELETE FROM {cls.table_name()}
                    USING non_halted_envs
                    WHERE environment = non_halted_envs.id
-                       AND created < now() AT TIME ZONE 'UTC' - (non_halted_envs.retention_days || ' days')::interval
+                       AND created < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
                """
         await cls._execute_query(query, default_retention_time)
 
