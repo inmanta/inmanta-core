@@ -465,7 +465,7 @@ async def test_agent_process(init_dataclasses_and_load_schema):
 
 @pytest.mark.parametrize("env1_halted", [True, False])
 @pytest.mark.parametrize("env2_halted", [True, False])
-async def test_agentprocess_cleanup(server, client, postgresql_client, env1_halted, env2_halted):
+async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql_client, env1_halted, env2_halted):
     # tests the agent process cleanup function with different combinations of halted environments
 
     project = data.Project(name="test")
@@ -513,11 +513,9 @@ async def test_agentprocess_cleanup(server, client, postgresql_client, env1_halt
     await insert_agent_proc_and_instances(env2.id, "proc2", datetime.datetime(2020, 1, 1, 3, 0), [now])
 
     if env1_halted:
-        result = await client.halt_environment(env1.id)
-        assert result.code == 200
+        await env1.update_fields(halted=True)
     if env2_halted:
-        result = await client.halt_environment(env2.id)
-        assert result.code == 200
+        await env2.update_fields(halted=True)
 
     # Run cleanup twice to verify stability
     for i in range(2):
@@ -2067,7 +2065,7 @@ async def test_code(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_parameter(server, client, halted):
+async def test_parameter(init_dataclasses_and_load_schema, halted):
     # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
     project = data.Project(name="test")
     await project.insert()
@@ -2076,8 +2074,7 @@ async def test_parameter(server, client, halted):
     await env.insert()
 
     if halted:
-        result = await client.halt_environment(env.id)
-        assert result.code == 200
+        await env.update_fields(halted=True)
 
     time1 = datetime.datetime(2018, 7, 14, 12, 30)
     time2 = datetime.datetime(2018, 7, 16, 12, 30)
@@ -2359,7 +2356,7 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
 
 @pytest.mark.parametrize("env1_halted", [True, False])
 @pytest.mark.parametrize("env2_halted", [True, False])
-async def test_purgelog_test(server, client, env1_halted, env2_halted):
+async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2_halted):
     project = data.Project(name="test")
     await project.insert()
 
@@ -2434,12 +2431,11 @@ async def test_purgelog_test(server, client, env1_halted, env2_halted):
             messages=[log_line_ra2],
         )
         await ra2.insert()
+
     if env1_halted:
-        result = await client.halt_environment(envs[0].id)
-        assert result.code == 200
+        await envs[0].update_fields(halted=True)
     if env2_halted:
-        result = await client.halt_environment(envs[1].id)
-        assert result.code == 200
+        await envs[1].update_fields(halted=True)
 
     # Make the retention time for the second environment shorter than the default 7 days
     await envs[1].set(data.RESOURCE_ACTION_LOGS_RETENTION, value=2)
