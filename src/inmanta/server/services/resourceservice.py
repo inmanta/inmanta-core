@@ -221,6 +221,12 @@ class ResourceService(protocol.ServerSlice):
         log_action: const.ResourceAction,
         log_limit: int,
     ) -> Apireturn:
+        # Validate resource version id
+        try:
+            Id.parse_resource_version_id(resource_id)
+        except ValueError:
+            return 400, {"message": f"{resource_id} is not a valid resource version id"}
+
         resv = await data.Resource.get(env.id, resource_id)
         if resv is None:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
@@ -240,7 +246,7 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"resource": resv, "logs": actions}
 
-    # This endpoint does't have a method associated yet.
+    # This endpoint doesn't have a method associated yet.
     # Intended for use by other slices
     async def get_resources_in_latest_version(
         self,
