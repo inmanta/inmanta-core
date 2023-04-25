@@ -562,7 +562,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
 
-            async def request_recompile() -> Tuple[Optional[uuid.UUID], Warnings]:
+            async def _request_recompile_task() -> Tuple[Optional[uuid.UUID], Warnings]:
                 """
                 Creates a new task for the full compile schedule.
                 If the environment is halted, the task does nothing.
@@ -580,8 +580,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                     metadata=metadata,
                 )
 
-            self.schedule_cron(request_recompile, schedule_cron, cancel_on_stop=False)
-            self._scheduled_full_compiles[env.id] = (request_recompile, schedule_cron)
+            self.schedule_cron(_request_recompile_task, schedule_cron, cancel_on_stop=False)
+            self._scheduled_full_compiles[env.id] = (_request_recompile_task, schedule_cron)
 
     async def request_recompile(
         self,

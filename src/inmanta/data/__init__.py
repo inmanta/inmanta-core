@@ -2878,6 +2878,9 @@ class Parameter(BaseDocument):
 
     @classmethod
     async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
+        """
+        Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
+        """
         query = f"""
          WITH non_halted_envs AS (
           SELECT id FROM public.environment WHERE NOT halted
