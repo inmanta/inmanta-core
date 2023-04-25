@@ -1065,6 +1065,59 @@ async def test_compileservice_cleanup(
     assert len(result.result["reports"]) == 1
 
 
+@pytest.mark.parametrize("halted", [True, False])
+async def test_compileservice_cleanup_halted(server, client, environment, halted):
+    """
+    Test that the cleanup process of the CompileService works correctly when the environment is halted.
+
+    This test creates two compiles and inserts them into the database.
+    If the 'halted' parameter is true, it halts the environment and checks that both compiles remain after cleanup.
+    Otherwise, it checks that only one compile remains after cleanup (the new latest one).
+    """
+
+    if halted:
+        result = await client.halt_environment(environment)
+        assert result.code == 200
+
+    now = datetime.datetime.now()
+    time_of_old_compile = now - datetime.timedelta(days=30)
+    compile_id_old = uuid.UUID("c00cc33f-f70f-4800-ad01-ff042f67118f")
+    old_compile = {
+        "id": compile_id_old,
+        "remote_id": uuid.UUID("c9a10da1-9bf6-4152-8461-98adc02c4cee"),
+        "environment": uuid.UUID(environment),
+        "requested": time_of_old_compile,
+        "started": time_of_old_compile,
+        "completed": time_of_old_compile,
+        "do_export": True,
+        "force_update": True,
+        "metadata": {"type": "api", "message": "Recompile trigger through API call"},
+        "environment_variables": {},
+        "success": True,
+        "handled": True,
+        "version": 1,
+    }
+    compile_id_new = uuid.uuid4()
+    new_compile = {**old_compile, "id": compile_id_new, "requested": now, "started": now, "completed": now}
+
+    # insert compiles and reports into the database
+    async with Compile.get_connection() as con:
+        async with con.transaction():
+            await Compile(**old_compile).insert(connection=con)
+            await Compile(**new_compile).insert(connection=con)
+
+    compiles = await data.Compile.get_list()
+    assert len(compiles) == 2
+
+    oldest_retained_date = datetime.datetime.now().astimezone() - datetime.timedelta(seconds=50)
+
+    await data.Compile.delete_older_than(oldest_retained_date)
+
+    compiles = await data.Compile.get_list()
+    # if halted, nothing should be cleaned up, otherwise only the old compile should be cleaned up
+    assert len(compiles) == (2 if halted else 1)
+
+
 async def test_issue_2361(environment_factory: EnvironmentFactory, server, client, tmpdir):
     env = await environment_factory.create_environment(main="")
 

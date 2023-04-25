@@ -394,7 +394,7 @@ class OrchestrationService(protocol.ServerSlice):
         Purge versions from the database
         """
         # TODO: move to data and use queries for delete
-        envs = await data.Environment.get_list()
+        envs = await data.Environment.get_list(halted=False)
         for env_item in envs:
             # get available versions
             n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)

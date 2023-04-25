@@ -73,17 +73,15 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.info("Renewing parameters")
 
         updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
-        params_to_renew = await data.Parameter.get_updated_before(updated_before)
+        params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before)
 
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
 
+        environments = await data.Environment.get_list(halted=False)
+        ids_non_halted_envs = [env.id for env in environments]
+
         for param in params_to_renew:
-            if param.environment is None:
-                LOGGER.warning(
-                    "Found parameter without environment (%s for resource %s). Deleting it.", param.name, param.resource_id
-                )
-                await param.delete()
-            else:
+            if param.environment in ids_non_halted_envs:
                 LOGGER.debug(
                     "Requesting new parameter value for %s of resource %s in env %s",
                     param.name,
@@ -91,18 +89,28 @@ class ParameterService(protocol.ServerSlice):
                     param.environment,
                 )
                 await self.agentmanager.request_parameter(param.environment, param.resource_id)
+            else:
+                LOGGER.debug(
+                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
+                    param.name,
+                    param.resource_id,
+                    param.environment,
+                )
 
         unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
         for u in unknown_parameters:
-            if u.environment is None:
-                LOGGER.warning(
-                    "Found unknown parameter without environment (%s for resource %s). Deleting it.", u.name, u.resource_id
+            if u.environment in ids_non_halted_envs:
+                LOGGER.debug(
+                    "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
                 )
-                await u.delete()
-            else:
-                LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
                 await self.agentmanager.request_parameter(u.environment, u.resource_id)
-
+            else:
+                LOGGER.debug(
+                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
+                    u.name,
+                    u.resource_id,
+                    u.environment,
+                )
         LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")
