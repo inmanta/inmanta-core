@@ -2877,7 +2877,7 @@ class Parameter(BaseDocument):
     metadata: Optional[JsonType] = None
 
     @classmethod
-    async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
+    async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> List["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
         """

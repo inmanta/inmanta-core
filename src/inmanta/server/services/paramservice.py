@@ -73,7 +73,7 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.info("Renewing parameters")
 
         updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
-        params_to_renew = await data.Parameter.get_updated_before(updated_before)
+        params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before)
 
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
 

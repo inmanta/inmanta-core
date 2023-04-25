@@ -2089,13 +2089,13 @@ async def test_parameter(init_dataclasses_and_load_schema, halted):
         parameters.append(parameter)
         await parameter.insert()
 
-    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 12, 12, 30))
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 12, 12, 30))
     assert len(updated_before) == 0
-    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 14, 12, 30))
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 14, 12, 30))
     assert len(updated_before) == (0 if halted else 1)
     if not halted:
         assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
-    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 15, 12, 30))
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 15, 12, 30))
     list_of_ids = [(x.environment, x.name) for x in updated_before]
     assert len(updated_before) == (0 if halted else 2)
     if not halted:
