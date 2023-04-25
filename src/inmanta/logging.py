@@ -93,38 +93,28 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
 
 class InmantaLogs:
-    _handler: logging.Handler = logging.StreamHandler(sys.stdout)
-
-    @classmethod
-    def get_basic_stream_handler(cls, stream=sys.stdout) -> logging.StreamHandler:
-        stream_handler = logging.StreamHandler(stream)
+    def _get_default_stream_handler(cls) -> logging.StreamHandler:
+        stream_handler = logging.StreamHandler(stream=sys.stdout)
         stream_handler.setLevel(logging.INFO)
-        formatter = cls.get_log_formatter_for_stream_handler(timed=False)
+
+        formatter = cls._get_log_formatter_for_stream_handler(timed=False)
         stream_handler.setFormatter(formatter)
 
         return stream_handler
 
-    @classmethod
-    def apply_options(cls, options: argparse.Namespace) -> None:
-        return
-
-    @classmethod
-    def set_log_location(cls, options):
-        if options.log_file:
-            file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
-
-    @classmethod
-    def get_watched_file_handler(cls, options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
+    def _get_watched_file_handler(cls, options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
         if not options.log_file:
             raise Exception("No logfile was provided.")
-        level = cls.convert_inmanta_log_level_to_python_log_level(options.log_file_level)
+        level = cls._convert_inmanta_log_level_to_python_log_level(options.log_file_level)
         formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
         file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
         file_handler.setFormatter(formatter)
         file_handler.setLevel(level)
 
+        return file_handler
+
     @classmethod
-    def convert_cli_log_level(cls, level: int) -> int:
+    def _convert_cli_log_level(cls, level: int) -> int:
         """
         Converts the number of -v's passed on the CLI to the corresponding Inmanta log level
         """

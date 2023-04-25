@@ -716,7 +716,7 @@ def app() -> None:
     Run the compiler
     """
     # Send logs to stdout
-    stream_handler = InmantaLogs.get_basic_stream_handler()
+    stream_handler = InmantaLogs._get_default_stream_handler()
     logging.root.handlers = []
     logging.root.addHandler(stream_handler)
     logging.root.setLevel(0)
@@ -729,14 +729,14 @@ def app() -> None:
 
     # Log everything to a log_file if logfile is provided
     if options.log_file:
-        watched_file_handler = InmantaLogs.get_watched_file_handler(options)
+        watched_file_handler = InmantaLogs._get_watched_file_handler(options)
         logging.root.addHandler(watched_file_handler)
         logging.root.removeHandler(stream_handler)
     else:
         if options.timed:
-            formatter = InmantaLogs.get_log_formatter_for_stream_handler(timed=True)
+            formatter = InmantaLogs._get_log_formatter_for_stream_handler(timed=True)
             stream_handler.setFormatter(formatter)
-        log_level = InmantaLogs.convert_cli_log_level(options.verbose)
+        log_level = InmantaLogs._convert_cli_log_level(options.verbose)
         stream_handler.setLevel(log_level)
 
     logging.captureWarnings(True)
