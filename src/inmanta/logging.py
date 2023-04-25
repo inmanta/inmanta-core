@@ -93,25 +93,50 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
 
 class InmantaLogs:
-    def _get_default_stream_handler(cls) -> logging.StreamHandler:
-        stream_handler = logging.StreamHandler(stream=sys.stdout)
-        stream_handler.setLevel(logging.INFO)
+    _handler: logging.Handler
 
+    @classmethod
+    def setup_handler(cls) -> logging.StreamHandler:
+        cls._handler = logging.StreamHandler(stream=sys.stdout)
+        cls.set_log_level(logging.INFO)
         formatter = cls._get_log_formatter_for_stream_handler(timed=False)
-        stream_handler.setFormatter(formatter)
+        cls.set_log_formatter(formatter)
 
-        return stream_handler
+        logging.root.handlers = []
+        logging.root.addHandler(cls._handler)
+        logging.root.setLevel(0)
 
-    def _get_watched_file_handler(cls, options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
-        if not options.log_file:
-            raise Exception("No logfile was provided.")
-        level = cls._convert_inmanta_log_level_to_python_log_level(options.log_file_level)
-        formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-        file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(level)
+    @classmethod
+    def apply_options(cls, options):
+        if options.log_file:
+            cls.set_logfile_location(options.log_file)
+            formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
+            cls.set_log_formatter(formatter)
+            log_level = cls._convert_inmanta_log_level_to_python_log_level(options.log_file_level)
+            cls.set_log_level(log_level)
+        else:
+            if options.timed:
+                formatter = InmantaLogs._get_log_formatter_for_stream_handler(timed=True)
+                cls.set_log_formatter(formatter)
+            log_level = InmantaLogs._convert_cli_log_level(options.verbose)
+            cls.set_log_level(log_level)
 
-        return file_handler
+    @classmethod
+    def set_log_level(cls, log_level: int):
+        cls._handler.setLevel(log_level)
+
+    @classmethod
+    def set_log_formatter(cls, formatter: logging.Formatter):
+        cls._handler.setFormatter(formatter)
+        return
+
+    @classmethod
+    def set_logfile_location(cls, location: str):
+        file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
+        logging.root.removeHandler(cls._handler)
+        cls._handler = file_handler
+        logging.root.addHandler(cls._handler)
+        return
 
     @classmethod
     def _convert_cli_log_level(cls, level: int) -> int:
@@ -134,7 +159,7 @@ class InmantaLogs:
         return log_levels[level]
 
     @classmethod
-    def get_log_formatter_for_stream_handler(cls, timed: bool) -> logging.Formatter:
+    def _get_log_formatter_for_stream_handler(cls, timed: bool) -> logging.Formatter:
         log_format = "%(asctime)s " if timed else ""
         if _is_on_tty():
             log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
