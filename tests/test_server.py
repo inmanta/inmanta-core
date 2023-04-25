@@ -572,6 +572,17 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     assert result.result["model"]["done"] == 10
 
 
+async def test_get_resource_on_invalid_resource_id(server, client, environment) -> None:
+    """
+    Verify that a clear error message is returned when the resource version id passed to the
+    get_resource() endpoint has an invalid structure.
+    """
+    invalid_resource_version_id = "invalid resource version id"
+    result = await client.get_resource(tid=environment, id=invalid_resource_version_id)
+    assert result.code == 400
+    assert f"{invalid_resource_version_id} is not a valid resource version id" in result.result["message"]
+
+
 async def test_clear_environment(client, server, clienthelper, environment):
     """
     Test clearing out an environment
