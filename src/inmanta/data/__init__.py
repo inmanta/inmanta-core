@@ -4047,7 +4047,7 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def purge_logs(cls) -> None:
-        default_retention_time = str(Environment._settings["resource_action_logs_retention"].default)
+        default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
 
         query = f"""
             WITH non_halted_envs AS (
