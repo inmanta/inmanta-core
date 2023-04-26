@@ -15,10 +15,11 @@
 
     Contact: code@inmanta.com
 """
+import argparse
 import logging
 import os
 import sys
-from typing import Optional
+from typing import Optional, TextIO
 
 import colorlog
 from colorlog.formatter import LogColors
@@ -71,7 +72,7 @@ class InmantaLogs:
     _handler: Optional[logging.Handler] = None
 
     @classmethod
-    def create_default_handler(cls, stream: Optional[str] = sys.stdout) -> None:
+    def create_default_handler(cls, stream: TextIO = sys.stdout) -> None:
         """
         Set up the logging handler for Inmanta.
 
@@ -87,12 +88,12 @@ class InmantaLogs:
         logging.root.setLevel(0)
 
     @classmethod
-    def apply_options(cls, options) -> None:
+    def apply_options(cls, options: object) -> None:
         """
         Apply the logging options to the current handler. A handler should have been created before
 
         :param options: the option object coming from the command line. This function use the following
-            attribute: log_file, log_file_level, verbose, timed
+            attributes: log_file, log_file_level, verbose, timed
         """
         if not cls._handler:
             raise Exception(
@@ -110,7 +111,7 @@ class InmantaLogs:
             cls.set_log_level(str(options.verbose))
 
     @classmethod
-    def set_log_level(cls, inmanta_log_level: str, cli=True) -> None:
+    def set_log_level(cls, inmanta_log_level: str, cli: bool = True) -> None:
         """
         Set the logging level. A handler should have been created before
         below the supported inmanta log levels and there equivalent in python logging:
@@ -172,7 +173,7 @@ class InmantaLogs:
         logging.root.addHandler(cls._handler)
 
     @classmethod
-    def get_handler(cls) -> logging.Handler:
+    def get_handler(cls) -> Optional[logging.Handler]:
         """
         Get the logging handler
 
