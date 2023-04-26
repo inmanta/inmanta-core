@@ -96,7 +96,7 @@ class InmantaLogs:
         """
         if not cls._handler:
             raise Exception(
-                "No handler to apply options to. Please use the create_default_handler method before calling this " "one"
+                "No handler to apply options to. Please use the create_default_handler method before calling this one"
             )
         if options.log_file:
             cls.set_logfile_location(options.log_file)
@@ -120,7 +120,7 @@ class InmantaLogs:
         """
         if not cls._handler:
             raise Exception(
-                "No handler to apply options to. Please use the create_default_handler method before calling this " "one"
+                "No handler to apply options to. Please use the create_default_handler method before calling this one"
             )
         cls._handler.setLevel(log_level)
 
@@ -133,7 +133,7 @@ class InmantaLogs:
         """
         if not cls._handler:
             raise Exception(
-                "No handler to apply options to. Please use the create_default_handler method before calling this " "one"
+                "No handler to apply options to. Please use the create_default_handler method before calling this one"
             )
         cls._handler.setFormatter(formatter)
 
