@@ -89,12 +89,15 @@ class InmantaLogs:
     @classmethod
     def apply_options(cls, options) -> None:
         """
-        Apply the logging options to the current handler. If there is no handler yet, this function starts one
-        with setup_handler
+        Apply the logging options to the current handler. A handler should have been created before
 
         :param options: the option object coming from the command line. This function use the following
             attribute: log_file, log_file_level, verbose, timed
         """
+        if not cls._handler:
+            raise Exception(
+                "No handler to apply options to. Please use the create_default_handler method before calling this " "one"
+            )
         if options.log_file:
             cls.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
@@ -111,27 +114,34 @@ class InmantaLogs:
     @classmethod
     def set_log_level(cls, log_level: int) -> None:
         """
-        Set the logging level.
+        Set the logging level. A handler should have been created before
 
         :param log_level: The logging level.
         """
+        if not cls._handler:
+            raise Exception(
+                "No handler to apply options to. Please use the create_default_handler method before calling this " "one"
+            )
         cls._handler.setLevel(log_level)
 
     @classmethod
     def set_log_formatter(cls, formatter: logging.Formatter) -> None:
         """
-        Set the log formatter.
+        Set the log formatter. A handler should have been created before
 
         :param formatter: The log formatter.
         """
+        if not cls._handler:
+            raise Exception(
+                "No handler to apply options to. Please use the create_default_handler method before calling this " "one"
+            )
         cls._handler.setFormatter(formatter)
 
     @classmethod
     def set_logfile_location(cls, location: str) -> None:
         """
-        Set the location of the log file. Be carefull taht this function will replace the current handler with a new one
-        This means that configurations done on the previous handler will be lost. It might be a good idea to
-        call this function first.
+        Set the location of the log file. Be careful that this function will replace the current handler with a new one
+        This means that configurations done on the previous handler will be lost.
 
         :param location: The location of the log file.
         """
@@ -143,9 +153,9 @@ class InmantaLogs:
     @classmethod
     def get_handler(cls) -> logging.Handler:
         """
-        Get the logging handler instance used by this class
+        Get the logging handler
 
-        :return: The logging handler instance used by this class
+        :return: The logging handler
         """
         return cls._handler
 
