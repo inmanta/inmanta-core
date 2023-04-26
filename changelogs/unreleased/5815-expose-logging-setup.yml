@@ -1,0 +1,8 @@
+description: Expose the logging setup through the stable api
+issue-nr: 5915
+change-type: minor
+destination-branches: [master, iso6, iso5]
+sections:
+  feature: "{{description}}"
+
+
