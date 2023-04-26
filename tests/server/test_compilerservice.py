@@ -691,25 +691,29 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert value_env_var in report_map["Recompiling configuration model"]["outstream"]
 
     # set a parameter without requesting a recompile
-    await client.set_param(environment, id="param1", value="test", source=ParameterSource.plugin)
+    result = await client.set_param(environment, id="param1", value="test", source=ParameterSource.plugin)
+    assert result.code == 200
     versions = await wait_for_version(client, environment, 1)
     assert versions["count"] == 1
 
     logger.info("request second compile")
     # set a new parameter and request a recompile
-    await client.set_param(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    result = await client.set_param(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
     logger.info("wait for 2")
     versions = await wait_for_version(client, environment, 2)
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 2
 
     # update the parameter to the same value -> no compile
-    await client.set_param(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    result = await client.set_param(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
     versions = await wait_for_version(client, environment, 2)
     assert versions["count"] == 2
 
     # update the parameter to a new value
-    await client.set_param(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
+    result = await client.set_param(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
     logger.info("wait for 3")
     versions = await wait_for_version(client, environment, 3)
     assert versions["count"] == 3
@@ -718,7 +722,8 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     async def schedule_soon() -> None:
         soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
         cron_soon: str = "%d %d %d * * * *" % (soon.second, soon.minute, soon.hour)
-        await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+        result = await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
+        assert result.code == 200
 
     async def is_compiling() -> None:
         return (await client.is_compiling(environment)).code == 200
@@ -738,25 +743,32 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # delete schedule, verify it is cancelled
     await schedule_soon()
-    await client.environment_setting_delete(environment, id="auto_full_compile")
+    result = await client.environment_setting_delete(environment, id="auto_full_compile")
+    assert result.code == 200
     with pytest.raises(AssertionError, match="Bounded wait failed"):
         await retry_limited(is_compiling, 4)
-    assert (await client.list_versions(environment)).result["count"] == 5
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == 5
 
     # override with schedule in far future (+- 24h), check that it doesn't trigger an immediate recompile
     recent: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)
-    cron_recent: str = "%d %d %d * * *" % (recent.second, recent.minute, recent.hour)
-    await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
+    cron_recent: str = "%d %d %d * * * *" % (recent.second, recent.minute, recent.hour)
+    result = await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
+    assert result.code == 200
     with pytest.raises(AssertionError, match="Bounded wait failed"):
         await retry_limited(is_compiling, 4)
-    assert (await client.list_versions(environment)).result["count"] == 5
+    result = await client.list_versions(environment)
+    assert result.code == 200
+    assert result.result["count"] == 5
 
     # clear the environment
     state_dir = server_config.state_dir.get()
     project_dir = os.path.join(state_dir, "server", "environments", environment)
     assert os.path.exists(project_dir)
 
-    await client.clear_environment(environment)
+    result = await client.clear_environment(environment)
+    assert result.code == 200
 
     assert not os.path.exists(project_dir)
 
