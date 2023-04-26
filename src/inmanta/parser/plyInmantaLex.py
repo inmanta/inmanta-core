@@ -64,6 +64,7 @@ tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX"
     list(reserved.values())
 )
 
+
 def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"f(\"([^\\\"\n]|\\.)*\")|f(\'([^\\\'\n]|\\.)*\')"
     t.value = t.value[2:-1]
@@ -78,6 +79,7 @@ def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     )
 
     return t
+
 
 def t_RSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"r(\"([^\\\"\n]|\\.)*\")|r(\'([^\\\'\n]|\\.)*\')"

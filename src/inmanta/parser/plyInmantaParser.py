@@ -29,9 +29,16 @@ from inmanta.ast import LocatableString, Location, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
 from inmanta.ast.statements import ExpressionStatement, Literal, Statement
-from inmanta.ast.statements.assign import CreateDict, CreateList, IndexLookup, MapLookup, ShortIndexLookup, \
-    StringInterpolationFormat, \
-    StringFormatV2, FormattedString
+from inmanta.ast.statements.assign import (
+    CreateDict,
+    CreateList,
+    FormattedString,
+    IndexLookup,
+    MapLookup,
+    ShortIndexLookup,
+    StringFormatV2,
+    StringInterpolationFormat,
+)
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
     DefineAttribute,
@@ -855,7 +862,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
     formatter = string.Formatter()
 
     LOGGER.debug(str(p[1]))
-    parsed= formatter.parse(str(p[1]))
+    parsed = formatter.parse(str(p[1]))
     LOGGER.debug(str(p[1]))
 
     whole_string = str(p[1])
@@ -864,6 +871,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
     end_char_pos = p[1].location.end_char
 
     offset = 1
+
     def char_count_to_lnr_char(position: int) -> Tuple[int, int]:
         # convert in-string position to lnr/charcount
         before = whole_string[0:position]
@@ -887,8 +895,10 @@ def p_constant_fstring(p: YaccProduction) -> None:
 
     # assert False
     # p[1] = fmter.format(str(p[1]), *parsed)
+    # p[0] = StringFormatV2(str(format_string), _vars)
     p[0] = create_string_format(p[1], locatable_matches, use_v2_format=True)
     attach_from_string(p)
+
 
 def p_constant_rstring(p: YaccProduction) -> None:
     "constant : RSTRING"
@@ -903,7 +913,7 @@ def p_constant_mls(p: YaccProduction) -> None:
 
 
 format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
-format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL) #  re.MULTILINE flag might be redundant since '^' and '$' aren't used in the pattern
+format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringInterpolationFormat]:
@@ -939,7 +949,9 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     return create_string_format(string_ast, locatable_matches)
 
 
-def create_string_format(format_string: LocatableString, variables: List[Tuple[str, LocatableString]], use_v2_format: bool=False) -> FormattedString:
+def create_string_format(
+    format_string: LocatableString, variables: List[Tuple[str, LocatableString]], use_v2_format: bool = False
+) -> FormattedString:
     """
     Create a string interpolation statement. This function assumes that the variables of a match are on the same line.
 

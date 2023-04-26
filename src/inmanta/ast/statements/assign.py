@@ -18,10 +18,10 @@
 
 # pylint: disable-msg=W0613
 import logging
-import string
 import typing
 from collections.abc import Iterator
 from itertools import chain
+from string import Formatter
 from typing import Dict, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
@@ -561,10 +561,10 @@ class FormattedString(ReferenceStatement):
     """
     This class is an abstraction around a single-line string containing references to variables.
     """
+
     __slots__ = ("_format_string", "_variables")
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
-        LOGGER.debug(f"IUNTI FormattedString format_string %s var: %s", format_string, ",".join([v[1] for v in variables]))
         ReferenceStatement.__init__(self, [k for (k, _) in variables])
         self._format_string = format_string
         self._variables = variables
@@ -583,6 +583,7 @@ class StringInterpolationFormat(FormattedString):
     """
     Create a new string by doing a string interpolation
     """
+
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
         super().__init__(format_string, variables)
 
@@ -601,16 +602,28 @@ class StringInterpolationFormat(FormattedString):
         return result_string
 
 
+class FStringFormatter(Formatter):
+    def __init__(self):
+        Formatter.__init__(self)
+
+    def get_field(self, key, args, kwds):
+        # try:
+        return (kwds[key], key)
+        # except KeyError:
+        #     return Formatter.get_field(key, args, kwds)
+
+
 class StringFormatV2(FormattedString):
     """
     Create a new string by using python build in formatting
     """
+
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
         super().__init__(format_string, variables)
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
-        formatter = string.Formatter()
+        formatter = FStringFormatter()
 
         kwargs = {}
         for _var, str_id in self._variables:
@@ -620,13 +633,8 @@ class StringFormatV2(FormattedString):
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
 
-
             kwargs[str_id] = value
 
-        # f = formatter.get_field("d.n", args=None, kwargs=dico)
-        # lookup = {formatter.get_field(k, args=None, kwargs=kwargs) for k, v in kwargs}
         result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
 
         return result_string
-
-
