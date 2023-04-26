@@ -146,7 +146,8 @@ class InmantaLogs:
         :param location: The location of the log file.
         """
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
-        logging.root.removeHandler(cls._handler)
+        if cls._handler:
+            logging.root.removeHandler(cls._handler)
         cls._handler = file_handler
         logging.root.addHandler(cls._handler)
 
