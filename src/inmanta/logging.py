@@ -68,7 +68,7 @@ class InmantaLogs:
     The setup is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
     the 'final' logger with `apply_options`.
 
-    for more fine-grained configuration the following functions can be used aswell:
+    for more fine-grained configuration the following functions can be used as well:
         - `set_log_level`
         - `set_log_formatter`
         - `set_logfile_location`
