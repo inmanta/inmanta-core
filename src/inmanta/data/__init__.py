@@ -4242,7 +4242,7 @@ class ResourceAction(BaseDocument):
             if last_deploy_start:
                 filter += f" AND ra.started > {arg(last_deploy_start)}"
             if exclude_change:
-                filter += f"AND ra.change <> {arg(exclude_change.value)}"
+                filter += f" AND ra.change <> {arg(exclude_change.value)}"
 
             # then the query around it
             get_all_query = f"""
