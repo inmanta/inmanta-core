@@ -715,7 +715,7 @@ def app() -> None:
     """
     Run the compiler
     """
-    InmantaLogs.setup_handler()
+    InmantaLogs.create_default_handler()
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()

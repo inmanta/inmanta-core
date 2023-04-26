@@ -18,7 +18,7 @@
 import logging
 import os
 import sys
-import typing
+from typing import Optional
 
 import colorlog
 from colorlog.formatter import LogColors
@@ -47,55 +47,36 @@ log_levels = {
 }
 
 
-class MultiLineFormatter(colorlog.ColoredFormatter):
-    """Multi-line formatter."""
-
-    def __init__(
-        self,
-        fmt: typing.Optional[str] = None,
-        *,
-        # keep interface minimal: only include fields we actually use
-        log_colors: typing.Optional[LogColors] = None,
-        reset: bool = True,
-        no_color: bool = False,
-    ):
-        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
-        self.fmt = fmt
-
-    def get_header_length(self, record: logging.LogRecord) -> int:
-        """Get the header length of a given record."""
-        # to get the length of the header we want to get the header without the color codes
-        formatter = colorlog.ColoredFormatter(
-            fmt=self.fmt,
-            log_colors=self.log_colors,
-            reset=False,
-            no_color=True,
-        )
-        header = formatter.format(
-            logging.LogRecord(
-                name=record.name,
-                level=record.levelno,
-                pathname=record.pathname,
-                lineno=record.lineno,
-                msg="",
-                args=(),
-                exc_info=None,
-            )
-        )
-        return len(header)
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format a record with added indentation."""
-        indent: str = " " * self.get_header_length(record)
-        head, *tail = super().format(record).splitlines(True)
-        return head + "".join(indent + line for line in tail)
-
-
 class InmantaLogs:
-    _handler: logging.Handler
+    """
+    A class that provides logging functionality for Inmanta projects.
+
+    Usage:
+    To use this class, you first need to call the `setup_handler` method to configure the logging handler. This method
+    takes a `stream` argument that specifies where the log messages should be sent to. If no `stream` is provided,
+    the log messages will be sent to standard output.
+
+    You can then call the `apply_options` method to configure the logging options. This method takes an `options`
+    argument that should be an object with the following attributes:
+    - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
+      specified in `setup_handler`.
+    - `log_file_level`: the logging level for the file handler (if `log_file` is set).
+    - `verbose`: the verbosity level of the log messages.
+    - 'timed':if true,  adds the time to the formatter in the log lines.
+
+    This is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
+    the 'final' logger with apply_options.
+    """
+
+    _handler: Optional[logging.Handler] = None
 
     @classmethod
-    def setup_handler(cls, stream=sys.stdout) -> logging.StreamHandler:
+    def create_default_handler(cls, stream: Optional[str] = sys.stdout) -> None:
+        """
+        Set up the logging handler for Inmanta.
+
+        :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
+        """
         cls._handler = logging.StreamHandler(stream=stream)
         cls.set_log_level(logging.INFO)
         formatter = cls._get_log_formatter_for_stream_handler(timed=False)
@@ -106,7 +87,17 @@ class InmantaLogs:
         logging.root.setLevel(0)
 
     @classmethod
-    def apply_options(cls, options):
+    def apply_options(cls, options, stream: Optional[str] = sys.stdout) -> None:
+        """
+        Apply the logging options to the current handler. If no handler yet, first start on with setup_handler
+
+        :param options: the option object coming from the command line. This function use the following
+            attribute: log_file, log_file_level, verbose, timed
+        :param stream: The stream to send log messages to. Default is standard output (sys.stdout). This is only used
+            if a handler needs to be setup. If there is already a handler this param is ignored.
+        """
+        if cls._handler is None:
+            cls.create_default_handler(stream=stream)
         if options.log_file:
             cls.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
@@ -121,21 +112,45 @@ class InmantaLogs:
             cls.set_log_level(log_level)
 
     @classmethod
-    def set_log_level(cls, log_level: int):
+    def set_log_level(cls, log_level: int) -> None:
+        """
+        Set the logging level.
+
+        :param log_level: The logging level.
+        """
         cls._handler.setLevel(log_level)
 
     @classmethod
-    def set_log_formatter(cls, formatter: logging.Formatter):
+    def set_log_formatter(cls, formatter: logging.Formatter) -> None:
+        """
+        Set the log formatter.
+
+        :param formatter: The log formatter.
+        """
         cls._handler.setFormatter(formatter)
-        return
 
     @classmethod
-    def set_logfile_location(cls, location: str):
+    def set_logfile_location(cls, location: str) -> None:
+        """
+        Set the location of the log file. Be carefull taht this function will replace the current handler with a new one
+        This means that configurations done on the previous handler will be lost. It might be a good idea to
+        call this function first.
+
+        :param location: The location of the log file.
+        """
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
         logging.root.removeHandler(cls._handler)
         cls._handler = file_handler
         logging.root.addHandler(cls._handler)
-        return
+
+    @classmethod
+    def get_handler(cls) -> logging.Handler:
+        """
+        Get the logging handler instance used by this class
+
+        :return: The logging handler instance used by this class
+        """
+        return cls._handler
 
     @classmethod
     def _convert_cli_log_level(cls, level: int) -> int:
@@ -175,3 +190,47 @@ class InmantaLogs:
                 no_color=True,
             )
         return formatter
+
+
+class MultiLineFormatter(colorlog.ColoredFormatter):
+    """Multi-line formatter."""
+
+    def __init__(
+        self,
+        fmt: Optional[str] = None,
+        *,
+        # keep interface minimal: only include fields we actually use
+        log_colors: Optional[LogColors] = None,
+        reset: bool = True,
+        no_color: bool = False,
+    ):
+        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
+        self.fmt = fmt
+
+    def get_header_length(self, record: logging.LogRecord) -> int:
+        """Get the header length of a given record."""
+        # to get the length of the header we want to get the header without the color codes
+        formatter = colorlog.ColoredFormatter(
+            fmt=self.fmt,
+            log_colors=self.log_colors,
+            reset=False,
+            no_color=True,
+        )
+        header = formatter.format(
+            logging.LogRecord(
+                name=record.name,
+                level=record.levelno,
+                pathname=record.pathname,
+                lineno=record.lineno,
+                msg="",
+                args=(),
+                exc_info=None,
+            )
+        )
+        return len(header)
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format a record with added indentation."""
+        indent: str = " " * self.get_header_length(record)
+        head, *tail = super().format(record).splitlines(True)
+        return head + "".join(indent + line for line in tail)
