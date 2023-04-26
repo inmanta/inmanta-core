@@ -78,7 +78,7 @@ class InmantaLogs:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
         """
         cls._handler = logging.StreamHandler(stream=stream)
-        cls.set_log_level(logging.INFO)
+        cls.set_log_level("INFO")
         formatter = cls._get_log_formatter_for_stream_handler(timed=False)
         cls.set_log_formatter(formatter)
 
@@ -102,27 +102,47 @@ class InmantaLogs:
             cls.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
             cls.set_log_formatter(formatter)
-            log_level = cls._convert_inmanta_log_level_to_python_log_level(options.log_file_level)
-            cls.set_log_level(log_level)
+            cls.set_log_level(options.log_file_level, cli=False)
         else:
             if options.timed:
                 formatter = InmantaLogs._get_log_formatter_for_stream_handler(timed=True)
                 cls.set_log_formatter(formatter)
-            log_level = InmantaLogs._convert_cli_log_level(options.verbose)
-            cls.set_log_level(log_level)
+            cls.set_log_level(str(options.verbose))
 
     @classmethod
-    def set_log_level(cls, log_level: int) -> None:
+    def set_log_level(cls, inmanta_log_level: str, cli=True) -> None:
         """
         Set the logging level. A handler should have been created before
+        below the supported inmanta log levels and there equivalent in python logging:
+            "0": logging.ERROR,
+            "1": logging.WARNING,
+            "2": logging.INFO,
+            "3": logging.DEBUG,
+            "4": 2,
+            "ERROR": logging.ERROR,
+            "WARNING": logging.WARNING,
+            "INFO": logging.INFO,
+            "DEBUG": logging.DEBUG,
+            "TRACE": 2,
 
-        :param log_level: The logging level.
+        :param inmanta_log_level: The inmanta logging level
+        :param cli: True if the logs will be outputed to the CLI.
         """
         if not cls._handler:
             raise Exception(
                 "No handler to apply options to. Please use the create_default_handler method before calling this one"
             )
-        cls._handler.setLevel(log_level)
+        # maximum of 4 v's
+        if inmanta_log_level.isdigit() and int(inmanta_log_level) > 4:
+            inmanta_log_level = "4"
+
+        # The minimal log level on the CLI is always WARNING
+        if cli and inmanta_log_level == "ERROR" or (inmanta_log_level.isdigit() and int(inmanta_log_level) < 1):
+            inmanta_log_level = "WARNING"
+
+        # Converts the Inmanta log level to the Python log level
+        python_log_level = log_levels[inmanta_log_level]
+        cls._handler.setLevel(python_log_level)
 
     @classmethod
     def set_log_formatter(cls, formatter: logging.Formatter) -> None:
@@ -159,26 +179,6 @@ class InmantaLogs:
         :return: The logging handler
         """
         return cls._handler
-
-    @classmethod
-    def _convert_cli_log_level(cls, level: int) -> int:
-        """
-        Converts the number of -v's passed on the CLI to the corresponding Inmanta log level
-        """
-        if level < 1:
-            # The minimal log level on the CLI is always WARNING
-            return logging.WARNING
-        else:
-            return cls._convert_inmanta_log_level_to_python_log_level(str(level))
-
-    @classmethod
-    def _convert_inmanta_log_level_to_python_log_level(cls, level: str) -> int:
-        """
-        Converts the Inmanta log level to the Python log level
-        """
-        if level.isdigit() and int(level) > 4:
-            level = "4"
-        return log_levels[level]
 
     @classmethod
     def _get_log_formatter_for_stream_handler(cls, timed: bool) -> logging.Formatter:

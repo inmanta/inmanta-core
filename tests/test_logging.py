@@ -59,7 +59,7 @@ def test_set_log_level():
     assert expected_output not in log_output
 
     # change the log_level and verify the log is visible this time.
-    InmantaLogs.set_log_level(logging.DEBUG)
+    InmantaLogs.set_log_level("DEBUG")
     logger.debug("This is a test message")
     log_output = stream.getvalue().strip()
     assert expected_output in log_output
@@ -123,7 +123,7 @@ def test_apply_options(tmpdir):
 
     # test that with if no log_file is given, the stream will be used with the specified verbose option
     # For verbose level 1, WARNINGs are shown INFOs not
-    options1 = Options(log_file=None, log_file_level="INFO", verbose=1)
+    options1 = Options(log_file=None, log_file_level="INFO", verbose="1")
     InmantaLogs.apply_options(options1)
     logger.info("info: This is the first test")
     logger.warning("warning: This is the second test")
@@ -133,7 +133,7 @@ def test_apply_options(tmpdir):
 
     # test that with if no log_file is given, the stream will be used with the specified verbose option
     # For verbose level 4, WARNINGs and INFOs are shown
-    options2 = Options(log_file=None, log_file_level="INFO", verbose=4)
+    options2 = Options(log_file=None, log_file_level="INFO", verbose="4")
     InmantaLogs.apply_options(options2)
     logger.warning("warning: This is the third test")
     logger.info("info: This is the forth test")
@@ -145,7 +145,7 @@ def test_apply_options(tmpdir):
 
     # test that with if a log_file is given, the logfile will be used will be used with the specified log_file_level
     # Here WARNINGs are shown INFOs not
-    options3 = Options(log_file=log_file, log_file_level="WARNING", verbose=4)
+    options3 = Options(log_file=log_file, log_file_level="WARNING", verbose="4")
     InmantaLogs.apply_options(options3)
     logger.info("info: This is the first test")
     logger.warning("warning: This is the second test")
@@ -156,7 +156,7 @@ def test_apply_options(tmpdir):
 
     # test that with if a log_file is given, the logfile will be used will be used with the specified log_file_level
     # Here both WARNINGs and INFOs are shown
-    options4 = Options(log_file=log_file, log_file_level="DEBUG", verbose=4)
+    options4 = Options(log_file=log_file, log_file_level="DEBUG", verbose="4")
     InmantaLogs.apply_options(options4)
     logger.warning("warning: This is the third test")
     logger.info("info: This is the forth test")
