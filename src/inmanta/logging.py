@@ -63,15 +63,15 @@ class InmantaLogs:
       specified in `setup_handler`.
     - `log_file_level`: the logging level for the file handler (if `log_file` is set).
     - `verbose`: the verbosity level of the log messages.
-    - 'timed': if true,  adds the time to the formatter in the log lines.
+    - `timed`: if true,  adds the time to the formatter in the log lines.
 
     The setup is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
     the 'final' logger with apply_options.
 
     for more fine-grained configuration the following functions can be used aswell:
-        - set_log_level
-        - set_log_formatter
-        - set_logfile_location
+        - `set_log_level`
+        - `set_log_formatter`
+        - `set_logfile_location`
     """
 
     _handler: Optional[logging.Handler] = None
