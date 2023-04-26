@@ -96,8 +96,8 @@ class InmantaLogs:
     _handler: logging.Handler
 
     @classmethod
-    def setup_handler(cls) -> logging.StreamHandler:
-        cls._handler = logging.StreamHandler(stream=sys.stdout)
+    def setup_handler(cls, stream=sys.stdout) -> logging.StreamHandler:
+        cls._handler = logging.StreamHandler(stream=stream)
         cls.set_log_level(logging.INFO)
         formatter = cls._get_log_formatter_for_stream_handler(timed=False)
         cls.set_log_formatter(formatter)
@@ -147,7 +147,7 @@ class InmantaLogs:
             # The minimal log level on the CLI is always WARNING
             return logging.WARNING
         else:
-            return cls.convert_inmanta_log_level_to_python_log_level(str(level))
+            return cls._convert_inmanta_log_level_to_python_log_level(str(level))
 
     @classmethod
     def _convert_inmanta_log_level_to_python_log_level(cls, level: str) -> int:
