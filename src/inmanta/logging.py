@@ -89,7 +89,8 @@ class InmantaLogs:
     @classmethod
     def apply_options(cls, options, stream: Optional[str] = sys.stdout) -> None:
         """
-        Apply the logging options to the current handler. If no handler yet, first start on with setup_handler
+        Apply the logging options to the current handler. If there is no handler yet, this function starts one
+        with setup_handler
 
         :param options: the option object coming from the command line. This function use the following
             attribute: log_file, log_file_level, verbose, timed
