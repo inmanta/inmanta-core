@@ -861,9 +861,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
     "constant : FSTRING"
     formatter = string.Formatter()
 
-    LOGGER.debug(str(p[1]))
     parsed = formatter.parse(str(p[1]))
-    LOGGER.debug(str(p[1]))
 
     whole_string = str(p[1])
     start_lnr = p[1].location.lnr
@@ -883,20 +881,16 @@ def p_constant_fstring(p: YaccProduction) -> None:
 
     locatable_matches: List[Tuple[str, LocatableString]] = []
     for match in parsed:
-        LOGGER.debug("mathc222222222222!!!")
         LOGGER.debug(match)
-        start_line, start_char = char_count_to_lnr_char(start_char_pos)
+        start_line, start_char = char_count_to_lnr_char(len(match[0]))
         end_line, end_char = char_count_to_lnr_char(end_char_pos)
-
+        start_char = start_char_pos + len(match[0])
         # TODO check char pos is correct
-        range: Range = Range(p[1].location.file, start_line, start_char, end_line, end_char)
+        range: Range = Range(p[1].location.file, start_lnr, start_char, start_lnr, end_char)
         locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
         locatable_matches.append((match[1], locatable_string))
 
-    # assert False
-    # p[1] = fmter.format(str(p[1]), *parsed)
-    # p[0] = StringFormatV2(str(format_string), _vars)
-    p[0] = create_string_format(p[1], locatable_matches, use_v2_format=True)
+    p[0] = StringFormatV2(str(p[1]), create_string_format(locatable_matches))
     attach_from_string(p)
 
 
@@ -917,10 +911,6 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringInterpolationFormat]:
-    """
-    :param string_ast:
-    :param mls: A boolean denoting if string_ast is a multi-line string
-    """
     matches: List[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
         return Literal(str(string_ast))
@@ -946,21 +936,17 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
         range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
         locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
         locatable_matches.append((match[1], locatable_string))
-    return create_string_format(string_ast, locatable_matches)
+    return StringInterpolationFormat(str(string_ast), create_string_format(locatable_matches))
 
 
-def create_string_format(
-    format_string: LocatableString, variables: List[Tuple[str, LocatableString]], use_v2_format: bool = False
-) -> FormattedString:
+def create_string_format(variables: List[Tuple[str, LocatableString]]) -> List[Tuple["Reference", str]]:
     """
     Create a string interpolation statement. This function assumes that the variables of a match are on the same line.
 
-    :param format_string: the LocatableString as it was received by get_string_ast_node()
     :param variables: A list of tuples where each tuple is a combination of a string and LocatableString
                         The string is the match containing the {{}} (ex: {{a.b}}) and the LocatableString is composed of
                         just the variables and the range for those variables.
                         (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
-    :param use_v2_format: When set to True, use python string formatting instead of string interpolation.
     """
     assert namespace
     _vars: List[Tuple[Reference, str]] = []
@@ -989,9 +975,7 @@ def create_string_format(
             _vars.append((ref, match))
         else:
             _vars.append((ref, match))
-    if use_v2_format:
-        return StringFormatV2(str(format_string), _vars)
-    return StringInterpolationFormat(str(format_string), _vars)
+        return _vars
 
 
 def p_constant_list(p: YaccProduction) -> None:

@@ -17,7 +17,6 @@
 """
 
 # pylint: disable-msg=W0613
-import logging
 import typing
 from collections.abc import Iterator
 from itertools import chain
@@ -74,7 +73,6 @@ if TYPE_CHECKING:
     from inmanta.ast.variables import Reference  # noqa: F401
 
 T = TypeVar("T")
-LOGGER = logging.getLogger(__name__)
 
 
 class CreateList(ReferenceStatement):
@@ -583,6 +581,7 @@ class StringInterpolationFormat(FormattedString):
     """
     Create a new string by doing a string interpolation
     """
+    __slots__ = ()
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
         super().__init__(format_string, variables)
@@ -617,6 +616,8 @@ class StringFormatV2(FormattedString):
     """
     Create a new string by using python build in formatting
     """
+    __slots__ = ()
+
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
         super().__init__(format_string, variables)

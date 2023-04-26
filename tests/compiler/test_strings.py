@@ -222,7 +222,8 @@ implement Foo using std::none
 z=5
 foo=Foo(n=z)
 
-std::print(f"foo.n is : {foo.n}")
+# std::print(f"foo.n is : {foo.n}")
+std::print("foo.n is : {{foo.n}}")
         """,
     )
     expected = "foo.n is : 5\n"
@@ -277,3 +278,34 @@ std::print(f"{unknown}")
             """,
         )
         compiler.do_compile()
+
+
+#
+# def test_fstring_sandbox323(snippetcompiler, capsys):
+#     snippetcompiler.setup_for_snippet(
+#         """
+# f'''
+# {arg}
+# '''
+# std::print(z)
+#         """,
+#     )
+#     expected = "{arg:.4f}\n"
+#
+#     compiler.do_compile()
+#     out, err = capsys.readouterr()
+#     assert out == expected
+#
+
+
+def test_fstring_sandbox323(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    number t = "str"
+end
+
+Test(t=5)
+        """,
+        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3:12))",
+    )

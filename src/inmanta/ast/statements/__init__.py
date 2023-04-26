@@ -214,7 +214,7 @@ class ExpressionStatement(RequiresEmitStatement):
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         """
-        :param lhs_attribute: The left hand side attribute of this expression is a right hand side in an attribute assignment.
+        :param lhs_attribute: The left hand side attribute if this expression is a right hand side in an attribute assignment.
             If not None, that caller is responsible for making sure the reference resolves to the correct instance as soon as
             this statement enters the `requires_emit` stage. As a result, it should always be None if the instance construction
             depends on this statement.

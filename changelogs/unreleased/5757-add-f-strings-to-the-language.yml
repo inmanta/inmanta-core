@@ -1,4 +1,4 @@
-description: Add python-like f-strings
+description: Add python-like f-strings.
 issue-nr: 5757
 change-type: minor
 destination-branches: [master, iso6]

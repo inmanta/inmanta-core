@@ -67,6 +67,7 @@ tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX"
 
 def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"f(\"([^\\\"\n]|\\.)*\")|f(\'([^\\\'\n]|\\.)*\')"
+    # r"f(?P<word>\"{3})([\s\S]*?)\"{3}|f('{3})([\s\S]*?)'{3}|f(\"([^\\\"\n]|\\.)*\")|f(\'([^\\\'\n]|\\.)*\')"
     t.value = t.value[2:-1]
     lexer = t.lexer
 
