@@ -62,9 +62,9 @@ class InmantaLogs:
       specified in `setup_handler`.
     - `log_file_level`: the logging level for the file handler (if `log_file` is set).
     - `verbose`: the verbosity level of the log messages.
-    - 'timed':if true,  adds the time to the formatter in the log lines.
+    - 'timed': if true,  adds the time to the formatter in the log lines.
 
-    This is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
+    The setup is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
     the 'final' logger with apply_options.
     """
 
@@ -87,18 +87,14 @@ class InmantaLogs:
         logging.root.setLevel(0)
 
     @classmethod
-    def apply_options(cls, options, stream: Optional[str] = sys.stdout) -> None:
+    def apply_options(cls, options) -> None:
         """
         Apply the logging options to the current handler. If there is no handler yet, this function starts one
         with setup_handler
 
         :param options: the option object coming from the command line. This function use the following
             attribute: log_file, log_file_level, verbose, timed
-        :param stream: The stream to send log messages to. Default is standard output (sys.stdout). This is only used
-            if a handler needs to be setup. If there is already a handler this param is ignored.
         """
-        if cls._handler is None:
-            cls.create_default_handler(stream=stream)
         if options.log_file:
             cls.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
