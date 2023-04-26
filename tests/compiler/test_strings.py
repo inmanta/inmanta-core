@@ -18,7 +18,7 @@
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace
+from inmanta.ast import Namespace, NotFoundException
 
 
 def test_multiline_string_interpolation(snippetcompiler):
@@ -159,6 +159,7 @@ world
     out, err = capsys.readouterr()
     assert expected == out
 
+
 def test_fstring_interpol(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
@@ -172,6 +173,7 @@ std::print(z)
     compiler.do_compile()
     out, err = capsys.readouterr()
     assert expected == out
+
 
 def test_fstring(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
@@ -212,27 +214,18 @@ def test_fstring_sandbox2(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
 entity Foo:
-  dict bar
-  dict foo = {}
-  dict blah = {"a":"a"}
   int n = 2
 end
 
 implement Foo using std::none
 
-a=Foo(bar={})
-b=Foo(bar={"a":z})
-c=Foo(bar={}, blah={"z":"y"})
-d=Foo(bar={}, n =z)
 z=5
+foo=Foo(n=z)
 
-std::print(f"str is : {d.n}")
-# std::print("str is : {{d.n}}")
+std::print(f"foo.n is : {foo.n}")
         """,
     )
-    expected = "\n"
-# kwargs = {'d.n': __config__::Foo 7fe96a3705e0}
-#     kwargs = {'d.n': 5}
+    expected = "foo.n is : 5\n"
 
     compiler.do_compile()
     out, err = capsys.readouterr()
@@ -252,6 +245,7 @@ std::print(z)
     compiler.do_compile()
     out, err = capsys.readouterr()
     assert out == expected
+
 
 @pytest.mark.parametrize(
     "f_string,expected_output",
@@ -274,3 +268,12 @@ std::print(z)
     out, err = capsys.readouterr()
     assert out == expected_output
 
+
+def test_fstring_expected_error(snippetcompiler, capsys):
+    with pytest.raises(NotFoundException):
+        snippetcompiler.setup_for_snippet(
+            """
+std::print(f"{unknown}")
+            """,
+        )
+        compiler.do_compile()
