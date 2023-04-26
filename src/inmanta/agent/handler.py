@@ -397,12 +397,7 @@ class HandlerContext(LoggerABC):
 
     def log_msg(self, level: int, msg: str, args: abc.Sequence[object], kwargs: abc.MutableMapping[str, object]) -> None:
         LOGGER.warning("Direct calls to the log_msg method are being deprecated, please use the LoggerABC interface instead.")
-        if "exc_info" in kwargs:
-            exc_info = bool(kwargs["exc_info"])
-            kwargs["traceback"] = traceback.format_exc()
-        else:
-            exc_info = False
-        self._log_msg(level, msg, *args, exc_info=exc_info, **kwargs)
+        self._log_msg(level, msg, *args, **kwargs)
 
     def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
         if len(args) > 0:
