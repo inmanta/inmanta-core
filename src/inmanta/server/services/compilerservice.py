@@ -28,7 +28,6 @@ import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
 from collections.abc import Mapping
-from functools import partial
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
@@ -562,11 +561,27 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 "type": "schedule",
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
-            recompile: TaskMethod = partial(
-                self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
-            )
-            self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
-            self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
+
+            async def _request_recompile_task() -> Tuple[Optional[uuid.UUID], Warnings]:
+                """
+                Creates a new task for the full compile schedule.
+                If the environment is halted, the task does nothing.
+                Otherwise, it requests a recompile.
+                """
+                latest_env = await data.Environment.get_by_id(env.id)
+                if not latest_env or latest_env.halted:
+                    return None, []
+
+                return await self.request_recompile(
+                    env,
+                    force_update=False,
+                    do_export=True,
+                    remote_id=uuid.uuid4(),
+                    metadata=metadata,
+                )
+
+            self.schedule_cron(_request_recompile_task, schedule_cron, cancel_on_stop=False)
+            self._scheduled_full_compiles[env.id] = (_request_recompile_task, schedule_cron)
 
     async def request_recompile(
         self,
