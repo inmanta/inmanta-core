@@ -18,10 +18,10 @@
 
 # pylint: disable-msg=W0613
 import typing
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
 from string import Formatter
-from typing import Dict, Optional, Sequence, TypeVar
+from typing import Dict, Optional, Tuple, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -563,11 +563,11 @@ class FormattedString(ReferenceStatement):
     __slots__ = ("_format_string", "_variables")
 
     def __init__(self, format_string: str, variables: Sequence["Reference"]) -> None:
-        ReferenceStatement.__init__(variables)
+        super().__init__(variables)
         self._format_string = format_string
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> None:
-        super().execute(requires, resolver, queue)
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        return super().execute(requires, resolver, queue)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
@@ -603,10 +603,10 @@ class StringInterpolationFormat(FormattedString):
 
 
 class FStringFormatter(Formatter):
-    def __init__(self):
+    def __init__(self) -> None:
         Formatter.__init__(self)
 
-    def get_field(self, key, args, kwds):
+    def get_field(self, key: str, args: Sequence[object], kwds: Mapping[str, object]) -> Tuple[object, str]:
         """
         Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
         retrieved by their full name.
@@ -628,7 +628,7 @@ class StringFormatV2(FormattedString):
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
-        formatter = FStringFormatter()
+        formatter: FStringFormatter = FStringFormatter()
 
         kwargs = {}
         for _var in self._variables:

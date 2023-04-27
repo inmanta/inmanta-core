@@ -866,8 +866,10 @@ def p_constant_fstring(p: YaccProduction) -> None:
     start_lnr = p[1].location.lnr
     start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
 
-    locatable_matches: List[LocatableString] = []
+    locatable_matches: List[Tuple[str, LocatableString]] = []
     for match in parsed:
+        if not match[1]:
+            continue
         literal_text_len = len(match[0])
         field_name_len = len(match[1])
         brackets_length = 1 if field_name_len else 0
