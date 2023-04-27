@@ -583,7 +583,7 @@ class StringInterpolationFormat(FormattedString):
 
     __slots__ = ()
 
-    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
+    def __init__(self, format_string: str, variables: Sequence[Tuple["Reference", str]]) -> None:
         super().__init__(format_string, [k for (k, _) in variables])
         self._variables = variables
 

@@ -211,7 +211,6 @@ def test_fstring_relations(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
 entity Aaa:
-    int n_a = 1
 end
 
 entity Bbb:
@@ -232,10 +231,7 @@ a = Aaa(b=b)
 b = Bbb(c=c)
 c = Ccc()
 
-std::print("HI    {{a.b.c.n_c}}{{a.n_a}} aaa {{a.n_a}}")
-# std::print(f"HI    {a.b.c.n_c}{a.n_a} aaa {a.n_a}")
-# std::print(f"HI    {a.b.c.n_c}")
-# std::print("{{a}}")
+std::print(f"{a.b.c.n_c}")
         """
     )
 

@@ -60,7 +60,6 @@ from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 # the token map is imported from the lexer. This is required.
 
 LOGGER = logging.getLogger()
-LOGGER.setLevel(logging.DEBUG)
 
 file = "NOFILE"
 namespace: Optional[Namespace] = None
@@ -860,7 +859,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
     "constant : FSTRING"
     formatter = string.Formatter()
 
-    # a match is a tuple (literal_text, field_name, format_spec, conversion)
+    # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
     parsed: Iterable[Tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(str(p[1]))
 
     start_lnr = p[1].location.lnr
@@ -869,7 +868,8 @@ def p_constant_fstring(p: YaccProduction) -> None:
     locatable_matches: List[Tuple[str, LocatableString]] = []
     for match in parsed:
         if not match[1]:
-            continue
+            # This happens when the format string ends with literal text (and not a replacement field): we're done parsing.
+            break
         literal_text_len = len(match[0])
         field_name_len = len(match[1])
         brackets_length = 1 if field_name_len else 0
