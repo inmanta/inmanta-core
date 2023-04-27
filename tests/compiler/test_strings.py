@@ -160,80 +160,7 @@ world
     assert expected == out
 
 
-def test_fstring_interpol(snippetcompiler, capsys):
-    snippetcompiler.setup_for_snippet(
-        """
-arg = 123
-z="{{arg}}"
-std::print(z)
-        """,
-    )
-    expected = "123\n"
-
-    compiler.do_compile()
-    out, err = capsys.readouterr()
-    assert expected == out
-
-
-def test_fstring(snippetcompiler, capsys):
-    snippetcompiler.setup_for_snippet(
-        """
-arg = 123
-z="arg {{arg}} aa"
-std::print(z)
-        """,
-    )
-    expected = "arg 123 aa\n"
-
-    compiler.do_compile()
-    out, err = capsys.readouterr()
-    assert expected == out
-
-
-#
-# Expected :'{123}\n'
-# Actual   :'123\n'
-
-
-def test_fstring_sandbox(snippetcompiler, capsys):
-    snippetcompiler.setup_for_snippet(
-        """
-arg = 123
-z=f"{arg}"
-std::print(z)
-        """,
-    )
-    expected = "123\n"
-
-    compiler.do_compile()
-    out, err = capsys.readouterr()
-    assert out == expected
-
-
-def test_fstring_sandbox2(snippetcompiler, capsys):
-    snippetcompiler.setup_for_snippet(
-        """
-entity Foo:
-  int n = 2
-end
-
-implement Foo using std::none
-
-z=5
-foo=Foo(n=z)
-
-# std::print(f"foo.n is : {foo.n}")
-std::print("foo.n is : {{foo.n}}")
-        """,
-    )
-    expected = "foo.n is : 5\n"
-
-    compiler.do_compile()
-    out, err = capsys.readouterr()
-    assert out == expected
-
-
-def test_fstring_sandbox3(snippetcompiler, capsys):
+def test_fstring_float_formatting(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
 arg = 12.23455
@@ -257,7 +184,7 @@ std::print(z)
         (r"f'{arg:^5}'", " 123 \n"),
     ],
 )
-def test_fstring_sandbox4(snippetcompiler, capsys, f_string, expected_output):
+def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
     snippetcompiler.setup_for_snippet(
         f"""
 arg = 123
@@ -280,32 +207,39 @@ std::print(f"{unknown}")
         compiler.do_compile()
 
 
-#
-# def test_fstring_sandbox323(snippetcompiler, capsys):
-#     snippetcompiler.setup_for_snippet(
-#         """
-# f'''
-# {arg}
-# '''
-# std::print(z)
-#         """,
-#     )
-#     expected = "{arg:.4f}\n"
-#
-#     compiler.do_compile()
-#     out, err = capsys.readouterr()
-#     assert out == expected
-#
-
-
-def test_fstring_sandbox323(snippetcompiler):
-    snippetcompiler.setup_for_error(
+def test_fstring_relations(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
         """
-entity Test:
-    number t = "str"
+entity Aaa:
+    int n_a = 1
 end
 
-Test(t=5)
-        """,
-        "Invalid value 'str', expected Number (reported in number t = 'str' ({dir}/main.cf:3:12))",
+entity Bbb:
+end
+
+entity Ccc:
+    int n_c = 3
+end
+
+implement Aaa using std::none
+implement Bbb using std::none
+implement Ccc using std::none
+
+Aaa.b [1] -- Bbb [1]
+Bbb.c [1] -- Ccc [1]
+
+a = Aaa(b=b)
+b = Bbb(c=c)
+c = Ccc()
+
+std::print("HI    {{a.b.c.n_c}}{{a.n_a}} aaa {{a.n_a}}")
+# std::print(f"HI    {a.b.c.n_c}{a.n_a} aaa {a.n_a}")
+# std::print(f"HI    {a.b.c.n_c}")
+# std::print("{{a}}")
+        """
     )
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    expected_output = "3\n"
+    assert out == expected_output

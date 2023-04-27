@@ -21,7 +21,7 @@ import typing
 from collections.abc import Iterator
 from itertools import chain
 from string import Formatter
-from typing import Dict, Optional, TypeVar
+from typing import Dict, Optional, Sequence, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -557,15 +557,14 @@ class ShortIndexLookup(IndexLookup):
 
 class FormattedString(ReferenceStatement):
     """
-    This class is an abstraction around a single-line string containing references to variables.
+    This class is an abstraction around a string containing references to variables.
     """
 
     __slots__ = ("_format_string", "_variables")
 
-    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
-        ReferenceStatement.__init__(self, [k for (k, _) in variables])
+    def __init__(self, format_string: str, variables: Sequence["Reference"]) -> None:
+        ReferenceStatement.__init__(variables)
         self._format_string = format_string
-        self._variables = variables
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> None:
         super().execute(requires, resolver, queue)
@@ -581,10 +580,12 @@ class StringInterpolationFormat(FormattedString):
     """
     Create a new string by doing a string interpolation
     """
+
     __slots__ = ()
 
     def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
-        super().__init__(format_string, variables)
+        super().__init__(format_string, [k for (k, _) in variables])
+        self._variables = variables
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -606,35 +607,38 @@ class FStringFormatter(Formatter):
         Formatter.__init__(self)
 
     def get_field(self, key, args, kwds):
-        # try:
+        """
+        Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
+        retrieved by their full name.
+        """
         return (kwds[key], key)
-        # except KeyError:
-        #     return Formatter.get_field(key, args, kwds)
 
 
 class StringFormatV2(FormattedString):
     """
     Create a new string by using python build in formatting
     """
+
     __slots__ = ()
 
-
-    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
-        super().__init__(format_string, variables)
+    def __init__(self, format_string: str, variables: Sequence[typing.Tuple["Reference", str]]) -> None:
+        only_refs: Sequence["Reference"] = [k for (k, _) in variables]
+        super().__init__(format_string, only_refs)
+        self._variables = only_refs
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
         formatter = FStringFormatter()
 
         kwargs = {}
-        for _var, str_id in self._variables:
+        for _var in self._variables:
             value = _var.execute(requires, resolver, queue)
             if isinstance(value, Unknown):
                 return Unknown(self)
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
 
-            kwargs[str_id] = value
+            kwargs[_var.full_name] = value
 
         result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
 

@@ -474,7 +474,7 @@ class ReferenceStatement(ExpressionStatement):
 
     __slots__ = ("children",)
 
-    def __init__(self, children: List[ExpressionStatement]) -> None:
+    def __init__(self, children: Sequence[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
         self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))

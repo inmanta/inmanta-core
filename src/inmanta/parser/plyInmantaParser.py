@@ -20,7 +20,7 @@ import re
 import string
 import warnings
 from itertools import accumulate
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterable, Iterator, List, Optional, Tuple, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -32,7 +32,6 @@ from inmanta.ast.statements import ExpressionStatement, Literal, Statement
 from inmanta.ast.statements.assign import (
     CreateDict,
     CreateList,
-    FormattedString,
     IndexLookup,
     MapLookup,
     ShortIndexLookup,
@@ -861,36 +860,26 @@ def p_constant_fstring(p: YaccProduction) -> None:
     "constant : FSTRING"
     formatter = string.Formatter()
 
-    parsed = formatter.parse(str(p[1]))
+    # a match is a tuple (literal_text, field_name, format_spec, conversion)
+    parsed: Iterable[Tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(str(p[1]))
 
-    whole_string = str(p[1])
     start_lnr = p[1].location.lnr
-    start_char_pos = p[1].location.start_char
-    end_char_pos = p[1].location.end_char
+    start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
 
-    offset = 1
-
-    def char_count_to_lnr_char(position: int) -> Tuple[int, int]:
-        # convert in-string position to lnr/charcount
-        before = whole_string[0:position]
-        lines = before.count("\n")
-        if lines == 0:
-            return start_lnr, start_char_pos + position + offset
-        else:
-            return start_lnr + lines, position - before.rindex("\n")
-
-    locatable_matches: List[Tuple[str, LocatableString]] = []
+    locatable_matches: List[LocatableString] = []
     for match in parsed:
-        LOGGER.debug(match)
-        start_line, start_char = char_count_to_lnr_char(len(match[0]))
-        end_line, end_char = char_count_to_lnr_char(end_char_pos)
-        start_char = start_char_pos + len(match[0])
-        # TODO check char pos is correct
-        range: Range = Range(p[1].location.file, start_lnr, start_char, start_lnr, end_char)
+        literal_text_len = len(match[0])
+        field_name_len = len(match[1])
+        brackets_length = 1 if field_name_len else 0
+        start_char_pos = start_char_pos + literal_text_len + brackets_length
+        end_char = start_char_pos + field_name_len
+
+        range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
+        start_char_pos += field_name_len + brackets_length
         locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
         locatable_matches.append((match[1], locatable_string))
 
-    p[0] = StringFormatV2(str(p[1]), create_string_format(locatable_matches))
+    p[0] = StringFormatV2(str(p[1]), convert_to_references(locatable_matches))
     attach_from_string(p)
 
 
@@ -936,17 +925,27 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
         range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
         locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
         locatable_matches.append((match[1], locatable_string))
-    return StringInterpolationFormat(str(string_ast), create_string_format(locatable_matches))
+
+    return StringInterpolationFormat(str(string_ast), convert_to_references(locatable_matches))
 
 
-def create_string_format(variables: List[Tuple[str, LocatableString]]) -> List[Tuple["Reference", str]]:
+def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[Tuple["Reference", str]]:
     """
-    Create a string interpolation statement. This function assumes that the variables of a match are on the same line.
+    This function is used in a context of string formatting. It expects variables that are part of a single line
+    format string and converts them to a format that can be processed by StringInterpolationFormat (for regular
+    string interpolation) or by StringFormatV2 (for f-string formatting).
 
-    :param variables: A list of tuples where each tuple is a combination of a string and LocatableString
-                        The string is the match containing the {{}} (ex: {{a.b}}) and the LocatableString is composed of
-                        just the variables and the range for those variables.
-                        (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
+    :param variables: A list of tuples where each tuple is a combination of a string and LocatableString.
+        For regular string interpolation:
+            - The string is the match containing the {{}} (ex: {{a.b}})
+            - The LocatableString is composed of just the variables and the range for those variables.
+            (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
+
+        For f-strings:
+            - The string is the plain variable name without brackets (ex: 'a.b')
+            - The LocatableString is the same as for regular string interpolation
+    :returns: A tuple where all LocatableString have been converted to Reference. The matching str holding the variable
+        name is left untouched
     """
     assert namespace
     _vars: List[Tuple[Reference, str]] = []
@@ -972,10 +971,11 @@ def create_string_format(variables: List[Tuple[str, LocatableString]]) -> List[T
                 ref = AttributeReference(ref, attr_locatable_string)
                 ref.location = range_attr
                 ref.namespace = namespace
+            # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
             _vars.append((ref, match))
         else:
             _vars.append((ref, match))
-        return _vars
+    return _vars
 
 
 def p_constant_list(p: YaccProduction) -> None:
