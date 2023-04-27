@@ -1,0 +1,4 @@
+description: Drop deprecated log_msg method
+change-type: patch
+destination-branches: [master]
+
