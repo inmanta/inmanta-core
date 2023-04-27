@@ -115,7 +115,8 @@ To use this logger, use one of the methods: :py:meth:`ctx.debug<inmanta.agent.ha
 :py:meth:`ctx.critical<inmanta.agent.handler.HandlerContext.critical>` or
 :py:meth:`ctx.exception<inmanta.agent.handler.HandlerContext.exception>`.
 
-This logger supports kwargs. The kwargs have to be json serializable. They will be available via the API in their json structured form.
+This logger implements the `~inmanta.agent.handler.LoggerABC` logging interface and supports kwargs.
+The kwargs have to be json serializable. They will be available via the API in their json structured form.
 
 For example:
 
@@ -125,6 +126,13 @@ For example:
         # ...
         ctx.debug("Creating loadbalancer with security group %(sg)s", sg=sg_id)
 
+
+An alternative implementation of the `~inmanta.agent.handler.LoggerABC` logging interface that just
+logs to the Python logger is provided in `~inmanta.agent.handler.PythonLogger`. This logger is not
+meant to be used in actual handlers but it can be used for the automated testing of helper methods
+that accept a `~inmanta.agent.handler.LoggerABC` instance. In production, these helpers would receive
+the actual :class:`~inmanta.agent.handler.HandlerContext` and log appropriately, while for testing the
+`PythonLogger` can be passed.
 
 Caching
 """""""
