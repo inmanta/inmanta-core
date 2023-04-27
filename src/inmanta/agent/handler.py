@@ -23,7 +23,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import abc, defaultdict
+from collections import defaultdict
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
@@ -394,10 +394,6 @@ class HandlerContext(LoggerABC):
     @property
     def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
-
-    def log_msg(self, level: int, msg: str, args: abc.Sequence[object], kwargs: abc.MutableMapping[str, object]) -> None:
-        LOGGER.warning("Direct calls to the log_msg method are being deprecated, please use the LoggerABC interface instead.")
-        self._log_msg(level, msg, *args, **kwargs)
 
     def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
         if len(args) > 0:
