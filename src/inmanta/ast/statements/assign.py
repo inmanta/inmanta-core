@@ -566,9 +566,6 @@ class FormattedString(ReferenceStatement):
         super().__init__(variables)
         self._format_string = format_string
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        return super().execute(requires, resolver, queue)
-
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
