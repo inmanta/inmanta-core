@@ -132,7 +132,7 @@ class Server(protocol.ServerSlice):
         async def collect_for_slice(slice_name: str, slice: protocol.ServerSlice) -> SliceStatus:
             try:
                 return SliceStatus(name=slice_name, status=await asyncio.wait_for(slice.get_status(), 0.1))
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 return SliceStatus(
                     name=slice_name,
                     status={
