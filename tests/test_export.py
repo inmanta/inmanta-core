@@ -28,6 +28,7 @@ from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
 from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
+from inmanta.resources import Resource
 from utils import LogSequence, v1_module_from_template
 
 
@@ -223,6 +224,15 @@ async def test_server_export(snippetcompiler, server, client, environment):
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
+
+    version = result.result["versions"][0]["version"]
+    result = await client.get_version(tid=environment, id=result.result["versions"][0]["version"])
+    assert result.code == 200
+
+    for res in result.result["resources"]:
+        res["attributes"]["id"] = res["id"]
+        resource = Resource.deserialize(res["attributes"])
+        assert resource.version == resource.id.version == version
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):
