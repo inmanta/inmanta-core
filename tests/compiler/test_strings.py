@@ -19,6 +19,8 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import Namespace, NotFoundException
+from inmanta.ast.variables import Reference
+from test_parser import parse_code
 
 
 def test_multiline_string_interpolation(snippetcompiler):
@@ -239,3 +241,33 @@ std::print(f"{a.b.c.n_c}")
     out, err = capsys.readouterr()
     expected_output = "3\n"
     assert out == expected_output
+
+
+def test_fstring_numbering_logic():
+    statements = parse_code(
+        """
+std::print(f"---{s}{mm} - {lll}")
+"""
+    )
+
+    def check_range(variable: Reference, start: int, end: int):
+        assert variable.location.start_char == start
+        assert variable.location.end_char == end
+
+    # Ranges are 1-indexed [start:end[
+    ranges = [
+        (
+            len('std::print(f"---{s'),
+            len('std::print(f"---{s}')
+        ),
+        (
+            len('std::print(f"---{s}{m'),
+            len('std::print(f"---{s}{mm}')),
+        (
+            len('std::print(f"---{s}{mm} - {l'),
+            len('std::print(f"---{s}{mm} - {lll}')),
+    ]
+    variables = statements[0].children[0]._variables
+
+    for var, range in zip(variables, ranges):
+        check_range(var, *range)
