@@ -576,7 +576,7 @@ class FormattedString(ReferenceStatement):
         return "Format(%s)" % self._format_string
 
 
-class StringInterpolationFormat(FormattedString):
+class StringFormat(FormattedString):
     """
     Create a new string by doing a string interpolation
     """

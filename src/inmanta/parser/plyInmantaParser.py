@@ -36,7 +36,7 @@ from inmanta.ast.statements.assign import (
     MapLookup,
     ShortIndexLookup,
     StringFormatV2,
-    StringInterpolationFormat,
+    StringFormat,
 )
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (
@@ -901,7 +901,7 @@ format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
-def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringInterpolationFormat]:
+def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
     matches: List[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
         return Literal(str(string_ast))
@@ -928,13 +928,13 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
         locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
         locatable_matches.append((match[1], locatable_string))
 
-    return StringInterpolationFormat(str(string_ast), convert_to_references(locatable_matches))
+    return StringFormat(str(string_ast), convert_to_references(locatable_matches))
 
 
 def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[Tuple["Reference", str]]:
     """
     This function is used in a context of string formatting. It expects variables that are part of a single line
-    format string and converts them to a format that can be processed by StringInterpolationFormat (for regular
+    format string and converts them to a format that can be processed by StringFormat (for regular
     string interpolation) or by StringFormatV2 (for f-string formatting).
 
     :param variables: A list of tuples where each tuple is a combination of a string and LocatableString.

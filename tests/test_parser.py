@@ -35,7 +35,7 @@ from inmanta.ast.statements.assign import (
     MapLookup,
     SetAttribute,
     ShortIndexLookup,
-    StringInterpolationFormat,
+    StringFormat,
 )
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineTypeConstraint, TypeDeclaration
@@ -992,7 +992,7 @@ a="j{{o}}s"
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, StringInterpolationFormat)
+    assert isinstance(stmt.value, StringFormat)
     assert isinstance(stmt.value._variables[0][0], Reference)
     assert [x[0].name for x in stmt.value._variables] == ["o"]
     assert [str(x[0].locatable_name) for x in stmt.value._variables] == ["o"]
@@ -1010,7 +1010,7 @@ a="j{{c.d}}s"
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, StringInterpolationFormat)
+    assert isinstance(stmt.value, StringFormat)
     assert len(stmt.value._variables) == 1
     assert len(stmt.value._variables[0]) == 2
     assert isinstance(stmt.value._variables[0][0], AttributeReference)
@@ -1982,7 +1982,7 @@ str = \"\"\"
     )
     assert len(statements) == 1
     assert isinstance(statements[0], Assign)
-    assert isinstance(statements[0].rhs, StringInterpolationFormat)
+    assert isinstance(statements[0].rhs, StringFormat)
 
 
 def test_1804_bool_condition_as_bool():
@@ -2127,7 +2127,7 @@ b=r"{{a}}\n"
     assert isinstance(assign_stmt, Assign)
     assert str(assign_stmt.name) == "a"
     assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
-    assert isinstance(assign_stmt.value, StringInterpolationFormat)
+    assert isinstance(assign_stmt.value, StringFormat)
 
     assign_stmt_2 = statements[1]
     assert isinstance(assign_stmt_2, Assign)
@@ -2149,7 +2149,7 @@ a="test{{hello.world.bye}}test"
     assert isinstance(assign_stmt, Assign)
     assert str(assign_stmt.name) == "a"
     assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
-    assert isinstance(assign_stmt.value, StringInterpolationFormat)
+    assert isinstance(assign_stmt.value, StringFormat)
     attribute_ref = assign_stmt.value.children[0]
     assert str(attribute_ref.attribute) == "bye"
     assert attribute_ref.attribute.location == Range("test", 2, 22, 2, 25)
@@ -2173,7 +2173,7 @@ a=\"""test{{hello.world.bye}}test\"""
     assert isinstance(assign_stmt, Assign)
     assert str(assign_stmt.name) == "a"
     assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
-    assert isinstance(assign_stmt.value, StringInterpolationFormat)
+    assert isinstance(assign_stmt.value, StringFormat)
     attribute_ref = assign_stmt.value.children[0]
     assert str(attribute_ref.attribute) == "bye"
     assert attribute_ref.attribute.location == Range("test", 2, 24, 2, 27)
@@ -2200,7 +2200,7 @@ a=\"""test
     assert isinstance(assign_stmt, Assign)
     assert str(assign_stmt.name) == "a"
     assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
-    assert isinstance(assign_stmt.value, StringInterpolationFormat)
+    assert isinstance(assign_stmt.value, StringFormat)
     attribute_ref = assign_stmt.value.children[0]
     assert str(attribute_ref.attribute) == "bye"
     assert attribute_ref.attribute.location == Range("test", 3, 22, 3, 25)
@@ -2227,7 +2227,7 @@ format string starts as first char on new line
     assert isinstance(assign_stmt, Assign)
     assert str(assign_stmt.name) == "a"
     assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
-    assert isinstance(assign_stmt.value, StringInterpolationFormat)
+    assert isinstance(assign_stmt.value, StringFormat)
     attribute_ref = assign_stmt.value.children[0]
     assert str(attribute_ref.attribute) == "n"
     assert attribute_ref.attribute.location == Range("test", 4, 5, 4, 6)
@@ -2253,7 +2253,7 @@ x.n
     assert isinstance(assign_stmt, Assign)
     assert str(assign_stmt.name) == "a"
     assert assign_stmt.name.location == Range("test", 2, 1, 2, 2)
-    assert isinstance(assign_stmt.value, StringInterpolationFormat)
+    assert isinstance(assign_stmt.value, StringFormat)
     attribute_ref = assign_stmt.value.children[0]
     assert str(attribute_ref.attribute) == "n"
     assert attribute_ref.attribute.location == Range("test", 5, 3, 5, 4)
