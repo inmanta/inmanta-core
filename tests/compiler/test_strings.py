@@ -19,7 +19,8 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import Namespace, NotFoundException
-from inmanta.ast.variables import Reference
+from inmanta.ast.type import Union
+from inmanta.ast.variables import AttributeReference, Reference
 from test_parser import parse_code
 
 
@@ -212,26 +213,26 @@ std::print(f"{unknown}")
 def test_fstring_relations(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
-entity Aaa:
+entity A:
 end
 
-entity Bbb:
+entity B:
 end
 
-entity Ccc:
+entity C:
     int n_c = 3
 end
 
-implement Aaa using std::none
-implement Bbb using std::none
-implement Ccc using std::none
+implement A using std::none
+implement B using std::none
+implement C using std::none
 
-Aaa.b [1] -- Bbb [1]
-Bbb.c [1] -- Ccc [1]
+A.b [1] -- B [1]
+B.c [1] -- C [1]
 
-a = Aaa(b=b)
-b = Bbb(c=c)
-c = Ccc()
+a = A(b=b)
+b = B(c=c)
+c = C()
 
 std::print(f"{a.b.c.n_c}")
         """
@@ -246,11 +247,11 @@ std::print(f"{a.b.c.n_c}")
 def test_fstring_numbering_logic():
     statements = parse_code(
         """
-std::print(f"---{s}{mm} - {lll}")
-"""
+std::print(f"---{s}{mm} - {sub.attr}")
+        """
     )
 
-    def check_range(variable: Reference, start: int, end: int):
+    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
         assert variable.location.start_char == start
         assert variable.location.end_char == end
 
@@ -258,7 +259,7 @@ std::print(f"---{s}{mm} - {lll}")
     ranges = [
         (len('std::print(f"---{s'), len('std::print(f"---{s}')),
         (len('std::print(f"---{s}{m'), len('std::print(f"---{s}{mm}')),
-        (len('std::print(f"---{s}{mm} - {l'), len('std::print(f"---{s}{mm} - {lll}')),
+        (len('std::print(f"---{s}{mm} - {sub.a'), len('std::print(f"---{s}{mm} - {sub.attr}')),
     ]
     variables = statements[0].children[0]._variables
 
