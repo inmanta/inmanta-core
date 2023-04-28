@@ -627,6 +627,8 @@ class StringFormatV2(FormattedString):
         super().execute(requires, resolver, queue)
         formatter: FStringFormatter = FStringFormatter()
 
+        # We can't cache the formatter because it has no ability to cache the parsed string
+
         kwargs = {}
         for _var in self._variables:
             value = _var.execute(requires, resolver, queue)
