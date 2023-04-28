@@ -23,12 +23,12 @@ from typing import Dict, List, Optional
 
 import pytest
 
+import inmanta.resources
 from inmanta import config, const
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
 from inmanta.data import Resource
 from inmanta.export import DependencyCycleException
-from inmanta.resources import Resource
 from utils import LogSequence, v1_module_from_template
 
 
@@ -231,7 +231,7 @@ async def test_server_export(snippetcompiler, server, client, environment):
 
     for res in result.result["resources"]:
         res["attributes"]["id"] = res["id"]
-        resource = Resource.deserialize(res["attributes"])
+        resource = inmanta.resources.Resource.deserialize(res["attributes"])
         assert resource.version == resource.id.version == version
 
 
