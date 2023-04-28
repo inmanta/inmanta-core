@@ -35,8 +35,8 @@ from inmanta.ast.statements.assign import (
     IndexLookup,
     MapLookup,
     ShortIndexLookup,
-    StringFormatV2,
     StringFormat,
+    StringFormatV2,
 )
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.define import (

@@ -256,16 +256,9 @@ std::print(f"---{s}{mm} - {lll}")
 
     # Ranges are 1-indexed [start:end[
     ranges = [
-        (
-            len('std::print(f"---{s'),
-            len('std::print(f"---{s}')
-        ),
-        (
-            len('std::print(f"---{s}{m'),
-            len('std::print(f"---{s}{mm}')),
-        (
-            len('std::print(f"---{s}{mm} - {l'),
-            len('std::print(f"---{s}{mm} - {lll}')),
+        (len('std::print(f"---{s'), len('std::print(f"---{s}')),
+        (len('std::print(f"---{s}{m'), len('std::print(f"---{s}{mm}')),
+        (len('std::print(f"---{s}{mm} - {l'), len('std::print(f"---{s}{mm} - {lll}')),
     ]
     variables = statements[0].children[0]._variables
 
