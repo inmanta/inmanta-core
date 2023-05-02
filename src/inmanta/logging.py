@@ -104,6 +104,7 @@ class InmantaLoggerConfig:
             cls._instance.__init__(stream)
         return cls._instance
 
+    @stable_api
     def apply_options(self, options: object) -> None:
         """
         Apply the logging options to the current handler. A handler should have been created before
@@ -112,9 +113,7 @@ class InmantaLoggerConfig:
             attributes: log_file, log_file_level, verbose, timed
         """
         if not self._handler:
-            raise Exception(
-                "No handler to apply options to. Please use the create_default_handler method before calling this one"
-            )
+            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
         if options.log_file:
             self.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
@@ -126,6 +125,7 @@ class InmantaLoggerConfig:
                 self.set_log_formatter(formatter)
             self.set_log_level(str(options.verbose))
 
+    @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
         """
         Set the logging level. A handler should have been created before
@@ -145,9 +145,7 @@ class InmantaLoggerConfig:
         :param cli: True if the logs will be outputed to the CLI.
         """
         if not self._handler:
-            raise Exception(
-                "No handler to apply options to. Please use the create_default_handler method before calling this one"
-            )
+            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
         # maximum of 4 v's
         if inmanta_log_level.isdigit() and int(inmanta_log_level) > 4:
             inmanta_log_level = "4"
@@ -160,6 +158,7 @@ class InmantaLoggerConfig:
         python_log_level = log_levels[inmanta_log_level]
         self._handler.setLevel(python_log_level)
 
+    @stable_api
     def set_log_formatter(self, formatter: logging.Formatter) -> None:
         """
         Set the log formatter. A handler should have been created before
@@ -167,11 +166,10 @@ class InmantaLoggerConfig:
         :param formatter: The log formatter.
         """
         if not self._handler:
-            raise Exception(
-                "No handler to apply options to. Please use the create_default_handler method before calling this one"
-            )
+            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
         self._handler.setFormatter(formatter)
 
+    @stable_api
     def set_logfile_location(self, location: str) -> None:
         """
         Set the location of the log file. Be careful that this function will replace the current handler with a new one
@@ -185,6 +183,7 @@ class InmantaLoggerConfig:
         self._handler = file_handler
         logging.root.addHandler(self._handler)
 
+    @stable_api
     def get_handler(self) -> Optional[logging.Handler]:
         """
         Get the logging handler
@@ -192,9 +191,7 @@ class InmantaLoggerConfig:
         :return: The logging handler
         """
         if not self._handler:
-            raise Exception(
-                "No handler to apply options to. Please use the create_default_handler method before calling this one"
-            )
+            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
         return self._handler
 
     def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:
