@@ -47,19 +47,19 @@ log_levels = {
 }
 
 
-class InmantaLogs:
+class InmantaLoggerConfig:
     """
     A class that provides logging functionality for Inmanta projects.
 
     Usage:
-    To use this class, you first need to call the `setup_handler` method to configure the logging handler. This method
+    To use this class, you first need to call the `create_default_handler` method to configure the logging handler. This method
     takes a `stream` argument that specifies where the log messages should be sent to. If no `stream` is provided,
     the log messages will be sent to standard output.
 
     You can then call the `apply_options` method to configure the logging options. This method takes an `options`
     argument that should be an object with the following attributes:
     - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
-      specified in `setup_handler`.
+      specified in `create_default_handler`.
     - `log_file_level`: the logging level for the file handler (if `log_file` is set).
     - `verbose`: the verbosity level of the log messages.
     - `timed`: if true,  adds the time to the formatter in the log lines.
@@ -110,7 +110,7 @@ class InmantaLogs:
             cls.set_log_level(options.log_file_level, cli=False)
         else:
             if options.timed:
-                formatter = InmantaLogs._get_log_formatter_for_stream_handler(timed=True)
+                formatter = InmantaLoggerConfig._get_log_formatter_for_stream_handler(timed=True)
                 cls.set_log_formatter(formatter)
             cls.set_log_level(str(options.verbose))
 
@@ -172,7 +172,7 @@ class InmantaLogs:
         """
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
         if cls._handler:
-            logging.root.removeHandler(cls._handler)
+            cls._handler.close()
         cls._handler = file_handler
         logging.root.addHandler(cls._handler)
 
@@ -206,7 +206,12 @@ class InmantaLogs:
 
 
 class MultiLineFormatter(colorlog.ColoredFormatter):
-    """Multi-line formatter."""
+    """
+    Formatter for multi-line log records.
+
+    This class extends the `colorlog.ColoredFormatter` class to provide a custom formatting method for log records that
+    span multiple lines.
+    """
 
     def __init__(
         self,
@@ -217,11 +222,24 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         reset: bool = True,
         no_color: bool = False,
     ):
+        """
+        Initialize a new `MultiLineFormatter` instance.
+
+        :param fmt: Optional string specifying the log record format.
+        :param log_colors: Optional `LogColors` object mapping log level names to color codes.
+        :param reset: Boolean indicating whether to reset terminal colors at the end of each log record.
+        :param no_color: Boolean indicating whether to disable colors in the output.
+        """
         super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
         self.fmt = fmt
 
     def get_header_length(self, record: logging.LogRecord) -> int:
-        """Get the header length of a given record."""
+        """
+        Get the header length of a given log record.
+
+        :param record: The `logging.LogRecord` object for which to calculate the header length.
+        :return: The length of the header in the log record, without color codes.
+        """
         # to get the length of the header we want to get the header without the color codes
         formatter = colorlog.ColoredFormatter(
             fmt=self.fmt,
@@ -243,7 +261,12 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         return len(header)
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format a record with added indentation."""
+        """
+        Format a log record with added indentation.
+
+        :param record: The `logging.LogRecord` object to format.
+        :return: The formatted log record as a string.
+        """
         indent: str = " " * self.get_header_length(record)
         head, *tail = super().format(record).splitlines(True)
         return head + "".join(indent + line for line in tail)

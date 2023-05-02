@@ -61,7 +61,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLogs, _is_on_tty
+from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -715,7 +715,7 @@ def app() -> None:
     """
     Run the compiler
     """
-    InmantaLogs.create_default_handler()
+    InmantaLoggerConfig.create_default_handler()
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -723,7 +723,7 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    InmantaLogs.apply_options(options)
+    InmantaLoggerConfig.apply_options(options)
 
     logging.captureWarnings(True)
 
