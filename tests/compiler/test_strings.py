@@ -334,18 +334,10 @@ std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}.{p}}-----{w}")
 
     # Ranges are 1-indexed [start:end[
     ranges = [
-        (
-            len('std::print(f"-{a'),
-            len('std::print(f"-{arg:')),
-        (
-            len('std::print(f"-{arg:{w'),
-            len('std::print(f"-{arg:{width}')),
-        (
-            len('std::print(f"-{arg:{width}.{p'),
-            len('std::print(f"-{arg:{width}.{precision}')),
-        (
-            len('std::print(f"-{arg:{width}.{precision}}{o'),
-            len('std::print(f"-{arg:{width}.{precision}}{other}')),
+        (len('std::print(f"-{a'), len('std::print(f"-{arg:')),
+        (len('std::print(f"-{arg:{w'), len('std::print(f"-{arg:{width}')),
+        (len('std::print(f"-{arg:{width}.{p'), len('std::print(f"-{arg:{width}.{precision}')),
+        (len('std::print(f"-{arg:{width}.{precision}}{o'), len('std::print(f"-{arg:{width}.{precision}}{other}')),
         (
             len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a'),
             len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:'),
