@@ -621,7 +621,7 @@ configuration files. To construct configuration files, templates and string inte
 
 
 String interpolation
---------------------
+++++++++++++++++++++
 
 String interpolation allows variables to be included as parameters inside a string.
 
@@ -644,7 +644,7 @@ To prevent string interpolation, use raw strings
 
 
 String formatting
------------------
++++++++++++++++++
 
 An alternative syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
 
@@ -669,9 +669,12 @@ can be used for fine-grained formatting:
     # Expected output:
     # "result:      12.35"
 
+.. note::
+    The \'=\' character specifier added in `python 3.8 <https://docs.python.org/3/whatsnew/3.8.html#f-strings-support-for-self-documenting-expressions-and-debugging>`_ is not supported yet in the Inmanta language.
 
 Templates
----------
++++++++++
+
 
 Inmanta integrates the Jinja2 template engine. A template is evaluated in the lexical
 scope where the ``std::template`` function is called. This function accepts as an argument the
