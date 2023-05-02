@@ -128,8 +128,9 @@ def test_apply_options(tmpdir):
     logger.info("info: This is the first test")
     logger.warning("warning: This is the second test")
     log_output = stream.getvalue().strip()
-    "INFO     test_logger info: This is the first test" not in log_output
-    "WARNING  test_logger warning: This is the second test" in log_output
+    assert "INFO     test_logger info: This is the first test" not in log_output
+    assert "WARNING  test_logger warning: This is the second test" in log_output
+``` ?
 
     # test that with if no log_file is given, the stream will be used with the specified verbose option
     # For verbose level 4, WARNINGs and INFOs are shown
