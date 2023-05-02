@@ -866,20 +866,46 @@ def p_constant_fstring(p: YaccProduction) -> None:
     start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
 
     locatable_matches: List[Tuple[str, LocatableString]] = []
+
+    def locate_match(match: Tuple[str, Optional[str], Optional[str], Optional[str]]) -> None:
+        """
+        Associates a parsed field name with a locatable string
+        """
+        range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
+        locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
+        locatable_matches.append((match[1], locatable_string))
+
     for match in parsed:
         if not match[1]:
-            # This happens when the format string ends with literal text (and not a replacement field): we're done parsing.
+            # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
             break
         literal_text_len = len(match[0])
         field_name_len = len(match[1])
         brackets_length = 1 if field_name_len else 0
-        start_char_pos = start_char_pos + literal_text_len + brackets_length
+        start_char_pos += literal_text_len + brackets_length
         end_char = start_char_pos + field_name_len
 
-        range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
-        start_char_pos += field_name_len + brackets_length
-        locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
-        locatable_matches.append((match[1], locatable_string))
+        locate_match(match)
+        start_char_pos += field_name_len
+
+        if match[2]:
+            # A format specifier was provided
+            start_char_pos += 1  # Account for the ":" character
+            sub_parsed: Iterable[Tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(match[2])
+            for submatch in sub_parsed:
+                if not submatch[1]:
+                    # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
+                    break
+                literal_text_len = len(submatch[0])
+                inner_field_name_len = len(submatch[1])
+                inner_brackets_len = 1 if inner_field_name_len else 0
+                start_char_pos += literal_text_len + inner_brackets_len
+                end_char = start_char_pos + inner_field_name_len
+
+                locate_match(submatch)
+                start_char_pos += inner_field_name_len + inner_brackets_len
+
+        start_char_pos += brackets_length
 
     p[0] = StringFormatV2(str(p[1]), convert_to_references(locatable_matches))
     attach_from_string(p)
