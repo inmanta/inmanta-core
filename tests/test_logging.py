@@ -22,7 +22,7 @@ from io import StringIO
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
 
 
-def test_setup_instance():
+def test_setup_instance(cleanup_log_instance):
     inmanta_logger = InmantaLoggerConfig.get_instance()
     handler = inmanta_logger.get_handler()
     assert handler.stream == sys.stdout
@@ -30,7 +30,7 @@ def test_setup_instance():
     assert handler.level == logging.INFO
 
 
-def test_setup_instance_with_stream():
+def test_setup_instance_with_stream(cleanup_log_instance):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     handler = inmanta_logger.get_handler()
@@ -46,7 +46,7 @@ def test_setup_instance_with_stream():
     assert log_output == expected_output
 
 
-def test_set_log_level():
+def test_set_log_level(cleanup_log_instance):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     handler = inmanta_logger.get_handler()
@@ -67,7 +67,7 @@ def test_set_log_level():
     assert expected_output in log_output
 
 
-def test_set_log_formatter():
+def test_set_log_formatter(cleanup_log_instance):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     handler = inmanta_logger.get_handler()
@@ -92,7 +92,7 @@ def test_set_log_formatter():
     assert expected_output_format2 in log_output
 
 
-def test_set_logfile_location(tmpdir):
+def test_set_logfile_location(tmpdir, cleanup_log_instance):
     log_file = tmpdir.join("test.log")
     inmanta_logger = InmantaLoggerConfig.get_instance()
     inmanta_logger.set_logfile_location(str(log_file))
@@ -110,7 +110,7 @@ def test_set_logfile_location(tmpdir):
         assert "This is a test message" in contents
 
 
-def test_apply_options(tmpdir):
+def test_apply_options(tmpdir, cleanup_log_instance):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     logger = logging.getLogger("test_logger")

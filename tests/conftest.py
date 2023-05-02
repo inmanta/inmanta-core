@@ -19,6 +19,7 @@ import warnings
 
 import toml
 from inmanta.config import AuthJWTConfig
+from inmanta.logging import InmantaLoggerConfig
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -1763,3 +1764,9 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = False
     yield
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
+
+
+@pytest.fixture(scope="function")
+async def cleanup_log_instance():
+    InmantaLoggerConfig.clean_instance()
+    yield

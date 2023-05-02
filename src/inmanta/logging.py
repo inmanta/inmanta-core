@@ -19,7 +19,6 @@ import logging
 import os
 import sys
 from argparse import Namespace
-from logging.handlers import WatchedFileHandler
 from typing import Optional, TextIO
 
 import colorlog
@@ -63,12 +62,12 @@ class InmantaLoggerConfig:
     A class that provides logging functionality for Inmanta projects.
 
     Usage:
-    To use this class, you first need to call the `create_default_handler` method to configure the logging handler. This method
-    takes a `stream` argument that specifies where the log messages should be sent to. If no `stream` is provided,
+    To use this class, you first need to call the `get_instance`. This method takes a `stream` argument
+    that specifies where the log messages should be sent to. If no `stream` is provided,
     the log messages will be sent to standard output.
 
     You can then call the `apply_options` method to configure the logging options. This method takes an `options`
-    argument that should be an object with the following attributes:
+    argument that should be an Option object with the following attributes:
     - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
       specified in `create_default_handler`.
     - `log_file_level`: the logging level for the file handler (if `log_file` is set).
@@ -102,6 +101,7 @@ class InmantaLoggerConfig:
         logging.root.setLevel(0)
 
     @classmethod
+    @stable_api
     def get_instance(cls, stream: TextIO = sys.stdout) -> "InmantaLoggerConfig":
         """
         This method should be used to obtain an instance of this class, because this class is a singleton.
@@ -111,6 +111,18 @@ class InmantaLoggerConfig:
         if not cls._instance:
             cls._instance = cls(stream)
         return cls._instance
+
+    @classmethod
+    @stable_api
+    def clean_instance(cls) -> "InmantaLoggerConfig":
+        """
+        This method should be used to obtain an instance of this class, because this class is a singleton.
+
+        :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
+        """
+        if cls._instance and cls._instance._handler:
+            cls._instance._handler.close()
+        cls._instance = None
 
     @stable_api
     def apply_options(self, options: Options) -> None:
