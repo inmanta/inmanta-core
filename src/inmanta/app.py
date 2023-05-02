@@ -715,7 +715,7 @@ def app() -> None:
     """
     Run the compiler
     """
-    InmantaLoggerConfig.create_default_handler()
+    log_config = InmantaLoggerConfig.get_instance()
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -723,7 +723,7 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    InmantaLoggerConfig.apply_options(options)
+    log_config.apply_options(options)
 
     logging.captureWarnings(True)
 

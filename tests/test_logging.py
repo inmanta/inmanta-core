@@ -22,16 +22,18 @@ from io import StringIO
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter
 
 
-def test_setup_handler():
-    InmantaLoggerConfig.create_default_handler()
-    handler = InmantaLoggerConfig.get_handler()
+def test_setup_instance():
+    inmanta_logger = InmantaLoggerConfig.get_instance()
+    handler = inmanta_logger.get_handler()
     assert handler.stream == sys.stdout
     assert isinstance(handler.formatter, MultiLineFormatter)
     assert handler.level == logging.INFO
 
+
+def test_setup_instance_with_stream():
     stream = StringIO()
-    InmantaLoggerConfig.create_default_handler(stream=stream)
-    handler = InmantaLoggerConfig.get_handler()
+    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
+    handler = inmanta_logger.get_handler()
     assert handler.stream == stream
     assert isinstance(handler.formatter, MultiLineFormatter)
     assert handler.level == logging.INFO
@@ -46,8 +48,8 @@ def test_setup_handler():
 
 def test_set_log_level():
     stream = StringIO()
-    InmantaLoggerConfig.create_default_handler(stream=stream)
-    handler = InmantaLoggerConfig.get_handler()
+    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
+    handler = inmanta_logger.get_handler()
     assert handler.level == logging.INFO
 
     logger = logging.getLogger("test_logger")
@@ -59,7 +61,7 @@ def test_set_log_level():
     assert expected_output not in log_output
 
     # change the log_level and verify the log is visible this time.
-    InmantaLoggerConfig.set_log_level("DEBUG")
+    inmanta_logger.set_log_level("DEBUG")
     logger.debug("This is a test message")
     log_output = stream.getvalue().strip()
     assert expected_output in log_output
@@ -67,8 +69,8 @@ def test_set_log_level():
 
 def test_set_log_formatter():
     stream = StringIO()
-    InmantaLoggerConfig.create_default_handler(stream=stream)
-    handler = InmantaLoggerConfig.get_handler()
+    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
+    handler = inmanta_logger.get_handler()
     assert isinstance(handler.formatter, MultiLineFormatter)
 
     logger = logging.getLogger("test_logger")
@@ -82,8 +84,8 @@ def test_set_log_formatter():
 
     # change the formatter and verify the output is different
     formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-    InmantaLoggerConfig.set_log_formatter(formatter)
-    assert InmantaLoggerConfig.get_handler().formatter == formatter
+    inmanta_logger.set_log_formatter(formatter)
+    assert inmanta_logger.get_handler().formatter == formatter
 
     logger.info("This is a test message")
     log_output = stream.getvalue().strip()
@@ -92,9 +94,9 @@ def test_set_log_formatter():
 
 def test_set_logfile_location(tmpdir):
     log_file = tmpdir.join("test.log")
-    InmantaLoggerConfig.create_default_handler()
-    InmantaLoggerConfig.set_logfile_location(str(log_file))
-    handler = InmantaLoggerConfig.get_handler()
+    inmanta_logger = InmantaLoggerConfig.get_instance()
+    inmanta_logger.set_logfile_location(str(log_file))
+    handler = inmanta_logger.get_handler()
     assert isinstance(handler, logging.handlers.WatchedFileHandler)
     assert handler.baseFilename == str(log_file)
 
@@ -118,50 +120,53 @@ class Options:
 
 def test_apply_options(tmpdir):
     stream = StringIO()
-    InmantaLoggerConfig.create_default_handler(stream=stream)
+    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     logger = logging.getLogger("test_logger")
 
-    # test that with if no log_file is given, the stream will be used with the specified verbose option
+    # test that if no log_file is given, the stream will be used with the specified verbose option
     # For verbose level 1, WARNINGs are shown INFOs not
     options1 = Options(log_file=None, log_file_level="INFO", verbose="1")
-    InmantaLoggerConfig.apply_options(options1)
+    inmanta_logger.apply_options(options1)
     logger.info("info: This is the first test")
     logger.warning("warning: This is the second test")
     log_output = stream.getvalue().strip()
-    assert "INFO     test_logger info: This is the first test" not in log_output
-    assert "WARNING  test_logger warning: This is the second test" in log_output
-``` ?
+    assert "test_logger              INFO    info: This is the first test" not in log_output
+    assert "test_logger              WARNING warning: This is the second test" in log_output
 
-    # test that with if no log_file is given, the stream will be used with the specified verbose option
+    # test that if no log_file is given, the stream will be used with the specified verbose option
     # For verbose level 4, WARNINGs and INFOs are shown
-    options2 = Options(log_file=None, log_file_level="INFO", verbose="4")
-    InmantaLoggerConfig.apply_options(options2)
+    options2 = Options(log_file=None, log_file_level="ERROR", verbose="4")
+    inmanta_logger.apply_options(options2)
     logger.warning("warning: This is the third test")
     logger.info("info: This is the forth test")
     log_output = stream.getvalue().strip()
-    "INFO     test_logger info: This is the forth test" in log_output
-    "WARNING  test_logger warning: This is the third test" in log_output
+    assert "test_logger              INFO    info: This is the forth test" in log_output
+    assert "test_logger              WARNING warning: This is the third test" in log_output
 
     log_file = tmpdir.join("test.log")
 
     # test that with if a log_file is given, the logfile will be used will be used with the specified log_file_level
     # Here WARNINGs are shown INFOs not
     options3 = Options(log_file=log_file, log_file_level="WARNING", verbose="4")
-    InmantaLoggerConfig.apply_options(options3)
+    inmanta_logger.apply_options(options3)
     logger.info("info: This is the first test")
     logger.warning("warning: This is the second test")
+    logger.debug("debug: This is the third test")
     with open(str(log_file), "r") as f:
         contents = f.read()
         assert "INFO     test_logger info: This is the first test" not in contents
         assert "WARNING  test_logger warning: This is the second test" in contents
+        assert "DEBUG    test_logger debug: This is the third test" not in contents
 
     # test that with if a log_file is given, the logfile will be used will be used with the specified log_file_level
     # Here both WARNINGs and INFOs are shown
     options4 = Options(log_file=log_file, log_file_level="DEBUG", verbose="4")
-    InmantaLoggerConfig.apply_options(options4)
-    logger.warning("warning: This is the third test")
-    logger.info("info: This is the forth test")
+    inmanta_logger.apply_options(options4)
+    logger.warning("warning: This is the forth test")
+    logger.info("info: This is the fifth test")
+    logger.debug("debug: This is the sixth test")
     with open(str(log_file), "r") as f:
         contents = f.read()
-        assert "WARNING  test_logger warning: This is the third test" in contents
-        assert "INFO     test_logger info: This is the forth test" in contents
+        assert "WARNING  test_logger warning: This is the forth test" in contents
+        assert "INFO     test_logger info: This is the fifth test" in contents
+        assert "DEBUG    test_logger debug: This is the sixth test" in contents

@@ -24,6 +24,7 @@ import colorlog
 from colorlog.formatter import LogColors
 
 from inmanta import const
+from inmanta.stable_api import stable_api
 
 
 def _is_on_tty() -> bool:
@@ -47,6 +48,7 @@ log_levels = {
 }
 
 
+@stable_api
 class InmantaLoggerConfig:
     """
     A class that provides logging functionality for Inmanta projects.
@@ -73,49 +75,58 @@ class InmantaLoggerConfig:
         - `set_logfile_location`
     """
 
-    _handler: Optional[logging.Handler] = None
+    _instance: Optional["InmantaLoggerConfig"] = None
 
-    @classmethod
-    def create_default_handler(cls, stream: TextIO = sys.stdout) -> None:
+    def __init__(self, stream: TextIO = sys.stdout) -> None:
         """
         Set up the logging handler for Inmanta.
 
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
         """
-        cls._handler = logging.StreamHandler(stream=stream)
-        cls.set_log_level("INFO")
-        formatter = cls._get_log_formatter_for_stream_handler(timed=False)
-        cls.set_log_formatter(formatter)
+        self._handler = logging.StreamHandler(stream=stream)
+        self.set_log_level("INFO")
+        formatter = self._get_log_formatter_for_stream_handler(timed=False)
+        self.set_log_formatter(formatter)
 
         logging.root.handlers = []
-        logging.root.addHandler(cls._handler)
+        logging.root.addHandler(self._handler)
         logging.root.setLevel(0)
 
     @classmethod
-    def apply_options(cls, options: object) -> None:
+    def get_instance(cls, stream: TextIO = sys.stdout) -> "InmantaLoggerConfig":
+        """
+        This method should be used to obtain an instance of this class, because this class is a singleton.
+
+        :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
+        """
+        if not cls._instance:
+            cls._instance = cls()
+            cls._instance.__init__(stream)
+        return cls._instance
+
+    def apply_options(self, options: object) -> None:
         """
         Apply the logging options to the current handler. A handler should have been created before
 
         :param options: the option object coming from the command line. This function use the following
             attributes: log_file, log_file_level, verbose, timed
         """
-        if not cls._handler:
+        if not self._handler:
             raise Exception(
                 "No handler to apply options to. Please use the create_default_handler method before calling this one"
             )
         if options.log_file:
-            cls.set_logfile_location(options.log_file)
+            self.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-            cls.set_log_formatter(formatter)
-            cls.set_log_level(options.log_file_level, cli=False)
+            self.set_log_formatter(formatter)
+            self.set_log_level(options.log_file_level, cli=False)
         else:
             if options.timed:
                 formatter = InmantaLoggerConfig._get_log_formatter_for_stream_handler(timed=True)
-                cls.set_log_formatter(formatter)
-            cls.set_log_level(str(options.verbose))
+                self.set_log_formatter(formatter)
+            self.set_log_level(str(options.verbose))
 
-    @classmethod
-    def set_log_level(cls, inmanta_log_level: str, cli: bool = True) -> None:
+    def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
         """
         Set the logging level. A handler should have been created before
         below the supported inmanta log levels and there equivalent in python logging:
@@ -133,7 +144,7 @@ class InmantaLoggerConfig:
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputed to the CLI.
         """
-        if not cls._handler:
+        if not self._handler:
             raise Exception(
                 "No handler to apply options to. Please use the create_default_handler method before calling this one"
             )
@@ -147,23 +158,21 @@ class InmantaLoggerConfig:
 
         # Converts the Inmanta log level to the Python log level
         python_log_level = log_levels[inmanta_log_level]
-        cls._handler.setLevel(python_log_level)
+        self._handler.setLevel(python_log_level)
 
-    @classmethod
-    def set_log_formatter(cls, formatter: logging.Formatter) -> None:
+    def set_log_formatter(self, formatter: logging.Formatter) -> None:
         """
         Set the log formatter. A handler should have been created before
 
         :param formatter: The log formatter.
         """
-        if not cls._handler:
+        if not self._handler:
             raise Exception(
                 "No handler to apply options to. Please use the create_default_handler method before calling this one"
             )
-        cls._handler.setFormatter(formatter)
+        self._handler.setFormatter(formatter)
 
-    @classmethod
-    def set_logfile_location(cls, location: str) -> None:
+    def set_logfile_location(self, location: str) -> None:
         """
         Set the location of the log file. Be careful that this function will replace the current handler with a new one
         This means that configurations done on the previous handler will be lost.
@@ -171,22 +180,24 @@ class InmantaLoggerConfig:
         :param location: The location of the log file.
         """
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
-        if cls._handler:
-            cls._handler.close()
-        cls._handler = file_handler
-        logging.root.addHandler(cls._handler)
+        if self._handler:
+            self._handler.close()
+        self._handler = file_handler
+        logging.root.addHandler(self._handler)
 
-    @classmethod
-    def get_handler(cls) -> Optional[logging.Handler]:
+    def get_handler(self) -> Optional[logging.Handler]:
         """
         Get the logging handler
 
         :return: The logging handler
         """
-        return cls._handler
+        if not self._handler:
+            raise Exception(
+                "No handler to apply options to. Please use the create_default_handler method before calling this one"
+            )
+        return self._handler
 
-    @classmethod
-    def _get_log_formatter_for_stream_handler(cls, timed: bool) -> logging.Formatter:
+    def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:
         log_format = "%(asctime)s " if timed else ""
         if _is_on_tty():
             log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
