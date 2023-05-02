@@ -642,6 +642,29 @@ To prevent string interpolation, use raw strings
     # containing the {{ and \n
     motd = r"Welcome to {{hostname}}\n"
 
+String formatting
+-----------------
+
+A syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
+
+.. code-block:: inmanta
+
+    hostname = "serv1.example.org"
+    motd = f"Welcome to {hostname}\n"
+
+Python's format specification `mini-language <https://docs.python.org/3.9/library/string.html#format-specification-mini-language>`_
+can be used for fine-grained formatting:
+
+.. code-block:: inmanta
+    width = 10
+    precision = 2
+    arg = 12.34567
+
+    std::print(f"result: {arg:{width}.{precision}f}")
+
+    # Expected output:
+    # "result:      12.35"
+
 
 Templates
 ---------
