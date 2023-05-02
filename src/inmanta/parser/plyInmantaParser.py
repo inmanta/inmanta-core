@@ -872,6 +872,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
         Associates a parsed field name with a locatable string
         """
         range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
+        assert match[1]  # make mypy happy
         locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
         locatable_matches.append((match[1], locatable_string))
 
