@@ -18,6 +18,8 @@
 import logging
 import os
 import sys
+from argparse import Namespace
+from logging.handlers import WatchedFileHandler
 from typing import Optional, TextIO
 
 import colorlog
@@ -29,6 +31,13 @@ from inmanta.stable_api import stable_api
 
 def _is_on_tty() -> bool:
     return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
+
+
+class Options(Namespace):
+    log_file: Optional[str]
+    log_file_level: Optional[str]
+    verbose: int
+    timed: bool = False
 
 
 """
@@ -79,11 +88,11 @@ class InmantaLoggerConfig:
 
     def __init__(self, stream: TextIO = sys.stdout) -> None:
         """
-        Set up the logging handler for Inmanta.
+        Set up the logging handler for Inmanta
 
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
         """
-        self._handler = logging.StreamHandler(stream=stream)
+        self._handler: logging.Handler = logging.StreamHandler(stream=stream)
         self.set_log_level("INFO")
         formatter = self._get_log_formatter_for_stream_handler(timed=False)
         self.set_log_formatter(formatter)
@@ -100,12 +109,11 @@ class InmantaLoggerConfig:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
         if not cls._instance:
-            cls._instance = cls()
-            cls._instance.__init__(stream)
+            cls._instance = cls(stream)
         return cls._instance
 
     @stable_api
-    def apply_options(self, options: object) -> None:
+    def apply_options(self, options: Options) -> None:
         """
         Apply the logging options to the current handler. A handler should have been created before
 
@@ -121,7 +129,7 @@ class InmantaLoggerConfig:
             self.set_log_level(options.log_file_level, cli=False)
         else:
             if options.timed:
-                formatter = InmantaLoggerConfig._get_log_formatter_for_stream_handler(timed=True)
+                formatter = self._get_log_formatter_for_stream_handler(timed=True)
                 self.set_log_formatter(formatter)
             self.set_log_level(str(options.verbose))
 

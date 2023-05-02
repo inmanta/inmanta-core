@@ -711,13 +711,6 @@ def print_versions_installed_components_and_exit() -> None:
     sys.exit(0)
 
 
-class Options:
-    log_file: str
-    log_file_level: str
-    verbose: int
-    timed: bool
-
-
 def app() -> None:
     """
     Run the compiler

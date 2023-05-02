@@ -19,7 +19,7 @@ import logging
 import sys
 from io import StringIO
 
-from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter
+from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
 
 
 def test_setup_instance():
@@ -108,14 +108,6 @@ def test_set_logfile_location(tmpdir):
     with open(str(log_file), "r") as f:
         contents = f.read()
         assert "This is a test message" in contents
-
-
-class Options:
-    def __init__(self, log_file=None, log_file_level=None, verbose=None):
-        self.log_file = log_file
-        self.log_file_level = log_file_level
-        self.verbose = verbose
-        self.timed = False
 
 
 def test_apply_options(tmpdir):
