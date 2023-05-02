@@ -285,29 +285,6 @@ std::print(z)
     assert out == expected
 
 
-def test_fstring_numbering_logic_complex():
-    statements = parse_code(
-        """
-std::print(f"---{arg:{width}.{precision}}")
-        """
-    )
-
-    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start
-        assert variable.location.end_char == end
-
-    # Ranges are 1-indexed [start:end[
-    ranges = [
-        (len('std::print(f"---{a'), len('std::print(f"---{arg:')),
-        (len('std::print(f"---{arg:{w'), len('std::print(f"---{arg:{width}')),
-        (len('std::print(f"---{arg:{width}.{p'), len('std::print(f"---{arg:{width}.{precision}')),
-    ]
-    variables = statements[0].children[0]._variables
-
-    for var, range in zip(variables, ranges):
-        check_range(var, *range)
-
-
 def test_fstring_double_brackets(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
@@ -321,10 +298,10 @@ std::print(z)
     assert out == expected
 
 
-def test_fstring_numbering_logic_complex2233():
+def test_fstring_numbering_logic_complex():
     statements = parse_code(
         """
-std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}.{p}}-----{w}")
+std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
         """
     )
 
@@ -339,20 +316,20 @@ std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}.{p}}-----{w}")
         (len('std::print(f"-{arg:{width}.{p'), len('std::print(f"-{arg:{width}.{precision}')),
         (len('std::print(f"-{arg:{width}.{precision}}{o'), len('std::print(f"-{arg:{width}.{precision}}{other}')),
         (
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a'),
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:'),
         ),
         (
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w'),
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}'),
         ),
         (
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}.{p'),
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}.{p}'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}'),
         ),
         (
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}.{p}}-----{w'),
-            len('std::print(f"-{arg:{width}.{precision}}{other}-ddd-{a:{w}.{p}}-----{w}'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}'),
         ),
     ]
     variables = statements[0].children[0]._variables
