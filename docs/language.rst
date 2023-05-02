@@ -642,10 +642,13 @@ To prevent string interpolation, use raw strings
     # containing the {{ and \n
     motd = r"Welcome to {{hostname}}\n"
 
+
 String formatting
 -----------------
 
-A syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
+An alternative syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
+
+Formatting strings
 
 .. code-block:: inmanta
 
@@ -656,6 +659,7 @@ Python's format specification `mini-language <https://docs.python.org/3.9/librar
 can be used for fine-grained formatting:
 
 .. code-block:: inmanta
+
     width = 10
     precision = 2
     arg = 12.34567
