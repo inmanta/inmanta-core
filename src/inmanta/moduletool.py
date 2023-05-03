@@ -665,7 +665,8 @@ mode.
 
         freeze = subparser.add_parser(
             "freeze",
-            help="Set all version numbers in module.yml",
+            help="Freeze all version numbers in module.yml. This command is only supported on v1 modules. On v2 modules use"
+            " the pip freeze command instead.",
             parents=parent_parsers,
         )
         freeze.add_argument(
@@ -1113,6 +1114,11 @@ version: 0.0.1dev0"""
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
+        if (module and ModuleV2.from_path(module)) or ModuleV2.from_path(os.curdir):
+            raise CLIException(
+                "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead.",
+                exitcode=1,
+            )
 
         # find module
         module_obj = self.get_module(module)
@@ -1328,6 +1334,7 @@ version: 0.0.1dev0"""
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
+            print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
             self.release(dev=True, message="Bump version to next development version", patch=True)
 

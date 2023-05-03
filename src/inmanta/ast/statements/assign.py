@@ -17,11 +17,11 @@
 """
 
 # pylint: disable-msg=W0613
-
 import typing
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
-from typing import Dict, Optional, TypeVar
+from string import Formatter
+from typing import Dict, Optional, Tuple, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -555,16 +555,33 @@ class ShortIndexLookup(IndexLookup):
         )
 
 
-class StringFormat(ReferenceStatement):
+class FormattedString(ReferenceStatement):
     """
-    Create a new string by doing a string interpolation
+    This class is an abstraction around a string containing references to variables.
     """
 
     __slots__ = ("_format_string", "_variables")
 
-    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
-        ReferenceStatement.__init__(self, [k for (k, _) in variables])
+    def __init__(self, format_string: str, variables: Sequence["Reference"]) -> None:
+        super().__init__(variables)
         self._format_string = format_string
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
+
+    def __repr__(self) -> str:
+        return "Format(%s)" % self._format_string
+
+
+class StringFormat(FormattedString):
+    """
+    Create a new string by doing a string interpolation
+    """
+
+    __slots__ = ()
+
+    def __init__(self, format_string: str, variables: Sequence[Tuple["Reference", str]]) -> None:
+        super().__init__(format_string, [k for (k, _) in variables])
         self._variables = variables
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -581,8 +598,47 @@ class StringFormat(ReferenceStatement):
 
         return result_string
 
-    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
-        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
-    def __repr__(self) -> str:
-        return "Format(%s)" % self._format_string
+class FStringFormatter(Formatter):
+    def __init__(self) -> None:
+        Formatter.__init__(self)
+
+    def get_field(self, key: str, args: Sequence[object], kwds: Mapping[str, object]) -> Tuple[object, str]:
+        """
+        Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
+        retrieved by their full name.
+        """
+        return (kwds[key], key)
+
+
+class StringFormatV2(FormattedString):
+    """
+    Create a new string by using python build in formatting
+    """
+
+    __slots__ = ()
+
+    def __init__(self, format_string: str, variables: Sequence[typing.Tuple["Reference", str]]) -> None:
+        only_refs: Sequence["Reference"] = [k for (k, _) in variables]
+        super().__init__(format_string, only_refs)
+        self._variables = only_refs
+
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
+        formatter: FStringFormatter = FStringFormatter()
+
+        # We can't cache the formatter because it has no ability to cache the parsed string
+
+        kwargs = {}
+        for _var in self._variables:
+            value = _var.execute(requires, resolver, queue)
+            if isinstance(value, Unknown):
+                return Unknown(self)
+            if isinstance(value, float) and (value - int(value)) == 0:
+                value = int(value)
+
+            kwargs[_var.full_name] = value
+
+        result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
+
+        return result_string
