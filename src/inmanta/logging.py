@@ -204,7 +204,7 @@ class InmantaLoggerConfig:
         logging.root.addHandler(self._handler)
 
     @stable_api
-    def get_handler(self) -> Optional[logging.Handler]:
+    def get_handler(self) -> logging.Handler:
         """
         Get the logging handler
 
