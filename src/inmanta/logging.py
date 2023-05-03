@@ -148,8 +148,8 @@ class InmantaLoggerConfig:
     @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
         """
-        Set the logging level. A handler should have been created before
-        below the supported inmanta log levels and there equivalent in python logging:
+        Set the logging level. A handler should have been created before.
+        Below the supported Inmanta log levels and there equivalent and their equivalent Python log levels are shown:
             "0": logging.ERROR,
             "1": logging.WARNING,
             "2": logging.INFO,
