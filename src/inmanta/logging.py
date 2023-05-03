@@ -129,7 +129,7 @@ class InmantaLoggerConfig:
         """
         Apply the logging options to the current handler. A handler should have been created before
 
-        :param options: the option object coming from the command line. This function use the following
+        :param options: The Option object coming from the command line. This function uses the following
             attributes: log_file, log_file_level, verbose, timed
         """
         if not self._handler:
