@@ -32,6 +32,7 @@ from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
 from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Sequence, Tuple, cast
+from asyncpg import Connection
 
 import dateutil
 import dateutil.parser
@@ -601,13 +602,104 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         Recompile an environment in a different thread and taking wait time into account.
 
         :param notify_failed_compile: if set to True, errors during compilation will be notified using the
-        "failed_compile_message".
-        if set to false, nothing will be notified. If not set then the default notifications are
-        sent (failed pull stage and errors during the do_export)
+                                      "failed_compile_message".
+                                      if set to false, nothing will be notified. If not set then the default notifications are
+                                      sent (failed pull stage and errors during the do_export)
         :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
         :return: the compile id of the requested compile and any warnings produced during the request
-
         """
+        return await self._request_recompile(
+            env,
+            force_update,
+            do_export,
+            remote_id,
+            metadata,
+            env_vars,
+            partial,
+            removed_resource_sets,
+            exporter_plugin,
+            notify_failed_compile,
+            failed_compile_message,
+        )
+
+    async def request_recompile_in_transaction(
+        self,
+        connection: Connection,
+        env: data.Environment,
+        force_update: bool,
+        do_export: bool,
+        remote_id: uuid.UUID,
+        metadata: Optional[JsonType] = None,
+        env_vars: Optional[Mapping[str, str]] = None,
+        partial: bool = False,
+        removed_resource_sets: Optional[List[str]] = None,
+        exporter_plugin: Optional[str] = None,
+        notify_failed_compile: Optional[bool] = None,
+        failed_compile_message: Optional[str] = None,
+    ) -> Tuple[Optional[uuid.UUID], Warnings]:
+        """
+        This method is similar to the `request_recompile()` method, but should be used when the compile request
+        is part of an ongoing database transaction. The given `connection` attribute should be within the scope
+        of that database transaction. It is required to call `CompileService.notify_compile_request_committed()`
+        right after the transaction commits.
+        """
+        return await self._request_recompile(
+            env,
+            force_update,
+            do_export,
+            remote_id,
+            metadata,
+            env_vars,
+            partial,
+            removed_resource_sets,
+            exporter_plugin,
+            notify_failed_compile,
+            failed_compile_message,
+            connection=connection,
+            in_db_transaction=True,
+        )
+
+    async def notify_compile_request_committed(self, compile_id: uuid.UUID) -> None:
+        """
+        This method must be called when the `request_recompile_in_transaction()` method was called and the associated
+        transaction committed successfully. It must be called right after the transaction committed. If the transaction was
+        aborted, this method most not be called.
+
+        This method is safe with respect to server restarts. If the server restarts after the transaction was committed,
+        but before this method was invoked, the server will automatically recover from this and run the requested compile
+        without any need to call this method.
+        """
+        async with self._queue_count_cache_lock:
+            self._queue_count_cache += 1
+        compile_obj: data.Compile = await data.Compile.get_by_id(compile_id)
+        if compile_obj.started:
+            raise Exception(f"Compile with id {compile_obj.id} was already started at {compile_obj.started}.")
+        await self._queue(compile_obj)
+
+    async def _request_recompile(
+        self,
+        env: data.Environment,
+        force_update: bool,
+        do_export: bool,
+        remote_id: uuid.UUID,
+        metadata: Optional[JsonType] = None,
+        env_vars: Optional[Mapping[str, str]] = None,
+        partial: bool = False,
+        removed_resource_sets: Optional[List[str]] = None,
+        exporter_plugin: Optional[str] = None,
+        notify_failed_compile: Optional[bool] = None,
+        failed_compile_message: Optional[str] = None,
+        in_db_transaction: bool = False,
+        connection: Optional[Connection] = None
+    ) -> Tuple[Optional[uuid.UUID], Warnings]:
+        """
+        :param in_db_transaction: True iff the given connection is part of an ongoing database transaction.
+        :param connection: An optional database connection. A connection must be provided when in_db_transaction is True.
+        """
+        if in_db_transaction and not connection:
+            raise Exception("A connection should be provided when in_db_transaction is True.")
+        if in_db_transaction and connection and not connection.is_in_transaction():
+            raise Exception("in_db_transaction is True, but the given connection is not executing a transaction.")
         if removed_resource_sets is None:
             removed_resource_sets = []
         if metadata is None:
@@ -636,10 +728,17 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
         )
-        async with self._queue_count_cache_lock:
-            await compile.insert()
-            self._queue_count_cache += 1
-        await self._queue(compile)
+        if not in_db_transaction:
+            async with self._queue_count_cache_lock:
+                await compile.insert(connection)
+                self._queue_count_cache += 1
+            await self._queue(compile)
+        else:
+            # We are running inside a transaction. The changes will only be applied after the transaction commits.
+            # We cannot increment the queue count yet or schedule the requested compile for execution. This will be
+            # done when the notify_compile_request_committed() method is invoked.
+            await compile.insert(connection)
+
         return compile.id, None
 
     @staticmethod

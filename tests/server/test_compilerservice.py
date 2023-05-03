@@ -520,17 +520,33 @@ async def test_compilerservice_compile_data(environment_factory: EnvironmentFact
     assert error.message == "value set twice:\n\told value: 0\n\t\tset at ./main.cf:1\n\tnew value: 1\n\t\tset at ./main.cf:1\n"
 
 
-async def test_e2e_recompile_failure(compilerservice: CompilerService):
+@pytest.mark.parametrize("use_trx_based_api", [True, False])
+async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_based_api: bool):
     project = data.Project(name="test")
     await project.insert()
 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    async def request_compile(remote_id: uuid.UUID, env_vars: dict[str, str]) -> None:
+        if use_trx_based_api:
+            async with data.Environment.get_connection() as connection:
+                async with connection.transaction():
+                    compile_id, warnings = await compilerservice.request_recompile_in_transaction(
+                        env=env, force_update=False, do_export=False, remote_id=remote_id, env_vars=env_vars, connection=connection
+                    )
+                assert compile_id is not None, warnings
+            await compilerservice.notify_compile_request_committed(compile_id)
+        else:
+            await compilerservice.request_recompile(
+                env=env, force_update=False, do_export=False, remote_id=remote_id, env_vars=env_vars
+            )
+
     u1 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u1, env_vars={"my_unique_var": str(u1)})
+    await request_compile(remote_id=u1, env_vars={"my_unique_var": str(u1)})
+
     u2 = uuid.uuid4()
-    await compilerservice.request_recompile(env, False, False, u2, env_vars={"my_unique_var": str(u2)})
+    await request_compile(remote_id=u2, env_vars={"my_unique_var": str(u2)})
 
     assert await compilerservice.is_compiling(env.id) == 200
 
@@ -540,6 +556,8 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService):
         return res == 204
 
     await retry_limited(compile_done, 10)
+    # All compiles are finished. The queue should be empty
+    assert compilerservice._queue_count_cache == 0
 
     _, all_compiles = await compilerservice.get_reports(env)
     all_reports = {i["remote_id"]: await compilerservice.get_report(i["id"]) for i in all_compiles["reports"]}
@@ -950,6 +968,32 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
     await client.resume_environment(environment)
     result = await client.is_compiling(environment)
     assert result.code == 200
+
+
+async def test_compileservice_queue(mocked_compiler_service_block, server, client, environment):
+    """
+    Verify that the `_queue_count_cache` is not incremented and that the compile is not scheduled until the
+    `notify_compile_request_committed()` method is called.
+    """
+    env = await data.Environment.get_by_id(environment)
+    compiler_service: CompilerService = server.get_slice(SLICE_COMPILER)
+
+    async with data.Environment.get_connection() as connection:
+        async with connection.transaction():
+            remote_id1 = uuid.uuid4()
+            compile_id, warnings = await compiler_service.request_recompile_in_transaction(
+                env=env, force_update=False, do_export=False, remote_id=remote_id1, connection=connection
+            )
+            assert compile_id is not None, warnings
+            assert compiler_service._queue_count_cache == 0
+            assert len(compiler_service._recompiles) == 0
+    # Transaction committed
+    await compiler_service.notify_compile_request_committed(compile_id)
+    assert compiler_service._queue_count_cache == 1
+    assert len(compiler_service._recompiles) == 1
+
+    await run_compile_and_wait_until_compile_is_done(compiler_service, mocked_compiler_service_block, env.id)
+    assert len(compiler_service._recompiles) == 0
 
 
 @pytest.fixture(scope="function")
