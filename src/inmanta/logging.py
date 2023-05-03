@@ -171,7 +171,7 @@ class InmantaLoggerConfig:
             inmanta_log_level = "4"
 
         # The minimal log level on the CLI is always WARNING
-        if cli and inmanta_log_level == "ERROR" or (inmanta_log_level.isdigit() and int(inmanta_log_level) < 1):
+        if cli and (inmanta_log_level == "ERROR" or (inmanta_log_level.isdigit() and int(inmanta_log_level) < 1)):
             inmanta_log_level = "WARNING"
 
         # Converts the Inmanta log level to the Python log level
