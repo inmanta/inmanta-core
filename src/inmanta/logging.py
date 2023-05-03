@@ -32,13 +32,6 @@ def _is_on_tty() -> bool:
     return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
 
 
-class Options(Namespace):
-    log_file: Optional[str]
-    log_file_level: Optional[str]
-    verbose: int
-    timed: bool = False
-
-
 """
 This dictionary maps the Inmanta log levels to the corresponding Python log levels
 """
@@ -54,6 +47,36 @@ log_levels = {
     "DEBUG": logging.DEBUG,
     "TRACE": 2,
 }
+
+
+class Options(Namespace):
+    """
+    The Options class provides a way to configure the InmantaLoggerConfig with the following attributes:
+    - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
+      specified in `create_default_handler`.
+    - `log_file_level`: the Inmanta logging level for the file handler (if `log_file` is set).
+        The possible inmanta logging levels and their associated python log level are the following ones:
+            "0": logging.ERROR,
+            "1": logging.WARNING,
+            "2": logging.INFO,
+            "3": logging.DEBUG,
+            "4": 2,
+            "ERROR": logging.ERROR,
+            "WARNING": logging.WARNING,
+            "INFO": logging.INFO,
+            "DEBUG": logging.DEBUG,
+            "TRACE": 2,
+        default is 'INFO'
+    - `verbose`: the verbosity level of the log messages. can be a number from 0 to 4.
+        if a bigger number is provided, 4 will be used. refer to log_file_level for the explanation of each level.
+        default is 1 (WARNING)
+    - `timed`: if true,  adds the time to the formatter in the log lines.
+    """
+
+    log_file: Optional[str]
+    log_file_level: str = "INFO"
+    verbose: int = 1
+    timed: bool = False
 
 
 @stable_api
@@ -91,6 +114,7 @@ class InmantaLoggerConfig:
 
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
         """
+        self._options_applied = False
         self._handler: logging.Handler = logging.StreamHandler(stream=stream)
         self.set_log_level("INFO")
         formatter = self._get_log_formatter_for_stream_handler(timed=False)
@@ -108,6 +132,8 @@ class InmantaLoggerConfig:
 
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
+        if cls._instance and stream != sys.stdout:
+            raise Exception("Instance already exists: cannot set the stream argument")
         if not cls._instance:
             cls._instance = cls(stream)
         return cls._instance
@@ -122,6 +148,7 @@ class InmantaLoggerConfig:
         """
         if cls._instance and cls._instance._handler:
             cls._instance._handler.close()
+            logging.root.removeHandler(cls._instance._handler)
         cls._instance = None
 
     @stable_api
@@ -132,8 +159,9 @@ class InmantaLoggerConfig:
         :param options: The Option object coming from the command line. This function uses the following
             attributes: log_file, log_file_level, verbose, timed
         """
-        if not self._handler:
-            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
+        if self._options_applied:
+            raise Exception("Options can only be applied once to a handler.")
+        self._options_applied = True
         if options.log_file:
             self.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
@@ -164,8 +192,6 @@ class InmantaLoggerConfig:
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputted to the CLI.
         """
-        if not self._handler:
-            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
         # maximum of 4 v's
         if inmanta_log_level.isdigit() and int(inmanta_log_level) > 4:
             inmanta_log_level = "4"
@@ -185,8 +211,6 @@ class InmantaLoggerConfig:
 
         :param formatter: The log formatter.
         """
-        if not self._handler:
-            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
         self._handler.setFormatter(formatter)
 
     @stable_api
@@ -200,6 +224,7 @@ class InmantaLoggerConfig:
         file_handler = logging.handlers.WatchedFileHandler(filename=location, mode="a+")
         if self._handler:
             self._handler.close()
+            logging.root.removeHandler(self._handler)
         self._handler = file_handler
         logging.root.addHandler(self._handler)
 
@@ -210,8 +235,6 @@ class InmantaLoggerConfig:
 
         :return: The logging handler
         """
-        if not self._handler:
-            raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
         return self._handler
 
     def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:

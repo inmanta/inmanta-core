@@ -516,6 +516,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
+    InmantaLoggerConfig.clean_instance()
 
 
 @pytest.fixture()
@@ -1764,9 +1765,3 @@ def disable_version_and_agent_cleanup_job():
     orchestrationservice.PERFORM_CLEANUP = False
     yield
     orchestrationservice.PERFORM_CLEANUP = old_perform_cleanup
-
-
-@pytest.fixture(scope="function")
-async def cleanup_log_instance():
-    InmantaLoggerConfig.clean_instance()
-    yield
