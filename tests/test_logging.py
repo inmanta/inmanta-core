@@ -19,6 +19,8 @@ import logging
 import sys
 from io import StringIO
 
+import pytest
+
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
 
 
@@ -112,58 +114,58 @@ def test_set_logfile_location(
         assert "This is a test message" in contents
 
 
-def test_apply_options(tmpdir):
+@pytest.mark.parametrize_any(
+    "log_file, log_file_level, verbose",
+    [(None, "INFO", "1"), (None, "ERROR", "4"), ("test.log", "WARNING", "4"), ("test.log", "DEBUG", "4")],
+)
+def test_apply_options(tmpdir, log_file, log_file_level, verbose):
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     logger = logging.getLogger("test_logger")
 
-    # test that if no log_file is given, the stream will be used with the specified verbose option
-    # For verbose level 1, WARNINGs are shown INFOs not
-    options1 = Options(log_file=None, log_file_level="INFO", verbose="1")
+    if log_file:
+        log_file = tmpdir.join("test.log")
+
+    options1 = Options(log_file=log_file, log_file_level=log_file_level, verbose=verbose)
     inmanta_logger.apply_options(options1)
-    logger.info("info: This is the first test")
-    logger.warning("warning: This is the second test")
-    log_output = stream.getvalue().strip()
-    assert "test_logger              INFO    info: This is the first test" not in log_output
-    assert "test_logger              WARNING warning: This is the second test" in log_output
-
-    # test that if no log_file is given, the stream will be used with the specified verbose option
-    # For verbose level 4, WARNINGs and INFOs are shown
-    options2 = Options(log_file=None, log_file_level="ERROR", verbose="4")
-    inmanta_logger.apply_options(options2)
+    logger.debug("debug: This is the first test")
+    logger.info("info: This is the second test")
     logger.warning("warning: This is the third test")
-    logger.info("info: This is the forth test")
-    log_output = stream.getvalue().strip()
-    assert "test_logger              INFO    info: This is the forth test" in log_output
-    assert "test_logger              WARNING warning: This is the third test" in log_output
+    logger.error("error: This is the forth test")
+    if not log_file:
+        log_output = stream.getvalue().strip()
+        debug_in_output = "test_logger              DEBUG   debug: This is the first test" in log_output
+        info_in_output = "test_logger              INFO    info: This is the second test" in log_output
+        warning_in_output = "test_logger              WARNING warning: This is the third test" in log_output
+        error_in_output = "test_logger              ERROR   error: This is the forth test" in log_output
+        assert debug_in_output if int(verbose) >= 3 else not debug_in_output
+        assert info_in_output if int(verbose) >= 2 else not info_in_output
+        assert warning_in_output if int(verbose) >= 1 else not warning_in_output
+        assert error_in_output
 
-    log_file = tmpdir.join("test.log")
+    else:
+        with open(str(log_file), "r") as f:
+            log_output = f.read().strip()
+            debug_in_output = "DEBUG    test_logger debug: This is the first test" in log_output
+            info_in_output = "INFO     test_logger info: This is the second test" in log_output
+            warning_in_output = "WARNING  test_logger warning: This is the third test" in log_output
+            error_in_output = "ERROR    test_logger error: This is the forth test" in log_output
+            assert debug_in_output if log_file_level in ["DEBUG"] else not debug_in_output
+            assert info_in_output if log_file_level in ["DEBUG", "INFO"] else not info_in_output
+            assert warning_in_output if log_file_level in ["WARNING", "INFO", "DEBUG"] else not warning_in_output
+            assert error_in_output
 
-    # test that with if a log_file is given, the logfile will be used will be used with the specified log_file_level
-    # Here WARNINGs are shown INFOs not
-    options3 = Options(log_file=log_file, log_file_level="WARNING", verbose="4")
-    inmanta_logger.apply_options(options3)
-    logger.info("info: This is the first test")
-    logger.warning("warning: This is the second test")
-    logger.debug("debug: This is the third test")
-    with open(str(log_file), "r") as f:
-        contents = f.read()
-        assert "INFO     test_logger info: This is the first test" not in contents
-        assert "WARNING  test_logger warning: This is the second test" in contents
-        assert "DEBUG    test_logger debug: This is the third test" not in contents
 
-    # test that with if a log_file is given, the logfile will be used will be used with the specified log_file_level
-    # Here both WARNINGs and INFOs are shown
-    options4 = Options(log_file=log_file, log_file_level="DEBUG", verbose="4")
-    inmanta_logger.apply_options(options4)
-    logger.warning("warning: This is the forth test")
-    logger.info("info: This is the fifth test")
-    logger.debug("debug: This is the sixth test")
-    with open(str(log_file), "r") as f:
-        contents = f.read()
-        assert "WARNING  test_logger warning: This is the forth test" in contents
-        assert "INFO     test_logger info: This is the fifth test" in contents
-        assert "DEBUG    test_logger debug: This is the sixth test" in contents
+def test_logging_apply_options_2_times():
+    stream = StringIO()
+    inmanta_logger = InmantaLoggerConfig.get_instance(stream)
+    options1 = Options(log_file=None, log_file_level="INFO", verbose="1")
+    with pytest.raises(Exception) as e:
+        inmanta_logger.apply_options(options1)
+        options2 = Options(log_file=None, log_file_level="INFO", verbose="2")
+        inmanta_logger.apply_options(options2)
+    message = "Options can only be applied once to a handler."
+    assert message in str(e.value)
 
 
 def test_logging_cleaned_after_apply_options(tmpdir):
