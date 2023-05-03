@@ -533,7 +533,12 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_b
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
                     compile_id, warnings = await compilerservice.request_recompile_in_transaction(
-                        env=env, force_update=False, do_export=False, remote_id=remote_id, env_vars=env_vars, connection=connection
+                        env=env,
+                        force_update=False,
+                        do_export=False,
+                        remote_id=remote_id,
+                        env_vars=env_vars,
+                        connection=connection,
                     )
                 assert compile_id is not None, warnings
             await compilerservice.notify_compile_request_committed(compile_id)
@@ -970,7 +975,7 @@ async def test_compilerservice_halt(mocked_compiler_service_block, server, clien
     assert result.code == 200
 
 
-async def test_compileservice_queue(mocked_compiler_service_block, server, client, environment):
+async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_service_block, server, client, environment):
     """
     Verify that the `_queue_count_cache` is not incremented and that the compile is not scheduled until the
     `notify_compile_request_committed()` method is called.

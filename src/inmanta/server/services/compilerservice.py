@@ -32,11 +32,11 @@ from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
 from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Sequence, Tuple, cast
-from asyncpg import Connection
 
 import dateutil
 import dateutil.parser
 import pydantic
+from asyncpg import Connection
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
@@ -690,7 +690,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         notify_failed_compile: Optional[bool] = None,
         failed_compile_message: Optional[str] = None,
         in_db_transaction: bool = False,
-        connection: Optional[Connection] = None
+        connection: Optional[Connection] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         :param in_db_transaction: True iff the given connection is part of an ongoing database transaction.
