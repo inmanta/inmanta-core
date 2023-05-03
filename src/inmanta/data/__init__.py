@@ -4353,8 +4353,7 @@ class Resource(BaseDocument):
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
-        if "version" not in record["attributes"]:
-            record["attributes"]["version"] = version
+        record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     @classmethod
@@ -4910,8 +4909,7 @@ class Resource(BaseDocument):
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
-        if "version" not in self.attributes:
-            attributes["version"] = self.model
+        attributes["version"] = self.model
 
         return m.Resource(
             environment=self.environment,
