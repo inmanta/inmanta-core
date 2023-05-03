@@ -20,10 +20,13 @@ import os
 
 import pytest
 
+import inmanta.resources
 from inmanta import config, const
 from inmanta.ast import ExternalException
 from inmanta.const import ResourceState
+from inmanta.data import Environment
 from inmanta.export import DependencyCycleException
+from inmanta.server import SLICE_RESOURCE
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -206,6 +209,21 @@ async def test_server_export(snippetcompiler, server, client, environment):
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
+
+    version = result.result["versions"][0]["version"]
+    result = await client.get_version(tid=environment, id=result.result["versions"][0]["version"])
+    assert result.code == 200
+
+    for res in result.result["resources"]:
+        res["attributes"]["id"] = res["id"]
+        resource = inmanta.resources.Resource.deserialize(res["attributes"])
+        assert resource.version == resource.id.version == version
+
+    resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
+        environment=await Environment.get_by_id(environment)
+    )
+
+    assert resources[0].attributes["version"] == version
 
 
 @pytest.mark.asyncio

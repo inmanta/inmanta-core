@@ -4422,9 +4422,12 @@ class Resource(BaseDocument):
         self.make_hash()
         dct = super(Resource, self).to_dict()
         dct["id"] = dct["resource_version_id"]
+        dct["attributes"]["version"] = self.model
         return dct
 
     def to_dto(self) -> m.Resource:
+        attributes = self.attributes.copy()
+        attributes["version"] = self.model
         return m.Resource(
             environment=self.environment,
             model=self.model,
@@ -4433,7 +4436,7 @@ class Resource(BaseDocument):
             resource_version_id=self.resource_version_id,
             agent=self.agent,
             last_deploy=self.last_deploy,
-            attributes=self.attributes,
+            attributes=attributes,
             status=self.status,
             resource_id_value=self.resource_id_value,
         )
