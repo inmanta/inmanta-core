@@ -4121,8 +4121,6 @@ class Resource(BaseDocument):
     # the list contains full rv id's
     provides: List[m.ResourceVersionIdStr] = []
 
-
-
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
         cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection] = None
