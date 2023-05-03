@@ -1,0 +1,8 @@
+---
+description: Fixed race condition between the lifecycle state transfer and the associated compile request of a service instance. This bug can cause a service instance to get stuck in a certain state of its lifecycle. If you hit this bug, the issue can be resolved by executing a recompile.
+issue-nr: 1249
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso6, iso5, iso4]
+sections:
+  bugfix: "{{description}}"
