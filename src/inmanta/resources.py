@@ -378,7 +378,6 @@ class Resource(metaclass=ResourceMeta):
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id
-        self.version = 0
         self.requires: Set[Id] = set()
         self.resource_requires: Set[Resource] = set()
         self.unknowns: Set[str] = set()
@@ -388,6 +387,8 @@ class Resource(metaclass=ResourceMeta):
 
         for field in self.__class__.fields:
             setattr(self, field, None)
+
+        self.version = _id.version
 
     def populate(self, fields: Dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
