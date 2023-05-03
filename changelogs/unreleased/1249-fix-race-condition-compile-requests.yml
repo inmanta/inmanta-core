@@ -3,6 +3,6 @@ description: Fixed race condition between the lifecycle state transfer and the a
 issue-nr: 1249
 issue-repo: inmanta-lsm
 change-type: patch
-destination-branches: [master, iso6, iso5, iso4]
+destination-branches: [master, iso6]
 sections:
   bugfix: "{{description}}"
