@@ -162,7 +162,7 @@ class InmantaLoggerConfig:
             "TRACE": 2,
 
         :param inmanta_log_level: The inmanta logging level
-        :param cli: True if the logs will be outputed to the CLI.
+        :param cli: True if the logs will be outputted to the CLI.
         """
         if not self._handler:
             raise Exception("No handler to apply options to. Please use the get_instance method before calling this one")
