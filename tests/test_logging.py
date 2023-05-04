@@ -170,7 +170,7 @@ def test_logging_apply_options_2_times():
 
 def test_logging_cleaned_after_apply_options(tmpdir):
     # verifies that when changing the stream with apply_option, the old stream is properly cleaned up
-    # and not user anymore.
+    # and not used anymore.
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     logger = logging.getLogger("test_logger")
