@@ -131,7 +131,7 @@ def test_apply_options(tmpdir, log_file, log_file_level, verbose):
     logger.debug("debug: This is the first test")
     logger.info("info: This is the second test")
     logger.warning("warning: This is the third test")
-    logger.error("error: This is the forth test")
+    logger.error("error: This is the fourth test")
     if not log_file:
         log_output = stream.getvalue().strip()
         debug_in_output = "test_logger              DEBUG   debug: This is the first test" in log_output
