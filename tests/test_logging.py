@@ -116,7 +116,7 @@ def test_set_logfile_location(
 
 @pytest.mark.parametrize_any(
     "log_file, log_file_level, verbose",
-    [(None, "INFO", "1"), (None, "ERROR", "4"), ("test.log", "WARNING", "4"), ("test.log", "DEBUG", "4")],
+    [(None, "INFO", 1), (None, "ERROR", 4), ("test.log", "WARNING", 4), ("test.log", "DEBUG", 4)],
 )
 def test_apply_options(tmpdir, log_file, log_file_level, verbose):
     stream = StringIO()

@@ -140,11 +140,10 @@ class InmantaLoggerConfig:
 
     @classmethod
     @stable_api
-    def clean_instance(cls) -> "InmantaLoggerConfig":
+    def clean_instance(cls) -> None:
         """
-        This method should be used to obtain an instance of this class, because this class is a singleton.
+        This method should be used to clean up an instance of this class
 
-        :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
         if cls._instance and cls._instance._handler:
             cls._instance._handler.close()
