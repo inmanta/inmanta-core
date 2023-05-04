@@ -68,7 +68,7 @@ class Options(Namespace):
             "TRACE": 2,
         default is 'INFO'
     - `verbose`: the verbosity level of the log messages. can be a number from 0 to 4.
-        if a bigger number is provided, 4 will be used. refer to log_file_level for the explanation of each level.
+        if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
         default is 1 (WARNING)
     - `timed`: if true,  adds the time to the formatter in the log lines.
     """
