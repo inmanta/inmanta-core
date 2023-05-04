@@ -28,7 +28,6 @@ from tornado import gen, queues, routing, web
 from tornado.ioloop import IOLoop
 
 import inmanta.protocol.endpoints
-from inmanta import config as inmanta_config
 from inmanta.data.model import ExtensionStatus
 from inmanta.protocol import Client, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
@@ -99,7 +98,6 @@ class Server(endpoints.Endpoint):
         self._slices: Dict[str, ServerSlice] = {}
         self._slice_sequence: Optional[List[ServerSlice]] = None
         self._handlers: List[routing.Rule] = []
-        self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.sessions_handler = SessionManager()
         self.add_slice(self.sessions_handler)
