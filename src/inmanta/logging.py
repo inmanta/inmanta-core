@@ -68,7 +68,7 @@ class Options(Namespace):
             "TRACE": 2,
         default is 'INFO'
     - `verbose`: the verbosity level of the log messages. can be a number from 0 to 4.
-        if a bigger number is provided, 4 will be used. refer to log_file_level for the explanation of each level.
+        if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
         default is 1 (WARNING)
     - `timed`: if true,  adds the time to the formatter in the log lines.
     """
@@ -176,7 +176,7 @@ class InmantaLoggerConfig:
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
         """
         Set the logging level. A handler should have been created before.
-        Below the supported Inmanta log levels and there equivalent and their equivalent Python log levels are shown:
+        Below the supported Inmanta log levels and their equivalent Python log levels are shown:
             "0": logging.ERROR,
             "1": logging.WARNING,
             "2": logging.INFO,
