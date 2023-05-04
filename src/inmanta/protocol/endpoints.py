@@ -427,7 +427,7 @@ class SyncClient(object):
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
         def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
             method: Callable[..., abc.Awaitable[common.Result]] = getattr(self._client, name)
-            with_timeout: Coroutine[Any, Any, common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
+            with_timeout: abc.Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
 
             try:
                 if self._ioloop is None:

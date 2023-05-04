@@ -132,7 +132,7 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    await asyncio.get_running_loop().run_in_executor(None, do_test)
+    await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, do_test), timeout=1)
     assert len(done) > 0
 
 
