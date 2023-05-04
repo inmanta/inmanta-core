@@ -137,7 +137,7 @@ def test_apply_options(tmpdir, log_file, log_file_level, verbose):
         debug_in_output = "test_logger              DEBUG   debug: This is the first test" in log_output
         info_in_output = "test_logger              INFO    info: This is the second test" in log_output
         warning_in_output = "test_logger              WARNING warning: This is the third test" in log_output
-        error_in_output = "test_logger              ERROR   error: This is the forth test" in log_output
+        error_in_output = "test_logger              ERROR   error: This is the fourth test" in log_output
         assert debug_in_output if int(verbose) >= 3 else not debug_in_output
         assert info_in_output if int(verbose) >= 2 else not info_in_output
         assert warning_in_output if int(verbose) >= 1 else not warning_in_output
@@ -149,7 +149,7 @@ def test_apply_options(tmpdir, log_file, log_file_level, verbose):
             debug_in_output = "DEBUG    test_logger debug: This is the first test" in log_output
             info_in_output = "INFO     test_logger info: This is the second test" in log_output
             warning_in_output = "WARNING  test_logger warning: This is the third test" in log_output
-            error_in_output = "ERROR    test_logger error: This is the forth test" in log_output
+            error_in_output = "ERROR    test_logger error: This is the fourth test" in log_output
             assert debug_in_output if log_file_level in ["DEBUG"] else not debug_in_output
             assert info_in_output if log_file_level in ["DEBUG", "INFO"] else not info_in_output
             assert warning_in_output if log_file_level in ["WARNING", "INFO", "DEBUG"] else not warning_in_output
