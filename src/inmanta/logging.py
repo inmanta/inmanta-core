@@ -55,18 +55,7 @@ class Options(Namespace):
     - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
       specified in `get_instance`.
     - `log_file_level`: the Inmanta logging level for the file handler (if `log_file` is set).
-        The possible inmanta logging levels and their associated python log level are the following ones:
-            "0": logging.ERROR,
-            "1": logging.WARNING,
-            "2": logging.INFO,
-            "3": logging.DEBUG,
-            "4": 2,
-            "ERROR": logging.ERROR,
-            "WARNING": logging.WARNING,
-            "INFO": logging.INFO,
-            "DEBUG": logging.DEBUG,
-            "TRACE": 2,
-        default is 'INFO'
+        The possible inmanta log levels and their associated python log level are defined in the inmanta.logging.log_levels dictionary.
     - `verbose`: the verbosity level of the log messages. can be a number from 0 to 4.
         if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
         default is 1 (WARNING)
@@ -89,13 +78,7 @@ class InmantaLoggerConfig:
     that specifies where the log messages should be sent to. If no `stream` is provided,
     the log messages will be sent to standard output.
 
-    You can then call the `apply_options` method to configure the logging options. This method takes an `options`
-    argument that should be an Option object with the following attributes:
-    - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
-      specified in `get_instance`.
-    - `log_file_level`: the logging level for the file handler (if `log_file` is set).
-    - `verbose`: the verbosity level of the log messages.
-    - `timed`: if true,  adds the time to the formatter in the log lines.
+    You can then call the `apply_options` method to configure the logging options.
 
     The setup is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
     the 'final' logger with `apply_options`.
@@ -180,17 +163,7 @@ class InmantaLoggerConfig:
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
         """
         Set the logging level. A handler should have been created before.
-        Below the supported Inmanta log levels and their equivalent Python log levels are shown:
-            "0": logging.ERROR,
-            "1": logging.WARNING,
-            "2": logging.INFO,
-            "3": logging.DEBUG,
-            "4": 2,
-            "ERROR": logging.ERROR,
-            "WARNING": logging.WARNING,
-            "INFO": logging.INFO,
-            "DEBUG": logging.DEBUG,
-            "TRACE": 2,
+        The possible inmanta log levels and their associated python log level are defined in the inmanta.logging.log_levels dictionary.
 
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputted to the CLI.
