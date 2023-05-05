@@ -78,13 +78,7 @@ class InmantaLoggerConfig:
     that specifies where the log messages should be sent to. If no `stream` is provided,
     the log messages will be sent to standard output.
 
-    You can then call the `apply_options` method to configure the logging options. This method takes an `options`
-    argument that should be an Option object with the following attributes:
-    - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
-      specified in `create_default_handler`.
-    - `log_file_level`: the logging level for the file handler (if `log_file` is set).
-    - `verbose`: the verbosity level of the log messages.
-    - `timed`: if true,  adds the time to the formatter in the log lines.
+    You can then call the `apply_options` method to configure the logging options.
 
     The setup is not done in one step as we want logs for the cmd_parser, which will provide the options needed to configure
     the 'final' logger with `apply_options`.
