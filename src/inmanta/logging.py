@@ -55,7 +55,8 @@ class Options(Namespace):
     - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
       specified in `get_instance`.
     - `log_file_level`: the Inmanta logging level for the file handler (if `log_file` is set).
-        The possible inmanta log levels and their associated python log level are defined in the inmanta.logging.log_levels dictionary.
+        The possible inmanta log levels and their associated python log level are defined in the
+        inmanta.logging.log_levels dictionary.
     - `verbose`: the verbosity level of the log messages. can be a number from 0 to 4.
         if a bigger number is provided, 4 will be used. Refer to log_file_level for the explanation of each level.
         default is 1 (WARNING)
