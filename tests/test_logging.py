@@ -32,6 +32,25 @@ def test_setup_instance():
     assert handler.level == logging.INFO
 
 
+def test_setup_instance_2_times():
+    inmanta_logger = InmantaLoggerConfig.get_instance(sys.stderr)
+    handler = inmanta_logger.get_handler()
+    assert handler.stream == sys.stderr
+    assert isinstance(handler.formatter, MultiLineFormatter)
+    assert handler.level == logging.INFO
+
+    inmanta_logger = InmantaLoggerConfig.get_instance(sys.stderr)
+    handler = inmanta_logger.get_handler()
+    assert handler.stream == sys.stderr
+    assert isinstance(handler.formatter, MultiLineFormatter)
+    assert handler.level == logging.INFO
+
+    with pytest.raises(Exception) as e:
+        InmantaLoggerConfig.get_instance(sys.stdout)
+    message = "Instance already exists: cannot set the stream argument"
+    assert message in str(e.value)
+
+
 def test_setup_instance_with_stream():
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)

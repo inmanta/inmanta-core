@@ -53,7 +53,7 @@ class Options(Namespace):
     """
     The Options class provides a way to configure the InmantaLoggerConfig with the following attributes:
     - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
-      specified in `create_default_handler`.
+      specified in `get_instance`.
     - `log_file_level`: the Inmanta logging level for the file handler (if `log_file` is set).
         The possible inmanta logging levels and their associated python log level are the following ones:
             "0": logging.ERROR,
@@ -92,7 +92,7 @@ class InmantaLoggerConfig:
     You can then call the `apply_options` method to configure the logging options. This method takes an `options`
     argument that should be an Option object with the following attributes:
     - `log_file`: if this attribute is set, the logs will be written to the specified file instead of the stream
-      specified in `create_default_handler`.
+      specified in `get_instance`.
     - `log_file_level`: the logging level for the file handler (if `log_file` is set).
     - `verbose`: the verbosity level of the log messages.
     - `timed`: if true,  adds the time to the formatter in the log lines.
@@ -132,7 +132,9 @@ class InmantaLoggerConfig:
 
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
-        if cls._instance and stream != sys.stdout:
+        if cls._instance and not (
+            isinstance(cls._instance.handler, logging.StreamHandler) and cls._instance._handler.stream != stream
+        ):
             raise Exception("Instance already exists: cannot set the stream argument")
         if not cls._instance:
             cls._instance = cls(stream)
