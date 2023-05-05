@@ -160,8 +160,8 @@ def test_logging_apply_options_2_times():
     stream = StringIO()
     inmanta_logger = InmantaLoggerConfig.get_instance(stream)
     options1 = Options(log_file=None, log_file_level="INFO", verbose="1")
+    inmanta_logger.apply_options(options1)
     with pytest.raises(Exception) as e:
-        inmanta_logger.apply_options(options1)
         options2 = Options(log_file=None, log_file_level="INFO", verbose="2")
         inmanta_logger.apply_options(options2)
     message = "Options can only be applied once to a handler."
