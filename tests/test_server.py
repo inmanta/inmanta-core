@@ -1524,10 +1524,16 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     agents_before_purge = await data.Agent.get_list()
     assert len(agents_before_purge) == 6
 
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+
     assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
     assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
 
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
 
     assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
     assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
