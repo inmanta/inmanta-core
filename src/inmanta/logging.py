@@ -162,7 +162,8 @@ class InmantaLoggerConfig:
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
         """
         Set the logging level. A handler should have been created before.
-        The possible inmanta log levels and their associated python log level are defined in the inmanta.logging.log_levels dictionary.
+        The possible inmanta log levels and their associated python log level
+        are defined in the inmanta.logging.log_levels dictionary.
 
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputted to the CLI.
