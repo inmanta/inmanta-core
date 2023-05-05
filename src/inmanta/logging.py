@@ -115,13 +115,12 @@ class InmantaLoggerConfig:
 
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout)
         """
-        if (
-            cls._instance
-            and not isinstance(cls._instance._handler, logging.StreamHandler)
-            or cls._instance._handler.stream != stream
-        ):
-            raise Exception("Instance already exists with a different stream handler")
-        if not cls._instance:
+        if cls._instance:
+            if not isinstance(cls._instance._handler, logging.StreamHandler):
+                raise Exception("Instance already exists with a different handler")
+            elif isinstance(cls._instance._handler, logging.StreamHandler) and cls._instance._handler.stream != stream:
+                raise Exception("Instance already exists with a different stream")
+        else:
             cls._instance = cls(stream)
         return cls._instance
 

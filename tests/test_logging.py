@@ -47,7 +47,7 @@ def test_setup_instance_2_times():
 
     with pytest.raises(Exception) as e:
         InmantaLoggerConfig.get_instance(sys.stdout)
-    message = "Instance already exists: cannot set the stream argument"
+    message = "Instance already exists with a different stream"
     assert message in str(e.value)
 
 
