@@ -1255,8 +1255,13 @@ async def test_cross_agent_deps(
 
     result = await resource_container.wait_for_done_with_waiters(client, env_id, version)
 
+    async def is_success() -> bool:
+        result = await client.get_version(env_id, version)
+        assert result.code == 200
+        return result.result["model"]["result"] == const.VersionState.success.name
+
     assert result.result["model"]["done"] == len(resources)
-    assert result.result["model"]["result"] == const.VersionState.success.name
+    await retry_limited(is_success, timeout=1)
 
     assert resource_container.Provider.isset("agent 1", "key1")
     assert resource_container.Provider.get("agent 1", "key1") == "value1"
