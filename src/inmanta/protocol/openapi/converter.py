@@ -158,9 +158,6 @@ class OpenApiTypeConverter:
         self.ref_prefix = "#/components/schemas/"
         self.ref_regex = re.compile(self.ref_prefix + r"(.*)")
 
-        # Applying some monkey patching to pydantic
-        patch_pydantic_field_type_schema()
-
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         schema = self.get_openapi_type(parameter_type.annotation)
         if parameter_type.default is not inspect.Parameter.empty:
