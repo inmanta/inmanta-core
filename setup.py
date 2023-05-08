@@ -24,7 +24,7 @@ requires = [
     "pip>=21.3",
     "ply~=3.0",
     # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
-    "pydantic>=2.0a1",
+    "pydantic~=1.0,!=1.9.0a1",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",
