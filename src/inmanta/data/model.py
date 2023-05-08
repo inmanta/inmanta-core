@@ -22,13 +22,13 @@ from itertools import chain
 from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic.schema
-from pydantic import Extra, root_validator, validator
+from pydantic import Extra, StrictBool, root_validator, validator
 
 import inmanta
 import inmanta.ast.export as ast_export
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
+from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -212,7 +212,7 @@ class AttributeStateChange(BaseModel):
         return v
 
 
-EnvSettingType = Union[StrictNonIntBool, int, float, str, Dict[str, Union[str, int, StrictNonIntBool]]]
+EnvSettingType = Union[StrictBool, int, float, str, Dict[str, Union[str, int, StrictBool]]]
 
 
 class Environment(BaseModel):
@@ -458,8 +458,8 @@ class VersionedResourceDetails(ResourceDetails):
     resource_version_id: ResourceVersionIdStr
     version: int
 
-    @root_validator
     @classmethod
+    @root_validator
     def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
