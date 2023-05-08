@@ -532,13 +532,14 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_b
         if use_trx_based_api:
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
-                    compile_id, warnings = await compilerservice.request_recompile_in_transaction(
+                    compile_id, warnings = await compilerservice.request_recompile(
                         env=env,
                         force_update=False,
                         do_export=False,
                         remote_id=remote_id,
                         env_vars=env_vars,
                         connection=connection,
+                        in_db_transaction=True
                     )
                 assert compile_id is not None, warnings
             await compilerservice.notify_compile_request_committed(compile_id)
@@ -986,8 +987,13 @@ async def test_compileservice_queue_count_on_trx_based_api(mocked_compiler_servi
     async with data.Environment.get_connection() as connection:
         async with connection.transaction():
             remote_id1 = uuid.uuid4()
-            compile_id, warnings = await compiler_service.request_recompile_in_transaction(
-                env=env, force_update=False, do_export=False, remote_id=remote_id1, connection=connection
+            compile_id, warnings = await compiler_service.request_recompile(
+                env=env,
+                force_update=False,
+                do_export=False,
+                remote_id=remote_id1,
+                connection=connection,
+                in_db_transaction=True,
             )
             assert compile_id is not None, warnings
             assert compiler_service._queue_count_cache == 0
