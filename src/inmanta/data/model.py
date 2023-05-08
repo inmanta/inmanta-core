@@ -459,7 +459,7 @@ class VersionedResourceDetails(ResourceDetails):
     version: int
 
     @classmethod
-    @root_validator
+    @root_validator(pre=True)
     def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
