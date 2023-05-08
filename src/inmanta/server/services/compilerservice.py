@@ -663,7 +663,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         """
         This method must be called when the `request_recompile_in_transaction()` method was called and the associated
         transaction committed successfully. It must be called right after the transaction committed. If the transaction was
-        aborted, this method most not be called.
+        aborted, this method must not be called.
 
         This method is safe with respect to server restarts. If the server restarts after the transaction was committed,
         but before this method was invoked, the server will automatically recover from this and run the requested compile
