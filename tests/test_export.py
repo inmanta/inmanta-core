@@ -736,3 +736,43 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
+
+
+def test_resource_pydantic(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+    init_cf = """
+entity Res extends std::Resource:
+    string name
+end
+
+implement Res using std::none
+
+Res(name="the_resource_a")
+"""
+    init_py = """
+from inmanta.resources import (
+    PydanticResource,
+    resource,
+)
+@resource("modulev1::Res", agent="name", id_attribute="name")
+class Res(PydanticResource):
+    name: str
+"""
+    module_name: str = "minimalv1module"
+    module_path: str = str(tmpdir.join("modulev1"))
+    v1_module_from_template(
+        os.path.join(modules_dir, module_name),
+        module_path,
+        new_content_init_cf=init_cf,
+        new_content_init_py=init_py,
+        new_name="modulev1",
+    )
+    snippetcompiler.setup_for_snippet(
+        """
+import modulev1
+        """,
+        add_to_module_path=[str(tmpdir)],
+    )
+
+    _version, json_value = snippetcompiler.do_export()
+    string_keyed = {str(k): v for k, v in json_value.items()}
+    string_keyed["modulev1::Res[the_resource_a,name=the_resource_a]"].name == "the_resource_a"

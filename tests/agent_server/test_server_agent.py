@@ -3470,3 +3470,76 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
     # Exception is raised by handler
     resource_container.Provider.set_fail("agent1", "key1", 1)
     assert const.ResourceState.failed == await deploy_resource()
+
+
+async def test_deploy_pydantic_resource(server, client, resource_container, async_finalizer, no_agent_backoff):
+    """
+    Test deploy of resource with undefined
+    """
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    Config.set("config", "agent-deploy-interval", "100")
+
+    resource_container.Provider.reset()
+    result = await client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    await client.set_setting(env_id, data.AUTO_DEPLOY, False)
+    await client.set_setting(env_id, data.PUSH_ON_AUTO_DEPLOY, False)
+    await client.set_setting(env_id, data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, const.AgentTriggerMethod.push_full_deploy)
+
+    agent = Agent(
+        hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
+    )
+    async_finalizer.add(agent.stop)
+    await agent.add_end_point_name("agent2")
+    await agent.start()
+
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    clienthelper = ClientHelper(client, env_id)
+
+    version = await clienthelper.get_version()
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::ResourceP[agent2,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_version(
+        tid=env_id,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == len(resources)
+    assert result.result["model"]["result"] == "deploying"
+
+    # The server will mark the full version as deployed even though the agent has not done anything yet.
+    result = await client.get_version(env_id, version)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, env_id, version)
+
+    result = await client.get_version(env_id, version)
+    assert result.result["model"]["done"] == len(resources)
+    assert result.code == 200
