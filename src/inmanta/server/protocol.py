@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Set,
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
-from tornado.ioloop import IOLoop
 
 import inmanta.protocol.endpoints
 from inmanta.data.model import ExtensionStatus
@@ -397,7 +396,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
 class Session(object):
     """
-    An environment that segments agents connected to the server
+    An environment that segments agents connected to the server. Should only be created in a context with a running event loop.
     """
 
     def __init__(
@@ -416,7 +415,7 @@ class Session(object):
         self._timeout = timout
         self._sessionstore: SessionManager = sessionstore
         self._seen: float = time.time()
-        self._callhandle = None
+        self._callhandle: Optional[asyncio.TimerHandle] = None
         self.expired: bool = False
 
         self.tid: uuid.UUID = tid
@@ -440,7 +439,7 @@ class Session(object):
             expire_coroutine = self.expire(self._seen - time.time())
             self._sessionstore.add_background_task(expire_coroutine)
         else:
-            self._callhandle = IOLoop.current().call_later(ttw, self.check_expire)
+            self._callhandle = asyncio.get_running_loop().call_later(ttw, self.check_expire)
 
     def get_id(self) -> uuid.UUID:
         return self._sid
@@ -452,7 +451,7 @@ class Session(object):
             return
         self.expired = True
         if self._callhandle is not None:
-            IOLoop.current().remove_timeout(self._callhandle)
+            self._callhandle.cancel()
         await self._sessionstore.expire(self, timeout)
 
     def seen(self, endpoint_names: Set[str]) -> None:
@@ -500,9 +499,9 @@ class Session(object):
             call_list: List[common.Request] = []
 
             if no_hang:
-                timeout = IOLoop.current().time() + 0.1
+                timeout = asyncio.get_running_loop().time() + 0.1
             else:
-                timeout = IOLoop.current().time() + self._interval
+                timeout = asyncio.get_running_loop().time() + self._interval
 
             call = await self._queue.get(timeout=timeout)
             if call is None:

@@ -41,7 +41,6 @@ from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
-from tornado.ioloop import IOLoop
 
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
@@ -245,7 +244,7 @@ class Scheduler(object):
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[ScheduledTask, object] = {}
+        self._scheduled: Dict[ScheduledTask, asyncio.TimerHandle] = {}
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
@@ -326,10 +325,10 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
-                    ihandle = IOLoop.current().call_later(schedule_typed.get_next_delay(), action_function)
+                    ihandle = asyncio.get_running_loop().call_later(schedule_typed.get_next_delay(), action_function)
                     self._scheduled[task_spec] = ihandle
 
-        handle = IOLoop.current().call_later(schedule_typed.get_initial_delay(), action_function)
+        handle: asyncio.TimerHandle = asyncio.get_running_loop().call_later(schedule_typed.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
         return task_spec
 
@@ -339,7 +338,7 @@ class Scheduler(object):
         Remove a scheduled action
         """
         if task in self._scheduled:
-            IOLoop.current().remove_timeout(self._scheduled[task])
+            self._scheduled[task].cancel()
             del self._scheduled[task]
 
     @stable_api
@@ -352,7 +351,7 @@ class Scheduler(object):
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:
                 _, handle = self._scheduled.popitem()
-                IOLoop.current().remove_timeout(handle)
+                handle.cancel()
         except KeyError:
             pass
 
@@ -716,7 +715,7 @@ async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
     2.The python sdk has no support for async awaiting threadpool shutdown (except for the default pool)
     """
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     future = loop.create_future()
 
     def join() -> None:
@@ -733,3 +732,18 @@ async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
         await future
     finally:
         thread.join()
+
+
+def ensure_event_loop() -> asyncio.AbstractEventLoop:
+    """
+    Returns the event loop for this thread. Creates a new one if none exists yet and registers it with asyncio's active event
+    loop policy.
+    """
+    try:
+        # nothing needs to be done if this thread already has an event loop
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        # asyncio.set_event_loop sets the event loop for this thread only
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        return new_loop
