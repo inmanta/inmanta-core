@@ -46,9 +46,12 @@ class AsyncReporter(object):
         self._handle: Optional[Task[None]] = None
 
     def start(self) -> bool:
+        """
+        Starts the reporter loop. Expects to be called in a context with a running event loop.
+        """
         if self._stopped:
             return False
-        self._handle = asyncio.get_event_loop().create_task(self._loop())
+        self._handle = asyncio.get_running_loop().create_task(self._loop())
         return True
 
     def stop(self) -> None:
@@ -57,7 +60,7 @@ class AsyncReporter(object):
             self._handle.cancel()
 
     async def _loop(self) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         next_loop_time = loop.time()
         while not self._stopped:
             try:

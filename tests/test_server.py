@@ -86,14 +86,14 @@ async def test_autostart(server, client, environment, caplog):
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
     res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
-    assert len(sessionendpoint._sessions) == 1
-
-    # second agent for same env
-    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agentx"])
-    assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
-    assert len(sessionendpoint._sessions) == 1
+    await retry_limited(
+        lambda: (
+            len(sessionendpoint._sessions) == 1
+            # starting any agent eventually causes it to reload the agent map, starting all three
+            and len(agentmanager.tid_endpoint_to_session.keys()) == 3
+        ),
+        5,
+    )
 
     # Test stopping all agents
     await autostarted_agentmanager.stop_agents(env)
