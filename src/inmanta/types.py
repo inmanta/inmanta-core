@@ -56,7 +56,7 @@ class StrictNonIntBool(object):
         """
         Should be handled as a boolean in OpenAPI schemas
         """
-        f_schema["type"] = "boolean"
+        f_schema["type"] = "bool"
         return f_schema
 
 
