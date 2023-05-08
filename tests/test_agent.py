@@ -23,7 +23,7 @@ import uuid
 
 import pytest
 
-from inmanta import config, protocol
+from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
@@ -93,8 +93,7 @@ async def async_started_agent(server_config):
     config.Config.set("config", "use_autostart_agent_map", "true")
 
     env_id = uuid.uuid4()
-    a = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
-    await a.add_end_point_name("agent1")
+    a = Agent(hostname="node1", environment=env_id, agent_map=None, code_loader=False)
     task = asyncio.ensure_future(a.start())
     yield a
     task.cancel()
@@ -140,6 +139,16 @@ async def test_agent_cannot_retrieve_autostart_agent_map(async_started_agent, st
 
     # Create environment
     result = await client.create_environment(project_id=project_id, name="dev", environment_id=async_started_agent.environment)
+    assert result.code == 200
+
+    # set agent in agent map
+    result = await client.get_setting(tid=async_started_agent.environment, id=data.AUTOSTART_AGENT_MAP)
+    assert result.code == 200
+    result = await client.set_setting(
+        tid=async_started_agent.environment,
+        id=data.AUTOSTART_AGENT_MAP,
+        value={"agent1": "localhost"} | result.result["value"],
+    )
     assert result.code == 200
 
     # Assert agent managed to establish session with the server

@@ -86,14 +86,14 @@ async def test_autostart(server, client, environment, caplog):
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
     res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
-    assert len(sessionendpoint._sessions) == 1
-
-    # second agent for same env
-    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agentx"])
-    assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
-    assert len(sessionendpoint._sessions) == 1
+    await retry_limited(
+        lambda: (
+            len(sessionendpoint._sessions) == 1
+            # starting any agent eventually causes it to reload the agent map, starting all three
+            and len(agentmanager.tid_endpoint_to_session.keys()) == 3
+        ),
+        5,
+    )
 
     # Test stopping all agents
     await autostarted_agentmanager.stop_agents(env)
@@ -1446,6 +1446,13 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
     await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
 
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
     if env1_halted:
         result = await client.halt_environment(env1.id)
         assert result.code == 200
@@ -1518,7 +1525,22 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     agents_before_purge = await data.Agent.get_list()
     assert len(agents_before_purge) == 6
 
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
     agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
     number_agents_env1_after_purge = 4 if env1_halted else 3
     number_agents_env2_after_purge = 2 if env2_halted else 1

@@ -40,7 +40,6 @@ import sys
 import threading
 import time
 import traceback
-import typing
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from collections import abc
@@ -49,14 +48,12 @@ from threading import Timer
 from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
-import colorlog
-from colorlog.formatter import LogColors
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
-from inmanta import const, module, moduletool, protocol
+from inmanta import const, module, moduletool, protocol, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -64,6 +61,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
+from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -76,50 +74,6 @@ except ImportError:
 LOGGER = logging.getLogger("inmanta")
 
 
-class MultiLineFormatter(colorlog.ColoredFormatter):
-    """Multi-line formatter."""
-
-    def __init__(
-        self,
-        fmt: typing.Optional[str] = None,
-        *,
-        # keep interface minimal: only include fields we actually use
-        log_colors: typing.Optional[LogColors] = None,
-        reset: bool = True,
-        no_color: bool = False,
-    ):
-        super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
-        self.fmt = fmt
-
-    def get_header_length(self, record: logging.LogRecord) -> int:
-        """Get the header length of a given record."""
-        # to get the length of the header we want to get the header without the color codes
-        formatter = colorlog.ColoredFormatter(
-            fmt=self.fmt,
-            log_colors=self.log_colors,
-            reset=False,
-            no_color=True,
-        )
-        header = formatter.format(
-            logging.LogRecord(
-                name=record.name,
-                level=record.levelno,
-                pathname=record.pathname,
-                lineno=record.lineno,
-                msg="",
-                args=(),
-                exc_info=None,
-            )
-        )
-        return len(header)
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format a record with added indentation."""
-        indent: str = " " * self.get_header_length(record)
-        head, *tail = super().format(record).splitlines(True)
-        return head + "".join(indent + line for line in tail)
-
-
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
     if options.config_file and not os.path.exists(options.config_file):
@@ -128,7 +82,7 @@ def start_server(options: argparse.Namespace) -> None:
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
-    asyncio.set_event_loop(asyncio.new_event_loop())
+    util.ensure_event_loop()
 
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
@@ -160,7 +114,7 @@ def start_server(options: argparse.Namespace) -> None:
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
 
-    asyncio.set_event_loop(asyncio.new_event_loop())
+    util.ensure_event_loop()
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
@@ -664,23 +618,6 @@ def export(options: argparse.Namespace) -> None:
         conn.release_version(tid, version, True, agent_trigger_method)
 
 
-"""
-This dictionary maps the Inmanta log levels to the corresponding Python log levels
-"""
-log_levels = {
-    "0": logging.ERROR,
-    "1": logging.WARNING,
-    "2": logging.INFO,
-    "3": logging.DEBUG,
-    "4": 2,
-    "ERROR": logging.ERROR,
-    "WARNING": logging.WARNING,
-    "INFO": logging.INFO,
-    "DEBUG": logging.DEBUG,
-    "TRACE": 2,
-}
-
-
 def cmd_parser() -> argparse.ArgumentParser:
     # create the argument compiler
 
@@ -774,80 +711,11 @@ def print_versions_installed_components_and_exit() -> None:
     sys.exit(0)
 
 
-def _is_on_tty() -> bool:
-    return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
-
-
-def _get_default_stream_handler() -> logging.StreamHandler:
-    stream_handler = logging.StreamHandler(stream=sys.stdout)
-    stream_handler.setLevel(logging.INFO)
-
-    formatter = _get_log_formatter_for_stream_handler(timed=False)
-    stream_handler.setFormatter(formatter)
-
-    return stream_handler
-
-
-def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
-    if not options.log_file:
-        raise Exception("No logfile was provided.")
-    level = _convert_inmanta_log_level_to_python_log_level(options.log_file_level)
-    formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-    file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(level)
-
-    return file_handler
-
-
-def _convert_inmanta_log_level_to_python_log_level(level: str) -> int:
-    """
-    Converts the Inmanta log level to the Python log level
-    """
-    if level.isdigit() and int(level) > 4:
-        level = "4"
-    return log_levels[level]
-
-
-def _convert_cli_log_level(level: int) -> int:
-    """
-    Converts the number of -v's passed on the CLI to the corresponding Inmanta log level
-    """
-    if level < 1:
-        # The minimal log level on the CLI is always WARNING
-        return logging.WARNING
-    else:
-        return _convert_inmanta_log_level_to_python_log_level(str(level))
-
-
-def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
-    log_format = "%(asctime)s " if timed else ""
-    if _is_on_tty():
-        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
-        formatter = MultiLineFormatter(
-            log_format,
-            reset=True,
-            log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
-        )
-    else:
-        log_format += "%(name)-25s%(levelname)-8s%(message)s"
-        formatter = MultiLineFormatter(
-            log_format,
-            reset=False,
-            no_color=True,
-        )
-    return formatter
-
-
 def app() -> None:
     """
     Run the compiler
     """
-    # Send logs to stdout
-    stream_handler = _get_default_stream_handler()
-    logging.root.handlers = []
-    logging.root.addHandler(stream_handler)
-    logging.root.setLevel(0)
+    log_config = InmantaLoggerConfig.get_instance()
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -855,17 +723,7 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    # Log everything to a log_file if logfile is provided
-    if options.log_file:
-        watched_file_handler = _get_watched_file_handler(options)
-        logging.root.addHandler(watched_file_handler)
-        logging.root.removeHandler(stream_handler)
-    else:
-        if options.timed:
-            formatter = _get_log_formatter_for_stream_handler(timed=True)
-            stream_handler.setFormatter(formatter)
-        log_level = _convert_cli_log_level(options.verbose)
-        stream_handler.setLevel(log_level)
+    log_config.apply_options(options)
 
     logging.captureWarnings(True)
 
