@@ -67,7 +67,6 @@ import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
-from pydantic.error_wrappers import display_errors
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -244,6 +243,23 @@ class ModuleV2InV1PathException(InvalidModuleException):
         super().__init__(msg)
         self.project: Optional[Project] = project
         self.module: ModuleV2 = module
+
+
+def display_errors(errors: List["ErrorDict"]) -> str:
+    return "\n".join(f'{_display_error_loc(e)}\n  {e["msg"]} ({_display_error_type_and_ctx(e)})' for e in errors)
+
+
+def _display_error_loc(error: "ErrorDict") -> str:
+    return " -> ".join(str(e) for e in error["loc"])
+
+
+def _display_error_type_and_ctx(error: "ErrorDict") -> str:
+    t = "type=" + error["type"]
+    ctx = error.get("ctx")
+    if ctx:
+        return t + "".join(f"; {k}={v}" for k, v in ctx.items())
+    else:
+        return t
 
 
 @stable_api
@@ -1214,7 +1230,7 @@ class Metadata(BaseModel):
     name: str
     description: Optional[str] = None
     freeze_recursive: bool = False
-    freeze_operator: str = Field(default="~=", regex=FreezeOperator.get_regex_for_validation())
+    freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
 
     _raw_parser: Type[RawParser]
 
@@ -1608,7 +1624,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-    relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
+    relation_precedence_policy: List[constr(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)] = []
     strict_deps_check: bool = True
     agent_install_dependency_modules: bool = False
 

@@ -35,8 +35,15 @@ def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
     """
     Alternative issubclass implementation that interpretes instances of NewType for the first argument as their super type.
     """
+    print("========issubclass========")
     if typing_inspect.is_new_type(sub):
+        print("FIRST")
+        print(sub.__supertype__)
+        print(super)
         return issubclass(sub.__supertype__, super)
+    print("SECOND")
+    print(sub)
+    print(super)
     return builtins.issubclass(sub, super)
 
 

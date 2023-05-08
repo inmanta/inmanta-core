@@ -34,20 +34,6 @@ class InvalidFilter(Exception):
         self.message = message
 
 
-def parse_single_value(v: object) -> object:
-    """
-    Transform list values to their single element value.
-    """
-    if isinstance(v, list):
-        return more_itertools.one(
-            v,
-            too_short=ValueError("Empty filter provided"),
-            too_long=ValueError(f"Multiple values provided for filter: {v}"),
-        )
-
-    return v
-
-
 def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.datetime:
     try:
         datetime_obj: datetime.datetime = dateutil.parser.isoparse(value)
@@ -122,7 +108,20 @@ class BooleanEqualityFilter(Filter):
     """Represents a valid boolean which should be handled as an equality filter"""
 
     field: Optional[bool]
-    validate_field: classmethod = validator("field", pre=True, allow_reuse=True)(parse_single_value)
+
+    @validator("field", pre=True, allow_reuse=True)
+    def validate_field(cls, v):
+        """
+        Transform list values to their single element value.
+        """
+        if isinstance(v, list):
+            return more_itertools.one(
+                v,
+                too_short=ValueError("Empty filter provided"),
+                too_long=ValueError(f"Multiple values provided for filter: {v}"),
+            )
+
+        return v
 
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
         if self.field is not None:
