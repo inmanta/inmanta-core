@@ -40,7 +40,6 @@ def iter_namespace(ns_pkg: ModuleType) -> Generator[ModuleInfo, None, None]:
 
 
 class PluginLoadFailed(Exception):
-
     pass
 
 

@@ -170,7 +170,7 @@ def log_messages(resource_log_objects):
 )
 @pytest.mark.asyncio
 async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs):
-    """ Test querying resource logs with paging, using different sorting parameters."""
+    """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
 
     result = await client.resource_logs(
@@ -295,7 +295,6 @@ async def test_filter_validation(server, client, filter, expected_status, env_wi
 
 @pytest.mark.asyncio
 async def test_log_without_kwargs(server, client, environment):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,
@@ -335,7 +334,6 @@ async def test_log_without_kwargs(server, client, environment):
 
 @pytest.mark.asyncio
 async def test_log_nested_kwargs(server, client, environment):
-
     await data.ConfigurationModel(
         environment=uuid.UUID(environment),
         version=1,

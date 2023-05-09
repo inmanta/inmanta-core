@@ -72,7 +72,6 @@ else:
 
 
 class ResourceAction(object):
-
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: List["ResourceAction"]

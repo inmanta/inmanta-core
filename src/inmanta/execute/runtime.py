@@ -260,7 +260,7 @@ class DelayedResultVariable(ResultVariable[T]):
         raise NotImplementedError()
 
     def get_progress_potential(self) -> int:
-        """How many are actually waiting for us """
+        """How many are actually waiting for us"""
         return len(self.waiters)
 
 
@@ -268,7 +268,6 @@ ListValue = Union["Instance", List["Instance"]]
 
 
 class Promise(IPromise[ListValue]):
-
     __slots__ = ("provider", "owner")
 
     def __init__(self, owner: "ListVariable", provider: "Statement"):
@@ -373,7 +372,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         return self.get_waiting_providers() == 0
 
     def get_progress_potential(self) -> int:
-        """How many are actually waiting for us """
+        """How many are actually waiting for us"""
         return len(self.waiters) - len(self.listeners)
 
     def receive_result(self, value: ListValue, location: Location) -> None:
@@ -393,7 +392,6 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
 
 class TempListVariable(BaseListVariable):
-
     __slots__ = ()
 
     def set_promised_value(self, promis: Promise, value: ListValue, location: Location, recur: bool = True) -> None:
@@ -404,7 +402,6 @@ class TempListVariable(BaseListVariable):
 
 
 class ListVariable(BaseListVariable):
-
     value: "List[Instance]"
 
     __slots__ = ("attribute", "myself")
@@ -461,7 +458,6 @@ class ListVariable(BaseListVariable):
 
 
 class OptionVariable(DelayedResultVariable["Instance"]):
-
     __slots__ = ("attribute", "myself", "location")
 
     def __init__(self, attribute: "Attribute", instance: "Instance", queue: "QueueScheduler") -> None:
@@ -809,7 +805,6 @@ Typeorvalue = Union[Type, ResultVariable]
 
 
 class Resolver(object):
-
     __slots__ = ("namespace", "dataflow_graph")
 
     def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
@@ -846,7 +841,6 @@ class Resolver(object):
 
 
 class NamespaceResolver(Resolver):
-
     __slots__ = ("parent", "root")
 
     def __init__(self, parent: Resolver, lecial_root: Namespace) -> None:
@@ -869,7 +863,6 @@ class NamespaceResolver(Resolver):
 
 
 class ExecutionContext(Resolver):
-
     __slots__ = ("block", "slots", "resolver")
 
     def __init__(self, block: "BasicBlock", resolver: Resolver):
@@ -1041,9 +1034,8 @@ class Instance(ExecutionContext):
         print("------------ ")
         print(str(self))
         print("------------ ")
-        for (n, v) in self.slots.items():
+        for n, v in self.slots.items():
             if v.can_get():
-
                 value = v.value
                 print("%s\t\t%s" % (n, value))
             else:

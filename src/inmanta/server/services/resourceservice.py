@@ -784,7 +784,6 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
-
         details = await data.Resource.get_resource_details(env.id, rid)
         if not details:
             raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")

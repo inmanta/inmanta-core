@@ -628,7 +628,6 @@ class ModelExporter(object):
             )
 
         def convert_relation(relation: RelationAttribute) -> model.Relation:
-
             return model.Relation(
                 relation.type.get_full_name(),
                 (relation.low, relation.high),

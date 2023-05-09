@@ -194,7 +194,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
         assert func(await data.AgentInstance.get_by_id(agent_instances[0].id))
         assert func(await data.AgentInstance.get_by_id(agent_instances[1].id))
         assert func(await data.Agent.get_one(environment=agent.environment, name=agent.name))
-        for (environment, resource_version_id) in resource_ids:
+        for environment, resource_version_id in resource_ids:
             assert func(await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id))
         assert func(await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version))
         assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
@@ -364,7 +364,7 @@ async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    for (deprecated_option, new_option) in [
+    for deprecated_option, new_option in [
         (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL),
         (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME),
     ]:

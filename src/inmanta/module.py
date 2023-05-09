@@ -428,7 +428,6 @@ class ModuleRepoType(enum.Enum):
 
 @stable_api
 class ModuleRepoInfo(BaseModel):
-
     url: str
     type: ModuleRepoType = ModuleRepoType.git
 

@@ -58,7 +58,6 @@ def splice_extension_in(name: str) -> Generator[Any, Any, None]:
 
 def test_discover_and_load():
     with splice_extension_in("test_module_path"):
-
         config.server_enabled_extensions.set("testplugin")
 
         ibl = InmantaBootloader()

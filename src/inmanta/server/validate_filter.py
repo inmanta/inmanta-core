@@ -114,12 +114,12 @@ class Filter(ABC, BaseModel):
 
     @abstractmethod
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
-        """ Get the value of the filter with the correct query type """
+        """Get the value of the filter with the correct query type"""
         pass
 
 
 class BooleanEqualityFilter(Filter):
-    """ Represents a valid boolean which should be handled as an equality filter """
+    """Represents a valid boolean which should be handled as an equality filter"""
 
     field: Optional[bool]
     validate_field: classmethod = validator("field", pre=True, allow_reuse=True)(parse_single_value)
@@ -131,7 +131,7 @@ class BooleanEqualityFilter(Filter):
 
 
 class BooleanIsNotNullFilter(BooleanEqualityFilter, Filter):
-    """ Represents a valid boolean which should be handled as an IS_NOT_NULL filter """
+    """Represents a valid boolean which should be handled as an IS_NOT_NULL filter"""
 
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
         if self.field is not None:
@@ -140,7 +140,7 @@ class BooleanIsNotNullFilter(BooleanEqualityFilter, Filter):
 
 
 class DateRangeFilter(Filter):
-    """ Represents a valid date range constraint which should be handled as a range filter"""
+    """Represents a valid date range constraint which should be handled as a range filter"""
 
     field: Optional[DateRangeConstraint]
 
@@ -170,7 +170,7 @@ class IntRangeFilter(Filter):
 
 
 class ContainsPartialFilter(Filter):
-    """ Represents a valid string list constraint which should be handled as a partial containment filter"""
+    """Represents a valid string list constraint which should be handled as a partial containment filter"""
 
     field: Optional[List[str]]
 
@@ -181,7 +181,7 @@ class ContainsPartialFilter(Filter):
 
 
 class ContainsFilter(Filter):
-    """ Represents a valid string list constraint which should be handled as a containment filter"""
+    """Represents a valid string list constraint which should be handled as a containment filter"""
 
     field: Optional[List[str]]
 
@@ -192,7 +192,7 @@ class ContainsFilter(Filter):
 
 
 class ContainsFilterResourceState(Filter):
-    """ Represents a valid ReleasedResourceState list constraint which should be handled as a containment filter"""
+    """Represents a valid ReleasedResourceState list constraint which should be handled as a containment filter"""
 
     # Pydantic doesn't support Generic models on python 3.6
     field: Optional[List[ReleasedResourceState]]
@@ -204,7 +204,7 @@ class ContainsFilterResourceState(Filter):
 
 
 class ContainsFilterResourceAction(Filter):
-    """ Represents a valid ResourceAction list constraint which should be handled as a containment filter"""
+    """Represents a valid ResourceAction list constraint which should be handled as a containment filter"""
 
     # Pydantic doesn't support Generic models on python 3.6
     field: Optional[List[const.ResourceAction]]
@@ -216,7 +216,7 @@ class ContainsFilterResourceAction(Filter):
 
 
 class LogLevelFilter(Filter):
-    """ Represents a valid LogLevel constraint which is considered to be the minimal log level """
+    """Represents a valid LogLevel constraint which is considered to be the minimal log level"""
 
     field: Optional[const.LogLevel]
 
@@ -256,7 +256,7 @@ class FilterValidator(ABC):
     @property
     @abstractmethod
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
-        """ A dictionary that determines the mapping between the allowed filters and how they should be parsed and validated"""
+        """A dictionary that determines the mapping between the allowed filters and how they should be parsed and validated"""
         raise NotImplementedError()
 
     def process_filters(self, filter: Dict[str, List[str]]) -> Dict[str, QueryFilter]:

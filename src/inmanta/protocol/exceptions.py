@@ -131,7 +131,7 @@ class ServerError(BaseHttpException):
 
 
 class ShutdownInProgress(BaseHttpException):
-    """ This request can not be fulfilled because the server is going down """
+    """This request can not be fulfilled because the server is going down"""
 
     def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
         msg = "Can not complete this request as a shutdown is on progress"

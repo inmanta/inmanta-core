@@ -74,7 +74,6 @@ def condition_block_with_self(request):
         if mode % 2 == 0:
             var = f"self.{var}"
         if mode == 1 or mode == 2:
-
             return f"""
 implementation printt for A:
     std::print("true")

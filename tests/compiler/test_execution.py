@@ -344,7 +344,6 @@ a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
 
 
 def test_veryhardsequencing(snippetcompiler):
-
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:

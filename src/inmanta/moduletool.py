@@ -64,7 +64,7 @@ def set_yaml_order_preserving():
 
 
 class ModuleLikeTool(object):
-    """Shared code for modules and projects """
+    """Shared code for modules and projects"""
 
     def execute(self, cmd, args):
         """
@@ -391,7 +391,6 @@ version: 0.0.1dev0"""
         names = sorted(project.modules.keys())
         specs = project.collect_imported_requirements()
         for name in names:
-
             name_length = max(len(name), name_length)
             mod = Project.get().modules[name]
             version = str(mod.version)
