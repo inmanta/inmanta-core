@@ -18,10 +18,10 @@
 import inspect
 import json
 import re
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union, cast
 
+from pydantic.json_schema import JsonSchemaValue
 from pydantic.networks import AnyUrl
-from pydantic.schema import model_schema
 from pydantic.typing import NoneType
 from typing_inspect import get_args, get_origin, is_generic_type
 
@@ -48,6 +48,7 @@ from inmanta.protocol.openapi.model import (
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
+from pydantic_core import core_schema
 
 
 def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
@@ -146,6 +147,20 @@ class OpenApiConverter:
         """
 
         return template
+
+
+def model_schema(self, schema: core_schema.ModelSchema) -> JsonSchemaValue:
+    # We do not use schema['model'].model_json_schema() because it could lead to inconsistent refs handling, etc.
+    json_schema = self.generate_inner(schema["schema"])
+
+    cls = cast("type[BaseModel]", schema["cls"])
+    config = cls.model_config
+    title = config.get("title")
+    forbid_additional_properties = config.get("extra") == "forbid"
+    json_schema_extra = config.get("json_schema_extra")
+    json_schema = self._update_class_schema(json_schema, title, forbid_additional_properties, cls, json_schema_extra)
+
+    return json_schema
 
 
 class OpenApiTypeConverter:
