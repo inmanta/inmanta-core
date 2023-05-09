@@ -671,7 +671,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         async with self._queue_count_cache_lock:
             self._queue_count_cache += 1
         compile_obj: data.Compile = await data.Compile.get_by_id(compile_id)
-        await self._queue(compile_obj)
+        async with self._global_lock:
+            if compile_obj.environment not in self._recompiles:
+                await self.process_next_compile_in_queue(compile_obj.environment)
 
     @staticmethod
     def _compile_merge_key(c: data.Compile) -> Hashable:
@@ -700,17 +702,20 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     async def _dequeue(self, environment: uuid.UUID) -> None:
         async with self._global_lock:
-            if self.is_stopping():
-                return
-            env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
-            if env is None:
-                raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
-            nextrun = await data.Compile.get_next_run(environment)
-            if nextrun and not env.halted:
-                task = self.add_background_task(self._run(nextrun))
-                self._recompiles[environment] = task
-            else:
-                del self._recompiles[environment]
+            await self.process_next_compile_in_queue(environment)
+
+    async def process_next_compile_in_queue(self, environment: uuid.UUID) -> None:
+        if self.is_stopping():
+            return
+        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+        if env is None:
+            raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
+        nextrun = await data.Compile.get_next_run(environment)
+        if nextrun and not env.halted:
+            task = self.add_background_task(self._run(nextrun))
+            self._recompiles[environment] = task
+        else:
+            del self._recompiles[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:

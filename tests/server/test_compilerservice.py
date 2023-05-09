@@ -539,7 +539,7 @@ async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_b
                         remote_id=remote_id,
                         env_vars=env_vars,
                         connection=connection,
-                        in_db_transaction=True
+                        in_db_transaction=True,
                     )
                 assert compile_id is not None, warnings
             await compilerservice.notify_compile_request_committed(compile_id)
