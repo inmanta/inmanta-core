@@ -26,12 +26,12 @@ import uuid
 from collections import abc
 from dataclasses import dataclass
 from datetime import timezone
+from functools import lru_cache
 from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
-from pydantic.tools import lru_cache
 
 import build
 import build.env

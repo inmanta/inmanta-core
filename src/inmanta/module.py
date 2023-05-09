@@ -82,6 +82,7 @@ from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
+from typing_extensions import TypedDict
 
 try:
     from typing import TYPE_CHECKING
@@ -243,6 +244,19 @@ class ModuleV2InV1PathException(InvalidModuleException):
         super().__init__(msg)
         self.project: Optional[Project] = project
         self.module: ModuleV2 = module
+
+
+Loc = Tuple[Union[int, str], ...]
+
+
+class _ErrorDictRequired(TypedDict):
+    loc: Loc
+    msg: str
+    type: str
+
+
+class ErrorDict(_ErrorDictRequired, total=False):
+    ctx: Dict[str, Any]
 
 
 def display_errors(errors: List["ErrorDict"]) -> str:
