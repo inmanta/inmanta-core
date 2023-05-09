@@ -24,6 +24,7 @@ from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statem
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:
+
     from inmanta.execute.runtime import ExecutionContext
 
 

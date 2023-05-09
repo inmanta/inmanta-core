@@ -133,6 +133,7 @@ def cache(
         myargs = list(sig.parameters.keys())[1:]
 
         def wrapper(self, *args: object, **kwds: object) -> object:
+
             kwds.update(dict(zip(myargs, args)))
 
             def bound(**kwds):

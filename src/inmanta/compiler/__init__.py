@@ -190,6 +190,7 @@ class Compiler(object):
 
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
+
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(

@@ -102,6 +102,7 @@ class Attribute(object):
 
     @staticmethod
     def from_dict(ctx: JsonType) -> None:
+
         return Attribute(
             mytype=ctx["type"],
             nullable=ctx["nullable"],
@@ -116,7 +117,7 @@ class Attribute(object):
 
 
 class Value(object):
-    """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue`"""
+    """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
 
     @staticmethod
     def from_list(lst: List[JsonType]) -> List["Value"]:
@@ -162,6 +163,7 @@ class ReferenceValue(Value):
     """
 
     def __init__(self, reference):
+
         self.reference = reference
 
     def to_dict(self) -> JsonType:

@@ -796,6 +796,7 @@ class AgentManager(ServerSlice, SessionListener):
                 resource_id not in self._fact_resource_block_set
                 or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
             ):
+
                 agents = await data.ConfigurationModel.get_agents(env.id, version)
                 await self._autostarted_agent_manager._ensure_agents(env, agents)
 
@@ -828,6 +829,7 @@ class AgentManager(ServerSlice, SessionListener):
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "name.asc",
     ) -> ReturnValue[List[model.Agent]]:
+
         if limit is None:
             limit = APILIMIT
         elif limit > APILIMIT:

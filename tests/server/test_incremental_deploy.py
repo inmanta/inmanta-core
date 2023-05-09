@@ -135,6 +135,7 @@ class MultiVersionSetup(object):
         return rid
 
     async def setup_agent(self, server, environment):
+
         agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
         endpoints = list(self.results.keys())

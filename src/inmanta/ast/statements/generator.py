@@ -450,7 +450,7 @@ class Constructor(ExpressionStatement):
         mytype: "EntityLike" = self.namespace.get_type(self.class_type)
         self.type = mytype
 
-        for k, v in self.__attributes.items():
+        for (k, v) in self.__attributes.items():
             v.normalize()
 
         for wrapped_kwargs in self.wrapped_kwargs:
@@ -472,7 +472,7 @@ class Constructor(ExpressionStatement):
         if self.required_kwargs and not self.wrapped_kwargs:
             raise IndexAttributeMissingInConstructorException(self, self.type.get_entity(), self.required_kwargs)
 
-        for k, v in all_attributes.items():
+        for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
                 raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
@@ -503,7 +503,7 @@ class Constructor(ExpressionStatement):
         if graph is not None:
             node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
             # TODO: also add wrapped_kwargs
-            for k, v in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
+            for (k, v) in chain(self._direct_attributes.items(), self._indirect_attributes.items()):
                 node.assign_attribute(k, v.get_dataflow_node(graph), self, graph)
 
         return direct_requires
@@ -520,7 +520,7 @@ class Constructor(ExpressionStatement):
         # kwargs
         kwarg_attrs: Dict[str, object] = {}
         for kwargs in self.wrapped_kwargs:
-            for k, v in kwargs.execute(requires, resolver, queue):
+            for (k, v) in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
                     raise RuntimeException(
                         self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)

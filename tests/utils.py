@@ -81,7 +81,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
             minimal = sorted(minimal, key=keyfunc)
             actual = sorted(actual, key=keyfunc)
-        for m, a in zip(minimal, actual):
+        for (m, a) in zip(minimal, actual):
             assert_equal_ish(m, a, sortby)
     elif minimal is UNKWN:
         return

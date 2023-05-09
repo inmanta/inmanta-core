@@ -149,7 +149,7 @@ class Scheduler(object):
             k for k in [t.register_types() for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None
         ]
 
-        for name, type_symbol in newtypes:
+        for (name, type_symbol) in newtypes:
             types_and_impl[name] = type_symbol
 
         # now that we have objects for all types, populate them

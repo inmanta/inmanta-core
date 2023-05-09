@@ -67,6 +67,7 @@ t = Test1()
 
 
 def test_issue_134_colliding_umplementations(snippetcompiler):
+
     snippetcompiler.setup_for_snippet(
         """
 implementation test for std::Entity:
@@ -121,6 +122,7 @@ def test_400_typeloops_2(snippetcompiler):
 
 
 def test_438_parent_scopes_accessible(snippetcompiler):
+
     snippetcompiler.setup_for_snippet(
         """
 entity Host:
@@ -158,6 +160,7 @@ Host(name="bar")
 
 
 def test_438_parent_scopes_accessible_2(snippetcompiler):
+
     snippetcompiler.setup_for_snippet(
         """
 entity Host:

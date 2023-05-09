@@ -293,7 +293,7 @@ async def test_pause_agent(server, cli):
         assert result.exit_code == 0
         output = result.stdout.replace(" ", "")
         assert "Agent|Environment|Paused" in output
-        for agent_name, paused in expected_records.items():
+        for (agent_name, paused) in expected_records.items():
             assert f"{agent_name}|{env_id}|{paused}" in output
 
     await assert_agent_paused(env_id=env1.id, expected_records=dict(agent1=False, agent2=False))

@@ -265,6 +265,7 @@ def test_get_or_else(my_resource):
     called = []
 
     def creator(param, resource, version):
+
         called.append("x")
         return param
 

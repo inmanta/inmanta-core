@@ -74,6 +74,7 @@ class CreateList(ReferenceStatement):
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
     ) -> typing.Dict[object, ResultVariable]:
+
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
 
@@ -261,6 +262,7 @@ class GradualSetAttributeHelper(ResultCollector[T]):
 
 
 class SetAttributeHelper(ExecutionUnit):
+
     __slots__ = ("stmt", "instance", "attribute_name")
 
     def __init__(
