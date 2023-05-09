@@ -30,8 +30,7 @@ requires = [
     "texttable",
     "tornado",
     "typing_inspect",
-    "virtualenv<20.22.0"
-
+    "virtualenv<20.22.0",
 ]
 
 
