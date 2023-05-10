@@ -27,7 +27,7 @@ tornado==6.3.1
 toml==0.10.2
 typing_inspect==0.8.0
 build==0.10.0
-ruamel.yaml==0.17.24
+ruamel.yaml==0.17.26
 
 # Optional import in code
 graphviz==0.20.1
