@@ -36,6 +36,7 @@ from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Seq
 import dateutil
 import dateutil.parser
 import pydantic
+from asyncpg import Connection
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
@@ -596,18 +597,27 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         exporter_plugin: Optional[str] = None,
         notify_failed_compile: Optional[bool] = None,
         failed_compile_message: Optional[str] = None,
+        in_db_transaction: bool = False,
+        connection: Optional[Connection] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
         :param notify_failed_compile: if set to True, errors during compilation will be notified using the
-        "failed_compile_message".
-        if set to false, nothing will be notified. If not set then the default notifications are
-        sent (failed pull stage and errors during the do_export)
+                                      "failed_compile_message".
+                                      if set to false, nothing will be notified. If not set then the default notifications are
+                                      sent (failed pull stage and errors during the do_export)
         :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
+        :param connection: Perform the database changes using this database connection.
+        :param in_db_transaction: If set to True, the connection must be provided and the connection must be part of an ongoing
+                                  database transaction. If this parameter is set to True, is required to call
+                                  `CompileService.notify_compile_request_committed()` right after the transaction commits.
         :return: the compile id of the requested compile and any warnings produced during the request
-
         """
+        if in_db_transaction and not connection:
+            raise Exception("A connection should be provided when in_db_transaction is True.")
+        if in_db_transaction and connection and not connection.is_in_transaction():
+            raise Exception("in_db_transaction is True, but the given connection is not executing a transaction.")
         if removed_resource_sets is None:
             removed_resource_sets = []
         if metadata is None:
@@ -636,11 +646,34 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
         )
-        async with self._queue_count_cache_lock:
-            await compile.insert()
-            self._queue_count_cache += 1
-        await self._queue(compile)
+        if not in_db_transaction:
+            async with self._queue_count_cache_lock:
+                await compile.insert(connection)
+                self._queue_count_cache += 1
+            await self._queue(compile)
+        else:
+            # We are running inside a transaction. The changes will only be applied after the transaction commits.
+            # We cannot increment the queue count yet or schedule the requested compile for execution. This will be
+            # done when the notify_compile_request_committed() method is invoked.
+            await compile.insert(connection)
+
         return compile.id, None
+
+    async def notify_compile_request_committed(self, compile_id: uuid.UUID) -> None:
+        """
+        This method must be called when the `request_recompile()` method was called with in_db_transaction=True. It must be
+        called right after the transaction committed. If the transaction was aborted, this method most not be called.
+
+        This method is safe with respect to server restarts. If the server restarts after the transaction was committed,
+        but before this method was invoked, the server will automatically recover from this and run the requested compile
+        without any need to call this method.
+        """
+        async with self._queue_count_cache_lock:
+            self._queue_count_cache += 1
+        compile_obj: data.Compile = await data.Compile.get_by_id(compile_id)
+        async with self._global_lock:
+            if compile_obj.environment not in self._recompiles:
+                await self.process_next_compile_in_queue(compile_obj.environment)
 
     @staticmethod
     def _compile_merge_key(c: data.Compile) -> Hashable:
@@ -669,17 +702,20 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     async def _dequeue(self, environment: uuid.UUID) -> None:
         async with self._global_lock:
-            if self.is_stopping():
-                return
-            env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
-            if env is None:
-                raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
-            nextrun = await data.Compile.get_next_run(environment)
-            if nextrun and not env.halted:
-                task = self.add_background_task(self._run(nextrun))
-                self._recompiles[environment] = task
-            else:
-                del self._recompiles[environment]
+            await self.process_next_compile_in_queue(environment)
+
+    async def process_next_compile_in_queue(self, environment: uuid.UUID) -> None:
+        if self.is_stopping():
+            return
+        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+        if env is None:
+            raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
+        nextrun = await data.Compile.get_next_run(environment)
+        if nextrun and not env.halted:
+            task = self.add_background_task(self._run(nextrun))
+            self._recompiles[environment] = task
+        else:
+            del self._recompiles[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
