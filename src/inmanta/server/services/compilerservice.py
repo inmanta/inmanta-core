@@ -668,9 +668,11 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         but before this method was invoked, the server will automatically recover from this and run the requested compile
         without any need to call this method.
         """
+        compile_obj: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+        if not compile_obj:
+            raise Exception(f"Compile with id {compile_id} not found.")
         async with self._queue_count_cache_lock:
             self._queue_count_cache += 1
-        compile_obj: data.Compile = await data.Compile.get_by_id(compile_id)
         async with self._global_lock:
             if compile_obj.environment not in self._recompiles:
                 await self.process_next_compile_in_queue(compile_obj.environment)
