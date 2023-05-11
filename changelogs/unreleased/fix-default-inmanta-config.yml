@@ -1,0 +1,6 @@
+description: Enable the web console in the default inmanta config shipped with the product.
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
