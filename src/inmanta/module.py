@@ -66,7 +66,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, field_validator, validator
+from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, field_validator, root_validator, validator
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -88,7 +88,6 @@ try:
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1284,13 +1283,13 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
-    deprecated: Optional[bool]
+    deprecated: Optional[bool] = None
 
     @classmethod
     @field_validator("version")
-    def is_pep440_version(cls, v: float) -> str:
+    def is_pep440_version(cls, v: str) -> str:
         try:
-            version.Version(str(v))
+            version.Version(v)
         except version.InvalidVersion as e:
             raise ValueError(f"Version {v} is not PEP440 compliant") from e
         return v
@@ -1370,6 +1369,13 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     compiler_version: Optional[str] = None
 
     _raw_parser: Type[YamlParser] = YamlParser
+
+    @classmethod
+    @root_validator(pre=True, skip_on_failure=True)
+    def cast_version_to_string(cls, v: object) -> str:
+        if "compiler_version" in v:
+            v["compiler_version"] = str(v["compiler_version"])
+        return v
 
     @classmethod
     @field_validator("compiler_version")
