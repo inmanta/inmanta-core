@@ -21,7 +21,7 @@ from typing import Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import dateutil
 import more_itertools
-from pydantic import BaseModel, ValidationError, validator
+from pydantic import BaseModel, ValidationError, validator, field_validator
 
 from inmanta import const
 from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeConstraint, RangeOperator
@@ -109,7 +109,7 @@ class BooleanEqualityFilter(Filter):
 
     field: Optional[bool]
 
-    @validator("field", pre=True, allow_reuse=True)
+    @field_validator("field", mode="before")
     def validate_field(cls, v):
         """
         Transform list values to their single element value.
@@ -143,8 +143,8 @@ class DateRangeFilter(Filter):
 
     field: Optional[DateRangeConstraint]
 
-    @validator("field", pre=True)
     @classmethod
+    @field_validator("field", mode="before")
     def parse_requested(cls, v: object) -> Optional[List[Tuple[RangeOperator, datetime.datetime]]]:
         return get_range_operator_parser(parse_range_value_to_date)(v)
 
@@ -157,8 +157,8 @@ class DateRangeFilter(Filter):
 class IntRangeFilter(Filter):
     field: Optional[RangeConstraint]
 
-    @validator("field", pre=True)
     @classmethod
+    @field_validator("field",mode="before")
     def parse_field(cls, v: object) -> Optional[List[Tuple[RangeOperator, int]]]:
         return get_range_operator_parser(parse_range_value_to_int)(v)
 
@@ -196,8 +196,8 @@ class CombinedContainsFilterResourceState(Filter):
 
     field: Optional[Dict[QueryType, List[ReleasedResourceState]]]
 
-    @validator("field", pre=True)
     @classmethod
+    @field_validator("field", mode="before")
     def parse_field(cls, v: object) -> Optional[Dict[QueryType, ReleasedResourceState]]:
         if v is None:
             return None
@@ -242,8 +242,8 @@ class LogLevelFilter(Filter):
 
     field: Optional[const.LogLevel]
 
-    @validator("field", pre=True)
     @classmethod
+    @field_validator("field", mode="before")
     def _field_single(cls, v: object) -> object:
         """
         Transform a list to a single log level

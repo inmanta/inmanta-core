@@ -115,7 +115,7 @@ class Error(BaseModel):
         Location where this error occurred.
     """
 
-    class Config:
-        # allow additional fields to be set for exception types that require it
-        extra = pydantic.Extra.allow
-        validate_assignment = True
+    model_config = {
+        "extra": pydantic.Extra.allow,         # allow additional fields to be set for exception types that require it
+        "validate_assignment": True,
+    }

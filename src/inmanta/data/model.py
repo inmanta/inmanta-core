@@ -22,7 +22,7 @@ from itertools import chain
 from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic.schema
-from pydantic import Extra, StrictBool, root_validator, validator
+from pydantic import Extra, StrictBool, root_validator, validator, field_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -194,8 +194,8 @@ class AttributeStateChange(BaseModel):
     current: Optional[Any] = None
     desired: Optional[Any] = None
 
-    @validator("current", "desired")
     @classmethod
+    @field_validator("current", "desired")
     def check_serializable(cls, v: Optional[Any]) -> Optional[Any]:
         """
         Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
@@ -291,16 +291,16 @@ class ResourceMinimal(BaseModel):
     """
 
     id: ResourceVersionIdStr
+    model_config = {
+        "extra": "allow",
+    }
 
     @classmethod
-    @validator("id")
+    @field_validator("id")
     def id_is_resource_version_id(cls, v):
         if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
-
-    class Config:
-        extra = Extra.allow
 
 
 class Resource(BaseModel):
@@ -704,8 +704,8 @@ class UnmanagedResource(BaseModel):
     unmanaged_resource_id: ResourceIdStr
     values: JsonType
 
-    @validator("unmanaged_resource_id")
     @classmethod
+    @field_validator("unmanaged_resource_id")
     def unmanaged_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
         if resources.Id.is_resource_id(v):
             return v
