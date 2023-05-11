@@ -66,8 +66,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, field_validator, root_validator, validator
-
+from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, field_validator, root_validator
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -1371,24 +1370,14 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     _raw_parser: Type[YamlParser] = YamlParser
 
-<<<<<<< HEAD
     @classmethod
-    @root_validator(pre=True, skip_on_failure=True)
-    def cast_version_to_string(cls, v: object) -> str:
-        if "compiler_version" in v:
-            v["compiler_version"] = str(v["compiler_version"])
-        return v
-
-    @classmethod
-=======
     @root_validator(pre=True, skip_on_failure=True)
     def convert_compiler_version(cls, values):
-        pw1 = values.get('compiler_version')
-        values['compiler_version'] = str(pw1)
+        pw1 = values.get("compiler_version")
+        values["compiler_version"] = str(pw1)
         return values
 
     @classmethod
->>>>>>> d52f4f47 ([WIP])
     @field_validator("compiler_version")
     def is_pep440_version_v1(cls, v: str) -> str:
         return cls.is_pep440_version(v)

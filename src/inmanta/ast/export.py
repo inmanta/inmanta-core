@@ -116,6 +116,6 @@ class Error(BaseModel):
     """
 
     model_config = {
-        "extra": pydantic.Extra.allow,         # allow additional fields to be set for exception types that require it
+        "extra": pydantic.Extra.allow,  # allow additional fields to be set for exception types that require it
         "validate_assignment": True,
     }

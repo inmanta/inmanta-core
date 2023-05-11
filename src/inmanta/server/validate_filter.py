@@ -21,7 +21,7 @@ from typing import Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import dateutil
 import more_itertools
-from pydantic import BaseModel, ValidationError, validator, field_validator
+from pydantic import BaseModel, ValidationError, field_validator
 
 from inmanta import const
 from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeConstraint, RangeOperator
@@ -158,7 +158,7 @@ class IntRangeFilter(Filter):
     field: Optional[RangeConstraint]
 
     @classmethod
-    @field_validator("field",mode="before")
+    @field_validator("field", mode="before")
     def parse_field(cls, v: object) -> Optional[List[Tuple[RangeOperator, int]]]:
         return get_range_operator_parser(parse_range_value_to_int)(v)
 

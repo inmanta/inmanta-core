@@ -22,7 +22,7 @@ from itertools import chain
 from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic.schema
-from pydantic import Extra, StrictBool, root_validator, validator, field_validator
+from pydantic import StrictBool, field_validator, root_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
