@@ -1370,7 +1370,6 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     _raw_parser: Type[YamlParser] = YamlParser
 
-    @classmethod
     @root_validator(pre=True, skip_on_failure=True)
     def convert_compiler_version(cls, values):
         pw1 = values.get("compiler_version")

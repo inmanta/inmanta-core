@@ -473,9 +473,10 @@ class PythonEnvironment:
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
     ) -> None:
+        filtered = list(filter(lambda r: r.key != "pydantic", requirements))
         cmd: List[str] = PipCommandBuilder.compose_install_command(
             python_path=python_path,
-            requirements=requirements,
+            requirements=filtered,
             paths=paths,
             index_urls=index_urls,
             upgrade=upgrade,
@@ -906,6 +907,7 @@ class ActiveEnv(PythonEnvironment):
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
         in that order.
         """
+        filtered = list(filter(lambda r: r.key != "pydantic", constraints))
 
         class OwnedRequirement(NamedTuple):
             requirement: Requirement
@@ -924,7 +926,7 @@ class ActiveEnv(PythonEnvironment):
             OwnedRequirement(r, owner="inmanta-core") for r in cls._get_requirements_on_inmanta_package()
         )
         extra_constraints: abc.Set[OwnedRequirement] = frozenset(
-            (OwnedRequirement(r) for r in constraints) if constraints is not None else []
+            (OwnedRequirement(r) for r in filtered) if filtered is not None else []
         )
 
         all_constraints: abc.Set[OwnedRequirement] = installed_constraints | inmanta_constraints | extra_constraints
