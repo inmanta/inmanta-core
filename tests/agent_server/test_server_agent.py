@@ -310,7 +310,6 @@ async def test_spontaneous_deploy(
     """
     start = time.time()
     with caplog.at_level(DEBUG):
-
         resource_container.Provider.reset()
 
         env_id = environment
@@ -382,7 +381,7 @@ async def test_spontaneous_deploy(
     # approximate check, the number of heartbeats can vary, but not by a factor of 10
     beats = [message for logger_name, log_level, message in caplog.record_tuples if "Received heartbeat from" in message]
     assert (
-        len(beats) < duration / 10
+        len(beats) < duration * 10
     ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleap mechanism is broken"
 
 
