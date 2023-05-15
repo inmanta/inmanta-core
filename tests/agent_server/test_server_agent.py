@@ -21,6 +21,7 @@ import time
 import uuid
 from functools import partial
 from itertools import groupby
+from logging import DEBUG
 from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
@@ -302,76 +303,86 @@ async def test_server_restart(
 
 
 async def test_spontaneous_deploy(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer
+    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer, caplog
 ):
     """
     dryrun and deploy a configuration model
     """
-    resource_container.Provider.reset()
+    start = time.time()
+    with caplog.at_level(DEBUG):
+        resource_container.Provider.reset()
 
-    env_id = environment
+        env_id = environment
 
-    Config.set("config", "agent-deploy-interval", "2")
-    Config.set("config", "agent-deploy-splay-time", "2")
-    Config.set("config", "agent-repair-interval", "0")
+        Config.set("config", "agent-deploy-interval", "2")
+        Config.set("config", "agent-deploy-splay-time", "2")
+        Config.set("config", "agent-repair-interval", "0")
 
-    agent = await get_agent(server, environment, "agent1", "node1")
-    async_finalizer(agent.stop)
+        agent = await get_agent(server, environment, "agent1", "node1")
+        async_finalizer(agent.stop)
 
-    resource_container.Provider.set("agent1", "key2", "incorrect_value")
-    resource_container.Provider.set("agent1", "key3", "value")
+        resource_container.Provider.set("agent1", "key2", "incorrect_value")
+        resource_container.Provider.set("agent1", "key3", "value")
 
-    version = await clienthelper.get_version()
+        version = await clienthelper.get_version()
 
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "purged": False,
-            "send_event": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "requires": [],
-            "purged": False,
-            "send_event": False,
-        },
-        {
-            "key": "key3",
-            "value": None,
-            "id": "test::Resource[agent1,key=key3],v=%d" % version,
-            "requires": [],
-            "purged": True,
-            "send_event": False,
-        },
-    ]
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "purged": False,
+                "send_event": False,
+                "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key2],v=%d" % version,
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+            },
+            {
+                "key": "key3",
+                "value": None,
+                "id": "test::Resource[agent1,key=key3],v=%d" % version,
+                "requires": [],
+                "purged": True,
+                "send_event": False,
+            },
+        ]
 
-    await clienthelper.put_version_simple(resources, version)
+        await clienthelper.put_version_simple(resources, version)
 
-    # do a deploy
-    result = await client.release_version(env_id, version, False)
-    assert result.code == 200
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 3
-    assert result.result["model"]["result"] == "deploying"
+        # do a deploy
+        result = await client.release_version(env_id, version, False)
+        assert result.code == 200
+        assert not result.result["model"]["deployed"]
+        assert result.result["model"]["released"]
+        assert result.result["model"]["total"] == 3
+        assert result.result["model"]["result"] == "deploying"
 
-    result = await client.get_version(env_id, version)
-    assert result.code == 200
+        result = await client.get_version(env_id, version)
+        assert result.code == 200
 
-    await _wait_until_deployment_finishes(client, env_id, version)
+        await _wait_until_deployment_finishes(client, env_id, version)
 
-    result = await client.get_version(env_id, version)
-    assert result.result["model"]["done"] == len(resources)
+        result = await client.get_version(env_id, version)
+        assert result.result["model"]["done"] == len(resources)
 
-    assert resource_container.Provider.isset("agent1", "key1")
-    assert resource_container.Provider.get("agent1", "key1") == "value1"
-    assert resource_container.Provider.get("agent1", "key2") == "value2"
-    assert not resource_container.Provider.isset("agent1", "key3")
+        assert resource_container.Provider.isset("agent1", "key1")
+        assert resource_container.Provider.get("agent1", "key1") == "value1"
+        assert resource_container.Provider.get("agent1", "key2") == "value2"
+        assert not resource_container.Provider.isset("agent1", "key3")
+
+    duration = time.time() - start
+
+    # approximate check, the number of heartbeats can vary, but not by a factor of 10
+    beats = [message for logger_name, log_level, message in caplog.record_tuples if "Received heartbeat from" in message]
+    assert (
+        len(beats) < duration * 10
+    ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
 async def test_spontaneous_repair(
