@@ -382,7 +382,7 @@ async def test_spontaneous_deploy(
     beats = [message for logger_name, log_level, message in caplog.record_tuples if "Received heartbeat from" in message]
     assert (
         len(beats) < duration * 10
-    ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleap mechanism is broken"
+    ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
 async def test_spontaneous_repair(
