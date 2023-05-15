@@ -89,6 +89,7 @@ def test_phase_1(caplog):
         assert "testplugin" in all
         assert all["testplugin"] == inmanta_ext.testplugin.extension
 
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Loading extensions: inmanta_ext.testplugin")
         log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 
 
