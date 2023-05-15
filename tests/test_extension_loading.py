@@ -93,7 +93,7 @@ def test_phase_1(caplog):
             caplog,
             "inmanta.server.bootloader",
             logging.INFO,
-            "Enabled extensions: inmanta_ext.testplugin, inmanta_ext.noext, inmanta_ext.core"
+            "Enabled extensions: inmanta_ext.testplugin, inmanta_ext.noext, inmanta_ext.core",
         )
         log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 
