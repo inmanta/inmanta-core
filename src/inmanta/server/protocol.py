@@ -502,8 +502,10 @@ class Session(object):
             if no_hang:
                 timeout = 0.1
             else:
-                timeout = self._interval
-
+                timeout = self._interval if self._interval > 0.1 else 0.1
+                # We choose to have a minimum of 0.1 as timeout as this is also the value used for no_hang.
+                # Furthermore, the timeout value cannot be zero as this causes an issue with Tornado:
+                # https://github.com/tornadoweb/tornado/issues/3271
             call = await self._queue.get(timeout=timedelta(seconds=timeout))
             if call is None:
                 # aborting session

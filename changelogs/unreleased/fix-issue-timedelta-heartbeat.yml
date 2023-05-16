@@ -1,0 +1,3 @@
+description: Fixed issue with timedelta in heartbeat timer
+change-type: patch
+destination-branches: [master, iso6]
