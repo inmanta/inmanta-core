@@ -187,7 +187,9 @@ class InmantaBootloader(object):
     def _load_extensions(self, load_all_extensions: bool = False) -> Dict[str, ModuleType]:
         """Discover all extensions, validate correct naming and load its setup function"""
         plugins: Dict[str, ModuleType] = {}
-        for name in self._discover_plugin_packages(load_all_extensions):
+        enabled_extensions: List[str] = self._discover_plugin_packages(load_all_extensions)
+        LOGGER.info("Enabled extensions: %s", ", ".join(enabled_extensions))
+        for name in enabled_extensions:
             try:
                 module = self._load_extension(name)
                 assert name.startswith(f"{EXTENSION_NAMESPACE}.")
