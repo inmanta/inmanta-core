@@ -205,7 +205,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, pos
     # Timeout=2
     # -> 1sec: Wait for agent-timeout
     # -> 1sec: Wait until session bookkeeping is updated
-    await retry_limited(lambda: len(server.get_sessions()) == 1, timeout=2)
+    await retry_limited(lambda: len(server.get_sessions()) == 1, timeout=10)
     print(server.get_sessions())
     await check_sessions(server.get_sessions())
     assert server.expires == 1

@@ -504,7 +504,7 @@ class Session(object):
             else:
                 timeout = self._interval
 
-            call = await self._queue.get(timeout=timedelta(seconds=timeout))
+            call = await self._queue.get(timeout=timedelta(seconds=timeout, microseconds=1))
             if call is None:
                 # aborting session
                 return None
