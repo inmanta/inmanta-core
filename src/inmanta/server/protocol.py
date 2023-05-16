@@ -503,7 +503,8 @@ class Session(object):
                 timeout = 0.1
             else:
                 timeout = self._interval if self._interval > 0.1 else 0.1
-                # timeout should always been at least 0.1, this to work around an issue with Tornado:
+                # We choose to have a minimum of 0.1 as timeout as this is also the value used for no_hang.
+                # Furthermore, the timeout value cannot be zero as this causes an issue with Tornado:
                 # https://github.com/tornadoweb/tornado/issues/3271
             call = await self._queue.get(timeout=timedelta(seconds=timeout))
             if call is None:
