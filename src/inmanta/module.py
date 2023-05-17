@@ -1616,7 +1616,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
     strict_deps_check: bool = True
     agent_install_dependency_modules: bool = False
-    pip: ProjectPipConfig = ProjectPipConfig()
+    pip: ProjectPipConfig
 
     @validator("modulepath", pre=True)
     @classmethod
