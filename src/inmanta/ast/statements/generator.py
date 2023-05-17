@@ -48,6 +48,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import (
     AttributeAssignmentLHS,
     ExpressionStatement,
+    Literal,
     RawResumer,
     RequiresEmitStatement,
     StaticEagerPromise,
@@ -382,6 +383,11 @@ class ListComprehension(RawResumer, ExpressionStatement):
     # TODO
 
 
+# TODO: is there a better way?
+# TODO: docstring
+LIST_COMPREHENSION_GUARDED = object()
+
+
 # TODO: implement Locatable interface?
 # TODO: normal Resumer would be simpler?
 class ListComprehensionCollector(RawResumer, ResultCollector[object]):
@@ -411,7 +417,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         # TODO: get rid of
         self.final_result: ResultVariable = ResultVariable()
 
-    # TODO: docstring chain
+    # TODO: docstring chain: introduces artificial requires needed for ordering in case of non-gradual iterable
     def receive_result(self, value: object, location: Location, *, chain: bool = False) -> bool:
         # TODO: raise exception if already complete
         # TODO: keep track of seen to avoid duplicate work? Be careful not to introduce the same bug as with the for loop
@@ -429,18 +435,31 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         result_variable: ResultVariable = ResultVariable()
         self.results.append(result_variable)
 
-        # execute the value expression
+        # execute the value expression and the guard
+        guarded_expression: ExpressionStatement
+        if self.statement.guard is None:
+            guarded_expression = self.statement.value_expression
+        else:
+            else_expression: ExpressionStatement = Literal(LIST_COMPREHENSION_GUARDED)
+            guarded_expression = ConditionalExpression(
+                condition=self.statement.guard,
+                if_expression=self.statement.value_expression,
+                else_expression=Literal(LIST_COMPREHENSION_GUARDED),
+            )
+            self.statement.copy_location(else_expression)
+            self.statement.copy_location(guarded_expression)
+
         requires: dict[object, VariableABC] = (
-            self.statement.value_expression.requires_emit(value_resolver, self.queue)
+            guarded_expression.requires_emit(value_resolver, self.queue)
             if self.lhs is None
-            else self.statement.value_expression.requires_emit_gradual(value_resolver, self.queue, self.lhs)
+            else guarded_expression.requires_emit_gradual(value_resolver, self.queue, self.lhs)
         )
         ExecutionUnit(
             self.queue,
             value_resolver,
             result_variable,
             requires | ({self: additional_requires} if additional_requires is not None else {}),
-            self.statement.value_expression,
+            guarded_expression,
         )
 
         return False
@@ -464,12 +483,15 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         RawUnit(queue, resolver, dict(enumerate(self.results)), resumer=self)
 
     def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
-        def get(variable: VariableABC) -> abc.Sequence[object]:
+        def get(variable: VariableABC) -> Optional[abc.Sequence[object]]:
             value: object = variable.get_value()
-            return value if isinstance(value, list) else [value]
+            return None if value is LIST_COMPREHENSION_GUARDED else value if isinstance(value, list) else [value]
 
         self.final_result.set_value(
-            list(itertools.chain.from_iterable(get(variable) for variable in requires.values())), self.statement.location
+            list(
+                itertools.chain.from_iterable(value for variable in requires.values() if (value := get(variable)) is not None)
+            ),
+            self.statement.location,
         )
 
 
@@ -565,6 +587,7 @@ class ConditionalExpression(ExpressionStatement):
     def requires(self) -> List[str]:
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
+    # TODO: add gradual support
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
 

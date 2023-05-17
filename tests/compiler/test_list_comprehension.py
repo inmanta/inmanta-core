@@ -92,7 +92,6 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-@pytest.mark.xfail(strict=True)
 def test_list_comprehension_guards(snippetcompiler) -> None:
     """
     Verify the functionality of guards within a list comprehension.
@@ -110,10 +109,9 @@ def test_list_comprehension_guards(snippetcompiler) -> None:
             # single guard
             l1 = [x for x in base if x > gt]
             # multiple guards
-            l2 = ["x={{x}}" for x in base if x > gt if x < lt if true and true]
+            l2 = ["x={{x}}" for x in base if x > gt if x < lt if true and true if true or true]
             # nested expressions
             l3 = [y for y in [x for x in base if x > gt] if y < lt]
-            l3 = [[x for x in y if x > gt] for y in base if y < lt]
             l4 = [
                 "{{x}}={{y}}"
                 for x in base
@@ -135,7 +133,6 @@ def test_list_comprehension_guards(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-# TODO: with guard that needs waiting for
 def test_list_comprehension_order(snippetcompiler) -> None:
     """
     Verify that the list comprehension expression preserves order on primitive lists.
@@ -152,9 +149,12 @@ def test_list_comprehension_order(snippetcompiler) -> None:
             default = true ? std::count(a.others) : "unreachable"
             a = A()
 
-            l = [chained for chained in [x > 2 ? x : default for x in [1, 2, 3, 4, 5]]]
+            l1 = [chained for chained in [x > 2 ? x : default for x in [1, 2, 3, 4, 5]]]
             # a naive implementation could result in [3, 4, 5, 0, 0] because the zeros need to be waited on
-            l = [0, 0, 3, 4, 5]
+            l1 = [0, 0, 3, 4, 5]
+
+            # with a guard
+            l1 = [chained for chained in [x > 2 ? x : default for x in [-1, 0, 1, 2, 3, 4, 5] if x > default]]
             """.strip(
                 "\n"
             )
@@ -398,7 +398,6 @@ def test_list_comprehension_gradual_mixed(snippetcompiler) -> None:
 
 
 # TODO: tests for error scenarios
-# TODO: test for shadowing + guard
 # TODO: test with Unknowns: in list / list itself is unknown
 # TODO: test with null values in list
 # TODO: as = [[a, a] for x in xs] where a = [1,2,3]

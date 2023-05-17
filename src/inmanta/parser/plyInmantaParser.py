@@ -780,8 +780,9 @@ def p_list_comprehension(p: YaccProduction) -> None:
 
     # for-specifiers in reverse order
     loops: abc.Sequence[ForSpecifier] = p[3]
-    loops[-1].guard = p[4]
-    # `[z for y in x.y for z in y.z]` is syntactic sugar for `[[z for z in y.z] for y in x.y]`, loops = [(z, y.z), (y, x.y)]
+    loops[0].guard = p[4]
+    # `[z for y in x.y for z in y.z if y > 0 if z > 0]` is syntactic sugar for
+    # `[[z for z in y.z if y > 0 and z > 0] for y in x.y]`, loops = [(z, y.z), (y, x.y)]
     p[0] = functools.reduce(
         lambda acc, for_spec: create_list_comprehension(value_expression=acc, for_specifier=for_spec),
         loops,
