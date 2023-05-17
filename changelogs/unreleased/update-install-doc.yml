@@ -1,0 +1,6 @@
+---
+description: Mention in the server installation documentation which extensions need to be enabled.
+change-type: patch
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"
