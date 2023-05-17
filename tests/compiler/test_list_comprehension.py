@@ -34,11 +34,13 @@ def test_list_comprehension_basic(snippetcompiler) -> None:
             l1 = [x for x in base]
             l2 = ["x={{x}}" for x in base]
             l3 = [x > 2 ? x : 0 for x in base]
+            l4 = [1 for _ in base]
 
             # assertions
             l1 = base
             l2 = ["x=1", "x=2", "x=3", "x=4", "x=5"]
             l3 = [0, 0, 3, 4, 5]
+            l4 = [1, 1, 1, 1, 1]
             """.strip(
                 "\n"
             )
@@ -81,9 +83,13 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
             # equivalent with even more name shadowing
             l2 = [a.n for a in a.b for a in a.c]
 
+            # cross-product with same name for both loop vars (bad practice but valid)
+            l3 = [x for x in base1 for x in base2]
+
             # assertions
             l1 = ["1-10", "1-20", "2-10", "2-20"]
             l2 = [1, 2, 3]  # specific order doesn't matter but it should be consistent
+            l3 = [10, 20, 10, 20]
             """.strip(
                 "\n"
             )
@@ -119,12 +125,20 @@ def test_list_comprehension_guards(snippetcompiler) -> None:
                 if x == 3
                 if y == 5
             ]
+            # cross-product with same name for both loop vars (bad practice but valid)
+            l5 = [
+                x
+                for x in base
+                for x in base
+                if x > 3
+            ]
 
             # assertions
             l1 = [3, 4, 5]
             l2 = ["x=3", "x=4"]
             l3 = [3, 4]
             l4 = ["3=5"]
+            l5 = [4, 5, 4, 5, 4, 5, 4, 5, 4, 5]
             """.strip(
                 "\n"
             )
@@ -397,7 +411,34 @@ def test_list_comprehension_gradual_mixed(snippetcompiler) -> None:
     compiler.do_compile()
 
 
+def test_list_comprehension_duplicate_values(snippetcompiler) -> None:
+    """
+    Verify behavior of list comprehensions when the iterable contains duplicate values.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            l = [1, 2, 3]
+
+            twice = [l, l]
+            twice = [x for x in [l, l]]
+            nested = [[l, l] for x in [l, l]]
+
+            # assertions
+
+            twice_count = 6
+            twice_count = std::count(twice)
+
+            nested_count = 36
+            nested_count = std::count(nested)
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
 # TODO: tests for error scenarios
 # TODO: test with Unknowns: in list / list itself is unknown
 # TODO: test with null values in list
-# TODO: as = [[a, a] for x in xs] where a = [1,2,3]
