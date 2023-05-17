@@ -50,11 +50,10 @@ from inmanta.server import (
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
-from inmanta.server.services.compilerservice import CompilerService
+from inmanta.server.services import compilerservice
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
-from inmanta.util import get_compiler_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -147,9 +146,14 @@ class EnvironmentService(protocol.ServerSlice):
         self.server_slice = cast(Server, server.get_slice(SLICE_SERVER))
         self.agent_manager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
         self.autostarted_agent_manager = cast(AutostartedAgentManager, server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER))
-        self.compiler_service = cast(CompilerService, server.get_slice(SLICE_COMPILER))
+        self.compiler_service = cast(compilerservice.CompilerService, server.get_slice(SLICE_COMPILER))
         self.orchestration_service = cast(OrchestrationService, server.get_slice(SLICE_ORCHESTRATION))
         self.resource_service = cast(ResourceService, server.get_slice(SLICE_RESOURCE))
+        # Register the compiler service here to the environment service listener. Registering it within the compiler service
+        # would result in a circular dependency between the environment slice and the compiler service slice.
+        self.register_listener_for_multiple_actions(
+            self.compiler_service, {EnvironmentAction.cleared, EnvironmentAction.deleted}
+        )
 
     async def start(self) -> None:
         await super().start()
@@ -282,15 +286,6 @@ class EnvironmentService(protocol.ServerSlice):
                     await self.agent_manager.resume_agents(refreshed_env, connection=connection)
             await self.autostarted_agent_manager.restart_agents(refreshed_env)
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
-
-    @handle(methods.decomission_environment, env="id")
-    async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:
-        data: Optional[model.ModelMetadata] = None
-        if metadata:
-            data = model.ModelMetadata(message=metadata.get("message", ""), type=metadata.get("type", ""))
-
-        version = await self.environment_decommission(env, data)
-        return 200, {"version": version}
 
     @handle(methods.clear_environment, env="id")
     async def clear_environment(self, env: data.Environment) -> Apireturn:
@@ -486,18 +481,6 @@ class EnvironmentService(protocol.ServerSlice):
 
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
-
-    @handle(methods_v2.environment_decommission, env="id")
-    async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
-        is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
-        if is_protected_environment:
-            raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
-        version = await env.get_next_version()
-        if metadata is None:
-            metadata = model.ModelMetadata(message="Decommission of environment", type="api")
-        version_info = model.ModelVersionInfo(export_metadata=metadata)
-        await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict(), get_compiler_version())
-        return version
 
     @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:

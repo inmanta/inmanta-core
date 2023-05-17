@@ -530,8 +530,10 @@ class Exporter(object):
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
-        for res in resources:
-            LOGGER.debug("  %s", res["id"])
+        if LOGGER.isEnabledFor(logging.DEBUG):
+            for res in resources:
+                rid = res["id"]
+                LOGGER.debug("  %s in resource set %s", rid, self._resource_sets.get(Id.parse_id(rid).resource_str(), ""))
 
         if partial_compile:
             result = conn.put_partial(

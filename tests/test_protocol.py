@@ -21,7 +21,6 @@ import datetime
 import json
 import os
 import random
-import threading
 import time
 import urllib.parse
 import uuid
@@ -33,10 +32,9 @@ import pydantic
 import pytest
 import tornado
 from pydantic.types import StrictBool
-from tornado import gen, web
+from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, const, protocol
 from inmanta.const import ClientType
@@ -111,12 +109,7 @@ async def test_client_files_lost(client):
 
 
 async def test_sync_client_files(client):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-
     done = []
-    limit = 100
-    sleep = 0.01
 
     def do_test():
         sync_client = protocol.SyncClient("client")
@@ -139,14 +132,7 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    thread = threading.Thread(target=do_test)
-    thread.start()
-
-    while len(done) == 0 and limit > 0:
-        await gen.sleep(sleep)
-        limit -= 1
-
-    thread.join()
+    await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, do_test), timeout=1)
     assert len(done) > 0
 
 

@@ -19,6 +19,7 @@ import warnings
 
 import toml
 from inmanta.config import AuthJWTConfig
+from inmanta.logging import InmantaLoggerConfig
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -95,7 +96,6 @@ from click import testing
 from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import build.env
 import inmanta
@@ -515,6 +515,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
+    InmantaLoggerConfig.clean_instance()
 
 
 @pytest.fixture()
@@ -990,12 +991,6 @@ def pytest_runtest_makereport(item, call):
             )
 
 
-async def off_main_thread(func):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-    return await asyncio.get_event_loop().run_in_executor(None, func)
-
-
 class ReentrantVirtualEnv(VirtualEnv):
     """
     A virtual env that can be de-activated and re-activated
@@ -1282,14 +1277,15 @@ class SnippetCompilationTest(KeepOnFail):
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
-        return await off_main_thread(
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
             lambda: self._do_export(
                 deploy=True,
                 include_status=include_status,
                 do_raise=do_raise,
                 partial_compile=partial_compile,
                 resource_sets_to_remove=resource_sets_to_remove,
-            )
+            ),
         )
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
@@ -1398,10 +1394,7 @@ def cli(caplog):
     # due to mysterious interference when juggling with sys.stdout
     # https://github.com/pytest-dev/pytest/issues/10553
     with caplog.at_level(logging.FATAL):
-        # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-        asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-        o = CLI()
-        yield o
+        yield CLI()
 
 
 class AsyncCleaner(object):

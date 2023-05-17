@@ -143,7 +143,7 @@ class RequiresEmitStatement(DynamicStatement):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Emits this statement by scheduling its promises and scheduling a unit to wait on its requirements. Injects the
-        schedulred promise objects in the waiter's requires in order to pass it on to the execute method.
+        scheduled promise objects in the waiter's requires in order to pass it on to the execute method.
         """
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
@@ -477,7 +477,7 @@ class ReferenceStatement(ExpressionStatement):
 
     __slots__ = ("children",)
 
-    def __init__(self, children: List[ExpressionStatement]) -> None:
+    def __init__(self, children: Sequence[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
         self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))

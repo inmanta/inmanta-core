@@ -12,7 +12,7 @@ requires = [
     "cryptography>=36,<41",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.16",
-    "email-validator~=1.0",
+    "email-validator>=1,<3",
     "execnet~=1.0",
     "importlib_metadata>=4,<7",
     "jinja2~=3.0",
@@ -44,7 +44,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "8.3.0"
+version = "9.1.0"
 
 setup(
     version=version,

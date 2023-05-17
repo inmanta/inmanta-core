@@ -1,0 +1,6 @@
+description: Added generic logging interface for the handler and a compatible implementation that uses the Python loggers for testing purposes.
+issue-nr: 5708
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

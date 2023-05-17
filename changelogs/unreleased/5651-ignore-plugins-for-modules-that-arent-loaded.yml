@@ -1,0 +1,6 @@
+---
+description: Ignore plugins for modules that aren't loaded.
+issue-nr: 5651
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]

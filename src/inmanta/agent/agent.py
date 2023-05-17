@@ -27,10 +27,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
-
-from tornado import ioloop
-from tornado.concurrent import Future
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -45,7 +42,7 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future
+from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -62,11 +59,7 @@ class ResourceActionResult(object):
         return "%r" % self.cancel
 
 
-# https://mypy.readthedocs.io/en/latest/common_issues.html#using-classes-that-are-generic-in-stubs-but-not-at-runtime
-if TYPE_CHECKING:
-    ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
-else:
-    ResourceActionResultFuture = asyncio.Future
+ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
 
 
 class ResourceActionBase(abc.ABC):
@@ -84,7 +77,7 @@ class ResourceActionBase(abc.ABC):
         """
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource_id: Id = resource_id
-        self.future: ResourceActionResultFuture = Future()
+        self.future: ResourceActionResultFuture = asyncio.Future()
         # This variable is used to indicate that the future of a ResourceAction will get a value, because of a deploy
         # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False
@@ -171,7 +164,7 @@ class ResourceAction(ResourceActionBase):
         else:
             # main execution
             try:
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     self.scheduler.agent.thread_pool,
                     provider.deploy,
                     ctx,
@@ -352,16 +345,14 @@ class ResourceScheduler(object):
     2 - we don't need to figure out exactly when a run is done
     """
 
-    def __init__(
-        self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: asyncio.Semaphore
-    ) -> None:
+    def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache) -> None:
         self.generation: Dict[ResourceIdStr, ResourceActionBase] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
         self.name = name
-        self.ratelimiter = ratelimiter
+        self.ratelimiter = agent.ratelimiter
         self.version: int = 0
         # the reason the last run was started
         self.reason: str = ""
@@ -540,7 +531,7 @@ class AgentInstance(object):
 
         # init
         self._cache = AgentCache(self)
-        self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
+        self._nq = ResourceScheduler(self, self._env_id, name, self._cache)
         self._time_triggered_actions: Set[ScheduledTask] = set()
         self._enabled = False
         self._stopped = False
@@ -566,6 +557,16 @@ class AgentInstance(object):
         self._cache.close()
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
+
+    def join(self, thread_pool_finalizer: List[ThreadPoolExecutor]) -> None:
+        """
+        Called after stop to ensure complete shutdown
+
+        :param thread_pool_finalizer: all threadpools that should be joined should be added here.
+        """
+        assert self._stopped
+        thread_pool_finalizer.append(self.provider_thread_pool)
+        thread_pool_finalizer.append(self.thread_pool)
 
     @property
     def environment(self) -> uuid.UUID:
@@ -671,7 +672,7 @@ class AgentInstance(object):
             return False
         if time.time() < self._get_resource_timeout:
             self.logger.info(
-                "Attempting to get resources during backoff %g seconds left, last download took %d seconds",
+                "Attempting to get resources during backoff %g seconds left, last download took %f seconds",
                 self._get_resource_timeout - time.time(),
                 self._get_resource_duration,
             )
@@ -679,7 +680,7 @@ class AgentInstance(object):
         return True
 
     async def get_provider(self, resource: Resource) -> ResourceHandler:
-        provider = await asyncio.get_event_loop().run_in_executor(
+        provider = await asyncio.get_running_loop().run_in_executor(
             self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
         )
         provider.set_cache(self._cache)
@@ -785,7 +786,7 @@ class AgentInstance(object):
                             )
                         else:
                             try:
-                                await asyncio.get_event_loop().run_in_executor(
+                                await asyncio.get_running_loop().run_in_executor(
                                     self.thread_pool, provider.execute, ctx, resource, True
                                 )
 
@@ -856,7 +857,7 @@ class AgentInstance(object):
                 try:
                     self._cache.open_version(version)
                     provider = await self.get_provider(resource_obj)
-                    result = await asyncio.get_event_loop().run_in_executor(
+                    result = await asyncio.get_running_loop().run_in_executor(
                         self.thread_pool, provider.check_facts, ctx, resource_obj
                     )
 
@@ -963,7 +964,7 @@ class Agent(SessionEndpoint):
 
     # cache reference to THIS ioloop for handlers to push requests on it
     # defer to start, just to be sure
-    _io_loop: ioloop.IOLoop
+    _io_loop: asyncio.AbstractEventLoop
 
     def __init__(
         self,
@@ -972,14 +973,12 @@ class Agent(SessionEndpoint):
         code_loader: bool = True,
         environment: Optional[uuid.UUID] = None,
         poolsize: int = 1,
-        cricital_pool_size: int = 5,
     ):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.hostname = hostname
         self.poolsize = poolsize
         self.ratelimiter = asyncio.Semaphore(poolsize)
-        self.critical_ratelimiter = asyncio.Semaphore(cricital_pool_size)
         self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
         self._storage = self.check_storage()
@@ -1037,8 +1036,11 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         await super(Agent, self).stop()
         self.thread_pool.shutdown(wait=False)
+        threadpools_to_join = [self.thread_pool]
         for instance in self._instances.values():
             await instance.stop()
+            instance.join(threadpools_to_join)
+        await join_threadpools(threadpools_to_join)
 
     async def start_connected(self) -> None:
         """
@@ -1057,7 +1059,7 @@ class Agent(SessionEndpoint):
 
     async def start(self) -> None:
         # cache reference to THIS ioloop for handlers to push requests on it
-        self._io_loop = ioloop.IOLoop.current()
+        self._io_loop = asyncio.get_running_loop()
         await super(Agent, self).start()
 
     async def add_end_point_name(self, name: str) -> None:
@@ -1240,7 +1242,7 @@ class Agent(SessionEndpoint):
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
         async with self._loader_lock:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(self.thread_pool, self._env.install_from_list, requirements)
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
 

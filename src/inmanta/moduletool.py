@@ -36,7 +36,7 @@ from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Sequence, Set, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Type
 
 import click
 import more_itertools
@@ -334,9 +334,10 @@ class VersionOperation:
 
 class ProjectTool(ModuleLikeTool):
     @classmethod
-    def parser_config(cls, parser: ArgumentParser) -> None:
+    def parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
+
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml", parents=parent_parsers)
         freeze.add_argument(
             "-o",
             "--outfile",
@@ -358,7 +359,7 @@ class ProjectTool(ModuleLikeTool):
             choices=[o.value for o in FreezeOperator],
             default=None,
         )
-        init = subparser.add_parser("init", help="Initialize directory structure for a project")
+        init = subparser.add_parser("init", help="Initialize directory structure for a project", parents=parent_parsers)
         init.add_argument("--name", "-n", help="The name of the new project", required=True)
         init.add_argument("--output-dir", "-o", help="Output directory path", default="./")
         init.add_argument(
@@ -377,6 +378,7 @@ to be updated to the latest compatible version.
 This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
 with the dependencies specified by the different Inmanta modules.
         """.strip(),
+            parents=parent_parsers,
         )
         add_deps_check_arguments(install)
 
@@ -392,6 +394,7 @@ Update all modules to the latest version compatible with the module version cons
 This command might reinstall Python packages in the development venv if the currently installed versions are not the latest
 compatible with the dependencies specified by the updated modules.
             """.strip(),
+            parents=parent_parsers,
         )
         add_deps_check_arguments(update)
 
@@ -556,9 +559,8 @@ class ModuleTool(ModuleLikeTool):
         self._mod_handled_list = set()
 
     @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser) -> None:
+    def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
-
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
         add_help_msg = "Add a module dependency to an Inmanta module or project."
@@ -567,6 +569,7 @@ class ModuleTool(ModuleLikeTool):
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
             f"Either --v1 or --v2 has to be set.",
+            parents=parent_parsers,
         )
         add.add_argument(
             "module_req",
@@ -581,13 +584,22 @@ class ModuleTool(ModuleLikeTool):
             action="store_true",
         )
 
-        subparser.add_parser("list", help="List all modules used in this project in a table")
+        subparser.add_parser(
+            "list",
+            help="List all modules used in this project in a table",
+            parents=parent_parsers,
+        )
 
-        do = subparser.add_parser("do", help="Execute a command on all loaded modules")
-        do.add_argument("command", metavar="command", help="the command to  execute")
+        do = subparser.add_parser(
+            "do",
+            help="Execute a command on all loaded modules",
+            parents=parent_parsers,
+        )
+        do.add_argument("command", metavar="command", help="the command to execute")
 
         install: ArgumentParser = subparser.add_parser(
             "install",
+            parents=parent_parsers,
             help="Install a module in the active Python environment.",
             description="""
 Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context
@@ -603,12 +615,24 @@ mode.
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
         install.add_argument("path", nargs="?", help="The path to the module.")
 
-        subparser.add_parser("status", help="Run a git status on all modules and report")
+        subparser.add_parser(
+            "status",
+            help="Run a git status on all modules and report",
+            parents=parent_parsers,
+        )
 
-        subparser.add_parser("push", help="Run a git push on all modules and report")
+        subparser.add_parser(
+            "push",
+            help="Run a git push on all modules and report",
+            parents=parent_parsers,
+        )
 
         # not currently working
-        subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
+        subparser.add_parser(
+            "verify",
+            help="Verify dependencies and frozen module versions",
+            parents=parent_parsers,
+        )
 
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
@@ -629,13 +653,22 @@ mode.
         commit.add_argument("-n", "--no-tag", dest="tag", help="Don't create a tag for the commit", action="store_false")
         commit.set_defaults(tag=False)
 
-        create = subparser.add_parser("create", help="Create a new module")
+        create = subparser.add_parser(
+            "create",
+            help="Create a new module",
+            parents=parent_parsers,
+        )
         create.add_argument("name", help="The name of the module")
         create.add_argument(
             "--v1", dest="v1", help="Create a v1 module. By default a v2 module is created.", action="store_true"
         )
 
-        freeze = subparser.add_parser("freeze", help="Set all version numbers in module.yml")
+        freeze = subparser.add_parser(
+            "freeze",
+            help="Freeze all version numbers in module.yml. This command is only supported on v1 modules. On v2 modules use"
+            " the pip freeze command instead.",
+            parents=parent_parsers,
+        )
         freeze.add_argument(
             "-o",
             "--outfile",
@@ -658,7 +691,11 @@ mode.
             default=None,
         )
 
-        build = subparser.add_parser("build", help="Build a Python package from a V2 module.")
+        build = subparser.add_parser(
+            "build",
+            help="Build a Python package from a V2 module.",
+            parents=parent_parsers,
+        )
         build.add_argument(
             "path",
             help="The path to the module that should be built. By default, the current working directory is used.",
@@ -688,10 +725,15 @@ mode.
             dest="byte_code",
         )
 
-        subparser.add_parser("v1tov2", help="Convert a V1 module to a V2 module in place")
+        subparser.add_parser(
+            "v1tov2",
+            help="Convert a V1 module to a V2 module in place",
+            parents=parent_parsers,
+        )
 
         release = subparser.add_parser(
             "release",
+            parents=parent_parsers,
             help="Release a new stable or dev release for this module.",
             description="""
 When a stable release is done, this command:
@@ -934,7 +976,7 @@ version: 0.0.1dev0"""
         project = Project.get()
         project.get_complete_ast()
 
-        names: Sequence[str] = sorted(project.modules.keys())
+        names: abc.Sequence[str] = sorted(project.modules.keys())
         specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
             mod: Module = Project.get().modules[name]
@@ -1072,6 +1114,11 @@ version: 0.0.1dev0"""
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
+        if (module and ModuleV2.from_path(module)) or ModuleV2.from_path(os.curdir):
+            raise CLIException(
+                "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead.",
+                exitcode=1,
+            )
 
         # find module
         module_obj = self.get_module(module)
@@ -1287,6 +1334,7 @@ version: 0.0.1dev0"""
                 raise_exc_when_nothing_to_commit=False,
             )
             gitprovider.tag(repo=module_dir, tag=str(release_tag))
+            print(f"Tag created successfully: {release_tag}")
             # bump to the next dev version
             self.release(dev=True, message="Bump version to next development version", patch=True)
 

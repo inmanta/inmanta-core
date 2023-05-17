@@ -1,0 +1,6 @@
+---
+description: Bump the compiler version to 2024.0
+issue-nr: 592
+issue-repo: lsm
+change-type: patch
+destination-branches: [master]

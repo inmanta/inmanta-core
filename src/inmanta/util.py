@@ -27,19 +27,20 @@ import itertools
 import logging
 import os
 import socket
+import threading
 import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
-from tornado.ioloop import IOLoop
 
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
@@ -243,7 +244,7 @@ class Scheduler(object):
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[ScheduledTask, object] = {}
+        self._scheduled: Dict[ScheduledTask, asyncio.TimerHandle] = {}
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
@@ -324,10 +325,10 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
-                    ihandle = IOLoop.current().call_later(schedule_typed.get_next_delay(), action_function)
+                    ihandle = asyncio.get_running_loop().call_later(schedule_typed.get_next_delay(), action_function)
                     self._scheduled[task_spec] = ihandle
 
-        handle = IOLoop.current().call_later(schedule_typed.get_initial_delay(), action_function)
+        handle: asyncio.TimerHandle = asyncio.get_running_loop().call_later(schedule_typed.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
         return task_spec
 
@@ -337,7 +338,7 @@ class Scheduler(object):
         Remove a scheduled action
         """
         if task in self._scheduled:
-            IOLoop.current().remove_timeout(self._scheduled[task])
+            self._scheduled[task].cancel()
             del self._scheduled[task]
 
     @stable_api
@@ -350,7 +351,7 @@ class Scheduler(object):
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:
                 _, handle = self._scheduled.popitem()
-                IOLoop.current().remove_timeout(handle)
+                handle.cancel()
         except KeyError:
             pass
 
@@ -699,3 +700,50 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
 
     async def __aexit__(self, *excinfo: object) -> None:
         pass
+
+
+async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
+    """
+    Asynchronously join a set of threadpools
+
+    idea borrowed from BaseEventLoop.shutdown_default_executor
+
+    We implemented this method because:
+    1. ThreadPoolExecutor.shutdown(wait=True)` is a blocking call, blocking the ioloop.
+       This doesn't work because we often have back-and-forth between the ioloop and the thread
+       due to our `ResourceHandler.run_sync` method.
+    2.The python sdk has no support for async awaiting threadpool shutdown (except for the default pool)
+    """
+
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+
+    def join() -> None:
+        for threadpool in threadpools:
+            try:
+                threadpool.shutdown(wait=True)
+            except Exception:
+                LOGGER.exception("Exception during threadpool shutdown")
+        loop.call_soon_threadsafe(future.set_result, None)
+
+    thread = threading.Thread(target=join)
+    thread.start()
+    try:
+        await future
+    finally:
+        thread.join()
+
+
+def ensure_event_loop() -> asyncio.AbstractEventLoop:
+    """
+    Returns the event loop for this thread. Creates a new one if none exists yet and registers it with asyncio's active event
+    loop policy.
+    """
+    try:
+        # nothing needs to be done if this thread already has an event loop
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        # asyncio.set_event_loop sets the event loop for this thread only
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        return new_loop

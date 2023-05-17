@@ -1,0 +1,7 @@
+description: Removed unused field in Server class
+change-type: patch
+sections:
+  bugfix: "The server no longer incorrectly logs a warning about server_rest_transport.token missing from the config"
+destination-branches:
+  - master
+  - iso6
