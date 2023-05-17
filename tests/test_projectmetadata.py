@@ -100,7 +100,7 @@ def test_no_module_path(tmp_path, caplog):
     assert_no_warning(caplog)
 
 
-@pytest.mark.parametrize("use_config_file, value", [(True, True), (True, False), (False, True)])
+@pytest.mark.parametrize("use_config_file, value", [(True, True), (True, False), (False, False)])
 def test_pip_config(tmp_path, caplog, use_config_file, value):
     use_config_file = (
         f"""
@@ -123,12 +123,6 @@ def test_pip_config(tmp_path, caplog, use_config_file, value):
     {use_config_file}
     """
             )
-
-    if use_config_file:
-        project = Project(tmp_path, autostd=False)
-        assert_no_warning(caplog)
-        assert project.metadata.pip.use_config_file == value
-
-    else:
-        with pytest.raises(InvalidMetadata):
-            Project(tmp_path, autostd=False)
+    project = Project(tmp_path, autostd=False)
+    assert_no_warning(caplog)
+    assert project.metadata.pip.use_config_file == value
