@@ -46,32 +46,6 @@ def test_list_comprehension_basic(snippetcompiler) -> None:
     )
     compiler.do_compile()
 
-def test_list_comprehension_order(snippetcompiler) -> None:
-    """
-    Verify that the list comprehension expression preserves order on primitive lists.
-    """
-    snippetcompiler.setup_for_snippet(
-        textwrap.dedent(
-            """
-            entity A: end
-            A.others [0:] -- A
-            implement A using std::none
-
-            # take some measures to ensure this needs to be waited on: expression with multiple phases, requiring a result
-            # variable to be frozen
-            default = true ? std::count(a.others) : "unreachable"
-            a = A()
-
-            l = [chained for chained in [x > 2 ? x : default for x in [1, 2, 3, 4, 5]]]
-            # a naive implementation could result in [3, 4, 5, 0, 0] because the zeros need to be waited on
-            l = [0, 0, 3, 4, 5]
-            """.strip(
-                "\n"
-            )
-        )
-    )
-    compiler.do_compile()
-
 
 def test_list_comprehension_double_for(snippetcompiler) -> None:
     """
@@ -110,6 +84,77 @@ def test_list_comprehension_double_for(snippetcompiler) -> None:
             # assertions
             l1 = ["1-10", "1-20", "2-10", "2-20"]
             l2 = [1, 2, 3]  # specific order doesn't matter but it should be consistent
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+@pytest.mark.xfail(strict=True)
+def test_list_comprehension_guards(snippetcompiler) -> None:
+    """
+    Verify the functionality of guards within a list comprehension.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            base = [1, 2, 3, 4, 5]
+
+            # shadow loop variable to verify that neither the value expression nor the guard see it
+            x = 0
+            gt = 2
+            lt = 5
+
+            # single guard
+            l1 = [x for x in base if x > gt]
+            # multiple guards
+            l2 = ["x={{x}}" for x in base if x > gt if x < lt if true and true]
+            # nested expressions
+            l3 = [y for y in [x for x in base if x > gt] if y < lt]
+            l3 = [[x for x in y if x > gt] for y in base if y < lt]
+            l4 = [
+                "{{x}}={{y}}"
+                for x in base
+                for y in base
+                if x == 3
+                if y == 5
+            ]
+
+            # assertions
+            l1 = [3, 4, 5]
+            l2 = ["x=3", "x=4"]
+            l3 = [3, 4]
+            l4 = ["3=5"]
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+# TODO: with guard that needs waiting for
+def test_list_comprehension_order(snippetcompiler) -> None:
+    """
+    Verify that the list comprehension expression preserves order on primitive lists.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            # take some measures to ensure this needs to be waited on: expression with multiple phases, requiring a result
+            # variable to be frozen
+            default = true ? std::count(a.others) : "unreachable"
+            a = A()
+
+            l = [chained for chained in [x > 2 ? x : default for x in [1, 2, 3, 4, 5]]]
+            # a naive implementation could result in [3, 4, 5, 0, 0] because the zeros need to be waited on
+            l = [0, 0, 3, 4, 5]
             """.strip(
                 "\n"
             )
@@ -353,7 +398,6 @@ def test_list_comprehension_gradual_mixed(snippetcompiler) -> None:
 
 
 # TODO: tests for error scenarios
-# TODO: tests for guards
 # TODO: test for shadowing + guard
 # TODO: test with Unknowns: in list / list itself is unknown
 # TODO: test with null values in list
