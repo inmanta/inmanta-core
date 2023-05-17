@@ -20,7 +20,7 @@ from typing import List, Optional
 
 import pytest
 
-from inmanta.module import ModuleRepoType, Project, ProjectMetadata, RelationPrecedenceRule
+from inmanta.module import InvalidMetadata, ModuleRepoType, Project, ProjectMetadata, RelationPrecedenceRule
 from utils import assert_no_warning
 
 
@@ -98,3 +98,37 @@ def test_no_module_path(tmp_path, caplog):
 
         Project(tmp_path, autostd=False)
     assert_no_warning(caplog)
+
+
+@pytest.mark.parametrize("use_config_file, value", [(True, True), (True, False), (False, True)])
+def test_pip_config(tmp_path, caplog, use_config_file, value):
+    use_config_file = (
+        f"""
+    pip: {{
+        use_config_file: {value}
+        }}
+"""
+        if use_config_file
+        else ""
+    )
+    with caplog.at_level(logging.WARNING):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                f"""
+    name: testproject
+    downloadpath: libs
+    repo:
+        - url: https://pypi.org/simple
+          type: package
+    {use_config_file}
+    """
+            )
+
+    if use_config_file:
+        project = Project(tmp_path, autostd=False)
+        assert_no_warning(caplog)
+        assert project.metadata.pip.use_config_file == value
+
+    else:
+        with pytest.raises(InvalidMetadata):
+            Project(tmp_path, autostd=False)
