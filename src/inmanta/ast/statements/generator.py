@@ -449,15 +449,14 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         """
         Indicate that all results have been received. No further calls to `receive_result` should be done after this.
         """
-        # TODO: restructure
-        if self.lhs is not None:
-            # gradual mode: should have already received all values
-            if len(all_values) != len(self.results):
-                # TODO: raise exception
-                pass
-        elif self.results:
-            # TODO: raise exception
-            pass
+        if self.results:
+            # We should only have received previous results in gradual mode, if the
+            if self.lhs is None:
+                # TODO: raise proper exception
+                raise Exception("Invalid compiler state: list comprehension received gradual results in non-gradual mode")
+            if len(self.results) != len(all_values):
+                # TODO: raise proper exception
+                raise Exception("Invalid compiler state: list comprehension received some but not all values gradually")
         else:
             for value in all_values:
                 self.receive_result(value, location=self.statement.location, chain=True)
