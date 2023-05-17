@@ -712,14 +712,14 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
-        # if not self.urls:
-        #     raise Exception(
-        #         f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
-        #         'repo of type "package" to the project config file. e.g. to add PyPi as a module source, add the following to '
-        #         "the `repo` section of the project's `project.yml`:"
-        #         "\n\t- type: package"
-        #         "\n\t  url: https://pypi.org/simple"
-        #     )
+        if not self.urls:
+            raise Exception(
+                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
+                'repo of type "package" to the project config file. e.g. to add PyPi as a module source, add the following to '
+                "the `repo` section of the project's `project.yml`:"
+                "\n\t- type: package"
+                "\n\t  url: https://pypi.org/simple"
+            )
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
