@@ -710,51 +710,51 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def get_namespace_package_name(cls, module_name: str) -> str:
         return f"{const.PLUGINS_PACKAGE}.{module_name}"
 
-    # def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
-    #     module_name: str = self._get_module_name(module_spec)
-    #     if not self.urls:
-    #         raise Exception(
-    #             f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
-    #             'repo of type "package" to the project config file. e.g. to add PyPi as a module source, add the following to '
-    #             "the `repo` section of the project's `project.yml`:"
-    #             "\n\t- type: package"
-    #             "\n\t  url: https://pypi.org/simple"
-    #         )
-    #     requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
-    #     allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
-    #     preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
-    #
-    #     # Get known requires and add them to prevent invalidating constraints through updates
-    #     # These could be constraints (-c) as well, but that requires additional sanitation
-    #     # Because for pip not every valid -r is a valid -c
-    #     current_requires = project.get_strict_python_requirements_as_list()
-    #     requirements += [Requirement.parse(r) for r in current_requires]
-    #
-    #     if preinstalled is not None:
-    #         # log warning if preinstalled version does not match constraints
-    #         preinstalled_version: str = str(preinstalled.version)
-    #         if not all(preinstalled_version in constraint for constraint in module_spec):
-    #             LOGGER.warning(
-    #                 "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
-    #                 module_name,
-    #                 preinstalled_version,
-    #                 ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
-    #             )
-    #     try:
-    #         self.log_pre_install_information(module_name, module_spec)
-    #         modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
-    #         env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
-    #
-    #         self.log_post_install_information(module_name)
-    #         self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
-    #     except env.PackageNotFound:
-    #         return None
-    #     path: Optional[str] = self.path_for(module_name)
-    #     if path is None:
-    #         python_package: str = ModuleV2Source.get_package_name_for(module_name)
-    #         namespace_package: str = self.get_namespace_package_name(module_name)
-    #         raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
-    #     return self.from_path(project, module_name, path)
+    def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
+        module_name: str = self._get_module_name(module_spec)
+        # if not self.urls:
+        #     raise Exception(
+        #         f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
+        #         'repo of type "package" to the project config file. e.g. to add PyPi as a module source, add the following to '
+        #         "the `repo` section of the project's `project.yml`:"
+        #         "\n\t- type: package"
+        #         "\n\t  url: https://pypi.org/simple"
+        #     )
+        requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
+        allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
+        preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
+
+        # Get known requires and add them to prevent invalidating constraints through updates
+        # These could be constraints (-c) as well, but that requires additional sanitation
+        # Because for pip not every valid -r is a valid -c
+        current_requires = project.get_strict_python_requirements_as_list()
+        requirements += [Requirement.parse(r) for r in current_requires]
+
+        if preinstalled is not None:
+            # log warning if preinstalled version does not match constraints
+            preinstalled_version: str = str(preinstalled.version)
+            if not all(preinstalled_version in constraint for constraint in module_spec):
+                LOGGER.warning(
+                    "Currently installed %s-%s does not match constraint %s: updating to compatible version.",
+                    module_name,
+                    preinstalled_version,
+                    ",".join(constraint.version_spec_str() for constraint in module_spec if constraint.specs),
+                )
+        try:
+            self.log_pre_install_information(module_name, module_spec)
+            modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
+            env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
+
+            self.log_post_install_information(module_name)
+            self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
+        except env.PackageNotFound:
+            return None
+        path: Optional[str] = self.path_for(module_name)
+        if path is None:
+            python_package: str = ModuleV2Source.get_package_name_for(module_name)
+            namespace_package: str = self.get_namespace_package_name(module_name)
+            raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
+        return self.from_path(project, module_name, path)
 
     def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v2) %s.", module_name, super()._format_constraints(module_name, module_spec))
