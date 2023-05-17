@@ -51,11 +51,8 @@ def test_list_comprehension_order(snippetcompiler) -> None:
     Verify that the list comprehension expression preserves order on primitive lists.
     """
     snippetcompiler.setup_for_snippet(
-        # TODO: this without intermediate base variable
         textwrap.dedent(
             """
-            base = [1, 2, 3, 4, 5]
-
             entity A: end
             A.others [0:] -- A
             implement A using std::none
@@ -65,7 +62,7 @@ def test_list_comprehension_order(snippetcompiler) -> None:
             default = true ? std::count(a.others) : "unreachable"
             a = A()
 
-            l = [x > 2 ? x : default for x in base]
+            l = [chained for chained in [x > 2 ? x : default for x in [1, 2, 3, 4, 5]]]
             # a naive implementation could result in [3, 4, 5, 0, 0] because the zeros need to be waited on
             l = [0, 0, 3, 4, 5]
             """.strip(
@@ -292,10 +289,72 @@ def test_list_comprehension_gradual_consistency(snippetcompiler, monkeypatch) ->
     compiler.do_compile()
 
 
+def test_list_comprehension_gradual_mixed(snippetcompiler) -> None:
+    """
+    Verify that list comprehensions work as expected when the lhs supports gradual execution but the iterable does not or vice
+    versa, when the iterable contains both a gradual and a non-gradual component.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+
+            # iterable
+
+            ## non-gradual component
+            extra = {"a": [A()]}
+
+            ## gradual component
+            a = A()
+            a.others += A()
+            a.others += A()
+
+
+            # lhs
+
+            ## gradual lhs, non-gradual iterable
+            b = A(others=[other for other in extra["a"]])
+
+            ## gradual lhs, mixed iterable
+            c = A(others=[other for other in [a.others, extra["a"]]])
+
+            ## non-gradual lhs, gradual iterable
+            u = [other for other in [a.others]]
+
+            ## non-gradual lhs, non-gradual iterable
+            v = [other for other in extra["a"]]
+
+            ## non-gradual lhs, mixed iterable
+            w = [other for other in [a.others, extra["a"]]]
+
+
+            # assertions
+
+            a_count = 2
+            a_count = std::count(a.others)
+            a_count = std::count(u)
+
+            extra_count = 1
+            no_extra_count = std::count(b.others)
+            no_extra_count = std::count(v)
+
+            sum_count = 3
+            sum_count = std::count(c.others)
+            sum_count = std::count(w)
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
 # TODO: tests for error scenarios
 # TODO: tests for guards
 # TODO: test for shadowing + guard
 # TODO: test with Unknowns: in list / list itself is unknown
 # TODO: test with null values in list
-# TODO: test with gradually executable literal list order
 # TODO: as = [[a, a] for x in xs] where a = [1,2,3]
