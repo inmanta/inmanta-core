@@ -441,4 +441,4 @@ def test_list_comprehension_duplicate_values(snippetcompiler) -> None:
 
 # TODO: tests for error scenarios
 # TODO: test with Unknowns: in list / list itself is unknown
-# TODO: test with null values in list
+# TODO: test with null/[] values in list + test with `is defined` guard
