@@ -294,6 +294,7 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             A.others [0:] -- A
             implement A using std::none
 
+            # gradual execution of iterable
             a = A()
             b = A(others=[chained for chained in [other for other in a.others]])
             a.others += A()
@@ -302,9 +303,18 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
                 a.others += A()
             end
 
+            # gradual execution of guard
+            x = A()
+            # again bad practice but asserts gradual execution of the `is defined`
+            y = A(others=[A(), c.others])
+            c = A(others=[candidate for candidate in [x, y] if candidate.others is defined])
+
             count = 2
             count = std::count(a.others)
             count = std::count(b.others)
+
+            c_count = 1
+            c_count = std::count(c.others)
             """.strip(
                 "\n"
             )
@@ -439,6 +449,127 @@ def test_list_comprehension_duplicate_values(snippetcompiler) -> None:
     compiler.do_compile()
 
 
+def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
+    """
+    Verify that list comprehensions behave as expected when the iterable produces empty subitems, both for gradual and
+    non-gradual execution.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            A.self [1] -- A
+            implementation a for A:
+                self.self = self
+            end
+            implement A using a
+
+            a = A()
+            a.others = [A(), A(), A()]
+
+            # gradual execution
+            b = A()
+            b.others = [chained for chained in [other for other in [[], [], a.others]]]
+            # non-gradual execution
+            c = A()
+            c.others = std::select([chained for chained in [other for other in [a.others, [], [], [], []]]], "self")
+
+            assert = true
+            assert = a.others == b.others
+            assert = b.others == c.others
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+def test_list_comprehension_unknown(snippetcompiler) -> None:
+    """
+    Verify that list comprehensions propagate Unknowns appropriately.
+    """
+    # TODO: make sure to mention Unknown semantics in docs: Unknown represents an unknown value, or absence of a value
+    # TODO: fix std::count with propagate_unknowns: bool = False
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            import tests
+
+            unknown = tests::unknown()
+
+            # comprehensions
+
+            ## unknown iterable makes result unknown
+            l1 = [x for x in unknown]
+
+            ## unknown in iterable becomes unknown in result
+            l2 = [x for x in [1, 2, unknown]]
+            l3 = [x for x in [1, unknown, 3] if true]
+
+            ## unknown in guard expression becomes unknown in result
+            l4 = [x for x in [1, 2, 3] if x > 1 or unknown]
+
+            ## unknown in value expression becomes unknown in result
+            l5 = [x < 2 ? x : unknown for x in [1, 2, 3]]
+            l6 = [x == 2 ? x : unknown for x in [1, 2, 3] if true]
+
+            ## nested for
+            l7 = [
+                x == 2 ? y : unknown
+                for x in [1, 2, 3]
+                for y in [1, 2, 3]
+            ]
+            l8 = [
+                x == 2 ? y : unknown
+                for y in [1, 2, 3]
+                for x in [1, 2, 3]
+            ]
+            l9 = [
+                y
+                for x in [1, 2, 3]
+                for y in [1, 2, 3]
+                if x == 2 or unknown
+            ]
+
+            assert = true
+            assert = tests::is_uknown(l1)
+            assert = not tests::is_uknown(l2)
+            assert = not tests::is_uknown(l3)
+            assert = not tests::is_uknown(l4)
+            assert = not tests::is_uknown(l5)
+            assert = not tests::is_uknown(l6)
+
+            l2_unknowns = [1, 2, "unknown"]
+            l2_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l2]
+
+            l3_unknowns = [1, "unknown", 3]
+            l3_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l3]
+
+            l4_unknowns = ["unknown", 2, 3]
+            l4_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l4]
+
+            l5_unknowns = [1, "unknown", "unknown"]
+            l5_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l5]
+
+            l6_unknowns = ["unknown", 2, "unknown"]
+            l6_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l6]
+
+            l7_unknowns = ["unknown", "unknown", "unknown", 1, 2, 3, "unknown", "unknown", "unknown"]
+            l7_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l7]
+
+            l8_unknowns = ["unknown", 1, "unknown", "unknown", 2, "unknown", "unknown", 3, "unknown"]
+            l8_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l8]
+
+            l9_unknowns = ["unknown", "unknown", "unknown", 1, 2, 3, "unknown", "unknown", "unknown"]
+            l9_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l9]
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
 # TODO: tests for error scenarios
-# TODO: test with Unknowns: in list / list itself is unknown
-# TODO: test with null/[] values in list + test with `is defined` guard

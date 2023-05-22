@@ -60,6 +60,7 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
     ExecutionUnit,
+    # TODO: this class can be deleted
     FixedCountVariable,
     ListElementVariable,
     Instance,
@@ -303,6 +304,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.value_expression.normalize(lhs_attribute=lhs_attribute)
         self.iterable.normalize()
+        if self.guard is not None:
+            self.guard.normalize()
 
     def requires(self) -> list[str]:
         # exclude loop var, unless it shadows an occurrence in iterable
@@ -364,14 +367,16 @@ class ListComprehension(RawResumer, ExpressionStatement):
         assert isinstance(collector_helper, ListComprehensionCollector)
 
         iterable: object = self.iterable.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
+
+        # indicate to helper that we're done
         if isinstance(iterable, Unknown):
-            return Unknown(self)
-        if not isinstance(iterable, list):
+            collector_helper.set_unknown()
+        elif not isinstance(iterable, list):
             raise TypingException(
                 self, f"A list comprehension can only be applied to lists and relations, got {type(iterable)}"
             )
-        # indicate to helper that we're done
-        collector_helper.complete(iterable, resolver, queue)
+        else:
+            collector_helper.complete(iterable, resolver, queue)
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -463,6 +468,11 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         )
 
         return False
+
+    def set_unknown(self) -> None:
+        # TODO: docstring: also mention mutual exclusion with complete
+        # TODO: assert self.results empty
+        self.final_result.set_value(Unknown(self.statement), self.statement.location)
 
     def complete(self, all_values: abc.Sequence[object], resolver: Resolver, queue: QueueScheduler) -> None:
         """
