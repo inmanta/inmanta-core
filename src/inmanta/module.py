@@ -712,7 +712,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
-        if not self.urls:
+        if not self.urls and not project.metadata.pip.use_config_file:
             raise Exception(
                 f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
                 'repo of type "package" to the project config file. e.g. to add PyPi as a module source, add the following to '
@@ -1489,7 +1489,7 @@ class ModuleRepoType(enum.Enum):
 @stable_api
 class ModuleRepoInfo(BaseModel):
     url: str
-    type: ModuleRepoType = ModuleRepoType.package
+    type: ModuleRepoType = ModuleRepoType.git
 
 
 @dataclass(frozen=True)

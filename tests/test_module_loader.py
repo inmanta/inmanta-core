@@ -181,6 +181,26 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
     assert message in e.value.format_trace()
 
 
+def test_install_module_no_v2_source_with_use_config_file(snippetcompiler) -> None:
+    """
+    Verify that attempting to install a v2 module without a v2 module source but with use_config_file
+    is allowed.
+    """
+    module_name = "non_existing_module"
+    with pytest.raises(Exception) as e:
+        snippetcompiler.setup_for_snippet(
+            snippet=f"import {module_name}",
+            install_project=True,
+            python_package_sources=[],
+            python_requires=[
+                InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
+            ],
+            pip_use_config_file=True,
+        )
+    message: str = f"Could not find module {module_name}"
+    assert message in e.value.format_trace()
+
+
 @pytest.mark.parametrize("allow_v1", [True, False])
 def test_load_module_v1_already_installed(snippetcompiler, modules_dir: str, allow_v1: bool) -> None:
     """

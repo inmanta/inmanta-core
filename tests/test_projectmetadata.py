@@ -20,7 +20,7 @@ from typing import List, Optional
 
 import pytest
 
-from inmanta.module import InvalidMetadata, ModuleRepoType, Project, ProjectMetadata, RelationPrecedenceRule
+from inmanta.module import ModuleRepoType, Project, ProjectMetadata, RelationPrecedenceRule
 from utils import assert_no_warning
 
 
