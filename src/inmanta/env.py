@@ -331,6 +331,7 @@ class PipCommandBuilder:
         allow_pre_releases: bool = False,
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
+        use_pip_config: Optional[bool] = False,
     ) -> List[str]:
         """
         Generate `pip install` command from the given arguments.
@@ -357,9 +358,12 @@ class PipCommandBuilder:
             []
             if index_urls is None
             else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
+            if not use_pip_config
+            else [*chain.from_iterable(["--extra-index-url", url] for url in index_urls[0:])]
             if index_urls
             else ["--no-index"]
         )
+
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
         return [
