@@ -7,23 +7,23 @@ Troubleshooting
 This page describes typical failure scenario's and provides a guideline on how to troubleshoot them.
 
 
-A resources is stuck in the state available
-===========================================
+A resource is stuck in the state available
+==========================================
 
 When a resource is stuck in the available state, it usually means that the agent, which should deploy the resource, is currently
-down or paused. Click on the version of the configuration model, shown in the versions tab of the Inmanta dashboard, to get an
+down or paused. Click on the ``Resources`` tab of the Inmanta dashboard, to get an
 overview of the different resources in the model. This overview shows the state of each resource and the name of its agent.
 Filter on resources in the available state and check which resource are ready to be deployed (i.e. a resource without
 dependencies or a resource for which all dependencies were deployed successfully). The agent of that resource, is the agent that
-causes the problem. In the figure below, the epel-release package should be ready to deploy on agent vm2
+causes the problem. In the figure below, the ``Global`` GnmiResource should be ready to deploy on the ``spine`` agent.
 
-.. figure:: ./_static/troubleshooting/resources_overview_stuck_in_available_state.png
+.. figure:: ./_static/troubleshooting/resources_overview_stuck_in_available_state_new.png
    :width: 100%
    :align: center
 
-Next, go to the agents tab of the dashboard to verify the state of that agent.
+Next, go to the ``Agents`` tab of the dashboard to verify the state of that agent.
 
-.. figure:: ./_static/troubleshooting/agent_is_paused.png
+.. figure:: ./_static/troubleshooting/agent_is_paused_new.png
    :width: 100%
    :align: center
 
