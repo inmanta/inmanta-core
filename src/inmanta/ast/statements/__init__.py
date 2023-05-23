@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from collections import abc
 from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
@@ -127,7 +128,12 @@ class DynamicStatement(Statement):
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
+        """
+        Execute this statement in a static context without any scheduling, returning the expression's result.
+
+        :param requires: A dictionary mapping names to values.
+        """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def declared_variables(self) -> Iterator[str]:
@@ -558,7 +564,7 @@ class Literal(ExpressionStatement):
         super().execute(requires, resolver, queue)
         return self.value
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         return self.value
 
     def as_constant(self) -> object:

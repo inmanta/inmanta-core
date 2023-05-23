@@ -19,7 +19,7 @@ import textwrap
 
 import pytest
 
-from inmanta import compiler
+from inmanta import ast, compiler
 
 
 def test_list_comprehension_basic(snippetcompiler) -> None:
@@ -569,6 +569,48 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             )
         )
     )
+    compiler.do_compile()
+
+
+def test_list_comprehension_direct(snippetcompiler) -> None:
+    """
+    Verify that list comprehensions work in a direct execute context.
+    """
+    model_def: str = textwrap.dedent(
+        """
+        import tests
+
+        typedef nineties as int matching self in [tests::sum(i, 90) for i in std::sequence(10) if i != 5]
+
+        entity A:
+            nineties n
+        end
+        implement A using std::none
+        """.strip(
+            "\n"
+        )
+    )
+
+    valid: str = textwrap.dedent(
+        """
+            for i in std::sequence(10, start=90):
+                if i != 95:
+                    A(n=i)
+                end
+            end
+        """.strip(
+            "\n"
+        )
+    )
+
+    # verify some invalid values
+    for i in [95, 100, 89, 0, -1, 42]:
+        snippetcompiler.setup_for_snippet(f"{model_def}\nA(n={i})")
+        with pytest.raises(ast.AttributeException):
+            compiler.do_compile()
+
+    # verify valid values
+    snippetcompiler.setup_for_snippet("\n".join((model_def, valid)))
     compiler.do_compile()
 
 

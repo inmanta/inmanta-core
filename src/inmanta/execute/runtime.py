@@ -325,58 +325,6 @@ class ListElementVariable(ResultVariable[T]):
             resultcollector.receive_result(self.value, location)
 
 
-# TODO: delete
-class FixedCountVariable(ResultVariable[Union[T, list[T]]]):
-    """
-    Variable that is complete when it has received a fixed number of assignments (not values, a single assignment can be a list
-    of values). The count can be supplied at construction or at a later stage. The variable will never freeze itself as long
-    as its count has not been reached (or if it has not yet been set).
-
-    This variable ignores listeners.
-    """
-
-    __slots__ = ("count", "freeze_count")
-
-    def __init__(self, freeze_count: Optional[int] = None) -> None:
-        super().__init__()
-        self.value: list[T] = []
-        self.count: int = 0
-        self.freeze_count: Optional[int] = None
-
-    def set_freeze_count(self, freeze_count: int) -> None:
-        """
-        Set the new assignment count and check if the variable can be frozen.
-        """
-        self.freeze_count = freeze_count
-        self.check_count()
-
-    def check_count(self) -> bool:
-        """
-        Freeze the variable iff it has received all its assignments.
-        """
-        if self.hasValue:
-            return
-        if self.freeze_count is not None and self.count >= self.freeze_count:
-            self.hasValue = True
-            for waiter in self.waiters:
-                waiter.ready(self)
-            self.waiters = None
-
-    def set_value(self, value: Union[T, list[T]], location: Location, recur: bool = True) -> None:
-        if self.hasValue:
-            # should never happen, indicates bug in compiler
-            raise RuntimeException(None, "FixedCountVariable assignment after freeze")
-        # flatten list
-        if isinstance(value, list):
-            self.value.extend(value)
-        else:
-            self.value.append(value)
-        self.count += 1
-        self.check_count()
-
-    # TODO: override get_promise to set two vars?
-
-
 class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between

@@ -60,10 +60,8 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
     ExecutionUnit,
-    # TODO: this class can be deleted
-    FixedCountVariable,
-    ListElementVariable,
     Instance,
+    ListElementVariable,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -232,8 +230,9 @@ class For(RequiresEmitStatement):
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
 
     def requires(self) -> List[str]:
+        # TODO: add test + bugfix entry
         # exclude loop var, unless it shadows an occurrence in iterable
-        return list(set(self.base.requires()) - {self.loop_var} + set(self.module.requires()))
+        return list(set(self.base.requires()) - {self.loop_var} | set(self.module.requires()))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
@@ -271,13 +270,12 @@ class For(RequiresEmitStatement):
         yield self.module
 
 
-# TODO: normal Resumer would be simpler?
+# TODO: run mypy
 class ListComprehension(RawResumer, ExpressionStatement):
     """
-    A list comprehension expression, e.g. `["hello {{world}}" for world in worlds]`.
+    A list comprehension expression, e.g. `["hello {{world}}" for world in worlds if world != "exclude"]`.
     """
 
-    # TODO: slotted test?
     __slots__ = ("loop_var", "value_expression", "iterable", "guard")
 
     def __init__(
@@ -291,7 +289,6 @@ class ListComprehension(RawResumer, ExpressionStatement):
         self.value_expression: ExpressionStatement = value_expression
         self.loop_var: LocatableString = loop_var
         self.iterable: ExpressionStatement = iterable
-        # TODO: guard currently ignored
         self.guard: ExpressionStatement = guard
         self.anchors.extend(
             itertools.chain(
@@ -309,7 +306,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
     def requires(self) -> list[str]:
         # exclude loop var, unless it shadows an occurrence in iterable
-        return list(set(self.iterable.requires()) - {self.loop_var} + set(self.value_expression.requires()))
+        return list(set(self.iterable.requires()) - {self.loop_var} | set(self.value_expression.requires()))
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
@@ -357,7 +354,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
     ) -> dict[object, VariableABC]:
         return self.requires_emit(resolver, queue, lhs=resultcollector)
 
-    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Resume when the iterable is fully ready for execution. Populates the helper's result variable and signals that no more
         values will be sent.
@@ -382,10 +379,45 @@ class ListComprehension(RawResumer, ExpressionStatement):
         super().execute(requires, resolver, queue)
         return requires[self]
 
-    # TODO: execute_direct?
-    # TODO: repr/str
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> list[object]:
+        iterable: object = self.iterable.execute_direct(requires)
+        if isinstance(iterable, Unknown):
+            return Unknown(self)
+        elif not isinstance(iterable, list):
+            raise TypingException(
+                self, f"A list comprehension in a direct execute context can only be applied to lists, got {type(iterable)}"
+            )
 
-    # TODO
+        def process(element: object) -> Optional[object]:
+            """
+            Execute the list comprehension for a single element of the iterable. Evaluates the guard expression if there is
+            any and executes the value expression if the guard passes. Returns the result of the value expression if the
+            guard passed, otherwise returns None.
+            """
+            extended_requires: abc.Mapping[str, object] = requires | {str(self.loop_var): element}
+
+            guard_passed: bool
+            if self.guard is None:
+                guard_passed = True
+            else:
+                guard_value: object = self.guard.execute_direct(extended_requires)
+                if isinstance(iterable, Unknown):
+                    return Unknown(self)
+                if not isinstance(guard_value, bool):
+                    raise TypingException(
+                        self,
+                        (
+                            f"Invalid value `{guard_value}`:"
+                            " the guard condition for a list comprehension must be a boolean expression"
+                        ),
+                    )
+                guard_passed = guard_value
+
+            return self.value_expression.execute_direct(extended_requires) if guard_passed else None
+
+        return [result for element in iterable if (result := process(element)) is not None]
+
+    # TODO: repr/str
 
 
 # TODO: is there a better way?
@@ -617,7 +649,7 @@ class ConditionalExpression(ExpressionStatement):
         super().execute(requires, resolver, queue)
         return requires[self]
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         condition_value: object = self.condition.execute_direct(requires)
         if isinstance(condition_value, Unknown):
             return Unknown(self)
