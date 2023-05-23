@@ -33,8 +33,8 @@ requires = [
     "texttable~=1.0",
     "tornado~=6.0",
     "typing_inspect~=0.7",
-    # Make sure we do not use 4.6.0 which breaks protocol
-    "typing-extensions<=4.5.0",
+    # typing-extensions-4.6 broken due to bugs in other packages: ilevkivskyi/typing_inspect#100, pydantic/pydantic#5821
+    "typing-extensions<4.6",
     "build~=0.7",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
