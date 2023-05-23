@@ -357,7 +357,9 @@ class PipCommandBuilder:
         )
         index_args: List[str] = []
 
-        if index_urls is not None:
+        if index_urls is None:
+            index_args = []
+        elif index_urls:
             if not use_pip_config:
                 # Use separate --index-url and --extra-index-url arguments
                 index_args.append("--index-url")
@@ -370,9 +372,8 @@ class PipCommandBuilder:
                 for url in index_urls:
                     index_args.append("--extra-index-url")
                     index_args.append(url)
-        elif index_urls is None:
-            # No index URLs provided, use --no-index argument
-            index_args.append("--no-index")
+        else:
+            index_args = ["--no-index"]
 
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
