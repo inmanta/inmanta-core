@@ -580,7 +580,7 @@ def test_list_comprehension_direct(snippetcompiler) -> None:
         """
         import tests
 
-        typedef nineties as int matching self in [tests::sum(i, 90) for i in std::sequence(10) if i != 5]
+        typedef nineties as int matching self in [i == 2 ? 42 : tests::sum(i, 90) for i in std::sequence(10) if i != 5]
 
         entity A:
             nineties n
@@ -594,17 +594,18 @@ def test_list_comprehension_direct(snippetcompiler) -> None:
     valid: str = textwrap.dedent(
         """
             for i in std::sequence(10, start=90):
-                if i != 95:
+                if i != 92 and i != 95:
                     A(n=i)
                 end
             end
+            A(n=42)
         """.strip(
             "\n"
         )
     )
 
     # verify some invalid values
-    for i in [95, 100, 89, 0, -1, 42]:
+    for i in [92, 95, 100, 89, 0, -1, 43]:
         snippetcompiler.setup_for_snippet(f"{model_def}\nA(n={i})")
         with pytest.raises(ast.AttributeException):
             compiler.do_compile()
