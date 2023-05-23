@@ -345,7 +345,7 @@ class PipCommandBuilder:
         :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
         :param constraints_files: Files that should be passed to pip using the `-c` option.
         :param requirements_files: Files that should be passed to pip using the `-r` option.
-        :param use_pip_config: whether the pip config should be used or not
+        :param use_pip_config: whether the pip config should be used
         """
         requirements = requirements if requirements is not None else []
         paths = paths if paths is not None else []
