@@ -743,7 +743,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         try:
             self.log_pre_install_information(module_name, module_spec)
             modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
-            env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
+            env.process_env.install_from_index(
+                requirements,
+                self.urls,
+                allow_pre_releases=allow_pre_releases,
+                use_pip_config=project.metadata.pip.use_config_file,
+            )
 
             self.log_post_install_information(module_name)
             self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
@@ -2068,6 +2073,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 upgrade=update_dependencies,
                 index_urls=indexes_urls if indexes_urls else None,
                 upgrade_strategy=env.PipUpgradeStrategy.EAGER,
+                use_pip_config=self.metadata.pip.use_config_file,
             )
 
         self.verify()

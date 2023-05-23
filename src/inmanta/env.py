@@ -345,6 +345,7 @@ class PipCommandBuilder:
         :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
         :param constraints_files: Files that should be passed to pip using the `-c` option.
         :param requirements_files: Files that should be passed to pip using the `-r` option.
+        :param use_pip_config: whether the pip config should be used or not
         """
         requirements = requirements if requirements is not None else []
         paths = paths if paths is not None else []
@@ -354,15 +355,24 @@ class PipCommandBuilder:
             LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
             for path in paths
         )
-        index_args: List[str] = (
-            []
-            if index_urls is None
-            else ["--index-url", index_urls[0], *chain.from_iterable(["--extra-index-url", url] for url in index_urls[1:])]
-            if not use_pip_config
-            else [*chain.from_iterable(["--extra-index-url", url] for url in index_urls[0:])]
-            if index_urls
-            else ["--no-index"]
-        )
+        index_args: List[str] = []
+
+        if index_urls is not None:
+            if not use_pip_config:
+                # Use separate --index-url and --extra-index-url arguments
+                index_args.append("--index-url")
+                index_args.append(index_urls[0])
+                for url in index_urls[1:]:
+                    index_args.append("--extra-index-url")
+                    index_args.append(url)
+            else:
+                # Use only --extra-index-url arguments
+                for url in index_urls:
+                    index_args.append("--extra-index-url")
+                    index_args.append(url)
+        elif index_urls is None:
+            # No index URLs provided, use --no-index argument
+            index_args.append("--no-index")
 
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
@@ -476,6 +486,7 @@ class PythonEnvironment:
         allow_pre_releases: bool = False,
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         cmd: List[str] = PipCommandBuilder.compose_install_command(
             python_path=python_path,
@@ -487,6 +498,7 @@ class PythonEnvironment:
             allow_pre_releases=allow_pre_releases,
             constraints_files=constraints_files,
             requirements_files=requirements_files,
+            use_pip_config=use_pip_config,
         )
 
         sub_env = os.environ.copy()
@@ -582,6 +594,7 @@ class PythonEnvironment:
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
@@ -595,9 +608,15 @@ class PythonEnvironment:
             allow_pre_releases=allow_pre_releases,
             constraints_files=[*constraint_files],
             upgrade_strategy=upgrade_strategy,
+            use_pip_config=use_pip_config,
         )
 
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+    def install_from_source(
+        self,
+        paths: List[LocalPackagePath],
+        constraint_files: Optional[List[str]] = None,
+        use_pip_config: Optional[bool] = False,
+    ) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
         """
@@ -610,6 +629,7 @@ class PythonEnvironment:
             paths=paths,
             constraints_files=constraint_files,
             requirements=inmanta_requirements,
+            use_pip_config=use_pip_config,
         )
 
     @classmethod
@@ -743,19 +763,25 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not upgrade and self.are_installed(requirements):
             return
         try:
             super(ActiveEnv, self).install_from_index(
-                requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
+                requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy, use_pip_config
             )
         finally:
             self.notify_change()
 
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+    def install_from_source(
+        self,
+        paths: List[LocalPackagePath],
+        constraint_files: Optional[List[str]] = None,
+        use_pip_config: Optional[bool] = False,
+    ) -> None:
         try:
-            super().install_from_source(paths, constraint_files)
+            super().install_from_source(paths, constraint_files, use_pip_config)
         finally:
             self.notify_change()
 
@@ -855,6 +881,7 @@ class ActiveEnv(PythonEnvironment):
         *,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         """
         Install requirements from a list of requirement strings. This method uses the Python package repositories
@@ -863,12 +890,15 @@ class ActiveEnv(PythonEnvironment):
         :param requirements_list: List of requirement strings to install.
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
+        :param use_pip_config: whether the pip config should be used
         """
         if not upgrade and self.are_installed(requirements_list):
             # don't fork subprocess if requirements are already met
             return
         try:
-            self._install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
+            self._install_from_list(
+                requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy, use_pip_config=use_pip_config
+            )
         finally:
             self.notify_change()
 
@@ -878,6 +908,7 @@ class ActiveEnv(PythonEnvironment):
         *,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         """
         This method differs from the `install_from_index()` method in the sense that it calls
@@ -895,6 +926,7 @@ class ActiveEnv(PythonEnvironment):
                     requirements=inmanta_requirements,
                     upgrade=upgrade,
                     upgrade_strategy=upgrade_strategy,
+                    use_pip_config=use_pip_config,
                 )
             except Exception:
                 LOGGER.info("requirements:\n%s", content_requirements_file)
@@ -1290,17 +1322,23 @@ import sys
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super(VirtualEnv, self).install_from_index(
-            requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy
+            requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy, use_pip_config
         )
 
-    def install_from_source(self, paths: List[LocalPackagePath], constraint_files: Optional[List[str]] = None) -> None:
+    def install_from_source(
+        self,
+        paths: List[LocalPackagePath],
+        constraint_files: Optional[List[str]] = None,
+        use_pip_config: Optional[bool] = False,
+    ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_source(paths, constraint_files)
+        super(VirtualEnv, self).install_from_source(paths, constraint_files, use_pip_config)
 
     def install_from_list(
         self,
@@ -1308,10 +1346,13 @@ import sys
         *,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_list(requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy)
+        super(VirtualEnv, self).install_from_list(
+            requirements_list, upgrade=upgrade, upgrade_strategy=upgrade_strategy, use_pip_config=use_pip_config
+        )
 
 
 class VenvCreationFailedError(Exception):
