@@ -53,7 +53,6 @@ def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mod
 modulepath: libs
 downloadpath: libs
 repo: %s
-pip: { use_config_file: False }
 """
                 % reporoot
             )
@@ -66,6 +65,8 @@ pip: { use_config_file: False }
                 if req[1] is not None:
                     projectfile.write("\n    - {} {}".format(req[0], req[1]))
 
+        projectfile.write("\n")
+        projectfile.write("pip: {use_config_file: False}")
         projectfile.write("\n")
 
     model = os.path.join(path, "model")

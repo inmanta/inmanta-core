@@ -1177,7 +1177,6 @@ class SnippetCompilationTest(KeepOnFail):
             version: 1.0
             repo:
                 - {{type: git, url: {self.repo} }}
-            pip: {{ use_config_file: {pip_use_config_file} }}
             """.rstrip()
             )
             if python_package_sources:
@@ -1197,6 +1196,7 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
+            cfg.write(f"\n            pip: {{ use_config_file: {pip_use_config_file} }}")
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")
