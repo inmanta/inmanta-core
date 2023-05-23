@@ -29,6 +29,8 @@ requires = [
     "pyyaml",
     "texttable",
     "tornado",
+    # Make sure we do not use 4.6.0 which breaks protocol
+    "typing-extensions<=4.5.0",
     "typing_inspect",
 ]
 
