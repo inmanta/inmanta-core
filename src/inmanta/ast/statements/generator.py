@@ -331,6 +331,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
             queue=queue,
             lhs=lhs,
         )
+        self.copy_location(collector_helper)
         iterable_requires: dict[object, VariableABC] = (
             # use helper strictly non-gradually when in a non-gradual context
             # => propagates progress potential to iterable expression's requires
@@ -483,7 +484,6 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         self._complete: bool = False
         # collector for the final result
         self.final_result: ResultVariable = ResultVariable()
-        self.statement.copy_location(self)
 
     def receive_result(self, value: object, location: Location) -> bool:
         """
@@ -665,21 +665,27 @@ class ConditionalExpression(ExpressionStatement):
     def requires(self) -> List[str]:
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
-    # TODO: add gradual support + test
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
+    ) -> dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
 
         # This ResultVariable will receive the result of this expression
         result: ResultVariable = ResultVariable()
 
         # Schedule execution to resume when the condition can be executed
-        resumer: RawResumer = ConditionalExpressionResumer(self, result)
+        resumer: RawResumer = ConditionalExpressionResumer(self, result, lhs=lhs)
         self.copy_location(resumer)
         RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer)
 
         # Wait for the result variable to be populated
         requires[self] = result
         return requires
+
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
+    ) -> dict[object, VariableABC]:
+        return self.requires_emit(resolver, queue, lhs=resultcollector)
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -707,13 +713,16 @@ class ConditionalExpression(ExpressionStatement):
 
 
 class ConditionalExpressionResumer(RawResumer):
-    __slots__ = ("expression", "condition_value", "result")
+    __slots__ = ("expression", "condition_value", "result", "lhs")
 
-    def __init__(self, expression: ConditionalExpression, result: ResultVariable) -> None:
+    def __init__(
+        self, expression: ConditionalExpression, result: ResultVariable, *, lhs: Optional[ResultCollector[object]] = None
+    ) -> None:
         super().__init__()
         self.expression: ConditionalExpression = expression
         self.condition_value: Optional[bool] = None
         self.result: ResultVariable = result
+        self.lhs: Optional[ResultCollector[object]] = lhs
 
     def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         if self.condition_value is None:
@@ -733,10 +742,15 @@ class ConditionalExpressionResumer(RawResumer):
             subexpression: ExpressionStatement = (
                 self.expression.if_expression if self.condition_value else self.expression.else_expression
             )
+            requires: dict[object, VariableABC] = (
+                subexpression.requires_emit(resolver, queue)
+                if self.lhs is None
+                else subexpression.requires_emit_gradual(resolver, queue, self.lhs)
+            )
             RawUnit(
                 queue,
                 resolver,
-                subexpression.requires_emit(resolver, queue),
+                requires,
                 self,
             )
         else:
