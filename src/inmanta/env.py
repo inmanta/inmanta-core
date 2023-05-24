@@ -549,13 +549,7 @@ class PythonEnvironment:
             log_msg.extend(create_log_content_files("constraints files", constraints_files))
         log_msg.append("Pip command: " + " ".join(cmd))
         LOGGER_PIP.debug("".join(log_msg).strip())
-        print("=================================================")
-        print(sub_env["PIP_CONFIG_FILE"])
-        with open(sub_env["PIP_CONFIG_FILE"], "r") as f:
-            print(f.read())
         return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=sub_env)
-        print(return_code)
-        print(full_output)
 
         if return_code != 0:
             not_found: List[str] = []

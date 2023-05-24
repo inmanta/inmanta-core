@@ -184,7 +184,7 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
 def test_install_module_no_v2_source_with_use_config_file(snippetcompiler) -> None:
     """
     Verify that attempting to install a v2 module without a v2 module source but with use_config_file
-    is allowed.
+    is allowed. The installation fails as the module is not found but nothing prevents it.
     """
     module_name = "non_existing_module"
     with pytest.raises(Exception) as e:
