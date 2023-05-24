@@ -44,6 +44,24 @@ from utils import LogSequence, PipIndex, log_contains, module_from_template
 LOGGER = logging.getLogger(__name__)
 
 
+def verify_installed_packages(package_name):
+    """
+    Verifies if a specified package is installed.
+    """
+    try:
+        result = subprocess.run(["pip", "list"], capture_output=True, text=True)
+        if result.returncode == 0:
+            # Process the output to extract package names
+            output_lines = result.stdout.strip().split("\n")[2:]
+            installed_packages = [line.split()[0] for line in output_lines]
+            # Check if the package is installed
+            return package_name in installed_packages
+        else:
+            print(f"Error: {result.stderr}")
+    except Exception as e:
+        print(e)
+
+
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
     """
     Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
@@ -902,7 +920,11 @@ def test_install_with_use_config(
     use_pip_config,
     caplog,
 ) -> None:
-    """ """
+    """
+    Test that when using "use_pip_config" the configfile is used and that the module is being installed and
+    that no package source needs to be set.
+    if "use_pip_config" is not used, verify that it will install the module from the specified package source
+    """
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
     # prepare v2 modules
     v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
@@ -944,6 +966,72 @@ def test_install_with_use_config(
     message_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0"
     message_dont_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0 --index-url {index.url}"
     log_contains(caplog, "inmanta.pip", logging.DEBUG, message_use_config if use_pip_config else message_dont_use_config)
+    assert verify_installed_packages("inmanta-module-v2mod1")
+
+
+def test_install_with_use_config_extra_index(
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    caplog,
+) -> None:
+    """
+    Test that package sources that are specified when the pip_config_file is used, are used as
+    --extra-index-url in the pip install command
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    index2: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index2"))
+
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        publish_index=index,
+    )
+
+    v2mod2: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod2"),
+        new_name="v2mod2",
+        publish_index=index2,
+    )
+
+    pip_config_file = os.path.join(tmpdir, "pip.conf")
+    with open(pip_config_file, "w+", encoding="utf-8") as f:
+        f.write("[global]\n")
+        f.write("timeout = 60\n")
+        f.write("index-url = file://" + index.url + "\n")
+    monkeypatch.setenv("PIP_CONFIG_FILE", pip_config_file)
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import v2mod1
+        import v2mod2
+        """,
+        autostd=False,
+        install_project=False,
+        # Installing a V2 module requires a python package source if use_config_file is not True
+        python_package_sources=[index2.url],
+        use_pip_config_file=True,
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
+            for metadata in [v2mod1, v2mod2]
+        ],
+    )
+
+    # install project
+    project_path = module.Project.get().path
+    os.chdir(project_path)
+    with caplog.at_level(logging.DEBUG):
+        ProjectTool().execute("install", [])
+    message_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0 --extra-index-url {index2.url}"
+    log_contains(caplog, "inmanta.pip", logging.DEBUG, message_use_config)
+    assert verify_installed_packages("inmanta-module-v2mod1")
+    assert verify_installed_packages("inmanta-module-v2mod2")
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
