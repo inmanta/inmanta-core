@@ -17,13 +17,13 @@ Filter on resources in the available state and check which resource are ready to
 dependencies or a resource for which all dependencies were deployed successfully). The agent of that resource, is the agent that
 causes the problem. In the figure below, the ``Global`` GnmiResource should be ready to deploy on the ``spine`` agent.
 
-.. figure:: ./_static/troubleshooting/resources_overview_stuck_in_available_state_new.png
+.. figure:: ./_static/troubleshooting/resources_overview_stuck_in_available_state.png
    :width: 100%
    :align: center
 
 Next, go to the ``Agents`` tab of the dashboard to verify the state of that agent.
 
-.. figure:: ./_static/troubleshooting/agent_is_paused_new.png
+.. figure:: ./_static/troubleshooting/agent_is_paused.png
    :width: 100%
    :align: center
 
@@ -46,7 +46,7 @@ agent that shouldn't be down is down.
 The agent is paused
 -------------------
 
-Unpause the agent by clicking the ``Unpause agent`` button in the agents tab of the dashboard.
+Unpause the agent by clicking the ``Unpause`` button in the ``Agents`` tab of the dashboard.
 
 .. figure:: ./_static/troubleshooting/agent_is_paused.png
    :width: 100%
@@ -59,10 +59,11 @@ The agent is up
 When the agent is in the up state, it should be ready to deploy resources. Read the agent log to verify it doesn't contain
 error or warning messages that would explain why the agent is not deploying any resources. For auto-started agents, three
 different log files exist. The log files are present in ``<config.log-dir>/agent-<environment-id>.[log|out|err]``. The
-environment ID can be found in the URL of the dashboard. More information about the different log files can be found
+environment ID can be found in the URL of the dashboard, or in the ``Settings`` view, accessible via the cogwheel icon.
+More information about the different log files can be found
 :ref:`here<administrators_doc_logging>`. For manually started agents the log file is present in
-``/var/log/inmanta/agent.log``. If the log file doesn't provide any more information, trigger the agents to execute a
-deployment by clicking on the ``Force Repair`` button in the versions tab of the dashboard, as shown in the figure below:
+``/var/log/inmanta/agent.log``. If the log file doesn't provide any more information, trigger the agent to execute a
+deployment by clicking on the ``Force Repair`` button in the ``Agents`` tab of the dashboard, as shown in the figure below:
 
 .. figure:: ./_static/troubleshooting/force_repair_button.png
    :width: 100%
@@ -89,9 +90,9 @@ When a resource cannot be deployed, it ends up in one of the following deploymen
   :ref:`Check the log of the resource<read_resource_log>` to get more details about the issue.
 * **unavailable:** A resource ends up in the ``unavailable`` state when no handler could be found to deploy that resource.
   :ref:`Check the log of the resource<read_resource_log>` to get more details about the issue.
-* **undefined:** A resource ends up in the ``undefined`` state when a fact, required by that resource didn't yet resolve to a
-  value. Read Section :ref:`Check which facts are not yet resolved<check_which_fact_didnt_resolve>` to find out which fact is
-  still unknown.
+* **undefined:** A resource ends up in the ``undefined`` state when an attribute required by that resource, didn't yet resolve to a
+  definite value. Read Section :ref:`Check which attributes are undefined<check_for_undefined_attributes>` to find out which attributes are
+  undefined.
 * **skipped:** When a resource is in the ``skipped`` state, it can mean two different things. Either the resource cannot be
   deployed because one of its dependencies ended up the failed state or the handler itself raised a SkipResource exception to
   indicate that the resource in not yet ready to be deployed. The latter case can occur when a VM is still booting for example.
@@ -106,43 +107,41 @@ When a resource cannot be deployed, it ends up in one of the following deploymen
 Read the logs of a resource
 ---------------------------
 
-This section describes how to obtain the logs for a specific resource. In the versions tab of the dashboard, click on the
-version of the configuration model being deployed to get a list of all the resource in that configuration model. Next, click on
-the magnifier in front of a resource, as shown in the figure below, to get the logs for that specific resource. The log messages
-for the different stages of the deployment are grouped together.
+This section describes how to obtain the logs for a specific resource. In the ``Resources`` tab of the dashboard, click on
+``Show Details`` for the desired resource.
 
-.. figure:: ./_static/troubleshooting/get_logs_failed_resource.png
+.. figure:: ./_static/troubleshooting/get_logs_failed_resource_1.png
    :width: 100%
    :align: center
 
-The magnifier in front of each log message can be used to get a more structured output for that specific log message.
+Next, click on the ``Logs`` tab.
 
-.. figure:: ./_static/troubleshooting/action_log.png
+.. figure:: ./_static/troubleshooting/get_logs_failed_resource_2.png
    :width: 100%
    :align: center
 
-In the figure below, the traceback of the exception is shown.
+In this view, the logs can be sorted and filtered. Click on the chevron for a specific log line to display more
+information, such as the traceback.
 
-.. figure:: ./_static/troubleshooting/action_log_specific_message.png
+.. figure:: ./_static/troubleshooting/get_logs_failed_resource_3.png
    :width: 100%
    :align: center
 
 
-.. _check_which_fact_didnt_resolve:
+.. _check_for_undefined_attributes:
 
-Check which facts are not yet resolved
---------------------------------------
+Check which attributes are undefined
+------------------------------------
 
-To find out which fact of a certain resource is not yet resolved, click on the magnifier in front of the resource in the
+To find out undefined attributes of a resource, click on ``Show Details`` for the resource in the
 ``undefined`` state, as shown in the figure below.
 
 .. figure:: ./_static/troubleshooting/resources_in_the_undefined_state.png
    :width: 100%
    :align: center
 
-The list of attributes of that resource, will contain one attribute which is marked as undefined (See figure below). This is the
-attribute that wasn't resolved yet. Track the source of this attribute down within the configuration model to find out why this
-attribute is undefined.
+Look for attributes marked as undefined in the list of attributes of that resource (See figure below). Track the source
+of this attribute down within the configuration model to find out why this attribute is undefined.
 
 .. figure:: ./_static/troubleshooting/undefined_attribute.png
    :width: 100%
@@ -155,7 +154,7 @@ Agent doesn't come up
 =====================
 
 This section explains how to troubleshoot the problem where an agent is in the down state while it should be up. In the figure
-shown below, the agent vm1 is down.
+shown below, the four agents are down.
 
 .. figure:: ./_static/troubleshooting/agent_in_down_state.png
    :width: 100%
@@ -173,7 +172,7 @@ Auto-started agents
 -------------------
 
 An auto-started agent is only started when that agent is present in the ``autostart_agent_map`` environment setting. Verify that
-requirement via the settings tab of the inmanta dashboard as shown in the figure below.
+requirement in the ``Configuration`` tab of the ``Settings`` view, accessible via the cogwheel icon, as shown in the figure below.
 
 .. figure:: ./_static/troubleshooting/environment_settings_autostart_agent_map.png
    :width: 100%
