@@ -938,8 +938,8 @@ def test_install_with_use_config(
 
     # install project
     os.chdir(module.Project.get().path)
-    print(use_pip_config)
-    print(module.Project.get().path)
+    print("project path: " + module.Project.get().path)
+    print("project.yml content:")
     with open(module.Project.get().path + "/project.yml", "r") as f:
         print(f.read())
     ProjectTool().execute("install", [])

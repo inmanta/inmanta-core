@@ -603,7 +603,6 @@ class PythonEnvironment:
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         use_pip_config: Optional[bool] = False,
     ) -> None:
-        print(requirements)
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
