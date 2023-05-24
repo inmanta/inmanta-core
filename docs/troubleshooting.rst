@@ -15,7 +15,7 @@ down or paused. Click on the ``Resources`` tab of the Inmanta dashboard, to get 
 overview of the different resources in the model. This overview shows the state of each resource and the name of its agent.
 Filter on resources in the available state and check which resource are ready to be deployed (i.e. a resource without
 dependencies or a resource for which all dependencies were deployed successfully). The agent of that resource, is the agent that
-causes the problem. In the figure below, the ``Global`` GnmiResource should be ready to deploy on the ``spine`` agent.
+causes the problem. In the figure below, the ``global`` GnmiResource should be ready to deploy on the ``spine`` agent.
 
 .. figure:: ./_static/troubleshooting/resources_overview_stuck_in_available_state.png
    :width: 100%
@@ -243,24 +243,23 @@ This section provides a list of potential reasons why an agent wouldn't start:
   server, etc.
 
 
-No version appears after recompile trigger
-==========================================
+Compilation failed
+==================
 
-After clicking the ``Recompile`` button of the dashboard, a new version of the configuration model should appear in the list of
-versions. If this doesn't happen, the compilation has failed. Click on the ``Compile Reports`` button, as shown in the
-figure below, to get the compile report of the latest compilation. This report will give more information about the exact
-problem.
+The ``Compile Reports`` tab shows a list of compile reports for the latest compilations. Click on ``Show Details``
+to see more information about a given report.
 
-.. figure:: ./_static/troubleshooting/compile_report_button.png
+.. figure:: ./_static/troubleshooting/compile_reports.png
    :width: 100%
    :align: center
 
-Each step of the compile process is shown, together with the output produced by that step and the return code. Verify that the
+Each step of the compile process is shown. Click on the chevron, as shown below, for a specific step, to display more
+information such as the output produced by that step and the return code. Verify that the
 timestamp of the compile report corresponds to the time the compilation was triggered in the dashboard. If no compile report was
 generated or the compile report doesn't show any errors, check the server logs as well. By default the server log is present in
 ``<config.log-dir>/server.log``.
 
-.. figure:: ./_static/troubleshooting/compile_report.png
+.. figure:: ./_static/troubleshooting/compile_report_detail.png
    :width: 100%
    :align: center
 
