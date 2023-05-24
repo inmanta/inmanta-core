@@ -501,11 +501,11 @@ class PythonEnvironment:
             requirements_files=requirements_files,
             use_pip_config=use_pip_config,
         )
-
+        print(cmd)
         sub_env = os.environ.copy()
 
         # if index_urls are set, only use those. Otherwise, use the one from the environment
-        if index_urls is not None:
+        if index_urls is not None and not use_pip_config:
             # setting this env_var to os.devnull disables the loading of all pip configuration files
             sub_env["PIP_CONFIG_FILE"] = os.devnull
         if index_urls is not None and "PIP_EXTRA_INDEX_URL" in sub_env:
@@ -547,7 +547,13 @@ class PythonEnvironment:
             log_msg.extend(create_log_content_files("constraints files", constraints_files))
         log_msg.append("Pip command: " + " ".join(cmd))
         LOGGER_PIP.debug("".join(log_msg).strip())
+        print("=================================================")
+        print(sub_env["PIP_CONFIG_FILE"])
+        with open(sub_env["PIP_CONFIG_FILE"], "r") as f:
+            print(f.read())
         return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=sub_env)
+        print(return_code)
+        print(full_output)
 
         if return_code != 0:
             not_found: List[str] = []
@@ -597,6 +603,7 @@ class PythonEnvironment:
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         use_pip_config: Optional[bool] = False,
     ) -> None:
+        print(requirements)
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []

@@ -749,7 +749,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 allow_pre_releases=allow_pre_releases,
                 use_pip_config=project.metadata.pip.use_config_file,
             )
-
+            print("ok")
             self.log_post_install_information(module_name)
             self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
         except env.PackageNotFound:
@@ -759,6 +759,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             python_package: str = ModuleV2Source.get_package_name_for(module_name)
             namespace_package: str = self.get_namespace_package_name(module_name)
             raise InvalidModuleException(f"{python_package} does not contain a {namespace_package} module.")
+        print("___________")
+        print(project)
+        print(module_name)
+        print(path)
         return self.from_path(project, module_name, path)
 
     def log_pre_install_information(self, module_name: str, module_spec: List[InmantaModuleRequirement]) -> None:
@@ -904,6 +908,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         )
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
+        print("4")
         module_name: str = self._get_module_name(module_spec)
         preinstalled: Optional[ModuleV1] = self.get_installed_module(project, module_name)
         if preinstalled is not None:
@@ -2369,10 +2374,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         module_reqs: List[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
         )
-
+        print(module_reqs)
         module: Optional[Union[ModuleV1, ModuleV2]]
         try:
             module = self.module_source.get_module(self, module_reqs, install=install_v2)
+            print(module)
             if module is not None and self.module_source_v1.path_for(module_name) is not None:
                 LOGGER.warning("Module %s is installed as a V1 module and a V2 module: V1 will be ignored.", module_name)
             if module is None and allow_v1:

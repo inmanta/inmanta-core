@@ -195,7 +195,7 @@ def test_install_module_no_v2_source_with_use_config_file(snippetcompiler) -> No
             python_requires=[
                 InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
             ],
-            pip_use_config_file=True,
+            use_pip_config_file=True,
         )
     message: str = f"Could not find module {module_name}"
     assert message in e.value.format_trace()

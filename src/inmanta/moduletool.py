@@ -1026,6 +1026,7 @@ version: 0.0.1dev0"""
         Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
         context of a project.
         """
+        print("2")
 
         def install(install_path: str) -> None:
             try:
