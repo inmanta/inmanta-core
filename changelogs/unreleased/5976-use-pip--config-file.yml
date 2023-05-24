@@ -1,0 +1,7 @@
+description: improved support for pip config by adding use_config_file to project.yml
+issue-nr: 5976
+change-type: minor
+destination-branches: [master, iso6, iso5]
+sections:
+  minor-improvement: "{{description}}"
+
