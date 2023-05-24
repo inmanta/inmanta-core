@@ -497,8 +497,6 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
     """
     Verify that list comprehensions propagate Unknowns appropriately.
     """
-    # TODO: make sure to mention Unknown semantics in docs: Unknown represents an unknown value, or absence of a value
-    # TODO: fix std::count with propagate_unknowns: bool = False
     snippetcompiler.setup_for_snippet(
         textwrap.dedent(
             """
