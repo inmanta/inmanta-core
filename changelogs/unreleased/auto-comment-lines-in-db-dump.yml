@@ -1,0 +1,4 @@
+---
+description: Make the dump_tool automatically comment out all undesired lines in the generated database dump to prevents issues with trailing whitespaces being removed from the file.
+change-type: patch
+destination-branches: [master, iso6, iso5]
