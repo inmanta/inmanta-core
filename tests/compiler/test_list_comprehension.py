@@ -622,4 +622,58 @@ def test_list_comprehension_direct(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-# TODO: tests for error scenarios
+def test_list_comprehension_type_error(snippetcompiler) -> None:
+    """
+    Verify that a list comprehension applied to something other than a list raises a clear exception
+    """
+    snippetcompiler.setup_for_error(
+        "[x for x in 'Hello World']",
+        (
+            "A list comprehension can only be applied to lists and relations, got str"
+            " (reported in [x for x in 'Hello World'] ({dir}/main.cf:1))"
+        ),
+    )
+
+
+def test_list_comprehension_type_error_direct_execute(snippetcompiler) -> None:
+    """
+    Verify that a list comprehension in a direct execute context applied to something other than a list raises a clear exception
+    """
+    snippetcompiler.setup_for_error(
+        textwrap.dedent(
+            """
+            typedef mytype as int matching self in [x for x in 'Hello World']
+            entity A:
+                mytype n = 0
+            end
+            """.strip(
+                "\n"
+            )
+        ),
+        (
+            "A list comprehension in a direct execute context can only be applied to lists, got str"
+            " (reported in [x for x in 'Hello World'] ({dir}/main.cf:1))"
+        ),
+    )
+
+
+def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> None:
+    """
+    Verify that a list comprehension in a direct execute context applied with a non-boolean guard raises a clear exception
+    """
+    snippetcompiler.setup_for_error(
+        textwrap.dedent(
+            """
+            typedef mytype as int matching self in [x for x in [1, 2] if 42]
+            entity A:
+                mytype n = 0
+            end
+            """.strip(
+                "\n"
+            )
+        ),
+        (
+            "Invalid value `42`: the guard condition for a list comprehension must be a boolean expression"
+            " (reported in [x for x in [1,2] if 42] ({dir}/main.cf:1))"
+        ),
+    )

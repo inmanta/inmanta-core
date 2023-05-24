@@ -267,7 +267,6 @@ class For(RequiresEmitStatement):
         yield self.module
 
 
-# TODO: run mypy
 class ListComprehension(RawResumer, ExpressionStatement):
     """
     A list comprehension expression, e.g. `["hello {{world}}" for world in worlds if world != "exclude"]`.
@@ -369,7 +368,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
             collector_helper.set_unknown()
         elif not isinstance(iterable, list):
             raise TypingException(
-                self, f"A list comprehension can only be applied to lists and relations, got {type(iterable)}"
+                self, f"A list comprehension can only be applied to lists and relations, got {type(iterable).__name__}"
             )
         else:
             collector_helper.complete(iterable, resolver, queue)
@@ -386,7 +385,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
             return Unknown(self)
         elif not isinstance(iterable, list):
             raise TypingException(
-                self, f"A list comprehension in a direct execute context can only be applied to lists, got {type(iterable)}"
+                self,
+                f"A list comprehension in a direct execute context can only be applied to lists, got {type(iterable).__name__}",
             )
 
         def process(element: object) -> Optional[object]:
@@ -423,7 +423,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
             self.value_expression.pretty_print(),
             self.loop_var,
             self.iterable.pretty_print(),
-            f" {self.guard.pretty_print()}" if self.guard is not None else "",
+            f" if {self.guard.pretty_print()}" if self.guard is not None else "",
         )
 
     def __str__(self) -> str:
