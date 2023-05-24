@@ -24,6 +24,7 @@ import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     Anchor,
     DirectExecuteException,
+    Locatable,
     Location,
     Named,
     Namespace,
@@ -242,8 +243,7 @@ class ExpressionStatement(RequiresEmitStatement):
         raise NotImplementedError()
 
 
-# TODO: why do resumers inherit from ExpressionStatement? Could just be a mix-in?
-class Resumer(ExpressionStatement):
+class Resumer(Locatable):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
     """
@@ -254,7 +254,7 @@ class Resumer(ExpressionStatement):
         pass
 
 
-class RawResumer(ExpressionStatement):
+class RawResumer(Locatable):
     """
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
