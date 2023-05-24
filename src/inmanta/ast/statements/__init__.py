@@ -139,6 +139,7 @@ class RequiresEmitStatement(DynamicStatement):
     of being emitted, its requirements may be requested through `requires_emit`. These should then be used to schedule `execute`
     when the requirements are met.
     """
+
     __slots__ = ()
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:

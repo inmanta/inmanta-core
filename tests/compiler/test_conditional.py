@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 
-import pytest
 import textwrap
+
+import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import Namespace, NotFoundException
