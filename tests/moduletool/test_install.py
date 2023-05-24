@@ -893,13 +893,14 @@ def test_install_from_index_dont_leak_pip_index(
     assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
 
 
-@pytest.mark.parametrize_any("use_pip_config", [True])
+@pytest.mark.parametrize_any("use_pip_config", [True, False])
 def test_install_with_use_config(
     tmpdir: py.path.local,
     modules_v2_dir: str,
     snippetcompiler_clean,
     monkeypatch,
     use_pip_config,
+    caplog,
 ) -> None:
     """ """
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
@@ -927,8 +928,7 @@ def test_install_with_use_config(
         autostd=False,
         install_project=False,
         # Installing a V2 module requires a python package source if use_config_file is not True
-        # python_package_sources=[index.url] if not use_pip_config else None,
-        python_package_sources=None,
+        python_package_sources=[index.url] if not use_pip_config else None,
         use_pip_config_file=use_pip_config,
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
@@ -937,12 +937,13 @@ def test_install_with_use_config(
     )
 
     # install project
-    os.chdir(module.Project.get().path)
-    print("project path: " + module.Project.get().path)
-    print("project.yml content:")
-    with open(module.Project.get().path + "/project.yml", "r") as f:
-        print(f.read())
-    ProjectTool().execute("install", [])
+    project_path = module.Project.get().path
+    os.chdir(project_path)
+    with caplog.at_level(logging.DEBUG):
+        ProjectTool().execute("install", [])
+    message_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0"
+    message_dont_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0 --index-url {index.url}"
+    log_contains(caplog, "inmanta.pip", logging.DEBUG, message_use_config if use_pip_config else message_dont_use_config)
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])

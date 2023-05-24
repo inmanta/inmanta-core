@@ -145,6 +145,7 @@ def log_contains(caplog, loggerpart, level, msg, test_phase="call"):
     close = []
     for record in caplog.get_records(test_phase):
         logger_name, log_level, message = record.name, record.levelno, record.message
+        print(record.message)
         if msg in message:
             if loggerpart in logger_name and level == log_level:
                 return

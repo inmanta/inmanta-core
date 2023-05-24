@@ -749,7 +749,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 allow_pre_releases=allow_pre_releases,
                 use_pip_config=project.metadata.pip.use_config_file,
             )
-            print("ok")
             self.log_post_install_information(module_name)
             self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
         except env.PackageNotFound:
