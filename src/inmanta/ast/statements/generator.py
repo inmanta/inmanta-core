@@ -32,6 +32,7 @@ from inmanta.ast import (
     AmbiguousTypeException,
     AttributeReferenceAnchor,
     DuplicateException,
+    InvalidCompilerState,
     Locatable,
     LocatableString,
     Location,
@@ -230,9 +231,8 @@ class For(RequiresEmitStatement):
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
 
     def requires(self) -> List[str]:
-        # TODO: add test + bugfix entry
         # exclude loop var, unless it shadows an occurrence in iterable
-        return list(set(self.base.requires()) - {self.loop_var} | set(self.module.requires()))
+        return list(set(self.module.requires()) - {self.loop_var} | set(self.base.requires()))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
@@ -306,7 +306,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
     def requires(self) -> list[str]:
         # exclude loop var, unless it shadows an occurrence in iterable
-        return list(set(self.iterable.requires()) - {self.loop_var} | set(self.value_expression.requires()))
+        return list(set(self.value_expression.requires()) - {self.loop_var} | set(self.iterable.requires()))
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
@@ -363,6 +363,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         collector_helper: object = requires[self].get_value()
         assert isinstance(collector_helper, ListComprehensionCollector)
 
+        # execute iterable so we have all values
         iterable: object = self.iterable.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue)
 
         # indicate to helper that we're done
@@ -377,6 +378,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
+        # at this point the resumer signalled the helper we were done and the helper waited for all value expressions
+        # => just fetch the result
         return requires[self]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> list[object]:
@@ -417,27 +420,50 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
         return [result for element in iterable if (result := process(element)) is not None]
 
-    # TODO: repr/str
+    def pretty_print(self) -> str:
+        return "[%s for %s in %s%s]" % (
+            self.value_expression.pretty_print(),
+            self.loop_var,
+            self.iterable.pretty_print(),
+            f" {self.guard.pretty_print()}" if self.guard is not None else "",
+        )
+
+    def __str__(self) -> str:
+        return self.pretty_print()
+
+    def __repr__(self) -> str:
+        return "ListComprehension(value_expression=%s, loop_var=%s, iterable=%s, guard=%s)" % (
+            repr(self.value_expression),
+            repr(self.loop_var),
+            repr(self.iterable),
+            repr(self.guard),
+        )
 
 
-# TODO: is there a better way?
-# TODO: docstring
 LIST_COMPREHENSION_GUARDED = object()
+"""
+Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
+expression for an element should not be executed because the element was filtered by the guard.
+"""
 
 
-# TODO: implement Locatable interface?
-# TODO: normal Resumer would be simpler?
 class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     """
-    Result collector for result collection (gradual or otherwise) of the list comprehension statement. When it receives a
+    Result collector (gradual or otherwise) for the list comprehension statement. When it receives a
     result, it sets up appropriate (gradual or otherwise) execution for the value expression, with the lhs as final result
     collector. Finally, it collects all final results in its own result variable for non-gradual execution.
 
-    Expects to receive each result once, be it gradually or at execution-time. Clients should indicate completion by calling
-    `complete()`.
+    This class has a gradual mode and a non-gradual mode depending on whether `lhs` is set. In non-gradual mode (lhs is None)
+    it must not receive any gradual results. This allows the class to maintain ordering in non-gradual mode (if elements are
+    received gradually each they arrive as soon as they can be resolved).
+
+    Expects to receive each result once, either gradually or at execution-time. Clients should indicate completion by calling
+    `complete()` or `set_unknown()`, after which no more values may be provided. This instance's `final_result` attribute
+    will contain the final result. It will be only be set after the client declares completion, but not necessarily immediately
+    after (we may have to wait for value expressions' requires).
     """
 
-    # TODO: slotted + test?
+    __slots__ = ("statement", "resolver", "queue", "lhs", "_results", "_complete", "final_result")
 
     def __init__(
         self,
@@ -450,14 +476,22 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         self.resolver: Resolver = resolver
         self.queue: QueueScheduler = queue
         self.lhs: Optional[ResultCollector[object]] = lhs
-        self.results: list[VariableABC] = []
-        # TODO: get rid of
+        # separately collect results for the value expression for each element of the iterable so we can wait for
+        # each element's value expression to complete.
+        self._results: list[VariableABC] = []
+        # have we received all elements?
+        self._complete: bool = False
+        # collector for the final result
         self.final_result: ResultVariable = ResultVariable()
+        self.statement.copy_location(self)
 
-    # TODO: docstring chain: introduces artificial requires needed for ordering in case of non-gradual iterable
-    def receive_result(self, value: object, location: Location, *, chain: bool = False) -> bool:
-        # TODO: raise exception if already complete
-        # TODO: keep track of seen to avoid duplicate work? Be careful not to introduce the same bug as with the for loop
+    def receive_result(self, value: object, location: Location) -> bool:
+        """
+        Receive an single element from the iterable and schedule execution of the associated value expression.
+        """
+        if self._complete:
+            raise InvalidCompilerState(self, "list comprehension helper received gradual result after it was declared complete")
+
         # Use special result variable for a pre-known value with listener capabilities. Using a plain `ResultVariable` would
         # break gradual execution (e.g. `Reference.requires_emit_gradual` registers self.lhs as listener)
         value_wrapper: ListElementVariable[object] = ListElementVariable(value, location)
@@ -467,10 +501,8 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             variable=value_wrapper,
         )
 
-        additional_requires: Optional[VariableABC] = self.results[-1] if chain and self.results else None
-
         result_variable: ResultVariable = ResultVariable()
-        self.results.append(result_variable)
+        self._results.append(result_variable)
 
         # execute the value expression and the guard
         guarded_expression: ExpressionStatement
@@ -495,40 +527,44 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             self.queue,
             value_resolver,
             result_variable,
-            requires | ({self: additional_requires} if additional_requires is not None else {}),
+            requires,
             guarded_expression,
         )
 
         return False
 
     def set_unknown(self) -> None:
-        # TODO: docstring: also mention mutual exclusion with complete
-        # TODO: assert self.results empty
+        """
+        Set the final result to be an unknown. No elements should be gradually received in this case.
+        Mutually exclusive with `complete`.
+        """
+        if self._results:
+            raise InvalidCompilerState("list comprehension helper got set_unknown after some (known) elements where received")
         self.final_result.set_value(Unknown(self.statement), self.statement.location)
 
     def complete(self, all_values: abc.Sequence[object], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Indicate that all results have been received. No further calls to `receive_result` should be done after this.
+        Mutually exclusive with `set_unknown`.
         """
-        if self.results:
+        if self._results:
             # We should only have received previous results in gradual mode, if the
             if self.lhs is None:
-                # TODO: raise proper exception
-                raise Exception("Invalid compiler state: list comprehension received gradual results in non-gradual mode")
-            if len(self.results) != len(all_values):
-                # TODO: raise proper exception
-                raise Exception("Invalid compiler state: list comprehension received some but not all values gradually")
+                raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
+            if len(self._results) != len(all_values):
+                raise InvalidCompilerState("list comprehension helper received some but not all values gradually")
         else:
             for value in all_values:
-                self.receive_result(value, location=self.statement.location, chain=True)
+                self.receive_result(value, location=self.statement.location)
 
-        RawUnit(queue, resolver, dict(enumerate(self.results)), resumer=self)
+        RawUnit(queue, resolver, dict(enumerate(self._results)), resumer=self)
 
     def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         def get(variable: VariableABC) -> Optional[abc.Sequence[object]]:
             value: object = variable.get_value()
             return None if value is LIST_COMPREHENSION_GUARDED else value if isinstance(value, list) else [value]
 
+        # collect all element value expressions' results and write them to the final result variable
         self.final_result.set_value(
             list(
                 itertools.chain.from_iterable(value for variable in requires.values() if (value := get(variable)) is not None)
@@ -629,7 +665,7 @@ class ConditionalExpression(ExpressionStatement):
     def requires(self) -> List[str]:
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
-    # TODO: add gradual support
+    # TODO: add gradual support + test
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
 

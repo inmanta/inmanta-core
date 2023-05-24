@@ -163,11 +163,18 @@ def test_list_comprehension_order(snippetcompiler) -> None:
             default = true ? std::count(a.others) : "unreachable"
             a = A()
 
+            # use both plain variables (no gradual capability) and inline lists as iterable to verify identical behavior
+            iterable1 = [1, 2, 3, 4, 5]
+            iterable2 = [-1, 0, 1, 2, 3, 4, 5]
+
+            # add an additional gradual-capable layer to collect out-of-order results if there are any
+            l1 = [chained for chained in [x > 2 ? x : default for x in iterable1]]
             l1 = [chained for chained in [x > 2 ? x : default for x in [1, 2, 3, 4, 5]]]
             # a naive implementation could result in [3, 4, 5, 0, 0] because the zeros need to be waited on
             l1 = [0, 0, 3, 4, 5]
 
             # with a guard
+            l1 = [chained for chained in [x > 2 ? x : default for x in iterable2 if x > default]]
             l1 = [chained for chained in [x > 2 ? x : default for x in [-1, 0, 1, 2, 3, 4, 5] if x > default]]
             """.strip(
                 "\n"
