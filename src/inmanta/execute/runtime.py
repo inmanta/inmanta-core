@@ -47,10 +47,10 @@ if TYPE_CHECKING:
 
 
 T = TypeVar("T")
+T_contra = TypeVar("T_contra", contravariant=True)
 
 
-# TODO: timeboxed attempt to make this contravariant with T_contra
-class ResultCollector(Generic[T]):
+class ResultCollector(Generic[T_contra]):
     """
     Helper interface for gradual execution. Should be attached as a listener to a ResultVariable, which will then call
     receive_result whenever it receives a new value.
@@ -68,7 +68,7 @@ class ResultCollector(Generic[T]):
         """
         return True
 
-    def receive_result(self, value: T, location: Location) -> bool:
+    def receive_result(self, value: T_contra, location: Location) -> bool:
         """
         Receive a single value for gradual execution. Called once for each value that is part of the result.
 
