@@ -792,13 +792,13 @@ def p_list_comprehension(p: YaccProduction) -> None:
 
 def p_list_comprehension_for_empty(p: YaccProduction) -> None:
     "list_comprehension_for_empty : empty"
-    p[0]: list[ForSpecifier] = []
+    p[0] = []  # list[ForSpecifier]
 
 
 def p_list_comprehension_for(p: YaccProduction) -> None:
     """list_comprehension_for : FOR ID IN expression list_comprehension_for_empty
     | FOR ID IN expression list_comprehension_for"""
-    p[0]: list[ForSpecifier] = p[5]
+    p[0] = p[5]  # list[ForSpecifier]
     # for-specifiers in reverse order
     p[0].append(ForSpecifier(variable=p[2], iterable=p[4]))
 

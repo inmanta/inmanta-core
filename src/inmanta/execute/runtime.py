@@ -47,6 +47,7 @@ if TYPE_CHECKING:
 
 
 T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
 T_contra = TypeVar("T_contra", contravariant=True)
 
 
@@ -121,7 +122,7 @@ class ProgressionPromise(IPromise):
         self.owner.fulfill(self)
 
 
-class VariableABC(Generic[T]):
+class VariableABC(Generic[T_co]):
     """
     Abstract base class for variables that get passed around the AST nodes' methods via waiters.
     """
@@ -134,7 +135,7 @@ class VariableABC(Generic[T]):
         """
         raise NotImplementedError()
 
-    def get_value(self) -> T:
+    def get_value(self) -> T_co:
         """
         Returns the value object for this variable
 
@@ -142,7 +143,7 @@ class VariableABC(Generic[T]):
         """
         raise NotImplementedError()
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> None:
         """
         Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
         assignments of `null` will not be reported.
@@ -550,7 +551,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def __init__(self, queue: "QueueScheduler") -> None:
         # use dict for easy lookup with reliable ordering
-        self._listeners: Optional[dict[ResultCollector[ListValue], None]] = {}
+        self._listeners: Optional[dict[ResultCollector["Instance"], None]] = {}
         # Cache count for waiters without progress potential. Meaning waiters associated with either a purely gradual
         # listener or with a listener that indicated it is done.
         self._nb_gradual_waiters: int = 0
@@ -607,7 +608,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
         return True
 
-    def _notify_listeners(self, value: ListValue, location: Location) -> None:
+    def _notify_listeners(self, value: "Instance", location: Location) -> None:
         """
         Notifies all listeners about a new value. Deregisters any listeners that indicate they no longer wish to receive
         results.
@@ -925,7 +926,7 @@ class Waiter(object):
         self.requires[key] = waitable
         self.waitfor(waitable)
 
-    def waitfor(self, waitable: VariableABC) -> None:
+    def waitfor(self, waitable: VariableABC[object]) -> None:
         self.waitcount = self.waitcount + 1
         waitable.waitfor(self)
 

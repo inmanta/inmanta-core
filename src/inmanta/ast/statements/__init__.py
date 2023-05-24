@@ -119,23 +119,9 @@ class DynamicStatement(Statement):
     def normalize(self) -> None:
         raise NotImplementedError()
 
-    def requires(self) -> List[str]:
-        """
-        List of all variable names used by this statement. Artifact from the past, hardly used anymore.
-        """
-        raise NotImplementedError()
-
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()
-
-    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
-        """
-        Execute this statement in a static context without any scheduling, returning the expression's result.
-
-        :param requires: A dictionary mapping names to values.
-        """
-        raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def declared_variables(self) -> Iterator[str]:
         """
@@ -145,6 +131,14 @@ class DynamicStatement(Statement):
 
 
 class RequiresEmitStatement(DynamicStatement):
+    """
+    Statements that execute in two stages based on their requirements. These statements have a well defined set of
+    names/variables they require before they can execute. When these are emitted, they schedule their own execution to continue
+    as soon as the requirements are met.
+    If a RequiresEmitStatement does not appear as a top-level statement in a block but as a child of another statement, instead
+    of being emitted, its requirements may be requested through `requires_emit`. These should then be used to schedule `execute`
+    when the requirements are met.
+    """
     __slots__ = ()
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
@@ -220,6 +214,20 @@ class AttributeAssignmentLHS:
 
 class ExpressionStatement(RequiresEmitStatement):
     __slots__ = ()
+
+    def requires(self) -> List[str]:
+        """
+        List of all variable names used by this statement. Artifact from the past, hardly used anymore.
+        """
+        raise NotImplementedError()
+
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
+        """
+        Execute this statement in a static context without any scheduling, returning the expression's result.
+
+        :param requires: A dictionary mapping names to values.
+        """
+        raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         """

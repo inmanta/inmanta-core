@@ -23,7 +23,7 @@ import logging
 import uuid
 from collections import abc
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
@@ -119,8 +119,8 @@ class SubConstructor(ExpressionStatement):
         #     if promise.get_root_variable() not in injected_variables
         # ]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
+        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         try:
             resv = resolver.for_namespace(self.implements.constraint.namespace)
             requires.update(self.implements.constraint.requires_emit(resv, queue))
@@ -230,12 +230,8 @@ class For(RequiresEmitStatement):
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
 
-    def requires(self) -> List[str]:
-        # exclude loop var, unless it shadows an occurrence in iterable
-        return list(set(self.module.requires()) - {self.loop_var} | set(self.base.requires()))
-
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
+        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
 
         # pass context via requires!
         helper = GradualFor(self, resolver, queue)
@@ -259,6 +255,7 @@ class For(RequiresEmitStatement):
             raise TypingException(self, "A for loop can only be applied to lists and relations")
 
         helper = requires[self]
+        assert isinstance(helper, GradualFor)
 
         for loop_var in var:
             # generate a subscope/namespace for each loop
@@ -283,13 +280,13 @@ class ListComprehension(RawResumer, ExpressionStatement):
         value_expression: ExpressionStatement,
         loop_var: LocatableString,
         iterable: ExpressionStatement,
-        guard: ExpressionStatement = None,
+        guard: Optional[ExpressionStatement] = None,
     ) -> None:
         super().__init__()
         self.value_expression: ExpressionStatement = value_expression
         self.loop_var: LocatableString = loop_var
         self.iterable: ExpressionStatement = iterable
-        self.guard: ExpressionStatement = guard
+        self.guard: Optional[ExpressionStatement] = guard
         self.anchors.extend(
             itertools.chain(
                 self.value_expression.get_anchors(),
@@ -306,11 +303,11 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
     def requires(self) -> list[str]:
         # exclude loop var, unless it shadows an occurrence in iterable
-        return list(set(self.value_expression.requires()) - {self.loop_var} | set(self.iterable.requires()))
+        return list(set(self.value_expression.requires()) - {str(self.loop_var)} | set(self.iterable.requires()))
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
-    ) -> dict[object, VariableABC]:
+    ) -> dict[object, VariableABC[object]]:
         """
         Sets up gradual or non-gradual execution (depending on the lhs) of the list comprehension. Additionally sets up a
         resumer for when the iterable is complete. Returns as requires the (gradual) helper's result variable, which will be
@@ -322,7 +319,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
             -> wait for iterable completion -> `resume()` -> finalize helper input
             -> wait for helper completion -> `execute()` -> return complete value
         """
-        base_requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
+        base_requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
 
         # set up gradual execution
         collector_helper: ListComprehensionCollector = ListComprehensionCollector(
@@ -332,7 +329,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
             lhs=lhs,
         )
         self.copy_location(collector_helper)
-        iterable_requires: dict[object, VariableABC] = (
+        iterable_requires: dict[object, VariableABC[object]] = (
             # use helper strictly non-gradually when in a non-gradual context
             # => propagates progress potential to iterable expression's requires
             self.iterable.requires_emit(resolver, queue)
@@ -342,8 +339,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
         # non-gradual mode / finishing up: resume as soon as the iterable can be executed
         # pass helper to the resumer via the requires object
-        wrapped_helper: VariableABC = WrappedValueVariable(collector_helper)
-        requires: dict[object, VariableABC] = base_requires | iterable_requires | {self: wrapped_helper}
+        wrapped_helper: VariableABC[ListComprehensionCollector] = WrappedValueVariable(collector_helper)
+        requires: dict[object, VariableABC[object]] = base_requires | iterable_requires | {self: wrapped_helper}
         RawUnit(queue, resolver, requires, resumer=self)
 
         # Wait for resumer and helper to populate result.
@@ -352,10 +349,10 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
-    ) -> dict[object, VariableABC]:
+    ) -> dict[object, VariableABC[object]]:
         return self.requires_emit(resolver, queue, lhs=resultcollector)
 
-    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Resume when the iterable is fully ready for execution. Populates the helper's result variable and signals that no more
         values will be sent.
@@ -383,7 +380,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         # => just fetch the result
         return requires[self]
 
-    def execute_direct(self, requires: abc.Mapping[str, object]) -> list[object]:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> Union[list[object], Unknown]:
         iterable: object = self.iterable.execute_direct(requires)
         if isinstance(iterable, Unknown):
             return Unknown(self)
@@ -479,11 +476,11 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         self.lhs: Optional[ResultCollector[object]] = lhs
         # separately collect results for the value expression for each element of the iterable so we can wait for
         # each element's value expression to complete.
-        self._results: list[VariableABC] = []
+        self._results: list[VariableABC[object]] = []
         # have we received all elements?
         self._complete: bool = False
         # collector for the final result
-        self.final_result: ResultVariable = ResultVariable()
+        self.final_result: ResultVariable[object] = ResultVariable()
 
     def receive_result(self, value: object, location: Location) -> bool:
         """
@@ -501,7 +498,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             variable=value_wrapper,
         )
 
-        result_variable: ResultVariable = ResultVariable()
+        result_variable: ResultVariable[object] = ResultVariable()
         self._results.append(result_variable)
 
         # execute the value expression and the guard
@@ -518,7 +515,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             self.statement.copy_location(else_expression)
             self.statement.copy_location(guarded_expression)
 
-        requires: dict[object, VariableABC] = (
+        requires: dict[object, VariableABC[object]] = (
             guarded_expression.requires_emit(value_resolver, self.queue)
             if self.lhs is None
             else guarded_expression.requires_emit_gradual(value_resolver, self.queue, self.lhs)
@@ -539,7 +536,9 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Mutually exclusive with `complete`.
         """
         if self._results:
-            raise InvalidCompilerState("list comprehension helper got set_unknown after some (known) elements where received")
+            raise InvalidCompilerState(
+                self, "list comprehension helper got set_unknown after some (known) elements where received"
+            )
         self.final_result.set_value(Unknown(self.statement), self.statement.location)
 
     def complete(self, all_values: abc.Sequence[object], resolver: Resolver, queue: QueueScheduler) -> None:
@@ -552,15 +551,15 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             if self.lhs is None:
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
             if len(self._results) != len(all_values):
-                raise InvalidCompilerState("list comprehension helper received some but not all values gradually")
+                raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
         else:
             for value in all_values:
                 self.receive_result(value, location=self.statement.location)
 
         RawUnit(queue, resolver, dict(enumerate(self._results)), resumer=self)
 
-    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
-        def get(variable: VariableABC) -> Optional[abc.Sequence[object]]:
+    def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
+        def get(variable: VariableABC[object]) -> Optional[abc.Sequence[object]]:
             value: object = variable.get_value()
             return None if value is LIST_COMPREHENSION_GUARDED else value if isinstance(value, list) else [value]
 
@@ -601,8 +600,8 @@ class If(RequiresEmitStatement):
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
+        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         requires.update(self.condition.requires_emit(resolver, queue))
         return requires
 
@@ -667,11 +666,11 @@ class ConditionalExpression(ExpressionStatement):
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
-    ) -> dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    ) -> dict[object, VariableABC[object]]:
+        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
 
         # This ResultVariable will receive the result of this expression
-        result: ResultVariable = ResultVariable()
+        result: ResultVariable[object] = ResultVariable()
 
         # Schedule execution to resume when the condition can be executed
         resumer: RawResumer = ConditionalExpressionResumer(self, result, lhs=lhs)
@@ -684,7 +683,7 @@ class ConditionalExpression(ExpressionStatement):
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
-    ) -> dict[object, VariableABC]:
+    ) -> dict[object, VariableABC[object]]:
         return self.requires_emit(resolver, queue, lhs=resultcollector)
 
     def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -724,7 +723,7 @@ class ConditionalExpressionResumer(RawResumer):
         self.result: ResultVariable = result
         self.lhs: Optional[ResultCollector[object]] = lhs
 
-    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: Dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
         if self.condition_value is None:
             condition_value: object = self.expression.condition.execute(
                 {k: v.get_value() for k, v in requires.items()}, resolver, queue
@@ -742,7 +741,7 @@ class ConditionalExpressionResumer(RawResumer):
             subexpression: ExpressionStatement = (
                 self.expression.if_expression if self.condition_value else self.expression.else_expression
             )
-            requires: dict[object, VariableABC] = (
+            subexpression_requires: dict[object, VariableABC[object]] = (
                 subexpression.requires_emit(resolver, queue)
                 if self.lhs is None
                 else subexpression.requires_emit_gradual(resolver, queue, self.lhs)
@@ -750,7 +749,7 @@ class ConditionalExpressionResumer(RawResumer):
             RawUnit(
                 queue,
                 resolver,
-                requires,
+                subexpression_requires,
                 self,
             )
         else:
@@ -976,8 +975,8 @@ class Constructor(ExpressionStatement):
         out.extend(req for (k, v) in self.get_default_values().items() for req in v.requires())
         return out
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
+        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         # direct
         direct = [x for x in self._direct_attributes.items()]
 
@@ -1240,8 +1239,8 @@ class WrappedKwargs(ExpressionStatement):
     def requires(self) -> List[str]:
         return self.dictionary.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
+        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         requires.update(self.dictionary.requires_emit(resolver, queue))
         return requires
 
