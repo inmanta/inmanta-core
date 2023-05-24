@@ -101,7 +101,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     ]
     with open(outfile, "r+") as fh:
         all_lines = fh.readlines()
-        assert all(l in all_lines for l in lines_to_remove)
+        assert all(to_remove in all_lines for to_remove in lines_to_remove)
         fh.seek(0)
         for line in all_lines:
             fh.write(f"--{line}" if line in lines_to_remove else line)
