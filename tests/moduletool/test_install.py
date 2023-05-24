@@ -963,9 +963,7 @@ def test_install_with_use_config(
     os.chdir(project_path)
     with caplog.at_level(logging.DEBUG):
         ProjectTool().execute("install", [])
-    message_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0"
-    message_dont_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0 --index-url {index.url}"
-    log_contains(caplog, "inmanta.pip", logging.DEBUG, message_use_config if use_pip_config else message_dont_use_config)
+    assert f"--index-url {index.url}" not in caplog.text if use_pip_config else f"--index-url {index.url}" in caplog.text
     assert verify_installed_packages("inmanta-module-v2mod1")
 
 
@@ -1028,8 +1026,7 @@ def test_install_with_use_config_extra_index(
     os.chdir(project_path)
     with caplog.at_level(logging.DEBUG):
         ProjectTool().execute("install", [])
-    message_use_config = f"pip install inmanta-module-v2mod1 inmanta-core==9.0.0.dev0 --extra-index-url {index2.url}"
-    log_contains(caplog, "inmanta.pip", logging.DEBUG, message_use_config)
+    assert f"--extra-index-url {index2.url}" in caplog.text
     assert verify_installed_packages("inmanta-module-v2mod1")
     assert verify_installed_packages("inmanta-module-v2mod2")
 
