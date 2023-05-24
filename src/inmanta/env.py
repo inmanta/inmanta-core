@@ -345,7 +345,7 @@ class PipCommandBuilder:
         :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
         :param constraints_files: Files that should be passed to pip using the `-c` option.
         :param requirements_files: Files that should be passed to pip using the `-r` option.
-        :param use_pip_config: whether the pip config should be used
+        :param use_pip_config: Whether the pip config file specified in the PIP_CONFIG_FILE env var should be used
         """
         requirements = requirements if requirements is not None else []
         paths = paths if paths is not None else []
@@ -893,7 +893,7 @@ class ActiveEnv(PythonEnvironment):
         :param requirements_list: List of requirement strings to install.
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
-        :param use_pip_config: whether the pip config should be used
+        :param use_pip_config: Whether the pip config file specified in the PIP_CONFIG_FILE env var should be used
         """
         if not upgrade and self.are_installed(requirements_list):
             # don't fork subprocess if requirements are already met

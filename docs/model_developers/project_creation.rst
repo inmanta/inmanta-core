@@ -48,7 +48,7 @@ An example ``project.yml`` could be:
         type: package
   install_mode: release
   requires:
-  pip: { use_config_file: bool }
+  pip: { use_config_file: False }
 
 
 The main file
