@@ -316,12 +316,23 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             y = A(others=[A(), c.others])
             c = A(others=[candidate for candidate in [x, y] if candidate.others is defined])
 
+            # gradual execution with nested lists in the iterable
+            u = A()
+            v = A(others=[candidate for candidate in [a, [b, c, [x, y, u], u, x], y]])
+            if v.others is defined:
+                # again bad practice but asserts gradual execution of the `is defined`
+                v.others += A()
+            end
+
             count = 2
             count = std::count(a.others)
             count = std::count(b.others)
 
             c_count = 1
             c_count = std::count(c.others)
+
+            v_count = 7
+            v_count = std::count(v.others)
             """.strip(
                 "\n"
             )
