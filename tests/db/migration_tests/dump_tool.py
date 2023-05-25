@@ -105,5 +105,4 @@ async def test_dump_db(server, client, postgres_db, database_name):
         fh.seek(0)
         for line in all_lines:
             fh.write(f"--{line}" if line in lines_to_remove else line)
-        fh.writelines(all_lines)
         fh.truncate()
