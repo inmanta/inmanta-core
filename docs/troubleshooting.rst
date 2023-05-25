@@ -11,7 +11,7 @@ A resource is stuck in the state available
 ==========================================
 
 When a resource is stuck in the available state, it usually means that the agent, which should deploy the resource, is currently
-down or paused. Click on the ``Resources`` tab of the Inmanta dashboard, to get an
+down or paused. Click on the ``Resources`` tab of the web-console, to get an
 overview of the different resources in the model. This overview shows the state of each resource and the name of its agent.
 Filter on resources in the available state and check which resource are ready to be deployed (i.e. a resource without
 dependencies or a resource for which all dependencies were deployed successfully). The agent of that resource, is the agent that
@@ -21,7 +21,7 @@ causes the problem. In the figure below, the ``global`` GnmiResource should be r
    :width: 100%
    :align: center
 
-Next, go to the ``Agents`` tab of the dashboard to verify the state of that agent.
+Next, go to the ``Agents`` tab of the web-console to verify the state of that agent.
 
 .. figure:: ./_static/troubleshooting/agent_is_paused.png
    :width: 100%
@@ -46,9 +46,9 @@ agent that shouldn't be down is down.
 The agent is paused
 -------------------
 
-Unpause the agent by clicking the ``Unpause`` button in the ``Agents`` tab of the dashboard.
+Unpause the agent by clicking the ``Unpause`` button in the ``Agents`` tab of the web-console.
 
-.. figure:: ./_static/troubleshooting/agent_is_paused.png
+.. figure:: ./_static/troubleshooting/unpause_agent.png
    :width: 100%
    :align: center
 
@@ -59,11 +59,11 @@ The agent is up
 When the agent is in the up state, it should be ready to deploy resources. Read the agent log to verify it doesn't contain
 error or warning messages that would explain why the agent is not deploying any resources. For auto-started agents, three
 different log files exist. The log files are present in ``<config.log-dir>/agent-<environment-id>.[log|out|err]``. The
-environment ID can be found in the URL of the dashboard, or in the ``Settings`` view, accessible via the cogwheel icon.
+environment ID can be found in the URL of the web-console, or in the ``Settings`` tab.
 More information about the different log files can be found
 :ref:`here<administrators_doc_logging>`. For manually started agents the log file is present in
 ``/var/log/inmanta/agent.log``. If the log file doesn't provide any more information, trigger the agent to execute a
-deployment by clicking on the ``Force Repair`` button in the ``Agents`` tab of the dashboard, as shown in the figure below:
+deployment by clicking on the ``Force Repair`` button in the ``Agents`` tab of the web-console, as shown in the figure below:
 
 .. figure:: ./_static/troubleshooting/force_repair_button.png
    :width: 100%
@@ -107,23 +107,17 @@ When a resource cannot be deployed, it ends up in one of the following deploymen
 Read the logs of a resource
 ---------------------------
 
-This section describes how to obtain the logs for a specific resource. In the ``Resources`` tab of the dashboard, click on
+This section describes how to obtain the logs for a specific resource. In the ``Resources`` tab of the web-console, click on
 ``Show Details`` for the desired resource.
 
 .. figure:: ./_static/troubleshooting/get_logs_failed_resource_1.png
    :width: 100%
    :align: center
 
-Next, click on the ``Logs`` tab.
-
-.. figure:: ./_static/troubleshooting/get_logs_failed_resource_2.png
-   :width: 100%
-   :align: center
-
-In this view, the logs can be sorted and filtered. Click on the chevron for a specific log line to display more
+Next, in the ``Logs`` tab of this view, the logs can be sorted and filtered. Click on the chevron for a specific log line to display more
 information, such as the traceback.
 
-.. figure:: ./_static/troubleshooting/get_logs_failed_resource_3.png
+.. figure:: ./_static/troubleshooting/get_logs_failed_resource_2.png
    :width: 100%
    :align: center
 
@@ -172,7 +166,7 @@ Auto-started agents
 -------------------
 
 An auto-started agent is only started when that agent is present in the ``autostart_agent_map`` environment setting. Verify that
-requirement in the ``Configuration`` tab of the ``Settings`` view, accessible via the cogwheel icon, as shown in the figure below.
+requirement in the ``Configuration`` panel of the ``Settings`` tab, as shown in the figure below.
 
 .. figure:: ./_static/troubleshooting/environment_settings_autostart_agent_map.png
    :width: 100%
@@ -180,7 +174,7 @@ requirement in the ``Configuration`` tab of the ``Settings`` view, accessible vi
 
 When the ``autostart_agent_map`` is configured correctly, but the agent is still not up, read the logs of the auto-started agent
 . These logs can be found at the following location: ``<config.log-dir>/agent-<environment-id>.[log|out|err]``. The
-environment ID is present in the URL of the dashboard. More information about the different log files can be found
+environment ID is present in the URL of the web-console. More information about the different log files can be found
 :ref:`here<administrators_doc_logging>`. When reading those log files, pay specific attention to error
 messages and warnings that could explain why the agent is marked as down. Also, ensure that the name of the agent under
 consideration is added as an endpoint to the agent process. The log file should contain the following message when a certain
