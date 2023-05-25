@@ -174,11 +174,16 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
                 InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
             ],
         )
-    message: str = (
+    message_part1: str = (
         "Attempting to install a v2 module non_existing_module but no v2 module source is configured. Add at least one repo of "
         'type "package" to the project config file.'
     )
-    assert message in e.value.format_trace()
+    message_part2: str = (
+        "Another option is to set the use_config_file project option to true to use the pip config file defined"
+        "in the PIP_CONFIG_FILE env variable."
+    )
+    assert message_part1 in e.value.format_trace()
+    assert message_part2 in e.value.format_trace()
 
 
 @pytest.mark.parametrize("allow_v1", [True, False])
