@@ -363,8 +363,6 @@ class PipCommandBuilder:
                 for url in index_urls:
                     index_args.append("--extra-index-url")
                     index_args.append(url)
-            else:
-                index_args = []
         else:
             if index_urls is None:
                 index_args = []

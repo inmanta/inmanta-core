@@ -944,7 +944,7 @@ def test_install_with_use_config(
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
-        f"""
+        """
         import v2mod1
         """,
         autostd=False,
@@ -1006,7 +1006,7 @@ def test_install_with_use_config_extra_index(
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
-        f"""
+        """
         import v2mod1
         import v2mod2
         """,
@@ -1027,6 +1027,7 @@ def test_install_with_use_config_extra_index(
     with caplog.at_level(logging.DEBUG):
         ProjectTool().execute("install", [])
     assert f"--extra-index-url {index2.url}" in caplog.text
+    assert f"--extra-index-url {index.url}" not in caplog.text
     assert verify_installed_packages("inmanta-module-v2mod1")
     assert verify_installed_packages("inmanta-module-v2mod2")
 

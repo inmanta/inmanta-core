@@ -29,8 +29,6 @@ typing_inspect==0.8.0
 typing-extensions==4.5.0
 build==0.10.0
 ruamel.yaml==0.17.26
-# To remove
-typing-extensions==4.5.0
 
 # Optional import in code
 graphviz==0.20.1
