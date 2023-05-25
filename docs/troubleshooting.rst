@@ -7,6 +7,23 @@ Troubleshooting
 This page describes typical failure scenario's and provides a guideline on how to troubleshoot them.
 
 
+..
+    Tips and tricks used to generate these screenshots:
+
+    The Inmanta quickstart was used (make sure the latest orchestrator and web-console version are being used)
+
+    Tips to generate a resource in a given state:
+
+    - Available : first pause the agent responsible for it and then do an export
+    - Failed : do an export with an invalid attribute value (ex: wrong password)
+    - Undefined: do an export with an attribute depending on an environment variable that doesn't exist
+      (ex: certificate_chain=std::get_env("DOESNTEXIST"))
+
+    Tips to make the agent go down:
+
+    - ssh into the orchestrator and kill the agent process
+
+
 A resource is stuck in the state available
 ==========================================
 
@@ -63,7 +80,7 @@ environment ID can be found in the URL of the web-console, or in the ``Settings`
 More information about the different log files can be found
 :ref:`here<administrators_doc_logging>`. For manually started agents the log file is present in
 ``/var/log/inmanta/agent.log``. If the log file doesn't provide any more information, trigger the agent to execute a
-deployment by clicking on the ``Force Repair`` button in the ``Agents`` tab of the web-console, as shown in the figure below:
+deployment by clicking on the ``Force repair`` button in the ``Agents`` tab of the web-console, as shown in the figure below:
 
 .. figure:: ./_static/troubleshooting/force_repair_button.png
    :width: 100%
@@ -75,7 +92,7 @@ When the agent receives the notification from the server, it writes the followin
 
     INFO     inmanta.agent.agent Agent <agent-name> got a trigger to update in environment <environment ID>
 
-If the notification from the server doesn't appear in the log file of the agent after clicking the ``Force Repair`` button, the
+If the notification from the server doesn't appear in the log file of the agent after clicking the ``Force repair`` button, the
 problem is situated on the server side. Check if the server log contains any error messages or warning that could explain
 the reason why the agent didn't get a notification from the server. The server log file is situated at
 ``<config.log-dir>/server.log``.
@@ -94,7 +111,7 @@ When a resource cannot be deployed, it ends up in one of the following deploymen
   definite value. Read Section :ref:`Check which attributes are undefined<check_for_undefined_attributes>` to find out which attributes are
   undefined.
 * **skipped:** When a resource is in the ``skipped`` state, it can mean two different things. Either the resource cannot be
-  deployed because one of its dependencies ended up the failed state or the handler itself raised a SkipResource exception to
+  deployed because one of its dependencies ended up in the failed state or the handler itself raised a SkipResource exception to
   indicate that the resource in not yet ready to be deployed. The latter case can occur when a VM is still booting for example.
   :ref:`Check the log of the resource<read_resource_log>` to get more information about actual root cause.
 * **skipped_for_undefined:** The ``skipped_for_undefined`` state indicates that the resource cannot be deployed because one of
@@ -249,7 +266,7 @@ to see more information about a given report.
 
 Each step of the compile process is shown. Click on the chevron, as shown below, for a specific step, to display more
 information such as the output produced by that step and the return code. Verify that the
-timestamp of the compile report corresponds to the time the compilation was triggered in the dashboard. If no compile report was
+timestamp of the compile report corresponds to the time the compilation was triggered in the web-console. If no compile report was
 generated or the compile report doesn't show any errors, check the server logs as well. By default the server log is present in
 ``<config.log-dir>/server.log``.
 
