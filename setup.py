@@ -34,8 +34,6 @@ requires = [
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
-    # typing-extensions-4.6 broken due to bugs in other packages: , pydantic/pydantic#5821
-    "typing-extensions<4.6",
     "build~=0.7",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
