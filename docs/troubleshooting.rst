@@ -254,11 +254,11 @@ This section provides a list of potential reasons why an agent wouldn't start:
   server, etc.
 
 
-Compilation failed
-==================
+Recompilation failed
+====================
 
-The ``Compile Reports`` tab shows a list of compile reports for the latest compilations. Click on ``Show Details``
-to see more information about a given report.
+You can trigger a recompilation from the ``Compile Reports`` tab. It shows a list of compile reports for the latest
+compilations. Click on ``Show Details`` to see more information about a given report.
 
 .. figure:: ./_static/troubleshooting/compile_reports.png
    :width: 100%
