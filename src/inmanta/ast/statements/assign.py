@@ -18,7 +18,7 @@
 
 # pylint: disable-msg=W0613
 import typing
-from collections.abc import Iterator, Mapping, Sequence
+from collections import abc
 from itertools import chain
 from string import Formatter
 from typing import Dict, Optional, Tuple, TypeVar
@@ -144,7 +144,7 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         qlist = []
 
         for i in range(len(self.items)):
@@ -178,7 +178,7 @@ class CreateDict(ReferenceStatement):
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
             seen[x] = v
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         qlist = {}
 
         for i in range(len(self.items)):
@@ -229,7 +229,7 @@ class SetAttribute(AssignStatement, Resumer):
         # register this assignment as left hand side to the value on the right hand side
         self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
 
-    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+    def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks
         return chain(super().get_all_eager_promises(), [self._assignment_promise])
 
@@ -371,7 +371,7 @@ class Assign(AssignStatement):
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
 
-    def declared_variables(self) -> typing.Iterator[str]:
+    def declared_variables(self) -> abc.Iterator[str]:
         yield str(self.name)
 
     def pretty_print(self) -> str:
@@ -562,7 +562,7 @@ class FormattedString(ReferenceStatement):
 
     __slots__ = ("_format_string", "_variables")
 
-    def __init__(self, format_string: str, variables: Sequence["Reference"]) -> None:
+    def __init__(self, format_string: str, variables: abc.Sequence["Reference"]) -> None:
         super().__init__(variables)
         self._format_string = format_string
 
@@ -580,7 +580,7 @@ class StringFormat(FormattedString):
 
     __slots__ = ()
 
-    def __init__(self, format_string: str, variables: Sequence[Tuple["Reference", str]]) -> None:
+    def __init__(self, format_string: str, variables: abc.Sequence[Tuple["Reference", str]]) -> None:
         super().__init__(format_string, [k for (k, _) in variables])
         self._variables = variables
 
@@ -603,7 +603,7 @@ class FStringFormatter(Formatter):
     def __init__(self) -> None:
         Formatter.__init__(self)
 
-    def get_field(self, key: str, args: Sequence[object], kwds: Mapping[str, object]) -> Tuple[object, str]:
+    def get_field(self, key: str, args: abc.Sequence[object], kwds: abc.Mapping[str, object]) -> Tuple[object, str]:
         """
         Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
         retrieved by their full name.
@@ -618,8 +618,8 @@ class StringFormatV2(FormattedString):
 
     __slots__ = ()
 
-    def __init__(self, format_string: str, variables: Sequence[typing.Tuple["Reference", str]]) -> None:
-        only_refs: Sequence["Reference"] = [k for (k, _) in variables]
+    def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
+        only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
         self._variables = only_refs
 
