@@ -23,17 +23,16 @@ requires = [
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
-    "pydantic~=1.0,!=1.9.0a1",
+    # lower bound because of pydantic/pydantic#5821
+    "pydantic>=1.10.8,<2",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
     "texttable~=1.0",
     "tornado~=6.0",
-    "typing_inspect~=0.7",
-    # typing-extensions-4.6 broken due to bugs in other packages: ilevkivskyi/typing_inspect#100, pydantic/pydantic#5821
-    "typing-extensions<4.6",
+    # lower bound because of ilevkivskyi/typing_inspect#100
+    "typing_inspect~=0.9",
     "build~=0.7",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
