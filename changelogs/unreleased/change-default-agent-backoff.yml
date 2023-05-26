@@ -1,5 +1,5 @@
 ---
-description: The default agent backoff time has been changed from five to three seconds. This backoff is configurable using the `config.agent-get-resource-backoff` config option.
+description: The default agent backoff time has been changed from five to three. This backoff is configurable using the `config.agent-get-resource-backoff` config option.
 change-type: major
 destination-branches: [master]
 sections:
