@@ -355,7 +355,7 @@ class PipCommandBuilder:
             LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
             for path in paths
         )
-        index_args: List[str] = []
+        index_args: list[str] = []
 
         if use_pip_config:
             if index_urls:
