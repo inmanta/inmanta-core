@@ -615,7 +615,6 @@ class PythonEnvironment:
         self,
         paths: List[LocalPackagePath],
         constraint_files: Optional[List[str]] = None,
-        use_pip_config: bool = False,
     ) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
@@ -629,7 +628,7 @@ class PythonEnvironment:
             paths=paths,
             constraints_files=constraint_files,
             requirements=inmanta_requirements,
-            use_pip_config=use_pip_config,
+            use_pip_config=True,
         )
 
     @classmethod
@@ -778,10 +777,9 @@ class ActiveEnv(PythonEnvironment):
         self,
         paths: List[LocalPackagePath],
         constraint_files: Optional[List[str]] = None,
-        use_pip_config: Optional[bool] = False,
     ) -> None:
         try:
-            super().install_from_source(paths, constraint_files, use_pip_config)
+            super().install_from_source(paths, constraint_files)
         finally:
             self.notify_change()
 
@@ -1334,11 +1332,10 @@ import sys
         self,
         paths: List[LocalPackagePath],
         constraint_files: Optional[List[str]] = None,
-        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_source(paths, constraint_files, use_pip_config)
+        super(VirtualEnv, self).install_from_source(paths, constraint_files)
 
     def install_from_list(
         self,

@@ -1015,6 +1015,34 @@ def test_install_with_use_config_extra_index(
     assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-v2mod1", "inmanta-module-v2mod2"])
 
 
+def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
+    tmpvenv_active_inherit: env.VirtualEnv,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    caplog,
+) -> None:
+    monkeypatch.delenv("PIP_CONFIG_FILE", False)
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        """
+        import dummy_module
+        """,
+        autostd=False,
+        install_project=False,
+        use_pip_config_file=True,
+    )
+
+    # install project
+    project_path = module.Project.get().path
+    os.chdir(project_path)
+    with caplog.at_level(logging.DEBUG):
+        ProjectTool().execute("install", [])
+    print(caplog.text)
+    assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-dummy-module"])
+
+
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
 def test_project_install_with_install_mode(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
