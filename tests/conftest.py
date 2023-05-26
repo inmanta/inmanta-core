@@ -538,7 +538,7 @@ def no_agent_backoff(inmanta_config: ConfigParser) -> None:
     old_backoff = agent_cfg.agent_get_resource_backoff.get()
     inmanta_config.set(section="config", option="agent-get-resource-backoff", value="0")
     yield
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=old_backoff)
+    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=str(old_backoff))
 
 
 @pytest.fixture()
