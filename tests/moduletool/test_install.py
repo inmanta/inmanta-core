@@ -1022,8 +1022,10 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
     monkeypatch,
     caplog,
 ) -> None:
+    """
+    Verify that the default pip config is used if the PIP_CONFIG_FILE env var is not set but use_pip_config_file is.
+    """
     monkeypatch.delenv("PIP_CONFIG_FILE", False)
-
     # set up project
     snippetcompiler_clean.setup_for_snippet(
         """
@@ -1032,6 +1034,7 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
         autostd=False,
         install_project=False,
         use_pip_config_file=True,
+        python_requires=[Requirement.parse("inmanta-module-dummy-module")],
     )
 
     # install project
@@ -1039,7 +1042,6 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
     os.chdir(project_path)
     with caplog.at_level(logging.DEBUG):
         ProjectTool().execute("install", [])
-    print(caplog.text)
     assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-dummy-module"])
 
 
