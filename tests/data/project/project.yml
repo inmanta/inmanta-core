@@ -5,5 +5,4 @@ downloadpath: libs
 install_mode: "release"
 repo:
     - https://github.com/inmanta/
-pip:
-    use_config_file: False
+

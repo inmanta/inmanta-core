@@ -615,7 +615,7 @@ class PythonEnvironment:
         self,
         paths: List[LocalPackagePath],
         constraint_files: Optional[List[str]] = None,
-        use_pip_config: Optional[bool] = False,
+        use_pip_config: bool = False,
     ) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.

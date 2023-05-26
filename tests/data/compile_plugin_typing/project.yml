@@ -3,5 +3,4 @@ description: test for plugin typing
 modulepath: libs
 downloadpath: libs
 repo: "."
-pip:
-    use_config_file: False
+

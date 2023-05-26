@@ -6,5 +6,3 @@ repo:
     - https://github.com/inmanta/
 requires:
     - std
-pip:
-    use_config_file: False
