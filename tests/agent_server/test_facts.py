@@ -273,15 +273,20 @@ async def test_get_facts_extended(server, client, agent, clienthelper, resource_
 
     await agent.stop()
 
-    LogSequence(caplog, allow_errors=False, ignore=["tornado.access"]).contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact").contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).contains(
-        "inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact"
-    ).no_more_errors()
+    def wait_until_log_records_are_available() -> bool:
+        try:
+            log_sequence = LogSequence(caplog, allow_errors=False, ignore=["tornado.access"])
+            for i in range(5):
+                log_sequence = log_sequence.contains("inmanta.agent.agent.agent1", logging.ERROR, "Unable to retrieve fact")
+            log_sequence.no_more_errors()
+        except AssertionError:
+            return False
+        else:
+            return True
+
+    # The get_parameter() API calls from the server to the agent are executed asynchronously with respect the
+    # get_param() API calls done from the test case to the server. Here we wait until all log records are available.
+    await retry_limited(wait_until_log_records_are_available, timeout=10)
 
 
 async def test_purged_resources(resource_container, client, clienthelper, server, environment, agent, no_agent_backoff):
