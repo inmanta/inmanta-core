@@ -106,6 +106,7 @@ import inmanta.compiler.config
 import inmanta.main
 import inmanta.user_setup
 from inmanta import config, const, data, env, loader, protocol, resources
+from inmanta.agent import config as agent_cfg
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -533,11 +534,11 @@ def restore_cwd():
 
 
 @pytest.fixture(scope="function")
-def no_agent_backoff():
-    backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
+def no_agent_backoff(inmanta_config: ConfigParser) -> None:
+    old_backoff = agent_cfg.agent_get_resource_backoff.get()
+    inmanta_config.set(section="config", option="agent-get-resource-backoff", value="0")
     yield
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
+    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=str(old_backoff))
 
 
 @pytest.fixture()
