@@ -44,24 +44,6 @@ from utils import LogSequence, PipIndex, log_contains, module_from_template
 LOGGER = logging.getLogger(__name__)
 
 
-def verify_installed_packages(package_name):
-    """
-    Verifies if a specified package is installed.
-    """
-    try:
-        result = subprocess.run(["pip", "list"], capture_output=True, text=True)
-        if result.returncode == 0:
-            # Process the output to extract package names
-            output_lines = result.stdout.strip().split("\n")[2:]
-            installed_packages = [line.split()[0] for line in output_lines]
-            # Check if the package is installed
-            return package_name in installed_packages
-        else:
-            print(f"Error: {result.stderr}")
-    except Exception as e:
-        print(e)
-
-
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
     """
     Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
@@ -914,6 +896,7 @@ def test_install_from_index_dont_leak_pip_index(
 @pytest.mark.parametrize_any("use_pip_config", [True, False])
 def test_install_with_use_config(
     tmpdir: py.path.local,
+    tmpvenv_active_inherit: env.VirtualEnv,
     modules_v2_dir: str,
     snippetcompiler_clean,
     monkeypatch,
@@ -964,11 +947,12 @@ def test_install_with_use_config(
     with caplog.at_level(logging.DEBUG):
         ProjectTool().execute("install", [])
     assert f"--index-url {index.url}" not in caplog.text if use_pip_config else f"--index-url {index.url}" in caplog.text
-    assert verify_installed_packages("inmanta-module-v2mod1")
+    assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-v2mod1"])
 
 
 def test_install_with_use_config_extra_index(
     tmpdir: py.path.local,
+    tmpvenv_active_inherit: env.VirtualEnv,
     modules_v2_dir: str,
     snippetcompiler_clean,
     monkeypatch,
@@ -1028,8 +1012,7 @@ def test_install_with_use_config_extra_index(
         ProjectTool().execute("install", [])
     assert f"--extra-index-url {index2.url}" in caplog.text
     assert f"--extra-index-url {index.url}" not in caplog.text
-    assert verify_installed_packages("inmanta-module-v2mod1")
-    assert verify_installed_packages("inmanta-module-v2mod2")
+    assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-v2mod1", "inmanta-module-v2mod2"])
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])

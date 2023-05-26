@@ -27,7 +27,6 @@ def test_file_co(git_modules_dir, modules_repo):
     result = """name: mod6
 license: Apache 2.0
 version: '3.2'
-pip: {use_config_file: False}
 """
     module_yaml = gitprovider.get_file_for_version(os.path.join(modules_repo, "mod6"), "3.2", "module.yml")
     assert result == module_yaml
