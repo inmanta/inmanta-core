@@ -331,7 +331,7 @@ class PipCommandBuilder:
         allow_pre_releases: bool = False,
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
-        use_pip_config: Optional[bool] = False,
+        use_pip_config: bool = False,
     ) -> List[str]:
         """
         Generate `pip install` command from the given arguments.
