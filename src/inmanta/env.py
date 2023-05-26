@@ -373,7 +373,7 @@ class PipCommandBuilder:
                 for url in index_urls[1:]:
                     index_args.append("--extra-index-url")
                     index_args.append(url)
-            elif not index_urls:
+            else:
                 index_args = ["--no-index"]
 
         constraints_files = constraints_files if constraints_files is not None else []
