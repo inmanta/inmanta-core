@@ -652,7 +652,7 @@ expression.
 .. code-block:: inmanta
 
     my_ordered_numbers = std::sequence(10)
-    my_ordered_pairs = ["{{i}}-{{i}} for i in my_ordered_numbers]
+    my_ordered_pairs = ["{{i}}-{{i}}" for i in my_ordered_numbers]
     # order is kept => ["0-0", "1-1", "2-2", ...]
 
 
