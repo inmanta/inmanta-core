@@ -363,18 +363,17 @@ class PipCommandBuilder:
                 for url in index_urls:
                     index_args.append("--extra-index-url")
                     index_args.append(url)
-        else:
-            if index_urls is None:
-                index_args = []
-            elif index_urls:
-                # Use separate --index-url and --extra-index-url arguments
-                index_args.append("--index-url")
-                index_args.append(index_urls[0])
-                for url in index_urls[1:]:
-                    index_args.append("--extra-index-url")
-                    index_args.append(url)
-            elif not index_urls:
-                index_args = ["--no-index"]
+        elif index_urls is None:
+            index_args = []
+        elif index_urls:
+            # Use separate --index-url and --extra-index-url arguments
+            index_args.append("--index-url")
+            index_args.append(index_urls[0])
+            for url in index_urls[1:]:
+                index_args.append("--extra-index-url")
+                index_args.append(url)
+        elif not index_urls:
+            index_args = ["--no-index"]
 
         constraints_files = constraints_files if constraints_files is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
