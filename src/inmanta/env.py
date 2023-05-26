@@ -345,7 +345,7 @@ class PipCommandBuilder:
         :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
         :param constraints_files: Files that should be passed to pip using the `-c` option.
         :param requirements_files: Files that should be passed to pip using the `-r` option.
-        :param use_pip_config: Whether the pip config file should be used
+        :param use_pip_config: Whether the pip config file specified in the PIP_CONFIG_FILE env var should be used
         """
         requirements = requirements if requirements is not None else []
         paths = paths if paths is not None else []
@@ -364,7 +364,7 @@ class PipCommandBuilder:
                     index_args.append("--extra-index-url")
                     index_args.append(url)
         elif index_urls is None:
-            index_args = []
+            pass
         elif index_urls:
             # Use separate --index-url and --extra-index-url arguments
             index_args.append("--index-url")
@@ -372,7 +372,7 @@ class PipCommandBuilder:
             for url in index_urls[1:]:
                 index_args.append("--extra-index-url")
                 index_args.append(url)
-        elif not index_urls:
+        else:
             index_args = ["--no-index"]
 
         constraints_files = constraints_files if constraints_files is not None else []
@@ -487,7 +487,7 @@ class PythonEnvironment:
         allow_pre_releases: bool = False,
         constraints_files: Optional[List[str]] = None,
         requirements_files: Optional[List[str]] = None,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         cmd: List[str] = PipCommandBuilder.compose_install_command(
             python_path=python_path,
@@ -594,7 +594,7 @@ class PythonEnvironment:
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
@@ -615,7 +615,7 @@ class PythonEnvironment:
         self,
         paths: List[LocalPackagePath],
         constraint_files: Optional[List[str]] = None,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
@@ -763,7 +763,7 @@ class ActiveEnv(PythonEnvironment):
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not upgrade and self.are_installed(requirements):
             return
@@ -778,7 +778,7 @@ class ActiveEnv(PythonEnvironment):
         self,
         paths: List[LocalPackagePath],
         constraint_files: Optional[List[str]] = None,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         try:
             super().install_from_source(paths, constraint_files, use_pip_config)
@@ -881,7 +881,7 @@ class ActiveEnv(PythonEnvironment):
         *,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         """
         Install requirements from a list of requirement strings. This method uses the Python package repositories
@@ -890,7 +890,7 @@ class ActiveEnv(PythonEnvironment):
         :param requirements_list: List of requirement strings to install.
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
-        :param use_pip_config: Whether the pip config file should be used
+        :param use_pip_config: Whether the pip config file specified in the PIP_CONFIG_FILE env var should be used
         """
         if not upgrade and self.are_installed(requirements_list):
             # don't fork subprocess if requirements are already met
@@ -908,7 +908,7 @@ class ActiveEnv(PythonEnvironment):
         *,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         """
         This method differs from the `install_from_index()` method in the sense that it calls
@@ -1322,7 +1322,7 @@ import sys
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
@@ -1334,7 +1334,7 @@ import sys
         self,
         paths: List[LocalPackagePath],
         constraint_files: Optional[List[str]] = None,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
@@ -1346,7 +1346,7 @@ import sys
         *,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: bool = False,
+        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
