@@ -132,6 +132,17 @@ Each subsequent repair deployment will start agent-repair-interval seconds after
     is_time,
 )
 
+agent_get_resource_backoff = Option(
+    "config",
+    "agent-get-resource-backoff",
+    5,
+    "This is a load management feature. It ensures that the agent will not pull resources from the inmanta server"
+    " `<agent-get-resource-backoff>*<duration-last-pull-in-seconds>` seconds after the last time the agent pulled resources"
+    " from the server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"
+    " may result in long deployment times.",
+    is_float,
+)
+
 
 ##############################
 # agent_rest_transport
