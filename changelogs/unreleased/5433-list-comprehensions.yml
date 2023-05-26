@@ -1,4 +1,4 @@
-description: "Added support for list comprehensions to the language"
+description: "Added support for list comprehensions to the language, see the documentation for more details"
 issue-nr: 5433
 change-type: minor
 sections:
