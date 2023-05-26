@@ -66,8 +66,6 @@ repo: %s
                     projectfile.write("\n    - {} {}".format(req[0], req[1]))
 
         projectfile.write("\n")
-        projectfile.write("pip: {use_config_file: False}")
-        projectfile.write("\n")
 
     model = os.path.join(path, "model")
     os.makedirs(model)
