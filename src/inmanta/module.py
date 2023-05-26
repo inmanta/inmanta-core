@@ -719,8 +719,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 "the `repo` section of the project's `project.yml`:"
                 "\n\t- type: package"
                 "\n\t  url: https://pypi.org/simple"
-                "\nAnother option is to set the use_config_file project option to true to use the pip config file defined"
-                "in the PIP_CONFIG_FILE env variable."
+                "\nAnother option is to set the use_config_file project option to true to use the pip config file."
             )
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}

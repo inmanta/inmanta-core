@@ -55,7 +55,8 @@ The code snippet below provides an example of a complete ``project.yml`` file:
       - yum ~= 0.6.2
     freeze_recursive: true
     freeze_operator: ~=
-    pip: { use_config_file: False }
+    pip:
+       use_config_file: False
 
 Module metadata files
 #####################

@@ -3,4 +3,5 @@ description: Model to test basic compiler functions
 modulepath: libs
 downloadpath: libs
 repo: "."
-pip: { use_config_file: False }
+pip:
+    use_config_file: False
