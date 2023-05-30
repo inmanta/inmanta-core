@@ -270,7 +270,10 @@ async def report_db_index_usage(min_precent=100):
         print(row)
 
 
-async def wait_for_version(client, environment, cnt):
+async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+    """
+    :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
+    """
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
@@ -278,7 +281,7 @@ async def wait_for_version(client, environment, cnt):
         code = compiling.code
         return code == 204
 
-    await retry_limited(compile_done, 30)
+    await retry_limited(compile_done, compile_timeout)
 
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
