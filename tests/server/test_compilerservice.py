@@ -22,7 +22,6 @@ import os
 import queue
 import shutil
 import subprocess
-import time
 import uuid
 from asyncio import Semaphore
 from collections import abc

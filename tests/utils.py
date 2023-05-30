@@ -274,6 +274,7 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
     """
     :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
     """
+
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
