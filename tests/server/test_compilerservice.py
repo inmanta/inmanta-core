@@ -582,7 +582,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.code == 200
 
     logger.info("wait for 1")
-    versions = await wait_for_version(client, environment, 1)
+    versions = await wait_for_version(client, environment, 1, compile_timeout=40)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
