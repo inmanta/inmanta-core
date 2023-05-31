@@ -1,0 +1,4 @@
+---
+description: Fix issue where the `test_server_recompile` test case times out because the compile takes longer than 30 seconds.
+change-type: patch
+destination-branches: [master, iso6, iso5, iso4]
