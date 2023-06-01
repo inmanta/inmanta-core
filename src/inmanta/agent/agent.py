@@ -45,7 +45,6 @@ from inmanta.types import Apireturn, JsonType
 from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
-GET_RESOURCE_BACKOFF = 5
 
 
 class ResourceActionResult(object):
@@ -714,7 +713,7 @@ class AgentInstance(object):
                 self._getting_resources = False
             end = time.time()
             self._get_resource_duration = end - start
-            self._get_resource_timeout = GET_RESOURCE_BACKOFF * self._get_resource_duration + end
+            self._get_resource_timeout = cfg.agent_get_resource_backoff.get() * self._get_resource_duration + end
             if result.code == 404:
                 self.logger.info("No released configuration model version available for %s", reason)
             elif result.code == 409:

@@ -47,9 +47,11 @@ if TYPE_CHECKING:
 
 
 T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
+T_contra = TypeVar("T_contra", contravariant=True)
 
 
-class ResultCollector(Generic[T]):
+class ResultCollector(Generic[T_contra]):
     """
     Helper interface for gradual execution. Should be attached as a listener to a ResultVariable, which will then call
     receive_result whenever it receives a new value.
@@ -67,7 +69,7 @@ class ResultCollector(Generic[T]):
         """
         return True
 
-    def receive_result(self, value: T, location: Location) -> bool:
+    def receive_result(self, value: T_contra, location: Location) -> bool:
         """
         Receive a single value for gradual execution. Called once for each value that is part of the result.
 
@@ -120,7 +122,7 @@ class ProgressionPromise(IPromise):
         self.owner.fulfill(self)
 
 
-class VariableABC(Generic[T]):
+class VariableABC(Generic[T_co]):
     """
     Abstract base class for variables that get passed around the AST nodes' methods via waiters.
     """
@@ -133,7 +135,7 @@ class VariableABC(Generic[T]):
         """
         raise NotImplementedError()
 
-    def get_value(self) -> T:
+    def get_value(self) -> T_co:
         """
         Returns the value object for this variable
 
@@ -141,7 +143,7 @@ class VariableABC(Generic[T]):
         """
         raise NotImplementedError()
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> None:
         """
         Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
         assignments of `null` will not be reported.
@@ -306,6 +308,22 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     def get_dataflow_node(self) -> dataflow.AssignableNodeReference:
         assert self._node is not None, "assertion error at %s.get_dataflow_node() in ResultVariable" % self
         return self._node
+
+
+class ListElementVariable(ResultVariable[T]):
+    """
+    Variable representing a single value in a gradually executable list. Can be resolved immediately and allows attaching
+    listeners who will receive this single value.
+    """
+
+    def __init__(self, value: T, location: Location) -> None:
+        super().__init__()
+        self.set_value(value, location)
+
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+        assert self.value is not None
+        if not isinstance(self.value, NoneValue):
+            resultcollector.receive_result(self.value, location)
 
 
 class ResultVariableProxy(VariableABC[T]):
@@ -533,7 +551,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def __init__(self, queue: "QueueScheduler") -> None:
         # use dict for easy lookup with reliable ordering
-        self._listeners: Optional[dict[ResultCollector[ListValue], None]] = {}
+        self._listeners: Optional[dict[ResultCollector["Instance"], None]] = {}
         # Cache count for waiters without progress potential. Meaning waiters associated with either a purely gradual
         # listener or with a listener that indicated it is done.
         self._nb_gradual_waiters: int = 0
@@ -590,7 +608,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
         return True
 
-    def _notify_listeners(self, value: ListValue, location: Location) -> None:
+    def _notify_listeners(self, value: "Instance", location: Location) -> None:
         """
         Notifies all listeners about a new value. Deregisters any listeners that indicate they no longer wish to receive
         results.
@@ -618,7 +636,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         self.set_value(value, location)
         return False
 
-    def listener(self, resultcollector: ResultCollector, location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> None:
         for value in self.value:
             resultcollector.receive_result(value, location)
         if not self.hasValue:
@@ -908,7 +926,7 @@ class Waiter(object):
         self.requires[key] = waitable
         self.waitfor(waitable)
 
-    def waitfor(self, waitable: ResultVariable) -> None:
+    def waitfor(self, waitable: VariableABC[object]) -> None:
         self.waitcount = self.waitcount + 1
         waitable.waitfor(self)
 

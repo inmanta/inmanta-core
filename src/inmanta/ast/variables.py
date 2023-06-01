@@ -102,7 +102,7 @@ class Reference(ExpressionStatement):
         super().execute(requires, resolver, queue)
         return requires[self.name]
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         if self.name not in requires:
             raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[self.name]
