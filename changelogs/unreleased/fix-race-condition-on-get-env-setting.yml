@@ -1,0 +1,6 @@
+---
+description: Fix race condition that can cause an environment setting to be reset to its default value.
+change-type: patch
+destination-branches: [master, iso6, iso5, iso4]
+sections:
+  bugfix: "{{description}}"
