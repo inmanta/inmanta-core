@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import json
 import datetime
 import enum
+import json
 import logging
 import time
 import uuid
