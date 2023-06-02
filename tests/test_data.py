@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import json
 import datetime
 import enum
 import logging
@@ -382,6 +383,42 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
         await env.get("get_non_existing_parameter")
     with pytest.raises(AttributeError):
         await env.set(data.AUTO_DEPLOY, 5)
+
+
+async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_load_schema):
+    """
+    Verify that executing the `Environment.get(<name_env_setting>)` method on an environment object which doesn't have the
+    <name_env_setting> in its settings dictionary, doesn't override the value of the setting with the default value in
+    the database when another transaction has written a value for this setting to the database.
+    """
+    # Create project and environment
+    project = data.Project(name="proj")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    async def assert_setting_in_db(expected_autostart_agent_map: Dict[str, object]) -> None:
+        """
+        Verify that the state of the setting.autostart_agent_map setting in the database matches the given
+        expected_autostart_agent_map dictionary.
+        """
+        async with data.Environment.get_connection() as connection:
+            query = f"SELECT setting->'{data.AUTOSTART_AGENT_MAP}' FROM {data.Environment.table_name()} WHERE id=$1"
+            result = await connection.fetchval(query, env.id)
+            assert json.loads(result) == expected_autostart_agent_map
+
+    # Get two environment object with an empty settings dict.
+    env_obj1 = await data.Environment.get_by_id(env.id)
+    env_obj2 = await data.Environment.get_by_id(env.id)
+
+    # Add autostart_agent_map key to settings dict
+    autostart_agent_map = {"test": ":local", "internal": ":local"}
+    await env_obj1.set(data.AUTOSTART_AGENT_MAP, dict(autostart_agent_map))
+
+    assert assert_setting_in_db(autostart_agent_map)
+    # Make sure that get for autostart_agent_map on env_obj2 object doesn't override setting with default value.
+    assert await env_obj2.get(data.AUTOSTART_AGENT_MAP) == autostart_agent_map
+    assert assert_setting_in_db(autostart_agent_map)
 
 
 async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
