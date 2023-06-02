@@ -2710,7 +2710,9 @@ class Environment(BaseDocument):
         values = [allow_override, self._get_value(key), self._get_value([key]), self._get_value(value)] + values
 
         new_value = await self._fetchval(query, *values, connection=connection)
-        new_value_parsed = self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
+        new_value_parsed = cast(
+            Dict[str, m.EnvSettingType], self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
+        )
         self.settings[key] = new_value_parsed[key]
 
     async def unset(self, key: str) -> None:
