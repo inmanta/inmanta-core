@@ -2374,13 +2374,21 @@ class Setting(object):
         """
         self.name: str = name
         self.typ: str = typ
-        self.default = default
+        self._default = default
         self.doc = doc
         self.validator = validator
         self.recompile = recompile
         self.update = update_model
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
+
+    @property
+    def default(self) -> Optional[m.EnvSettingType]:
+        if self._default and isinstance(self._default, dict):
+            # Dicts are mutable objects. Return a copy.
+            return dict(self._default)
+        else:
+            return self._default
 
     def to_dict(self) -> JsonType:
         return {
@@ -2416,7 +2424,13 @@ class Environment(BaseDocument):
     :param project: The project this environment belongs to.
     :param repo_url: The repository url that contains the configuration model code for this environment
     :param repo_branch: The repository branch that contains the configuration model code for this environment
-    :param settings: Key/value settings for this environment
+    :param settings: Key/value settings for this environment. This dictionary does not necessarily contain a key
+                     for every environment setting known by the server. This is done for backwards compatibility reasons.
+                     When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
+                     account. The logic to decide that is the following:
+                        * When the name of the new setting is present in this settings dictionary or when the name of the old
+                          setting is not present in the settings dictionary, use the new setting.
+                        * Otherwise, use the setting with the old name.
     :param last_version: The last version number that was reserved for this environment
     :param description: The description of the environment
     :param icon: An icon for the environment
@@ -2657,19 +2671,27 @@ class Environment(BaseDocument):
         if key in self.settings:
             return self.settings[key]
 
-        if self._settings[key].default is None:
+        default_value = self._settings[key].default
+        if default_value is None:
             raise KeyError()
 
-        value = self._settings[key].default
-        await self.set(key, value, connection=connection)
-        return value
+        await self.set(key, default_value, connection=connection, allow_override=False)
+        return self.settings[key]
 
-    async def set(self, key: str, value: m.EnvSettingType, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: m.EnvSettingType,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        allow_override: bool = True,
+    ) -> None:
         """
         Set a new setting in this environment.
 
         :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
         :param value: The value of the settings. The value should be of type as defined in _settings
+        :param allow_override: If set to False, don't set the given environment setting when it already exists in the setting
+                               dictionary in the database.
         """
         if key not in self._settings:
             raise KeyError()
@@ -2678,19 +2700,25 @@ class Environment(BaseDocument):
             value = self._settings[key].validator(value)
 
         type = translate_to_postgres_type(self._settings[key].typ)
-        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=3)
-        query = (
-            "UPDATE "
-            + self.table_name()
-            + " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::"
-            + type
-            + "), TRUE)"
-            + " WHERE "
-            + filter_statement
+        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=5)
+        query = f"""
+                UPDATE {self.table_name()}
+                SET settings=(
+                        CASE WHEN $1 IS FALSE AND settings ? $2::text
+                        THEN settings
+                        ELSE jsonb_set(settings, $3::text[], to_jsonb($4::{type}), TRUE)
+                        END
+                    )
+                WHERE {filter_statement}
+                RETURNING settings
+        """
+        values = [allow_override, self._get_value(key), self._get_value([key]), self._get_value(value)] + values
+
+        new_value = await self._fetchval(query, *values, connection=connection)
+        new_value_parsed = cast(
+            Dict[str, m.EnvSettingType], self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
         )
-        values = [self._get_value([key]), self._get_value(value)] + values
-        await self._execute_query(query, *values, connection=connection)
-        self.settings[key] = value
+        self.settings[key] = new_value_parsed[key]
 
     async def unset(self, key: str) -> None:
         """
