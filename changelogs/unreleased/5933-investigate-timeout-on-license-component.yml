@@ -1,4 +1,4 @@
-description: Add get_latest_resources_resource_type_count to get the count for each resource_type over all resources in their latest version.
+description: Add get_latest_resources_resource_type_count to get the count for each resource_type over all resources in the model's latest version.
 issue-nr: 5933
 change-type: patch
 destination-branches: [master, iso6]
