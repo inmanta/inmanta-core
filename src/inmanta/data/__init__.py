@@ -4522,23 +4522,21 @@ class Resource(BaseDocument):
     @classmethod
     async def get_latest_resources_resource_type_count(cls, environment: uuid.UUID) -> JsonType:
         """
-        Returns the count for each resource_type over all resources in their latest version
+        Returns the count for each resource_type over all resources in the model's latest version
         """
-        query = """
-            SELECT resource_type,  count(*) as count
+        query_latest_model = f"""
+            SELECT max(version)
+            FROM {ConfigurationModel.table_name()}
+            WHERE environment=$1
+        """
+        query = f"""
+            SELECT resource_type, count(*) as count
             FROM (
-                SELECT DISTINCT resource_id
-                FROM resource
+                SELECT DISTINCT resource_id, resource_type
+                FROM {Resource.table_name()}
                 WHERE environment=$1
-            ) AS r1 INNER JOIN LATERAL (
-                SELECT resource_id, model AS latest_version, resource_type
-                       FROM resource
-                       WHERE environment=$1 AND
-                             resource_id=r1.resource_id
-                       ORDER BY model DESC
-                       LIMIT 1
-                ) AS r2
-            ON (r1.resource_id = r2.resource_id)
+                AND model=({query_latest_model})
+            ) AS r1
             GROUP BY resource_type;
         """
         values = [cls._get_value(environment)]

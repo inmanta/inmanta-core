@@ -1699,7 +1699,7 @@ async def test_get_latest_resources_resource_type_count(init_dataclasses_and_loa
     )
     await res1_1.insert()
 
-    await assert_expected_count({"std::File": 1})
+    await assert_expected_count({"std::File": 1})  # 1 File resource in model v1
 
     res2_1 = data.Resource.new(
         environment=env.id,
@@ -1710,7 +1710,7 @@ async def test_get_latest_resources_resource_type_count(init_dataclasses_and_loa
     )
     await res2_1.insert()
 
-    await assert_expected_count({"std::File": 2})
+    await assert_expected_count({"std::File": 2})  # 2 File resources in model v1
 
     version += 1
     cm2 = data.ConfigurationModel(
@@ -1734,7 +1734,7 @@ async def test_get_latest_resources_resource_type_count(init_dataclasses_and_loa
     )
     await res2_2.insert()
 
-    await assert_expected_count({"std::File": 2})
+    await assert_expected_count({"std::File": 1})  # 1 File resource in model v2
 
     res3_2 = data.Resource.new(
         environment=env.id,
@@ -1744,7 +1744,7 @@ async def test_get_latest_resources_resource_type_count(init_dataclasses_and_loa
     )
     await res3_2.insert()
 
-    await assert_expected_count({"std::File": 2, "std::Dummy": 1})
+    await assert_expected_count({"std::File": 1, "std::Dummy": 1})  # 1 File resource and 1 Dummy resource in model v2
 
 
 async def test_resources_report(init_dataclasses_and_load_schema):
