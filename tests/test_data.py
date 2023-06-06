@@ -1661,6 +1661,92 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     assert res1.attribute_hash != res3.attribute_hash
 
 
+async def test_get_latest_resources_resource_type_count(init_dataclasses_and_load_schema):
+    """
+    Test for the get_latest_resources_resource_type_count query
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    async def assert_expected_count(expected_report: Dict[str, int]):
+        # Checks the expected_report against the actual one
+        report = await data.Resource.get_latest_resources_resource_type_count(env.id)
+        assert report == expected_report
+
+    # model 1
+    version = 1
+    cm1 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        deployed=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm1.insert()
+
+    res1_1 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file1"},
+    )
+    await res1_1.insert()
+
+    await assert_expected_count({"std::File": 1})
+
+    res2_1 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2_1.insert()
+
+    await assert_expected_count({"std::File": 2})
+
+    version += 1
+    cm2 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        deployed=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm2.insert()
+
+    res2_2 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2_2.insert()
+
+    await assert_expected_count({"std::File": 2})
+
+    res3_2 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::Dummy[agent1,path=/etc/file3],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+    )
+    await res3_2.insert()
+
+    await assert_expected_count({"std::File": 2, "std::Dummy": 1})
+
+
 async def test_resources_report(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

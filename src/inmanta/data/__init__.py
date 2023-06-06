@@ -4520,6 +4520,36 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
+    async def get_latest_resources_resource_type_count(cls, environment: uuid.UUID) -> JsonType:
+        """
+        Returns the count for each resource_type over all resources in their latest version
+        """
+        query = """
+            SELECT resource_type,  count(*) as count
+            FROM (
+                SELECT DISTINCT resource_id
+                FROM resource
+                WHERE environment=$1
+            ) AS r1 INNER JOIN LATERAL (
+                SELECT resource_id, model AS latest_version, resource_type
+                       FROM resource
+                       WHERE environment=$1 AND
+                             resource_id=r1.resource_id
+                       ORDER BY model DESC
+                       LIMIT 1
+                ) AS r2
+            ON (r1.resource_id = r2.resource_id)
+            GROUP BY resource_type;
+        """
+        values = [cls._get_value(environment)]
+        result = {}
+        async with cls.get_connection() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    result[record["resource_type"]] = record["count"]
+        return result
+
+    @classmethod
     async def get_resources_report(cls, environment: uuid.UUID) -> List[JsonType]:
         """
         This method generates a report of all resources in the given environment,
