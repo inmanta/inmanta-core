@@ -28,7 +28,7 @@ async def test_discovery_resource_single(server, client, agent, environment):
     """
     unmanaged_resource_id = "test::Resource[agent1,key=key]"
     values = {"value1": "test1", "value2": "test2"}
-    result = await agent._client.unmanaged_resource_create(
+    result = await agent._client.discovered_resource_create(
         tid=environment,
         unmanaged_resource_id=unmanaged_resource_id,
         values=values,
@@ -42,7 +42,7 @@ async def test_discovery_resource_single(server, client, agent, environment):
     assert result.result["data"]["values"] == values
 
     # try to store the same resource a second time
-    result = await agent._client.unmanaged_resource_create(
+    result = await agent._client.discovered_resource_create(
         tid=environment,
         unmanaged_resource_id=unmanaged_resource_id,
         values=values,
@@ -56,16 +56,16 @@ async def test_discovery_resource_single(server, client, agent, environment):
     assert error_message in result.result["message"]
 
 
-async def test_unmanaged_resource_create_batch(server, client, agent, environment):
+async def test_discovered_resource_create_batch(server, client, agent, environment):
     """
-    Test that a batch of unmanaged resources can be created
+    Test that a batch of discovered resources can be created
     """
     resources = [
         {"unmanaged_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test1", "value2": "test2"}},
         {"unmanaged_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
         {"unmanaged_resource_id": "test::Resource[agent1,key3=key3]", "values": {"value1": "test5", "value2": "test6"}},
     ]
-    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
+    result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 200
 
     for res in resources:
@@ -80,7 +80,7 @@ async def test_unmanaged_resource_create_batch(server, client, agent, environmen
         {"unmanaged_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test9", "value2": "test10"}},
         {"unmanaged_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
     ]
-    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
+    result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 409
     error_message = (
         "Request conflicts with the current state of the resource: "
@@ -104,7 +104,7 @@ async def test_unmanaged_resource_get_paging(server, client, agent, environment)
         {"unmanaged_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
     ]
 
-    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
+    result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 200
 
     result = await client.unmanaged_resources_get_batch(
@@ -161,7 +161,7 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
     """
     Test that exceptions are raised when creating unmanaged resources with invalid IDs.
     """
-    result = await agent._client.unmanaged_resource_create(
+    result = await agent._client.discovered_resource_create(
         tid=environment, unmanaged_resource_id="test", values={"value1": "test1", "value2": "test2"}
     )
     assert result.code == 400
@@ -172,6 +172,6 @@ async def test_discovery_resource_bad_res_id(server, client, agent, environment)
         {"unmanaged_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test3", "value2": "test4"}},
         {"unmanaged_resource_id": "test", "values": {"value1": "test5", "value2": "test6"}},
     ]
-    result = await agent._client.unmanaged_resource_create_batch(environment, resources)
+    result = await agent._client.discovered_resource_create_batch(environment, resources)
     assert result.code == 400
     assert "Failed to validate argument" in result.result["message"]

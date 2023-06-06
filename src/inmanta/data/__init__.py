@@ -5867,6 +5867,7 @@ class UnmanagedResource(BaseDocument):
     """
 
     environment: uuid.UUID
+    discovered: datetime.datetime
     unmanaged_resource_id: m.ResourceIdStr
     values: dict[str, str]
 

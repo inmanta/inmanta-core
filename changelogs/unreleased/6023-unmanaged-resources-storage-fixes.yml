@@ -1,0 +1,5 @@
+description: Fixes some issues with the unmanaged resources storage backend
+issue-nr: 5690
+change-type: minor
+destination-branches: [iso6, master]
+

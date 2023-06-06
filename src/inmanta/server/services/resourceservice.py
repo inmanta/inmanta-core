@@ -1053,8 +1053,8 @@ class ResourceService(protocol.ServerSlice):
             raise NotFound("The resource with the given id does not exist")
         return resource
 
-    @handle(methods_v2.unmanaged_resource_create, env="tid")
-    async def unmanaged_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: JsonType) -> None:
+    @handle(methods_v2.discovered_resource_create, env="tid")
+    async def discovered_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: JsonType) -> None:
         try:
             unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
         except ValidationError as e:
@@ -1063,12 +1063,13 @@ class ResourceService(protocol.ServerSlice):
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg, {"validation_errors": e.errors()})
         try:
-            await unmanaged_resource.to_dao(env.id).insert()
+            dao = unmanaged_resource.to_dao(env.id)
+            await dao.insert()
         except UniqueViolationError as e:
             raise Conflict(message=e.detail)
 
-    @handle(methods_v2.unmanaged_resource_create_batch, env="tid")
-    async def unmanaged_resources_create_batch(
+    @handle(methods_v2.discovered_resource_create_batch, env="tid")
+    async def discovered_resources_create_batch(
         self, env: data.Environment, unmanaged_resources: List[UnmanagedResource]
     ) -> None:
         resources: List[data.UnmanagedResource] = [res.to_dao(env.id) for res in unmanaged_resources]

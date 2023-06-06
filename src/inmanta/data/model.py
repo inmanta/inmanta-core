@@ -737,5 +737,6 @@ class UnmanagedResource(BaseModel):
         return data.UnmanagedResource(
             unmanaged_resource_id=self.unmanaged_resource_id,
             values=self.values,
+            discovered=datetime.datetime.now(),
             environment=env,
         )
