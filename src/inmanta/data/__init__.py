@@ -4542,11 +4542,11 @@ class Resource(BaseDocument):
             GROUP BY resource_type;
         """
         values = [cls._get_value(environment)]
-        result = {}
+        result: JsonType = {}
         async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
-                    result[record["resource_type"]] = record["count"]
+                    result[str(record["resource_type"])] = record["count"]
         return result
 
     @classmethod
