@@ -4520,7 +4520,7 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_latest_resources_resource_type_count(cls, environment: uuid.UUID) -> JsonType:
+    async def get_resource_type_count_for_latest_version(cls, environment: uuid.UUID) -> JsonType:
         """
         Returns the count for each resource_type over all resources in the model's latest version
         """
