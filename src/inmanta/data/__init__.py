@@ -4531,12 +4531,8 @@ class Resource(BaseDocument):
         """
         query = f"""
             SELECT resource_type, count(*) as count
-            FROM (
-                SELECT DISTINCT resource_id, resource_type
-                FROM {Resource.table_name()}
-                WHERE environment=$1
-                AND model=({query_latest_model})
-            ) AS r1
+            FROM {Resource.table_name()}
+            WHERE environment=$1 AND model=({query_latest_model})
             GROUP BY resource_type;
         """
         values = [cls._get_value(environment)]
