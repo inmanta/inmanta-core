@@ -37,6 +37,7 @@ from inmanta.data import (
     ConfigurationModel,
     DatabaseOrderV2,
     DesiredStateVersionOrder,
+    DiscoveredResourceOrder,
     FactOrder,
     InvalidQueryParameter,
     InvalidSort,
@@ -51,7 +52,6 @@ from inmanta.data import (
     ResourceLogOrder,
     ResourceOrder,
     SimpleQueryBuilder,
-    UnmanagedResourceOrder,
     VersionedResourceOrder,
     model,
 )
@@ -1176,7 +1176,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
-class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedResource]):
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
     def __init__(
         self,
         environment: data.Environment,
@@ -1186,7 +1186,7 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
         end: Optional[str] = None,
     ) -> None:
         super().__init__(
-            order=UnmanagedResourceOrder.parse_from_string(sort),
+            order=DiscoveredResourceOrder.parse_from_string(sort),
             limit=limit,
             first_id=None,
             last_id=None,
@@ -1217,7 +1217,7 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
-            model.UnmanagedResource(
+            model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
             ).dict()

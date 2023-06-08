@@ -32,11 +32,11 @@ from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
+    DiscoveredResourceView,
     ResourceHistoryView,
     ResourceLogsView,
     ResourcesInVersionView,
     ResourceView,
-    UnmanagedResourceView,
 )
 from inmanta.data.model import (
     AttributeStateChange,
@@ -1098,7 +1098,7 @@ class ResourceService(protocol.ServerSlice):
         sort: str = "discovered_resource_id.asc",
     ) -> ReturnValue[Sequence[DiscoveredResource]]:
         try:
-            handler = UnmanagedResourceView(
+            handler = DiscoveredResourceView(
                 environment=env,
                 limit=limit,
                 sort=sort,

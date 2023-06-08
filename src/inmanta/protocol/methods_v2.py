@@ -26,7 +26,7 @@ from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import PrimitiveTypes
 
-from ..data.model import ResourceIdStr, UnmanagedResource
+from ..data.model import DiscoveredResource, ResourceIdStr
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
@@ -1388,7 +1388,7 @@ def discovered_resource_create(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: List[UnmanagedResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: List[DiscoveredResource]) -> None:
     """
     create multiple discovered resource in the DB
     :param tid: The id of the environment this resource belongs to
@@ -1407,7 +1407,7 @@ def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdS
     """
     Get a single discovered resource.
 
-    :param tid: the id of the environment in which to get the unmanaged resource.
+    :param tid: the id of the environment in which to get the discovered resource.
     :param discovered_resource_id: The id of the discovered resource
     """
 

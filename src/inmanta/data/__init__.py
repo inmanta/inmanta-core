@@ -904,7 +904,7 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
-class UnmanagedResourceOrder(SingleDatabaseOrder):
+class DiscoveredResourceOrder(SingleDatabaseOrder):
     """Represents the ordering by which discovered resources should be sorted"""
 
     @classmethod
@@ -5899,7 +5899,7 @@ _classes = [
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     User,
-    UnmanagedResource,
+    DiscoveredResource,
 ]
 
 
