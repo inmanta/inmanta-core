@@ -1062,21 +1062,58 @@ class ResourceService(protocol.ServerSlice):
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg, {"validation_errors": e.errors()})
-        try:
-            dao = discovered_resource.to_dao(env.id)
-            await dao.insert()
-        except UniqueViolationError as e:
-            raise Conflict(message=e.detail)
+
+        dao = discovered_resource.to_dao(env.id)
+        (column_names, values) = dao._get_column_names_and_values()
+        column_names_as_sql_string = ",".join(column_names)
+        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        query = (
+            f"INSERT INTO {dao.table_name()} "
+            f"({column_names_as_sql_string}) "
+            f"VALUES ({values_as_parameterize_sql_string})"
+            "ON CONFLICT (environment, discovered_resource_id)"
+            "DO UPDATE SET"
+            "    values = EXCLUDED.values,"
+            "    discovered_time = EXCLUDED.discovered_time;"
+        )
+        await dao._execute_query(query, *values)
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
     async def discovered_resources_create_batch(
         self, env: data.Environment, discovered_resources: List[DiscoveredResource]
     ) -> None:
-        resources: List[data.DiscoveredResource] = [res.to_dao(env.id) for res in discovered_resources]
-        try:
-            await data.DiscoveredResource.insert_many(resources)
-        except UniqueViolationError as e:
-            raise Conflict(message=e.detail)
+        dao_list = [res.to_dao(env.id) for res in discovered_resources]
+        column_names = []
+        values = []
+        for dao in dao_list:
+            col_names, dao_values = dao._get_column_names_and_values()
+            column_names.append(col_names)
+            values.append(dao_values)
+
+        column_names_as_sql_string = ", ".join(column_names[0])
+
+        start_value = 1
+        placeholders = []
+        for _ in range(len(values)):
+            sublist = []
+            step = len(values[0])
+            for i in range(start_value, start_value + step):
+                sublist.append(f"${i}")
+            placeholders.append("(" + ", ".join(sublist) + ")")
+            start_value += step
+        values_placeholder = ", ".join(placeholders)
+
+        query = (
+            f"INSERT INTO {dao_list[0].table_name()} "
+            f"({column_names_as_sql_string}) "
+            f"VALUES {values_placeholder}"
+            " ON CONFLICT (environment, discovered_resource_id)"
+            " DO UPDATE SET"
+            " values = EXCLUDED.values,"
+            " discovered_time = EXCLUDED.discovered_time;"
+        )
+        flattened_values = [item for sublist in values for item in sublist]
+        await dao_list[0]._execute_query(query, *flattened_values)
 
     @handle(methods_v2.discovered_resources_get, env="tid")
     async def discovered_resources_get(

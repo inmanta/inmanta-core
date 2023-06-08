@@ -41,19 +41,20 @@ async def test_discovery_resource_single(server, client, agent, environment):
     assert result.result["data"]["discovered_resource_id"] == discovered_resource_id
     assert result.result["data"]["values"] == values
 
+    values = {"value1": "test3", "value2": "test4"}
     # try to store the same resource a second time
     result = await agent._client.discovered_resource_create(
         tid=environment,
         discovered_resource_id=discovered_resource_id,
         values=values,
     )
-    assert result.code == 409
-    error_message = (
-        "Request conflicts with the current state of the resource: "
-        f"Key (environment, discovered_resource_id)=({environment}, "
-        "test::Resource[agent1,key=key]) already exists."
-    )
-    assert error_message in result.result["message"]
+    assert result.code == 200
+
+    result = await client.discovered_resources_get(environment, discovered_resource_id)
+    assert result.code == 200
+
+    assert result.result["data"]["discovered_resource_id"] == discovered_resource_id
+    assert result.result["data"]["values"] == values
 
 
 async def test_discovered_resource_create_batch(server, client, agent, environment):
@@ -74,20 +75,20 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
         assert result.result["data"]["discovered_resource_id"] == res["discovered_resource_id"]
         assert result.result["data"]["values"] == res["values"]
 
-    # try to store a batch with 2 times the same resource
+    # try to store the same resources a second time
     resources = [
-        {"discovered_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test7", "value2": "test8"}},
-        {"discovered_resource_id": "test::Resource[agent1,key4=key4]", "values": {"value1": "test9", "value2": "test10"}},
+        {"discovered_resource_id": "test::Resource[agent1,key1=key1]", "values": {"value1": "test7", "value2": "test8"}},
+        {"discovered_resource_id": "test::Resource[agent1,key2=key2]", "values": {"value1": "test9", "value2": "test10"}},
         {"discovered_resource_id": "test::Resource[agent1,key6=key6]", "values": {"value1": "test11", "value2": "test12"}},
     ]
     result = await agent._client.discovered_resource_create_batch(environment, resources)
-    assert result.code == 409
-    error_message = (
-        "Request conflicts with the current state of the resource: "
-        f"Key (environment, discovered_resource_id)=({environment}, "
-        "test::Resource[agent1,key4=key4]) already exists."
-    )
-    assert error_message in result.result["message"]
+    assert result.code == 200
+
+    for res in resources:
+        result = await client.discovered_resources_get(environment, res["discovered_resource_id"])
+        assert result.code == 200
+        assert result.result["data"]["discovered_resource_id"] == res["discovered_resource_id"]
+        assert result.result["data"]["values"] == res["values"]
 
 
 async def test_discovered_resource_get_paging(server, client, agent, environment):
