@@ -1661,9 +1661,9 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     assert res1.attribute_hash != res3.attribute_hash
 
 
-async def test_get_latest_resources_resource_type_count(init_dataclasses_and_load_schema):
+async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_load_schema):
     """
-    Test for the get_latest_resources_resource_type_count query
+    Test for the get_resource_type_count_for_latest_version query
     """
     project = data.Project(name="test")
     await project.insert()
@@ -1673,7 +1673,7 @@ async def test_get_latest_resources_resource_type_count(init_dataclasses_and_loa
 
     async def assert_expected_count(expected_report: Dict[str, int]):
         # Checks the expected_report against the actual one
-        report = await data.Resource.get_latest_resources_resource_type_count(env.id)
+        report = await data.Resource.get_resource_type_count_for_latest_version(env.id)
         assert report == expected_report
 
     # model 1
