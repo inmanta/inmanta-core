@@ -725,6 +725,7 @@ class DiscoveredResource(BaseModel):
 
     discovered_resource_id: ResourceIdStr
     values: JsonType
+    discovered_time: datetime.datetime
 
     @validator("discovered_resource_id")
     @classmethod
@@ -737,6 +738,6 @@ class DiscoveredResource(BaseModel):
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
             values=self.values,
-            discovered=datetime.datetime.now(),
+            discovered_time=datetime.datetime.now(),
             environment=env,
         )

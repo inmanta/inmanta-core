@@ -17,8 +17,8 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-    -- Add the 'discovered' column
-    ALTER TABLE public.unmanagedresource ADD COLUMN discovered TIMESTAMP NOT NULL;
+    -- Add the 'discovered_time' column
+    ALTER TABLE public.unmanagedresource ADD COLUMN discovered_time TIMESTAMP NOT NULL;
 
     -- drop the old primary key
     ALTER TABLE public.unmanagedresource DROP CONSTRAINT unmanagedresource_pkey;

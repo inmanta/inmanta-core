@@ -5867,7 +5867,7 @@ class DiscoveredResource(BaseDocument):
     """
 
     environment: uuid.UUID
-    discovered: datetime.datetime
+    discovered_time: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
     values: dict[str, str]
 
@@ -5875,8 +5875,7 @@ class DiscoveredResource(BaseDocument):
 
     def to_dto(self) -> m.DiscoveredResource:
         return m.DiscoveredResource(
-            discovered_resource_id=self.discovered_resource_id,
-            values=self.values,
+            discovered_resource_id=self.discovered_resource_id, values=self.values, discovered_time=self.discovered_time
         )
 
 
