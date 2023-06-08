@@ -752,11 +752,12 @@ class OrchestrationService(protocol.ServerSlice):
                         "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
                         "a full compile is necessary for this process:\n"
                     )
-                    msg += "\n".join(f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}" for rid in resources_that_moved_resource_sets)
-
-                    raise BadRequest(
-                        msg
+                    msg += "\n".join(
+                        f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
+                        for rid in resources_that_moved_resource_sets
                     )
+
+                    raise BadRequest(msg)
                 all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets}
 
             await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)

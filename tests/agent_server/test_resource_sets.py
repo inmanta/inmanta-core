@@ -389,82 +389,8 @@ async def test_put_partial_migrate_resource_to_other_resource_set_sandbox(server
             "send_event": False,
             "purged": False,
             "requires": [],
-        }
-        # , {
-        #     "key": "key2",
-        #     "value": "value2",
-        #     "id": "test::Resource[agent1,key=key2],v=%d" % version,
-        #     "send_event": False,
-        #     "purged": False,
-        #     "requires": [],
-        # },
-    ]
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state={},
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-        resource_sets={
-            "test::Resource[agent1,key=key1]": "set-a",
-            # "test::Resource[agent1,key=key2]": "set-b"
         },
-    )
-    assert result.code == 200
-    resources_partial = [
         {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=0",
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        },
-        # {
-        #     "key": "key2",
-        #     "value": "value2",
-        #     "id": "test::Resource[agent1,key=key2],v=0",
-        #     "send_event": False,
-        #     "purged": False,
-        #     "requires": [],
-        # },
-    ]
-
-    result = await client.put_partial(
-        tid=environment,
-        resources=resources_partial,
-        resource_state={},
-        unknowns=[],
-        version_info=None,
-        resource_sets={
-            "test::Resource[agent1,key=key1]": "set-b",
-            # "test::Resource[agent1,key=key2]": "set-c"
-        },
-    )
-
-    assert result.code == 400
-    assert result.result["message"] == (
-        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
-        "a full compile is necessary for this process:\n"
-        '    test::Resource[agent1,key=key1] moved from set-a to set-b'
-    )
-
-async def test_put_partial_migrate_resource_to_other_resource_set(server, client, environment, clienthelper):
-    """
-    Resources cannot migrate to a different resource set using a partial compile.
-    """
-    version = await clienthelper.get_version()
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "send_event": False,
-            "purged": False,
-            "requires": [],
-        }, {
             "key": "key2",
             "value": "value2",
             "id": "test::Resource[agent1,key=key2],v=%d" % version,
@@ -481,10 +407,7 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
-        resource_sets={
-            "test::Resource[agent1,key=key1]": "set-a",
-            "test::Resource[agent1,key=key2]": "set-b"
-        },
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-old", "test::Resource[agent1,key=key2]": "set-b-old"},
     )
     assert result.code == 200
     resources_partial = [
@@ -495,7 +418,8 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
             "send_event": False,
             "purged": False,
             "requires": [],
-        },{
+        },
+        {
             "key": "key2",
             "value": "value2",
             "id": "test::Resource[agent1,key=key2],v=0",
@@ -511,17 +435,87 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         resource_state={},
         unknowns=[],
         version_info=None,
-        resource_sets={
-            "test::Resource[agent1,key=key1]": "set-b",
-            "test::Resource[agent1,key=key2]": "set-b"
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a-new", "test::Resource[agent1,key=key2]": "set-b-new"},
+    )
+
+    assert result.code == 400
+    expected_lines = [
+        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
+        "a full compile is necessary for this process:",
+        "    test::Resource[agent1,key=key1] moved from set-a-old to set-a-new",
+        "    test::Resource[agent1,key=key2] moved from set-b-old to set-b-new",
+    ]
+
+    assert all(line in result.result["message"] for line in expected_lines)
+
+
+async def test_put_partial_migrate_resource_to_other_resource_set(server, client, environment, clienthelper):
+    """
+    Resources cannot migrate to a different resource set using a partial compile.
+    """
+    version = await clienthelper.get_version()
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
         },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+        resource_sets={"test::Resource[agent1,key=key1]": "set-a", "test::Resource[agent1,key=key2]": "set-b"},
+    )
+    assert result.code == 200
+    resources_partial = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": "test::Resource[agent1,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },
+    ]
+
+    result = await client.put_partial(
+        tid=environment,
+        resources=resources_partial,
+        resource_state={},
+        unknowns=[],
+        version_info=None,
+        resource_sets={"test::Resource[agent1,key=key1]": "set-b", "test::Resource[agent1,key=key2]": "set-b"},
     )
 
     assert result.code == 400
     assert result.result["message"] == (
         "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
         "a full compile is necessary for this process:\n"
-        '    test::Resource[agent1,key=key1] moved from set-a to set-b'
+        "    test::Resource[agent1,key=key1] moved from set-a to set-b"
     )
 
 
