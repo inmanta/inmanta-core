@@ -736,6 +736,7 @@ class OrchestrationService(protocol.ServerSlice):
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
+                # This dict maps a resource id to its resource set for unchanged resource sets.
                 rids_unchanged_resource_sets: dict[
                     ResourceIdStr, str
                 ] = await data.Resource.copy_resources_from_unchanged_resource_set(
@@ -758,7 +759,7 @@ class OrchestrationService(protocol.ServerSlice):
                     )
 
                     raise BadRequest(msg)
-                all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets}
+                all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
             await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
             await cm.recalculate_total(connection=connection)
