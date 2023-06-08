@@ -17,6 +17,20 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
+    -- Add the 'discovered' column
     ALTER TABLE public.unmanagedresource ADD COLUMN discovered TIMESTAMP NOT NULL
+
+    -- drop the old primary key
+    ALTER TABLE public.unmanagedresource DROP CONSTRAINT unmanagedresource_pkey;
+
+    -- Rename the 'unmanaged_resource_id' column
+    ALTER TABLE public.unmanagedresource RENAME COLUMN unmanaged_resource_id TO discovered_resource_id;
+
+    -- Rename the table
+    ALTER TABLE public.unmanagedresource RENAME TO discoveredresource;
+
+    -- add a new primary key constraint
+    ALTER TABLE public.unmanagedresource ADD CONSTRAINT
+    discoveredresource_pkey PRIMARY KEY (environment, discovered_resource_id);
     """
     await connection.execute(schema)
