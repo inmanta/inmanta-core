@@ -725,7 +725,6 @@ class DiscoveredResource(BaseModel):
 
     discovered_resource_id: ResourceIdStr
     values: JsonType
-    discovered_time: datetime.datetime
 
     @validator("discovered_resource_id")
     @classmethod
