@@ -41,9 +41,9 @@ async def test_migration(
     env = await Environment.get_one(name="dev-1")
     values = {"value1": "test1", "value2": "test2"}
     await UnmanagedResource(
-        unmanaged_resource_id="test::Resource[agent1,key=key]",
+        discovered_resource_id="test::Resource[agent1,key=key]",
         values=values,
         environment=env.id,
     ).insert()
-    result = await UnmanagedResource.get_one(environment=env.id, unmanaged_resource_id="test::Resource[agent1,key=key]")
+    result = await UnmanagedResource.get_one(environment=env.id, discovered_resource_id="test::Resource[agent1,key=key]")
     assert result.values == values

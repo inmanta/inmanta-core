@@ -717,25 +717,25 @@ class LoginReturn(BaseModel):
     user: User
 
 
-class UnmanagedResource(BaseModel):
+class DiscoveredResource(BaseModel):
     """
-    :param unmanaged_resource_id: The name of the resource
+    :param discovered_resource_id: The name of the resource
     :param values: The actual resource
     """
 
-    unmanaged_resource_id: ResourceIdStr
+    discovered_resource_id: ResourceIdStr
     values: JsonType
 
-    @validator("unmanaged_resource_id")
+    @validator("discovered_resource_id")
     @classmethod
-    def unmanaged_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
+    def discovered_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
         if resources.Id.is_resource_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceIdStr")
 
-    def to_dao(self, env: uuid) -> "data.UnmanagedResource":
-        return data.UnmanagedResource(
-            unmanaged_resource_id=self.unmanaged_resource_id,
+    def to_dao(self, env: uuid) -> "data.DiscoveredResource":
+        return data.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
             values=self.values,
             discovered=datetime.datetime.now(),
             environment=env,

@@ -1403,7 +1403,7 @@ def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: List[
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.UnmanagedResource:
+def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
     """
     Get a single discovered resource.
 
@@ -1419,13 +1419,13 @@ def unmanaged_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdSt
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get_batch(
+def discovered_resources_get_batch(
     tid: uuid.UUID,
     limit: Optional[int] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    sort: str = "unmanaged_resource_id.asc",
-) -> List[model.UnmanagedResource]:
+    sort: str = "discovered_resource_id.asc",
+) -> List[model.DiscoveredResource]:
     """
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
@@ -1434,7 +1434,7 @@ def unmanaged_resources_get_batch(
     :param end: The upper limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param sort: Return the results sorted according to the parameter value.
-            The following sorting attributes are supported: 'unmanaged_resource_id'.
+            The following sorting attributes are supported: 'discovered_resource_id'.
             The following orders are supported: 'asc', 'desc'
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found

@@ -1181,7 +1181,7 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        sort: str = "unmanaged_resource_id.asc",
+        sort: str = "discovered_resource_id.asc",
         start: Optional[str] = None,
         end: Optional[str] = None,
     ) -> None:
@@ -1208,8 +1208,8 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT environment, unmanaged_resource_id, values",
-            from_clause=f" FROM {data.UnmanagedResource.table_name()}",
+            select_clause="SELECT environment, discovered_resource_id, values",
+            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
             filter_statements=["environment = $1"],
             values=[self.environment.id],
         )
@@ -1218,7 +1218,7 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
             model.UnmanagedResource(
-                unmanaged_resource_id=res["unmanaged_resource_id"],
+                discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
             ).dict()
             for res in records

@@ -911,7 +911,7 @@ class UnmanagedResourceOrder(SingleDatabaseOrder):
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            ColumnNameStr("unmanaged_resource_id"): StringColumn,
+            ColumnNameStr("discovered_resource_id"): StringColumn,
         }
 
 
@@ -5859,23 +5859,23 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
-class UnmanagedResource(BaseDocument):
+class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource
-    :param unmanaged_resource_id: The id of the resource
-    :param values: The values associated with the unmanaged_resource
+    :param discovered_resource_id: The id of the resource
+    :param values: The values associated with the discovered_resource
     """
 
     environment: uuid.UUID
     discovered: datetime.datetime
-    unmanaged_resource_id: m.ResourceIdStr
+    discovered_resource_id: m.ResourceIdStr
     values: dict[str, str]
 
-    __primary_key__ = ("environment", "unmanaged_resource_id")
+    __primary_key__ = ("environment", "discovered_resource_id")
 
-    def to_dto(self) -> m.UnmanagedResource:
-        return m.UnmanagedResource(
-            unmanaged_resource_id=self.unmanaged_resource_id,
+    def to_dto(self) -> m.DiscoveredResource:
+        return m.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
             values=self.values,
         )
 
