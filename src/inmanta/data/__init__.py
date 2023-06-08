@@ -4536,10 +4536,11 @@ class Resource(BaseDocument):
             GROUP BY resource_type;
         """
         values = [cls._get_value(environment)]
-        result: JsonType = {}
+        result: dict[str, int] = {}
         async with cls.get_connection() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
+                    assert isinstance(record["count"], int)
                     result[str(record["resource_type"])] = record["count"]
         return result
 
