@@ -736,8 +736,8 @@ class OrchestrationService(protocol.ServerSlice):
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
-                rids_unchanged_resource_sets: abc.Set[
-                    ResourceIdStr
+                rids_unchanged_resource_sets: dict[
+                    ResourceIdStr, str
                 ] = await data.Resource.copy_resources_from_unchanged_resource_set(
                     environment=env.id,
                     source_version=partial_base_version,
@@ -746,11 +746,16 @@ class OrchestrationService(protocol.ServerSlice):
                     deleted_resource_sets=set(removed_resource_sets),
                     connection=connection,
                 )
-                resources_that_moved_resource_sets = rids_unchanged_resource_sets & set(rid_to_resource.keys())
+                resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & set(rid_to_resource.keys())
                 if resources_that_moved_resource_sets:
+                    msg = (
+                        "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
+                        "a full compile is necessary for this process:\n"
+                    )
+                    msg += "\n".join(f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}" for rid in resources_that_moved_resource_sets)
+
                     raise BadRequest(
-                        f"A partial compile cannot migrate resources {list(resources_that_moved_resource_sets)} to another"
-                        " resource set"
+                        msg
                     )
                 all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets}
 

@@ -389,6 +389,13 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
             "send_event": False,
             "purged": False,
             "requires": [],
+        }, {
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=%d" % version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
         },
     ]
     result = await client.put_version(
@@ -399,7 +406,10 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         unknowns=[],
         version_info={},
         compiler_version=get_compiler_version(),
-        resource_sets={"test::Resource[agent1,key=key1]": "set-a"},
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-a",
+            "test::Resource[agent1,key=key2]": "set-b"
+        },
     )
     assert result.code == 200
     resources_partial = [
@@ -407,6 +417,13 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
             "key": "key1",
             "value": "value1",
             "id": "test::Resource[agent1,key=key1],v=0",
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        },{
+            "key": "key2",
+            "value": "value2",
+            "id": "test::Resource[agent1,key=key2],v=0",
             "send_event": False,
             "purged": False,
             "requires": [],
@@ -419,13 +436,17 @@ async def test_put_partial_migrate_resource_to_other_resource_set(server, client
         resource_state={},
         unknowns=[],
         version_info=None,
-        resource_sets={"test::Resource[agent1,key=key1]": "set-b"},
+        resource_sets={
+            "test::Resource[agent1,key=key1]": "set-b",
+            "test::Resource[agent1,key=key2]": "set-b"
+        },
     )
 
     assert result.code == 400
     assert result.result["message"] == (
-        "Invalid request: A partial compile cannot migrate resources "
-        "['test::Resource[agent1,key=key1]'] to another resource set"
+        "Invalid request: The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
+        "a full compile is necessary for this process:\n"
+        '    test::Resource[agent1,key=key1] moved from set-a to set-b'
     )
 
 
