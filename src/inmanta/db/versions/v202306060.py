@@ -30,7 +30,7 @@ async def update(connection: Connection) -> None:
     ALTER TABLE public.unmanagedresource RENAME TO discoveredresource;
 
     -- add a new primary key constraint
-    ALTER TABLE public.unmanagedresource ADD CONSTRAINT
+    ALTER TABLE public.discoveredresource ADD CONSTRAINT
     discoveredresource_pkey PRIMARY KEY (environment, discovered_resource_id);
     """
     await connection.execute(schema)
