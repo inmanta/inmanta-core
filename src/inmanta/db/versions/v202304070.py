@@ -17,7 +17,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     schema = """
-CREATE TABLE IF NOT EXISTS unmanagedresource (
+CREATE TABLE IF NOT EXISTS public.unmanagedresource (
     environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     unmanaged_resource_id VARCHAR NOT NULL,
     values jsonb NOT NULL,
