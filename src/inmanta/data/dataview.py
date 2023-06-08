@@ -1204,7 +1204,7 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
         return {}
 
     def get_base_url(self) -> str:
-        return "/api/v2/unmanaged"
+        return "/api/v2/discovered"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(

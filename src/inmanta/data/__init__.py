@@ -905,7 +905,7 @@ class NotificationOrder(AbstractDatabaseOrderV2):
 
 
 class UnmanagedResourceOrder(SingleDatabaseOrder):
-    """Represents the ordering by which unmanaged resources should be sorted"""
+    """Represents the ordering by which discovered resources should be sorted"""
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:

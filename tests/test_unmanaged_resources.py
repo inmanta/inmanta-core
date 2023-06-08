@@ -24,7 +24,7 @@ from inmanta.server.config import get_bind_port
 
 async def test_discovery_resource_single(server, client, agent, environment):
     """
-    Test that an unmanaged resource can be created and retrieved successfully for a single resource.
+    Test that a discovered resource can be created and retrieved successfully for a single resource.
     """
     discovered_resource_id = "test::Resource[agent1,key=key]"
     values = {"value1": "test1", "value2": "test2"}
@@ -92,7 +92,7 @@ async def test_discovered_resource_create_batch(server, client, agent, environme
 
 async def test_discovered_resource_get_paging(server, client, agent, environment):
     """
-    Test that unmanaged resources can be retrieved with paging. The test creates multiple resources, retrieves them
+    Test that discovered resources can be retrieved with paging. The test creates multiple resources, retrieves them
     with various paging options, and verifies that the expected resources are returned.
     """
     resources = [
@@ -159,7 +159,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
 
 async def test_discovery_resource_bad_res_id(server, client, agent, environment):
     """
-    Test that exceptions are raised when creating unmanaged resources with invalid IDs.
+    Test that exceptions are raised when creating discovered resources with invalid IDs.
     """
     result = await agent._client.discovered_resource_create(
         tid=environment, discovered_resource_id="test", values={"value1": "test1", "value2": "test2"}
