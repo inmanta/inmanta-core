@@ -1067,15 +1067,13 @@ class ResourceService(protocol.ServerSlice):
         (column_names, values) = dao._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
         values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = (
-            f"INSERT INTO {dao.table_name()} "
-            f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterize_sql_string})"
-            "ON CONFLICT (environment, discovered_resource_id)"
-            "DO UPDATE SET"
-            "    values = EXCLUDED.values,"
-            "    discovered_time = EXCLUDED.discovered_time;"
-        )
+        query = f"""INSERT INTO {dao.table_name()}
+            ({column_names_as_sql_string})
+            VALUES ({values_as_parameterize_sql_string})
+            ON CONFLICT (environment, discovered_resource_id)
+            DO UPDATE SET
+                values = EXCLUDED.values,
+                discovered_at = EXCLUDED.discovered_at;"""
         await dao._execute_query(query, *values)
 
     @handle(methods_v2.discovered_resource_create_batch, env="tid")
@@ -1103,15 +1101,13 @@ class ResourceService(protocol.ServerSlice):
             start_value += step
         values_placeholder = ", ".join(placeholders)
 
-        query = (
-            f"INSERT INTO {dao_list[0].table_name()} "
-            f"({column_names_as_sql_string}) "
-            f"VALUES {values_placeholder}"
-            " ON CONFLICT (environment, discovered_resource_id)"
-            " DO UPDATE SET"
-            " values = EXCLUDED.values,"
-            " discovered_time = EXCLUDED.discovered_time;"
-        )
+        query = f"""INSERT INTO {dao_list[0].table_name()}
+            ({column_names_as_sql_string})
+            VALUES {values_placeholder}
+            ON CONFLICT (environment, discovered_resource_id)
+            DO UPDATE SET
+                values = EXCLUDED.values,
+                discovered_at = EXCLUDED.discovered_at;"""
         flattened_values = [item for sublist in values for item in sublist]
         await dao_list[0]._execute_query(query, *flattened_values)
 

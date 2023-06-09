@@ -737,6 +737,6 @@ class DiscoveredResource(BaseModel):
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
             values=self.values,
-            discovered_time=datetime.datetime.now(),
+            discovered_at=datetime.datetime.now(),
             environment=env,
         )

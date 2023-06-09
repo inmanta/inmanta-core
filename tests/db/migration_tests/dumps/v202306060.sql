@@ -236,7 +236,7 @@ CREATE TABLE public.discoveredresource (
     environment uuid NOT NULL,
     discovered_resource_id character varying NOT NULL,
     "values" jsonb NOT NULL,
-    discovered_time timestamp without time zone NOT NULL
+    discovered_at timestamp without time zone NOT NULL
 );
 
 
@@ -526,7 +526,7 @@ COPY public.configurationmodel (version, environment, date, released, deployed, 
 -- Data for Name: discoveredresource; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.discoveredresource (environment, discovered_resource_id, "values", discovered_time) FROM stdin;
+COPY public.discoveredresource (environment, discovered_resource_id, "values", discovered_at) FROM stdin;
 \.
 
 

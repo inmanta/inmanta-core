@@ -5867,7 +5867,7 @@ class DiscoveredResource(BaseDocument):
     """
 
     environment: uuid.UUID
-    discovered_time: datetime.datetime
+    discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
     values: dict[str, str]
 

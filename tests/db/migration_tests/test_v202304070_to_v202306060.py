@@ -30,12 +30,12 @@ async def test_migration(
     get_primary_key_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
 ) -> None:
     """
-    verify that the discovered_time column is added, that the table is renamed and that the primary key is changed
+    verify that the discovered_at column is added, that the table is renamed and that the primary key is changed
     """
     tables = await get_tables_in_db()
     assert "unmanagedresource" in tables
     assert "discoveredresource" not in tables
-    assert "discovered_time" not in (await get_columns_in_db_table("unmanagedresource"))
+    assert "discovered_at" not in (await get_columns_in_db_table("unmanagedresource"))
 
     columns_pk = await get_primary_key_columns_in_db_table("unmanagedresource")
     assert len(columns_pk) == 2
@@ -47,7 +47,7 @@ async def test_migration(
     tables = await get_tables_in_db()
     assert "unmanagedresource" not in tables
     assert "discoveredresource" in tables
-    assert "discovered_time" in (await get_columns_in_db_table("discoveredresource"))
+    assert "discovered_at" in (await get_columns_in_db_table("discoveredresource"))
 
     columns_pk = await get_primary_key_columns_in_db_table("discoveredresource")
     assert len(columns_pk) == 2

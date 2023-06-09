@@ -45,7 +45,7 @@ async def test_migration(
         discovered_resource_id="test::Resource[agent1,key=key]",
         values=values,
         environment=env.id,
-        discovered_time=datetime.datetime.now(),
+        discovered_at=datetime.datetime.now(),
     ).insert()
     result = await DiscoveredResource.get_one(environment=env.id, discovered_resource_id="test::Resource[agent1,key=key]")
     assert result.values == values
