@@ -1571,6 +1571,26 @@ class BaseDocument(object, metaclass=DocumentMeta):
         )
         await self._execute_query(query, *values, connection=connection)
 
+    async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Insert a new document based on the instance passed. If the document already exists, overwrite it.
+        """
+        (column_names, values) = self._get_column_names_and_values()
+        column_names_as_sql_string = ",".join(column_names)
+
+        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        primary_key_fields = self._get_names_of_primary_key_fields()
+        primary_key_string = ",".join(primary_key_fields)
+        update_set = list(set(column_names) - set(self._get_names_of_primary_key_fields()))
+        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
+        query = f"""INSERT INTO {self.table_name()}
+            ({column_names_as_sql_string})
+            VALUES ({values_as_parameterize_sql_string})
+            ON CONFLICT ({primary_key_string})
+            DO UPDATE SET
+            {update_set_string};"""
+        await self._execute_query(query, *values, connection=connection)
+
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
         async with cls.get_connection(connection) as con:
@@ -1633,6 +1653,48 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
+
+    @classmethod
+    async def insert_many_with_overwrite(
+        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        Insert new documents. If the document already exists, overwrite it.
+        """
+        if not documents:
+            return
+        column_names = cls.get_field_names()
+        primary_key_fields = cls._get_names_of_primary_key_fields()
+        primary_key_string = ",".join(primary_key_fields)
+        update_set = list(set(column_names) - set(cls._get_names_of_primary_key_fields()))
+        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
+
+        values = []
+        for record in documents:
+            col_names, dao_values = record._get_column_names_and_values()
+            values.append(dao_values)
+
+        column_names_as_sql_string = ", ".join(column_names)
+
+        start_value = 1
+        placeholders = []
+        for _ in range(len(values)):
+            sublist = []
+            step = len(values[0])
+            for i in range(start_value, start_value + step):
+                sublist.append(f"${i}")
+            placeholders.append("(" + ", ".join(sublist) + ")")
+            start_value += step
+        values_placeholder = ", ".join(placeholders)
+
+        query = f"""INSERT INTO {documents[0].table_name()}
+                    ({column_names_as_sql_string})
+                    VALUES {values_placeholder}
+                    ON CONFLICT ({primary_key_string})
+                    DO UPDATE SET
+                    {update_set_string};"""
+        flattened_values = [item for sublist in values for item in sublist]
+        await documents[0]._execute_query(query, *flattened_values)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
