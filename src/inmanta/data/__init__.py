@@ -4863,7 +4863,7 @@ class Resource(BaseDocument):
                 destination_version,
                 updated_resource_sets | deleted_resource_sets,
             )
-            return {record["resource_id"]: record["resource_set"] for record in result}
+            return {str(record["resource_id"]): str(record["resource_set"]) for record in result}
 
     @classmethod
     async def get_resources_in_resource_sets(
