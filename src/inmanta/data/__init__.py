@@ -1672,8 +1672,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
 
         values = []
-        for record in documents:
-            col_names, dao_values = record._get_column_names_and_values()
+        for document in documents:
+            col_names, dao_values = document._get_column_names_and_values()
             values.append(dao_values)
 
         column_names_as_sql_string = ", ".join(column_names)
