@@ -1,0 +1,6 @@
+description: Improve error reporting when attempting to move a resource to another resource set in a partial compile.
+issue-nr: 5884
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
