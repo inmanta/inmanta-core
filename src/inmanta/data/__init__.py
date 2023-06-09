@@ -1563,11 +1563,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = (
             f"INSERT INTO {self.table_name()} "
             f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterize_sql_string})"
+            f"VALUES ({values_as_parameterized_sql_string})"
         )
         await self._execute_query(query, *values, connection=connection)
 
@@ -1575,21 +1575,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         Insert a new document based on the instance passed. If the document already exists, overwrite it.
         """
-        (column_names, values) = self._get_column_names_and_values()
-        column_names_as_sql_string = ",".join(column_names)
-
-        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        primary_key_fields = self._get_names_of_primary_key_fields()
-        primary_key_string = ",".join(primary_key_fields)
-        update_set = list(set(column_names) - set(self._get_names_of_primary_key_fields()))
-        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
-        query = f"""INSERT INTO {self.table_name()}
-            ({column_names_as_sql_string})
-            VALUES ({values_as_parameterize_sql_string})
-            ON CONFLICT ({primary_key_string})
-            DO UPDATE SET
-            {update_set_string};"""
-        await self._execute_query(query, *values, connection=connection)
+        return await self.insert_many_with_overwrite([self], connection=connection)
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
@@ -1666,30 +1652,27 @@ class BaseDocument(object, metaclass=DocumentMeta):
         column_names = cls.get_field_names()
         primary_key_fields = cls._get_names_of_primary_key_fields()
         primary_key_string = ",".join(primary_key_fields)
-        update_set = list(set(column_names) - set(cls._get_names_of_primary_key_fields()))
+        update_set = set(column_names) - set(cls._get_names_of_primary_key_fields())
         update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
 
-        values = []
+        values: List[List[object]] = []
         for record in documents:
             col_names, dao_values = record._get_column_names_and_values()
             values.append(dao_values)
 
         column_names_as_sql_string = ", ".join(column_names)
 
-        start_value = 1
-        placeholders = []
-        for _ in range(len(values)):
-            sublist = []
-            step = len(values[0])
-            for i in range(start_value, start_value + step):
-                sublist.append(f"${i}")
-            placeholders.append("(" + ", ".join(sublist) + ")")
-            start_value += step
-        values_placeholder = ", ".join(placeholders)
+        number_of_columns = len(values[0])
+        placeholders = ", ".join(
+            [
+                "(" + ", ".join([f"${doc * number_of_columns + col}" for col in range(1, number_of_columns + 1)]) + ")"
+                for doc in range(len(values))
+            ]
+        )
 
         query = f"""INSERT INTO {documents[0].table_name()}
                     ({column_names_as_sql_string})
-                    VALUES {values_placeholder}
+                    VALUES {placeholders}
                     ON CONFLICT ({primary_key_string})
                     DO UPDATE SET
                     {update_set_string};"""
@@ -1713,10 +1696,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
         (column_names, values) = self._get_column_names_and_values()
-        values_as_parameterize_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
-        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
+        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterized_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
 
     def _get_set_statement(self, **kwargs: object) -> Tuple[str, List[object]]:
