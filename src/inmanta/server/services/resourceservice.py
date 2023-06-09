@@ -1117,7 +1117,7 @@ class ResourceService(protocol.ServerSlice):
     ) -> DiscoveredResource:
         result = await data.DiscoveredResource.get_one(environment=env.id, discovered_resource_id=discovered_resource_id)
         if not result:
-            raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env}")
+            raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env.id}")
         dto = result.to_dto()
         return dto
 
