@@ -1676,6 +1676,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                     ON CONFLICT ({primary_key_string})
                     DO UPDATE SET
                     {update_set_string};"""
+
         flattened_values = [item for sublist in values for item in sublist]
         await documents[0]._execute_query(query, *flattened_values)
 
