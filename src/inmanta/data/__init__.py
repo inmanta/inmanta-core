@@ -1583,12 +1583,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         primary_key_string = ",".join(primary_key_fields)
         update_set = list(set(column_names) - set(self._get_names_of_primary_key_fields()))
         update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
-        query = f"""INSERT INTO {self.table_name()}
+        query = f"""
+            INSERT INTO {self.table_name()}
             ({column_names_as_sql_string})
             VALUES ({values_as_parameterize_sql_string})
             ON CONFLICT ({primary_key_string})
             DO UPDATE SET
-            {update_set_string};"""
+            {update_set_string};
+        """
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
