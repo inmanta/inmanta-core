@@ -747,7 +747,7 @@ class OrchestrationService(protocol.ServerSlice):
                     deleted_resource_sets=set(removed_resource_sets),
                     connection=connection,
                 )
-                resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & set(rid_to_resource.keys())
+                resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
                 if resources_that_moved_resource_sets:
                     msg = (
                         "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
