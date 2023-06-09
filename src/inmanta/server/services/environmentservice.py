@@ -47,6 +47,7 @@ from inmanta.server import (
     SLICE_SERVER,
     SLICE_TRANSPORT,
     protocol,
+    config as opt,
 )
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
@@ -482,6 +483,23 @@ class EnvironmentService(protocol.ServerSlice):
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
+
+        state_dir = opt.state_dir.get()
+        environment_dir = os.path.join(state_dir, "server", "environments", str(environment_id))
+
+        if os.path.exists(environment_dir):
+            # This call might fail when someone manually creates a directory or file that is owned
+            # by another user than the user running the inmanta server. Execute rmtree() after
+            # notify_listeners() to ensure that the listeners are notified.
+            try:
+                shutil.rmtree(environment_dir)
+            except PermissionError:
+                raise Forbidden(
+                    f"Environment {environment_id} cannot be deleted because it contains files owned"
+                    " by a different user from the one running the Inmanta server."
+                )
+
+
     @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:
         """
@@ -495,7 +513,6 @@ class EnvironmentService(protocol.ServerSlice):
         await env.delete_cascade(only_content=True)
 
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
-
         project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):
             # This call might fail when someone manually creates a directory or file that is owned
