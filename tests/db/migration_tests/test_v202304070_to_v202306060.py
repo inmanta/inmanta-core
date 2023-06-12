@@ -15,37 +15,41 @@
 
     Contact: code@inmanta.com
 """
-import datetime
 import os
 from collections import abc
 from typing import Awaitable, Callable, List
 
 import pytest
 
-from inmanta.data import DiscoveredResource, Environment
 
-
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202304060.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202304070.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
+    get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
     get_tables_in_db: Callable[[], Awaitable[List[str]]],
+    get_primary_key_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
 ) -> None:
     """
-    verify that the discoveredresource table is created
+    verify that the discovered_at column is added, that the table is renamed and that the primary key is changed
     """
     tables = await get_tables_in_db()
+    assert "unmanagedresource" in tables
     assert "discoveredresource" not in tables
-    await migrate_db_from()
-    tables = await get_tables_in_db()
-    assert "discoveredresource" in tables
+    assert "discovered_at" not in (await get_columns_in_db_table("unmanagedresource"))
 
-    env = await Environment.get_one(name="dev-1")
-    values = {"value1": "test1", "value2": "test2"}
-    await DiscoveredResource(
-        discovered_resource_id="test::Resource[agent1,key=key]",
-        values=values,
-        environment=env.id,
-        discovered_at=datetime.datetime.now(),
-    ).insert()
-    result = await DiscoveredResource.get_one(environment=env.id, discovered_resource_id="test::Resource[agent1,key=key]")
-    assert result.values == values
+    columns_pk = await get_primary_key_columns_in_db_table("unmanagedresource")
+    assert len(columns_pk) == 2
+    assert "discovered_resource_id" not in columns_pk
+    assert "unmanaged_resource_id" in columns_pk
+
+    await migrate_db_from()
+
+    tables = await get_tables_in_db()
+    assert "unmanagedresource" not in tables
+    assert "discoveredresource" in tables
+    assert "discovered_at" in (await get_columns_in_db_table("discoveredresource"))
+
+    columns_pk = await get_primary_key_columns_in_db_table("discoveredresource")
+    assert len(columns_pk) == 2
+    assert "discovered_resource_id" in columns_pk
+    assert "unmanaged_resource_id" not in columns_pk

@@ -37,6 +37,7 @@ from inmanta.data import (
     ConfigurationModel,
     DatabaseOrderV2,
     DesiredStateVersionOrder,
+    DiscoveredResourceOrder,
     FactOrder,
     InvalidQueryParameter,
     InvalidSort,
@@ -51,7 +52,6 @@ from inmanta.data import (
     ResourceLogOrder,
     ResourceOrder,
     SimpleQueryBuilder,
-    UnmanagedResourceOrder,
     VersionedResourceOrder,
     model,
 )
@@ -1176,17 +1176,17 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         ]
 
 
-class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedResource]):
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
     def __init__(
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        sort: str = "unmanaged_resource_id.asc",
+        sort: str = "discovered_resource_id.asc",
         start: Optional[str] = None,
         end: Optional[str] = None,
     ) -> None:
         super().__init__(
-            order=UnmanagedResourceOrder.parse_from_string(sort),
+            order=DiscoveredResourceOrder.parse_from_string(sort),
             limit=limit,
             first_id=None,
             last_id=None,
@@ -1204,12 +1204,12 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
         return {}
 
     def get_base_url(self) -> str:
-        return "/api/v2/unmanaged"
+        return "/api/v2/discovered"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT environment, unmanaged_resource_id, values",
-            from_clause=f" FROM {data.UnmanagedResource.table_name()}",
+            select_clause="SELECT environment, discovered_resource_id, values",
+            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
             filter_statements=["environment = $1"],
             values=[self.environment.id],
         )
@@ -1217,8 +1217,8 @@ class UnmanagedResourceView(DataView[UnmanagedResourceOrder, model.UnmanagedReso
 
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
         return [
-            model.UnmanagedResource(
-                unmanaged_resource_id=res["unmanaged_resource_id"],
+            model.DiscoveredResource(
+                discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
             ).dict()
             for res in records

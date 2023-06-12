@@ -904,14 +904,14 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
-class UnmanagedResourceOrder(SingleDatabaseOrder):
-    """Represents the ordering by which unmanaged resources should be sorted"""
+class DiscoveredResourceOrder(SingleDatabaseOrder):
+    """Represents the ordering by which discovered resources should be sorted"""
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            ColumnNameStr("unmanaged_resource_id"): StringColumn,
+            ColumnNameStr("discovered_resource_id"): StringColumn,
         }
 
 
@@ -1563,13 +1563,19 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = (
             f"INSERT INTO {self.table_name()} "
             f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterize_sql_string})"
+            f"VALUES ({values_as_parameterized_sql_string})"
         )
         await self._execute_query(query, *values, connection=connection)
+
+    async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Insert a new document based on the instance passed. If the document already exists, overwrite it.
+        """
+        return await self.insert_many_with_overwrite([self], connection=connection)
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
@@ -1634,6 +1640,43 @@ class BaseDocument(object, metaclass=DocumentMeta):
         async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
 
+    @classmethod
+    async def insert_many_with_overwrite(
+        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        Insert new documents. If the document already exists, overwrite it.
+        """
+        if not documents:
+            return
+        column_names = cls.get_field_names()
+        primary_key_fields = cls._get_names_of_primary_key_fields()
+        primary_key_string = ",".join(primary_key_fields)
+        update_set = set(column_names) - set(cls._get_names_of_primary_key_fields())
+        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
+
+        values: List[List[object]] = [document._get_column_names_and_values()[1] for document in documents]
+
+        column_names_as_sql_string = ", ".join(column_names)
+
+        number_of_columns = len(values[0])
+        placeholders = ", ".join(
+            [
+                "(" + ", ".join([f"${doc * number_of_columns + col}" for col in range(1, number_of_columns + 1)]) + ")"
+                for doc in range(len(values))
+            ]
+        )
+
+        query = f"""INSERT INTO {cls.table_name()}
+                    ({column_names_as_sql_string})
+                    VALUES {placeholders}
+                    ON CONFLICT ({primary_key_string})
+                    DO UPDATE SET
+                    {update_set_string};"""
+
+        flattened_values = [item for sublist in values for item in sublist]
+        await cls._execute_query(query, *flattened_values)
+
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
         for name, field in self._fields.items():
@@ -1651,10 +1694,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
         (column_names, values) = self._get_column_names_and_values()
-        values_as_parameterize_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
-        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
+        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterized_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
 
     def _get_set_statement(self, **kwargs: object) -> Tuple[str, List[object]]:
@@ -5884,24 +5927,22 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
-class UnmanagedResource(BaseDocument):
+class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource
-    :param unmanaged_resource_id: The id of the resource
-    :param values: The values associated with the unmanaged_resource
+    :param discovered_resource_id: The id of the resource
+    :param values: The values associated with the discovered_resource
     """
 
     environment: uuid.UUID
-    unmanaged_resource_id: m.ResourceIdStr
+    discovered_at: datetime.datetime
+    discovered_resource_id: m.ResourceIdStr
     values: dict[str, str]
 
-    __primary_key__ = ("environment", "unmanaged_resource_id")
+    __primary_key__ = ("environment", "discovered_resource_id")
 
-    def to_dto(self) -> m.UnmanagedResource:
-        return m.UnmanagedResource(
-            unmanaged_resource_id=self.unmanaged_resource_id,
-            values=self.values,
-        )
+    def to_dto(self) -> m.DiscoveredResource:
+        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
 
 
 _classes = [
@@ -5923,7 +5964,7 @@ _classes = [
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     User,
-    UnmanagedResource,
+    DiscoveredResource,
 ]
 
 
