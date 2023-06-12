@@ -577,15 +577,20 @@ class EnvironmentService(protocol.ServerSlice):
 
     def _delete_environment_dir(self, environment_id: uuid.UUID) -> None:
         """
-        Deletes an environment from the server's state_dir directory.
+        Deletes an environment from the server's state_dir directory. This method should be called after
+        notify_listeners() to ensure that the listeners are notified.
+
+        :param environment_id: The uuid of the environment to remove from the state directory.
+
+        :raises Forbidden: When a file or directory has been created by a user different from the
+        one running the Inmanta server inside the environment directory marked for removal.
         """
         state_dir = config.state_dir.get()
         environment_dir = os.path.join(state_dir, "server", "environments", str(environment_id))
 
         if os.path.exists(environment_dir):
             # This call might fail when someone manually creates a directory or file that is owned
-            # by another user than the user running the inmanta server. Execute rmtree() after
-            # notify_listeners() to ensure that the listeners are notified.
+            # by another user than the user running the inmanta server.
             try:
                 shutil.rmtree(environment_dir)
             except PermissionError:
