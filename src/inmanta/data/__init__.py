@@ -1675,7 +1675,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                     {update_set_string};"""
 
         flattened_values = [item for sublist in values for item in sublist]
-        await documents[0]._execute_query(query, *flattened_values)
+        await cls._execute_query(query, *flattened_values)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
