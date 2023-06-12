@@ -4563,6 +4563,31 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
+    async def get_resource_type_count_for_latest_version(cls, environment: uuid.UUID) -> dict[str, int]:
+        """
+        Returns the count for each resource_type over all resources in the model's latest version
+        """
+        query_latest_model = f"""
+            SELECT max(version)
+            FROM {ConfigurationModel.table_name()}
+            WHERE environment=$1
+        """
+        query = f"""
+            SELECT resource_type, count(*) as count
+            FROM {Resource.table_name()}
+            WHERE environment=$1 AND model=({query_latest_model})
+            GROUP BY resource_type;
+        """
+        values = [cls._get_value(environment)]
+        result: dict[str, int] = {}
+        async with cls.get_connection() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    assert isinstance(record["count"], int)
+                    result[str(record["resource_type"])] = record["count"]
+        return result
+
+    @classmethod
     async def get_resources_report(cls, environment: uuid.UUID) -> List[JsonType]:
         """
         This method generates a report of all resources in the given environment,
@@ -4857,7 +4882,7 @@ class Resource(BaseDocument):
         deleted_resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> abc.Set[m.ResourceIdStr]:
+    ) -> dict[m.ResourceIdStr, str]:
         """
         Copy the resources that belong to an unchanged resource set of a partial compile,
         from source_version to destination_version. This method doesn't copy shared resources.
@@ -4896,7 +4921,7 @@ class Resource(BaseDocument):
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
             )
-            RETURNING resource_id
+            RETURNING resource_id, resource_set
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetch(
@@ -4906,7 +4931,7 @@ class Resource(BaseDocument):
                 destination_version,
                 updated_resource_sets | deleted_resource_sets,
             )
-            return {record["resource_id"] for record in result}
+            return {str(record["resource_id"]): str(record["resource_set"]) for record in result}
 
     @classmethod
     async def get_resources_in_resource_sets(
