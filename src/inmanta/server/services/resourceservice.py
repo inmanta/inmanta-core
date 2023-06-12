@@ -32,14 +32,15 @@ from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
+    DiscoveredResourceView,
     ResourceHistoryView,
     ResourceLogsView,
     ResourcesInVersionView,
     ResourceView,
-    UnmanagedResourceView,
 )
 from inmanta.data.model import (
     AttributeStateChange,
+    DiscoveredResource,
     LatestReleasedResource,
     LogLine,
     ReleasedResourceDetails,
@@ -50,7 +51,6 @@ from inmanta.data.model import (
     ResourceLog,
     ResourceType,
     ResourceVersionIdStr,
-    UnmanagedResource,
     VersionedResource,
     VersionedResourceDetails,
 )
@@ -1053,49 +1053,47 @@ class ResourceService(protocol.ServerSlice):
             raise NotFound("The resource with the given id does not exist")
         return resource
 
-    @handle(methods_v2.unmanaged_resource_create, env="tid")
-    async def unmanaged_resource_create(self, env: data.Environment, unmanaged_resource_id: str, values: JsonType) -> None:
+    @handle(methods_v2.discovered_resource_create, env="tid")
+    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
         try:
-            unmanaged_resource = UnmanagedResource(unmanaged_resource_id=unmanaged_resource_id, values=values)
+            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
         except ValidationError as e:
             # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
             raise BadRequest(error_msg, {"validation_errors": e.errors()})
-        try:
-            await unmanaged_resource.to_dao(env.id).insert()
-        except UniqueViolationError as e:
-            raise Conflict(message=e.detail)
 
-    @handle(methods_v2.unmanaged_resource_create_batch, env="tid")
-    async def unmanaged_resources_create_batch(
-        self, env: data.Environment, unmanaged_resources: List[UnmanagedResource]
+        dao = discovered_resource.to_dao(env.id)
+        await dao.insert_with_overwrite()
+
+    @handle(methods_v2.discovered_resource_create_batch, env="tid")
+    async def discovered_resources_create_batch(
+        self, env: data.Environment, discovered_resources: List[DiscoveredResource]
     ) -> None:
-        resources: List[data.UnmanagedResource] = [res.to_dao(env.id) for res in unmanaged_resources]
-        try:
-            await data.UnmanagedResource.insert_many(resources)
-        except UniqueViolationError as e:
-            raise Conflict(message=e.detail)
+        dao_list = [res.to_dao(env.id) for res in discovered_resources]
+        await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
 
-    @handle(methods_v2.unmanaged_resources_get, env="tid")
-    async def unmanaged_resources_get(self, env: data.Environment, unmanaged_resource_id: ResourceIdStr) -> UnmanagedResource:
-        result = await data.UnmanagedResource.get_one(environment=env.id, unmanaged_resource_id=unmanaged_resource_id)
+    @handle(methods_v2.discovered_resources_get, env="tid")
+    async def discovered_resources_get(
+        self, env: data.Environment, discovered_resource_id: ResourceIdStr
+    ) -> DiscoveredResource:
+        result = await data.DiscoveredResource.get_one(environment=env.id, discovered_resource_id=discovered_resource_id)
         if not result:
-            raise NotFound(f"unmanaged_resource with name {unmanaged_resource_id} not found in env {env}")
+            raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env.id}")
         dto = result.to_dto()
         return dto
 
-    @protocol.handle(methods_v2.unmanaged_resources_get_batch, env="tid")
-    async def unmanaged_resources_get_batch(
+    @protocol.handle(methods_v2.discovered_resources_get_batch, env="tid")
+    async def discovered_resources_get_batch(
         self,
         env: data.Environment,
         limit: Optional[int] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        sort: str = "unmanaged_resource_id.asc",
-    ) -> ReturnValue[Sequence[UnmanagedResource]]:
+        sort: str = "discovered_resource_id.asc",
+    ) -> ReturnValue[Sequence[DiscoveredResource]]:
         try:
-            handler = UnmanagedResourceView(
+            handler = DiscoveredResourceView(
                 environment=env,
                 limit=limit,
                 sort=sort,
