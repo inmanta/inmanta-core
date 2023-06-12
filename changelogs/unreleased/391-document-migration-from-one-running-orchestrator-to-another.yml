@@ -1,4 +1,5 @@
 description: Add documentation to migrate from one running orchestrator to another.
 issue-nr: 391
+issue-repo: inmanta-service-orchestrator
 change-type: patch
 destination-branches: [master, iso6]
