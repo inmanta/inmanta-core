@@ -1670,7 +1670,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             ]
         )
 
-        query = f"""INSERT INTO {documents[0].table_name()}
+        query = f"""INSERT INTO {cls.table_name()}
                     ({column_names_as_sql_string})
                     VALUES {placeholders}
                     ON CONFLICT ({primary_key_string})
