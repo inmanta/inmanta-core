@@ -16,5 +16,5 @@ Administrator documentation
     administrators/metering.rst
     administrators/waf.rst
     administrators/support.rst
-    administrators/placeholder_name.rst
+    administrators/updating_the_orchestrator.rst
     administrators/web-console.md

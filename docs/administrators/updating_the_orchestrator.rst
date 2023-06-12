@@ -1,8 +1,11 @@
 .. _updating_the_orchestrator:
 
 
+Updating the orchestrator
+-------------------------
+
 Migrating from one running orchestrator to another running orchestrator
------------------------------------------------------------------------
+#######################################################################
 
 This document describes the procedure to migrate from one running orchestrator
 to another one. This procedure should be followed when an in-place update of
