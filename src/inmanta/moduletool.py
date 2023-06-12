@@ -738,11 +738,14 @@ mode.
             help="Release a new stable or dev release for this module.",
             description="""
 When a stable release is done, this command:
+
 * Does a commit that changes the current version to a stable version.
 * Adds Git release tag.
 * Does a commit that changes the current version to a development version that is one patch increment ahead of the released
   version.
+
 When a development release is done using the --dev option, this command:
+
 * Does a commit that updates the current version of the module to a development version that is a patch, minor or major version
   ahead of the previous stable release. The size of the increment is determined by the --revision, --patch, --minor or
   --major argument (--patch is the default). When a CHANGELOG.md file is present in the root of the module
