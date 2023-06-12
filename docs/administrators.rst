@@ -16,4 +16,5 @@ Administrator documentation
     administrators/metering.rst
     administrators/waf.rst
     administrators/support.rst
+    administrators/placeholder_name.rst
     administrators/web-console.md
