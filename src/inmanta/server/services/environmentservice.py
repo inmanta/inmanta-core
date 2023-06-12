@@ -582,7 +582,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         :param environment_id: The uuid of the environment to remove from the state directory.
 
-        :raises Forbidden: When a file or directory has been created by a user different from the
+        :raises ServerError: When a file or directory has been created by a user different than the
         one running the Inmanta server inside the environment directory marked for removal.
         """
         state_dir = config.state_dir.get()
@@ -594,9 +594,9 @@ class EnvironmentService(protocol.ServerSlice):
             try:
                 shutil.rmtree(environment_dir)
             except PermissionError:
-                raise Forbidden(
+                raise ServerError(
                     f"Environment {environment_id} cannot be deleted because it contains files owned"
-                    " by a different user from the one running the Inmanta server."
+                    " by a different user than the one running the Inmanta server."
                 )
 
     async def notify_listeners(
