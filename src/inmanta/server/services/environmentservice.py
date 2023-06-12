@@ -46,9 +46,8 @@ from inmanta.server import (
     SLICE_RESOURCE,
     SLICE_SERVER,
     SLICE_TRANSPORT,
+    protocol,
 )
-from inmanta.server import config as opt
-from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.server import Server
 from inmanta.server.services import compilerservice
@@ -483,7 +482,7 @@ class EnvironmentService(protocol.ServerSlice):
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
 
-        state_dir = opt.state_dir.get()
+        state_dir = config.state_dir.get()
         environment_dir = os.path.join(state_dir, "server", "environments", str(environment_id))
 
         if os.path.exists(environment_dir):
