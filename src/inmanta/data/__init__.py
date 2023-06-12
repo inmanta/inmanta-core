@@ -1655,9 +1655,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         update_set = set(column_names) - set(cls._get_names_of_primary_key_fields())
         update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
 
-        values: List[List[object]] = [
-        document._get_column_names_and_values()[1] for document in documents
-        ]
+        values: List[List[object]] = [document._get_column_names_and_values()[1] for document in documents]
 
         column_names_as_sql_string = ", ".join(column_names)
 
