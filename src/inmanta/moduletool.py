@@ -108,7 +108,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
             "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-            "\--strict-deps-check option."
+            "\--strict-deps-check option."  # noqa: W605
         ),
     )
     parser.add_argument(
@@ -118,7 +118,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help=(
             "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-            "This option is mutually exclusive with the \--no-strict-deps-check option."
+            "This option is mutually exclusive with the \--no-strict-deps-check option."  # noqa: W605
         ),
     )
 
@@ -569,7 +569,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            f"Either \--v1 or \--v2 has to be set.",
+            f"Either \--v1 or \--v2 has to be set.",  # noqa: W605
             parents=parent_parsers,
         )
         add.add_argument(
@@ -751,7 +751,7 @@ When a development release is done using the \--dev option, this command:
   \--major argument (\--patch is the default). When a CHANGELOG.md file is present in the root of the module
   directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
   the associated stable version and not a development version.
-            """.strip(),
+            """.strip(),  # noqa: W605
             formatter_class=RawTextHelpFormatter,
         )
         release.add_argument(
