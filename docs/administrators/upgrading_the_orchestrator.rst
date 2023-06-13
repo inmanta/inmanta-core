@@ -28,13 +28,13 @@ Procedure
 
     - Before upgrading the orchestrator to a new major version, an update should be done first.
     - Upgrades should be done one major version at a time. So if you want to upgrade from major
-    version X to major version X+2, you should do an upgrade from X to X+1 and then from X+1 to X+2.
+      version :code:`X` to major version :code:`X+2`, you should do an upgrade from :code:`X` to :code:`X+1` and then from :code:`X+1` to :code:`X+2`.
 
 
-
+_________
 
 1. **[New Orchestrator]**: Make sure the desired version of the orchestrator is installed, by following the
-installation instructions: :ref:`install-server` and set up a project manually, validating that the setup
+installation instructions (see :ref:`install-server`) and set up a project manually, validating that the setup
 of the orchestrator works (config, credentials, access to packages, etc.).
 
 _________
@@ -64,7 +64,7 @@ _________
 
     sudo systemctl stop inmanta-server.service
 
-6. Load the dump of the server database using ``pgsql``.
+6. **[New Orchestrator]** Load the dump of the server database using ``pgsql``.
 
 
 .. code-block:: bash
@@ -72,23 +72,29 @@ _________
     cat <db_dump_file> | psql -U <user> -W -h <host> <db_name>
 
 
-7. Start the orchestrator service, it will take some time before the orchestrator goes up, as some database migration will be done:
+7. **[New Orchestrator]** Start the orchestrator service, it will take some time before the orchestrator goes up, as some database migration will be done:
 
 .. code-block:: bash
 
     sudo systemctl enable --now inmanta-server.service
 
-8. When accessing the web console, all the environments will be visible, and still halted.
-9. One environment at a time:
+8. **[New Orchestrator]** When accessing the web console, all the environments will be visible, and still halted.
+9. **[New Orchestrator]** One environment at a time:
 
    a. Disable the ``auto_deploy`` option in the environment settings.  (``/console/settings?env=<your-env-id>&state.Settings.tab=Configuration``)
-   b. In the **desired state** page of the environment, click ``Update project & recompile``, accessible via the
+
+   b. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
    dropdown of the ``Recompile`` button. (``/console/desiredstate?env=<your-env-id>``).
 
-.. warning::
+   .. warning::
 
-    Make sure the compilation has finished and was successful before moving on to the next steps.
+       Make sure the compilation has finished and was successful before moving on to the next steps.
+
 
    c. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
+
    d. Make a dry-run and check that no difference is detected by the orchestrator.
+
    e. Enable ``auto_deploy`` in the settings of the environment.
+
+   f. In the **Resources** page of the environment, click ``Deploy`` to deploy the version created in step 9.b. (``/console/resources?env=<your-env-id>``)
