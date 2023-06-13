@@ -64,7 +64,7 @@ _________
 
     sudo systemctl stop inmanta-server.service
 
-6. **[New Orchestrator]** Load the dump of the server database using ``pgsql``.
+6. **[New Orchestrator]** Load the dump of the server database using ``psql``.
 
 
 .. code-block:: bash
