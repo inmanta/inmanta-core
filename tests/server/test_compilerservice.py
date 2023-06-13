@@ -28,11 +28,13 @@ from collections import abc
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import pkg_resources
+import py.path
 import pytest
 from pytest import approx
 
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
+import utils
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
@@ -1634,3 +1636,39 @@ async def test_status_compilerservice_task_queue(
 
     # Verify compile queue is empty
     await retry_limited(verify_length_compile_queue, timeout=10, expected_length=0)
+
+
+async def test_environment_delete_removes_env_directories_on_server(
+    server,
+    client,
+) -> None:
+    """
+    Make sure the environment_delete endpoint deletes the environment directory on the server.
+    """
+    state_dir: Optional[str] = config.Config.get("config", "state-dir")
+    assert state_dir is not None
+    env_dir = py.path.local(state_dir).join("server", "environments")
+
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="env1")
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+
+    result: Result = await client.notify_change(env_id)
+    assert result.code == 200
+
+    async def wait_for_compile() -> bool:
+        result = await client.is_compiling(env_id)
+        return result.code == 204
+
+    await utils.retry_limited(wait_for_compile, 15)
+
+    assert os.path.exists(os.path.join(env_dir, env_id))
+
+    result = await client.environment_delete(env_id)
+    assert result.code == 200
+
+    assert not os.path.exists(os.path.join(env_dir, env_id))
