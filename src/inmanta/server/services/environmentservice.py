@@ -493,7 +493,6 @@ class EnvironmentService(protocol.ServerSlice):
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
         self._delete_environment_dir(environment_id)
 
-
     @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
         is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
@@ -505,7 +504,6 @@ class EnvironmentService(protocol.ServerSlice):
         version_info = model.ModelVersionInfo(export_metadata=metadata)
         await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict(), get_compiler_version())
         return version
-
 
     @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:
