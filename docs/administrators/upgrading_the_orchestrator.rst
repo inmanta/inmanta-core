@@ -4,7 +4,7 @@
 Upgrading the orchestrator
 -------------------------
 
-Migrating from one running orchestrator to another running orchestrator
+Upgrading by migrating from one orchestrator to another orchestrator
 #######################################################################
 
 This document describes how to upgrade to a new version of the orchestrator by setting
@@ -26,9 +26,9 @@ Procedure
 .. note::
     **Pre-requisite**
 
-    - Before upgrading the orchestrator to a new major version, an update should be done first.
-    - Upgrades should be done one major version at a time. So if you want to upgrade from major
-      version :code:`X` to major version :code:`X+2`, you should do an upgrade from :code:`X` to :code:`X+1` and then from :code:`X+1` to :code:`X+2`.
+    - Before upgrading the orchestrator to a new major version, an update should be done to the latest version of the current major version.
+    - Upgrades should be done one major version at a time. Upgrading from major
+      version :code:`X` to major version :code:`X+2`, should be done by upgrading from :code:`X` to :code:`X+1` and then from :code:`X+1` to :code:`X+2`.
 
 
 _________
