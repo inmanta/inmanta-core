@@ -26,7 +26,7 @@ Procedure
 .. note::
     **Pre-requisite**
 
-    - Before upgrading the orchestrator to a new major version, an update should be done to the latest version of the current major version.
+    - Before upgrading the orchestrator to a new major version, make sure the old orchestrator is at the latest version available within its major.
     - Upgrades should be done one major version at a time. Upgrading from major
       version :code:`X` to major version :code:`X+2`, should be done by upgrading from :code:`X` to :code:`X+1` and then from :code:`X+1` to :code:`X+2`.
 
