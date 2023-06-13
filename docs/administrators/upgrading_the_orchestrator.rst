@@ -93,8 +93,6 @@ _________
 
    c. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
 
-   d. Make a dry-run and check that no difference is detected by the orchestrator.
+   d. Enable ``auto_deploy`` in the settings of the environment.
 
-   e. Enable ``auto_deploy`` in the settings of the environment.
-
-   f. In the **Resources** page of the environment, click ``Deploy`` to deploy the version created in step 9.b. (``/console/resources?env=<your-env-id>``)
+   e. In the **Resources** page of the environment, click ``Deploy`` to deploy the version created in step 9.b. (``/console/resources?env=<your-env-id>``)
