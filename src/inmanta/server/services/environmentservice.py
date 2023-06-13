@@ -491,6 +491,7 @@ class EnvironmentService(protocol.ServerSlice):
 
         self.resource_service.close_resource_action_logger(environment_id)
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
+        self._delete_environment_dir(environment_id)
 
     @handle(methods_v2.environment_decommission, env="id")
     async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
@@ -517,13 +518,7 @@ class EnvironmentService(protocol.ServerSlice):
         await env.delete_cascade(only_content=True)
 
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
-
-        project_dir = os.path.join(self.server_slice._server_storage["environments"], str(env.id))
-        if os.path.exists(project_dir):
-            # This call might fail when someone manually creates a directory or file that is owned
-            # by another user than the user running the inmanta server. Execute rmtree() after
-            # notify_listeners() to ensure that the listeners are notified.
-            shutil.rmtree(project_dir)
+        self._delete_environment_dir(env.id)
 
     @handle(methods_v2.environment_create_token, env="tid")
     async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:
@@ -600,6 +595,30 @@ class EnvironmentService(protocol.ServerSlice):
 
     def remove_listener(self, action: EnvironmentAction, listener: EnvironmentListener) -> None:
         self.listeners[action].remove(listener)
+
+    def _delete_environment_dir(self, environment_id: uuid.UUID) -> None:
+        """
+        Deletes an environment from the server's state_dir directory. This method should be called after
+        notify_listeners() to ensure that the listeners are notified.
+
+        :param environment_id: The uuid of the environment to remove from the state directory.
+
+        :raises ServerError: When a file or directory has been created by a user different than the
+        one running the Inmanta server inside the environment directory marked for removal.
+        """
+        state_dir = config.state_dir.get()
+        environment_dir = os.path.join(state_dir, "server", "environments", str(environment_id))
+
+        if os.path.exists(environment_dir):
+            # This call might fail when someone manually creates a directory or file that is owned
+            # by another user than the user running the inmanta server.
+            try:
+                shutil.rmtree(environment_dir)
+            except PermissionError:
+                raise ServerError(
+                    f"Environment {environment_id} cannot be deleted because it contains files owned"
+                    " by a different user than the one running the Inmanta server."
+                )
 
     async def notify_listeners(
         self, action: EnvironmentAction, updated_env: model.Environment, original_env: Optional[model.Environment] = None
