@@ -7,14 +7,12 @@ Updating the orchestrator
 Migrating from one running orchestrator to another running orchestrator
 #######################################################################
 
-This document describes the procedure to migrate from one running orchestrator
-to another one. This procedure should be followed when an in-place update of
+This document describes how to upgrade to a new version of the orchestrator by setting up a new orchestrator next to the existing orchestrator and migrating all the state from the existing to the new orchestrator. This procedure should be followed when an in-place update of
 the orchestrator is not possible e.g. when the operating system needs to be
-updated alongside the orchestrator or when updating the orchestrator to a
-different major version.
+updated alongside the orchestrator.
 
-Context
-+++++++
+Terminology
++++++++++++
 
 The procedure below describes how to migrate from one running orchestrator
 denoted as the 'old orchestrator' to another one denoted as the 'new orchestrator'.
@@ -28,12 +26,12 @@ Procedure
     .. tab-item:: Old orchestrator
 
 
-        1. Halt all environments (by pressing the ``STOP`` button in the dashboard for each environment).
+        1. Halt all environments (by pressing the ``STOP`` button in the web-console for each environment).
         2. Stop the server:
 
         .. code-block:: bash
 
-            sudo systemctl stop inmanta-server.service
+            sudo systemctl disable --now inmanta-server.service
 
         3. Make a dump of the server database using ``pgdump``.
 
@@ -55,9 +53,9 @@ Procedure
 
         .. code-block:: bash
 
-            sudo systemctl start inmanta-server.service
+            sudo systemctl enable --now inmanta-server.service
 
-        5. When accessing the web console, all the environments from the old orchestrator should be visible, and still halted.
+        5. When accessing the web console, all the environments will be visible, and still halted.
         6. One environment at a time:
 
            1. Disable the ``auto_deploy`` option in the environment settings.  (``/console/settings?env=<your-env-id>&state.Settings.tab=Configuration``)
