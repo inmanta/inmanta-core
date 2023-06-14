@@ -15,10 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import functools
 import logging
 import re
 import string
 import warnings
+from collections import abc
+from dataclasses import dataclass
 from itertools import accumulate
 from typing import Iterable, Iterator, List, Optional, Tuple, Union
 
@@ -50,7 +53,7 @@ from inmanta.ast.statements.define import (
     DefineTypeConstraint,
     TypeDeclaration,
 )
-from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, WrappedKwargs
+from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, ListComprehension, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
@@ -655,6 +658,7 @@ def p_expression(p: YaccProduction) -> None:
     | var_ref %prec VAR_REF
     | constructor
     | list_def
+    | list_comprehension
     | map_def
     | map_lookup %prec MAP_LOOKUP
     | index_lookup
@@ -751,6 +755,66 @@ def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
     p[0] = CreateList(p[2])
     attach_lnr(p, 1)
+
+
+@dataclass
+class ForSpecifier:
+    variable: LocatableString
+    iterable: ExpressionStatement
+    guard: Optional[ExpressionStatement] = None
+
+
+def p_list_comprehension(p: YaccProduction) -> None:
+    "list_comprehension : '[' expression list_comprehension_for list_comprehension_guard ']'"
+
+    def create_list_comprehension(value_expression: ExpressionStatement, for_specifier: ForSpecifier) -> ListComprehension:
+        result: ListComprehension = ListComprehension(
+            value_expression, for_specifier.variable, for_specifier.iterable, for_specifier.guard
+        )
+        line_nb_token: int = 1
+        result.location = Location(file, p.lineno(line_nb_token))
+        result.namespace = namespace
+        result.lexpos = p.lexpos(line_nb_token)
+        return result
+
+    # for-specifiers in reverse order
+    loops: abc.Sequence[ForSpecifier] = p[3]
+    loops[0].guard = p[4]
+    # `[z for y in x.y for z in y.z if y > 0 if z > 0]` is syntactic sugar for
+    # `[[z for z in y.z if y > 0 and z > 0] for y in x.y]`, loops = [(z, y.z), (y, x.y)]
+    p[0] = functools.reduce(
+        lambda acc, for_spec: create_list_comprehension(value_expression=acc, for_specifier=for_spec),
+        loops,
+        p[2],
+    )
+
+
+def p_list_comprehension_for_empty(p: YaccProduction) -> None:
+    "list_comprehension_for_empty : empty"
+    p[0] = []  # list[ForSpecifier]
+
+
+def p_list_comprehension_for(p: YaccProduction) -> None:
+    """list_comprehension_for : FOR ID IN expression list_comprehension_for_empty
+    | FOR ID IN expression list_comprehension_for"""
+    p[0] = p[5]  # list[ForSpecifier]
+    # for-specifiers in reverse order
+    p[0].append(ForSpecifier(variable=p[2], iterable=p[4]))
+
+
+def p_list_comprehension_guard_empty(p: YaccProduction) -> None:
+    "list_comprehension_guard : empty"
+    p[0] = None
+
+
+def p_list_comprehension_guard(p: YaccProduction) -> None:
+    "list_comprehension_guard : IF expression list_comprehension_guard"
+    if p[3] is None:
+        p[0] = p[2]
+    else:
+        # `if x if y` is syntactic sugar for `if x and y`
+        p[0] = And(p[2], p[3])
+        attach_lnr(p, 1)
 
 
 def p_r_string_dict_key(p: YaccProduction) -> None:

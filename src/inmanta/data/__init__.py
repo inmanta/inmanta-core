@@ -904,14 +904,14 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
-class UnmanagedResourceOrder(SingleDatabaseOrder):
-    """Represents the ordering by which unmanaged resources should be sorted"""
+class DiscoveredResourceOrder(SingleDatabaseOrder):
+    """Represents the ordering by which discovered resources should be sorted"""
 
     @classmethod
     def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            ColumnNameStr("unmanaged_resource_id"): StringColumn,
+            ColumnNameStr("discovered_resource_id"): StringColumn,
         }
 
 
@@ -1563,13 +1563,19 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = (
             f"INSERT INTO {self.table_name()} "
             f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterize_sql_string})"
+            f"VALUES ({values_as_parameterized_sql_string})"
         )
         await self._execute_query(query, *values, connection=connection)
+
+    async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Insert a new document based on the instance passed. If the document already exists, overwrite it.
+        """
+        return await self.insert_many_with_overwrite([self], connection=connection)
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
@@ -1634,6 +1640,43 @@ class BaseDocument(object, metaclass=DocumentMeta):
         async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
 
+    @classmethod
+    async def insert_many_with_overwrite(
+        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        Insert new documents. If the document already exists, overwrite it.
+        """
+        if not documents:
+            return
+        column_names = cls.get_field_names()
+        primary_key_fields = cls._get_names_of_primary_key_fields()
+        primary_key_string = ",".join(primary_key_fields)
+        update_set = set(column_names) - set(cls._get_names_of_primary_key_fields())
+        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
+
+        values: List[List[object]] = [document._get_column_names_and_values()[1] for document in documents]
+
+        column_names_as_sql_string = ", ".join(column_names)
+
+        number_of_columns = len(values[0])
+        placeholders = ", ".join(
+            [
+                "(" + ", ".join([f"${doc * number_of_columns + col}" for col in range(1, number_of_columns + 1)]) + ")"
+                for doc in range(len(values))
+            ]
+        )
+
+        query = f"""INSERT INTO {cls.table_name()}
+                    ({column_names_as_sql_string})
+                    VALUES {placeholders}
+                    ON CONFLICT ({primary_key_string})
+                    DO UPDATE SET
+                    {update_set_string};"""
+
+        flattened_values = [item for sublist in values for item in sublist]
+        await cls._execute_query(query, *flattened_values)
+
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
         for name, field in self._fields.items():
@@ -1651,10 +1694,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
         (column_names, values) = self._get_column_names_and_values()
-        values_as_parameterize_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
-        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
+        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterized_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
 
     def _get_set_statement(self, **kwargs: object) -> Tuple[str, List[object]]:
@@ -2383,13 +2426,21 @@ class Setting(object):
         """
         self.name: str = name
         self.typ: str = typ
-        self.default = default
+        self._default = default
         self.doc = doc
         self.validator = validator
         self.recompile = recompile
         self.update = update_model
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
+
+    @property
+    def default(self) -> Optional[m.EnvSettingType]:
+        if self._default and isinstance(self._default, dict):
+            # Dicts are mutable objects. Return a copy.
+            return dict(self._default)
+        else:
+            return self._default
 
     def to_dict(self) -> JsonType:
         return {
@@ -2425,7 +2476,13 @@ class Environment(BaseDocument):
     :param project: The project this environment belongs to.
     :param repo_url: The repository url that contains the configuration model code for this environment
     :param repo_branch: The repository branch that contains the configuration model code for this environment
-    :param settings: Key/value settings for this environment
+    :param settings: Key/value settings for this environment. This dictionary does not necessarily contain a key
+                     for every environment setting known by the server. This is done for backwards compatibility reasons.
+                     When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
+                     account. The logic to decide that is the following:
+                        * When the name of the new setting is present in this settings dictionary or when the name of the old
+                          setting is not present in the settings dictionary, use the new setting.
+                        * Otherwise, use the setting with the old name.
     :param last_version: The last version number that was reserved for this environment
     :param description: The description of the environment
     :param icon: An icon for the environment
@@ -2658,19 +2715,27 @@ class Environment(BaseDocument):
         if key in self.settings:
             return self.settings[key]
 
-        if self._settings[key].default is None:
+        default_value = self._settings[key].default
+        if default_value is None:
             raise KeyError()
 
-        value = self._settings[key].default
-        await self.set(key, value, connection=connection)
-        return value
+        await self.set(key, default_value, connection=connection, allow_override=False)
+        return self.settings[key]
 
-    async def set(self, key: str, value: m.EnvSettingType, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: m.EnvSettingType,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        allow_override: bool = True,
+    ) -> None:
         """
         Set a new setting in this environment.
 
         :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
         :param value: The value of the settings. The value should be of type as defined in _settings
+        :param allow_override: If set to False, don't set the given environment setting when it already exists in the setting
+                               dictionary in the database.
         """
         if key not in self._settings:
             raise KeyError()
@@ -2679,19 +2744,25 @@ class Environment(BaseDocument):
             value = self._settings[key].validator(value)
 
         type = translate_to_postgres_type(self._settings[key].typ)
-        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=3)
-        query = (
-            "UPDATE "
-            + self.table_name()
-            + " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::"
-            + type
-            + "), TRUE)"
-            + " WHERE "
-            + filter_statement
+        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=5)
+        query = f"""
+                UPDATE {self.table_name()}
+                SET settings=(
+                        CASE WHEN $1 IS FALSE AND settings ? $2::text
+                        THEN settings
+                        ELSE jsonb_set(settings, $3::text[], to_jsonb($4::{type}), TRUE)
+                        END
+                    )
+                WHERE {filter_statement}
+                RETURNING settings
+        """
+        values = [allow_override, self._get_value(key), self._get_value([key]), self._get_value(value)] + values
+
+        new_value = await self._fetchval(query, *values, connection=connection)
+        new_value_parsed = cast(
+            Dict[str, m.EnvSettingType], self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
         )
-        values = [self._get_value([key]), self._get_value(value)] + values
-        await self._execute_query(query, *values, connection=connection)
-        self.settings[key] = value
+        self.settings[key] = new_value_parsed[key]
 
     async def unset(self, key: str) -> None:
         """
@@ -4492,6 +4563,31 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
+    async def get_resource_type_count_for_latest_version(cls, environment: uuid.UUID) -> dict[str, int]:
+        """
+        Returns the count for each resource_type over all resources in the model's latest version
+        """
+        query_latest_model = f"""
+            SELECT max(version)
+            FROM {ConfigurationModel.table_name()}
+            WHERE environment=$1
+        """
+        query = f"""
+            SELECT resource_type, count(*) as count
+            FROM {Resource.table_name()}
+            WHERE environment=$1 AND model=({query_latest_model})
+            GROUP BY resource_type;
+        """
+        values = [cls._get_value(environment)]
+        result: dict[str, int] = {}
+        async with cls.get_connection() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    assert isinstance(record["count"], int)
+                    result[str(record["resource_type"])] = record["count"]
+        return result
+
+    @classmethod
     async def get_resources_report(cls, environment: uuid.UUID) -> List[JsonType]:
         """
         This method generates a report of all resources in the given environment,
@@ -4786,7 +4882,7 @@ class Resource(BaseDocument):
         deleted_resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> abc.Set[m.ResourceIdStr]:
+    ) -> dict[m.ResourceIdStr, str]:
         """
         Copy the resources that belong to an unchanged resource set of a partial compile,
         from source_version to destination_version. This method doesn't copy shared resources.
@@ -4825,7 +4921,7 @@ class Resource(BaseDocument):
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
             )
-            RETURNING resource_id
+            RETURNING resource_id, resource_set
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetch(
@@ -4835,7 +4931,7 @@ class Resource(BaseDocument):
                 destination_version,
                 updated_resource_sets | deleted_resource_sets,
             )
-            return {record["resource_id"] for record in result}
+            return {str(record["resource_id"]): str(record["resource_set"]) for record in result}
 
     @classmethod
     async def get_resources_in_resource_sets(
@@ -5831,24 +5927,22 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
-class UnmanagedResource(BaseDocument):
+class DiscoveredResource(BaseDocument):
     """
     :param environment: the environment of the resource
-    :param unmanaged_resource_id: The id of the resource
-    :param values: The values associated with the unmanaged_resource
+    :param discovered_resource_id: The id of the resource
+    :param values: The values associated with the discovered_resource
     """
 
     environment: uuid.UUID
-    unmanaged_resource_id: m.ResourceIdStr
+    discovered_at: datetime.datetime
+    discovered_resource_id: m.ResourceIdStr
     values: dict[str, str]
 
-    __primary_key__ = ("environment", "unmanaged_resource_id")
+    __primary_key__ = ("environment", "discovered_resource_id")
 
-    def to_dto(self) -> m.UnmanagedResource:
-        return m.UnmanagedResource(
-            unmanaged_resource_id=self.unmanaged_resource_id,
-            values=self.values,
-        )
+    def to_dto(self) -> m.DiscoveredResource:
+        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
 
 
 _classes = [
@@ -5870,7 +5964,7 @@ _classes = [
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     User,
-    UnmanagedResource,
+    DiscoveredResource,
 ]
 
 

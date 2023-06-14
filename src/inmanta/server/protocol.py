@@ -21,6 +21,7 @@ import socket
 import time
 import uuid
 from collections import defaultdict
+from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import importlib_metadata
@@ -499,11 +500,13 @@ class Session(object):
             call_list: List[common.Request] = []
 
             if no_hang:
-                timeout = asyncio.get_running_loop().time() + 0.1
+                timeout = 0.1
             else:
-                timeout = asyncio.get_running_loop().time() + self._interval
-
-            call = await self._queue.get(timeout=timeout)
+                timeout = self._interval if self._interval > 0.1 else 0.1
+                # We choose to have a minimum of 0.1 as timeout as this is also the value used for no_hang.
+                # Furthermore, the timeout value cannot be zero as this causes an issue with Tornado:
+                # https://github.com/tornadoweb/tornado/issues/3271
+            call = await self._queue.get(timeout=timedelta(seconds=timeout))
             if call is None:
                 # aborting session
                 return None

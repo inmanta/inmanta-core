@@ -108,7 +108,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
             "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-            "--strict-deps-check option."
+            "\--strict-deps-check option."  # noqa: W605
         ),
     )
     parser.add_argument(
@@ -118,7 +118,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help=(
             "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-            "This option is mutually exclusive with the --no-strict-deps-check option."
+            "This option is mutually exclusive with the \--no-strict-deps-check option."  # noqa: W605
         ),
     )
 
@@ -491,6 +491,7 @@ compatible with the dependencies specified by the updated modules.
                     my_project.module_source.urls,
                     upgrade=True,
                     allow_pre_releases=my_project.install_mode != InstallMode.release,
+                    use_pip_config=my_project.metadata.pip.use_config_file,
                 )
 
             for v1_module in set(modules).difference(v2_modules):
@@ -568,7 +569,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            f"Either --v1 or --v2 has to be set.",
+            f"Either \--v1 or \--v2 has to be set.",  # noqa: W605
             parents=parent_parsers,
         )
         add.add_argument(
@@ -737,17 +738,20 @@ mode.
             help="Release a new stable or dev release for this module.",
             description="""
 When a stable release is done, this command:
+
 * Does a commit that changes the current version to a stable version.
 * Adds Git release tag.
 * Does a commit that changes the current version to a development version that is one patch increment ahead of the released
   version.
-When a development release is done using the --dev option, this command:
+
+When a development release is done using the \--dev option, this command:
+
 * Does a commit that updates the current version of the module to a development version that is a patch, minor or major version
-  ahead of the previous stable release. The size of the increment is determined by the --revision, --patch, --minor or
-  --major argument (--patch is the default). When a CHANGELOG.md file is present in the root of the module
+  ahead of the previous stable release. The size of the increment is determined by the \--revision, \--patch, \--minor or
+  \--major argument (\--patch is the default). When a CHANGELOG.md file is present in the root of the module
   directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
   the associated stable version and not a development version.
-            """.strip(),
+            """.strip(),  # noqa: W605
             formatter_class=RawTextHelpFormatter,
         )
         release.add_argument(

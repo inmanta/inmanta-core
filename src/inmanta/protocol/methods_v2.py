@@ -26,7 +26,7 @@ from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import PrimitiveTypes
 
-from ..data.model import ResourceIdStr, UnmanagedResource
+from ..data.model import DiscoveredResource, ResourceIdStr
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
@@ -1360,7 +1360,7 @@ def set_password(username: str, password: str) -> None:
 
 
 @typedmethod(
-    path="/unmanaged/<unmanaged_resource_id>",
+    path="/discovered/<discovered_resource_id>",
     operation="POST",
     agent_server=True,
     arg_options=methods.ENV_OPTS,
@@ -1368,65 +1368,64 @@ def set_password(username: str, password: str) -> None:
     api_version=2,
     varkw=True,
 )
-def unmanaged_resource_create(
-    tid: uuid.UUID, unmanaged_resource_id: str, **kwargs: object  # bypass the type checking for the values
+def discovered_resource_create(
+    tid: uuid.UUID, discovered_resource_id: str, **kwargs: object  # bypass the type checking for the values
 ) -> None:
     """
     create a discovered resource.
     :param tid: The id of the environment this resource belongs to
-    :param unmanaged_resource_id: The id of the unmanaged resource
-    :param values: The values associated with the unmanaged_resource
+    :param discovered_resource_id: The id of the discovered_resource
     :param **kwargs: The following arguments are supported:
-           values: The values associated with the unmanaged_resource
+           values: The values associated with the discovered_resource
     """
 
 
 @typedmethod(
-    path="/unmanaged/",
+    path="/discovered/",
     operation="POST",
     agent_server=True,
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.agent],
     api_version=2,
 )
-def unmanaged_resource_create_batch(tid: uuid.UUID, unmanaged_resources: List[UnmanagedResource]) -> None:
+def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: List[DiscoveredResource]) -> None:
     """
     create multiple discovered resource in the DB
     :param tid: The id of the environment this resource belongs to
-    :param unmanaged_resources: List of UnmanagedResources containing the unmanaged_resource_id and values for each resource
+    :param discovered_resources: List of discovered_resources containing the discovered_resource_id and values for each resource
     """
 
 
 @typedmethod(
-    path="/unmanaged/<unmanaged_resource_id>",
+    path="/discovered/<discovered_resource_id>",
     operation="GET",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get(tid: uuid.UUID, unmanaged_resource_id: ResourceIdStr) -> model.UnmanagedResource:
+def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
     """
     Get a single discovered resource.
 
-    :param tid: the id of the environment in which to get the unmanaged resource.
-    :param unmanaged_resource_id: The id of the unmanaged resource
+    :param tid: the id of the environment in which to get the discovered resource.
+    :param discovered_resource_id: The id of the discovered resource
     """
 
 
 @typedmethod(
-    path="/unmanaged",
+    path="/discovered",
     operation="GET",
     arg_options=methods.ENV_OPTS,
     client_types=[ClientType.api],
     api_version=2,
 )
-def unmanaged_resources_get_batch(
+def discovered_resources_get_batch(
     tid: uuid.UUID,
     limit: Optional[int] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    sort: str = "unmanaged_resource_id.asc",
-) -> List[model.UnmanagedResource]:
+    sort: str = "discovered_resource_id.asc",
+) -> List[model.DiscoveredResource]:
     """
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
@@ -1435,7 +1434,7 @@ def unmanaged_resources_get_batch(
     :param end: The upper limit for the order by column (exclusive).
                 Only one of 'start' and 'end' should be specified at the same time.
     :param sort: Return the results sorted according to the parameter value.
-            The following sorting attributes are supported: 'unmanaged_resource_id'.
+            The following sorting attributes are supported: 'discovered_resource_id'.
             The following orders are supported: 'asc', 'desc'
     :return: A list of all matching released resources
     :raise NotFound: This exception is raised when the referenced environment is not found

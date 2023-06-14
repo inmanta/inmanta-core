@@ -18,6 +18,7 @@
 import asyncio
 import datetime
 import enum
+import json
 import logging
 import time
 import uuid
@@ -382,6 +383,42 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
         await env.get("get_non_existing_parameter")
     with pytest.raises(AttributeError):
         await env.set(data.AUTO_DEPLOY, 5)
+
+
+async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_load_schema):
+    """
+    Verify that executing the `Environment.get(<name_env_setting>)` method on an environment object which doesn't have the
+    <name_env_setting> in its settings dictionary, doesn't override the value of the setting with the default value in
+    the database when another transaction has written a value for this setting to the database.
+    """
+    # Create project and environment
+    project = data.Project(name="proj")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    async def assert_setting_in_db(expected_autostart_agent_map: Dict[str, object]) -> None:
+        """
+        Verify that the state of the setting.autostart_agent_map setting in the database matches the given
+        expected_autostart_agent_map dictionary.
+        """
+        async with data.Environment.get_connection() as connection:
+            query = f"SELECT setting->'{data.AUTOSTART_AGENT_MAP}' FROM {data.Environment.table_name()} WHERE id=$1"
+            result = await connection.fetchval(query, env.id)
+            assert json.loads(result) == expected_autostart_agent_map
+
+    # Get two environment object with an empty settings dict.
+    env_obj1 = await data.Environment.get_by_id(env.id)
+    env_obj2 = await data.Environment.get_by_id(env.id)
+
+    # Add autostart_agent_map key to settings dict
+    autostart_agent_map = {"test": ":local", "internal": ":local"}
+    await env_obj1.set(data.AUTOSTART_AGENT_MAP, dict(autostart_agent_map))
+
+    assert assert_setting_in_db(autostart_agent_map)
+    # Make sure that get for autostart_agent_map on env_obj2 object doesn't override setting with default value.
+    assert await env_obj2.get(data.AUTOSTART_AGENT_MAP) == autostart_agent_map
+    assert assert_setting_in_db(autostart_agent_map)
 
 
 async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
@@ -1622,6 +1659,92 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     assert res1.attribute_hash == res2.attribute_hash
     assert res3.attribute_hash is not None
     assert res1.attribute_hash != res3.attribute_hash
+
+
+async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_load_schema):
+    """
+    Test for the get_resource_type_count_for_latest_version query
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    async def assert_expected_count(expected_report: Dict[str, int]):
+        # Checks the expected_report against the actual one
+        report = await data.Resource.get_resource_type_count_for_latest_version(env.id)
+        assert report == expected_report
+
+    # model 1
+    version = 1
+    cm1 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        deployed=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm1.insert()
+
+    res1_1 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file1"},
+    )
+    await res1_1.insert()
+
+    await assert_expected_count({"std::File": 1})  # 1 File resource in model v1
+
+    res2_1 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2_1.insert()
+
+    await assert_expected_count({"std::File": 2})  # 2 File resources in model v1
+
+    version += 1
+    cm2 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        deployed=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm2.insert()
+
+    res2_2 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2_2.insert()
+
+    await assert_expected_count({"std::File": 1})  # 1 File resource in model v2
+
+    res3_2 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::Dummy[agent1,path=/etc/file3],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+    )
+    await res3_2.insert()
+
+    await assert_expected_count({"std::File": 1, "std::Dummy": 1})  # 1 File resource and 1 Dummy resource in model v2
 
 
 async def test_resources_report(init_dataclasses_and_load_schema):
