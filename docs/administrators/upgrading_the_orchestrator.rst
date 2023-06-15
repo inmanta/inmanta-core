@@ -64,7 +64,20 @@ _________
 
     sudo systemctl stop inmanta-server.service
 
-6. **[New Orchestrator]** Load the dump of the server database using ``psql``.
+6. **[New Orchestrator]** Drop the inmanta database and recreate it:
+
+
+.. code-block:: bash
+
+    # drop the database
+    psql -h <host> -U <user> -W
+    drop database <db_name>;
+
+    # re-create it
+    sudo -u postgres -i bash -c "createdb -O <user> <db_name>"
+
+
+7. **[New Orchestrator]** Load the dump of the server database using ``psql``.
 
 
 .. code-block:: bash
@@ -72,27 +85,28 @@ _________
     cat <db_dump_file> | psql -U <user> -W -h <host> <db_name>
 
 
-7. **[New Orchestrator]** Start the orchestrator service, it will take some time before the orchestrator goes up, as some database migration will be done:
+8. **[New Orchestrator]** Start the orchestrator service, it will take some time before the orchestrator goes up, as some database migration will be done:
 
 .. code-block:: bash
 
     sudo systemctl enable --now inmanta-server.service
 
-8. **[New Orchestrator]** When accessing the web console, all the environments will be visible, and still halted.
-9. **[New Orchestrator]** One environment at a time:
+9. **[New Orchestrator]** When accessing the web console, all the environments will be visible, and still halted.
+10. **[New Orchestrator]** One environment at a time:
 
-   a. Disable the ``auto_deploy`` option in the environment settings.  (``/console/settings?env=<your-env-id>&state.Settings.tab=Configuration``)
+    a. Disable the ``auto_deploy`` option in the environment settings and make sure the change is persisted
+    by clicking the ``Save`` button.  (``/console/settings?env=<your-env-id>&state.Settings.tab=Configuration``)
 
-   b. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
-   dropdown of the ``Recompile`` button. (``/console/desiredstate?env=<your-env-id>``).
+    b. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
+    dropdown of the ``Recompile`` button. (``/console/desiredstate?env=<your-env-id>``).
 
-   .. warning::
+    c. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
 
-       Make sure the compilation has finished and was successful before moving on to the next steps.
+    .. warning::
 
+        Make sure the compilation has finished and was successful before moving on to the next steps.
 
-   c. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
+    d. Enable ``auto_deploy`` in the settings of the environment and make sure the change is persisted
+    by clicking the ``Save`` button.
 
-   d. Enable ``auto_deploy`` in the settings of the environment.
-
-   e. In the **Resources** page of the environment, click ``Deploy`` to deploy the version created in step 9.b. (``/console/resources?env=<your-env-id>``)
+    e. In the **Resources** page of the environment, click ``Deploy`` to deploy the version created in step 9.b. (``/console/resources?env=<your-env-id>``)
