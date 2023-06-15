@@ -716,7 +716,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         if nextrun and not env.halted:
             task = self.add_background_task(self._run(nextrun))
             self._recompiles[environment] = task
-        else:
+        elif environment in self._recompiles:
             del self._recompiles[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
