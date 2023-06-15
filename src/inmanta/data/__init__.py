@@ -1296,7 +1296,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return util.nullcontext(connection)
         # Make pypi happy
         assert cls._connection_pool is not None
-        return cls._connection_pool.acquire()
+        try:
+            return cls._connection_pool.acquire(timeout=1.0)
+        except asyncio.TimeoutError:
+            # log pool event
+            LOGGER.warning("Connection pool is exhausted")
+            # exhausted_connections_logger.log()
+            return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:

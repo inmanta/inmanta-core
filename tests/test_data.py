@@ -35,6 +35,60 @@ from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
 from inmanta.data import ArgumentCollector, QueryType
 from inmanta.resources import Id, ResourceVersionIdStr
+from inmanta.server.services.compilerservice import CompilerService
+
+
+async def test_connect_too_small_connection_pool_sandbox(compilerservice: CompilerService, postgres_db, database_name: str, caplog, create_db_schema: bool = False):
+    with caplog.at_level(logging.DEBUG):
+
+        pool: Pool = await data.connect(
+            postgres_db.host,
+            postgres_db.port,
+            database_name,
+            postgres_db.user,
+            postgres_db.password,
+            create_db_schema,
+            connection_pool_min_size=1,
+            connection_pool_max_size=1,
+            connection_timeout=120,
+        )
+        assert pool is not None
+        connection: Connection = await pool.acquire()
+        caplog.clear()
+        try:
+            with pytest.raises(asyncio.TimeoutError):
+                await pool.acquire(timeout=2.0)
+        finally:
+            await connection.close()
+            await data.disconnect()
+        assert "Connection pool is exhausted" in caplog.text
+# @pytest.mark.parametrize("use_trx_based_api", [True, False])
+# async def test_e2e_recompile_failure(compilerservice: CompilerService, use_trx_based_api: bool):
+    project = data.Project(name="test")
+#     await project.insert()
+#
+#     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+#     await env.insert()
+#
+#     async def request_compile(remote_id: uuid.UUID, env_vars: dict[str, str]) -> None:
+#         if use_trx_based_api:
+#             async with data.Environment.get_connection() as connection:
+#                 async with connection.transaction():
+#                     compile_id, warnings = await compilerservice.request_recompile(
+#                         env=env,
+#                         force_update=False,
+#                         do_export=False,
+#                         remote_id=remote_id,
+#                         env_vars=env_vars,
+#                         connection=connection,
+#                         in_db_transaction=True,
+#                     )
+#                 assert compile_id is not None, warnings
+#             await compilerservice.notify_compile_request_committed(compile_id)
+#         else:
+#             await compilerservice.request_recompile(
+#                 env=env, force_update=False, do_export=False, remote_id=remote_id, env_vars=env_vars
+#             )
 
 
 async def test_connect_too_small_connection_pool(postgres_db, database_name: str, create_db_schema: bool = False):
