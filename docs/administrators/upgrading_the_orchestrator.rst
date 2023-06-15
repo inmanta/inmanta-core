@@ -94,19 +94,12 @@ _________
 9. **[New Orchestrator]** When accessing the web console, all the environments will be visible, and still halted.
 10. **[New Orchestrator]** One environment at a time:
 
-    a. Disable the ``auto_deploy`` option in the environment settings and make sure the change is persisted
-    by clicking the ``Save`` button.  (``/console/settings?env=<your-env-id>&state.Settings.tab=Configuration``)
-
-    b. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
+    a. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
     dropdown of the ``Recompile`` button. (``/console/desiredstate?env=<your-env-id>``).
 
-    c. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
+    b. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
 
     .. warning::
 
         Make sure the compilation has finished and was successful before moving on to the next steps.
 
-    d. Enable ``auto_deploy`` in the settings of the environment and make sure the change is persisted
-    by clicking the ``Save`` button.
-
-    e. In the **Resources** page of the environment, click ``Deploy`` to deploy the version created in step 9.b. (``/console/resources?env=<your-env-id>``)
