@@ -1,0 +1,6 @@
+---
+description: Fix race condition in the compiler service where a KeyError is raised after the invocation of the `notify_compile_request_committed()` method.
+issue-nr: 6114
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
