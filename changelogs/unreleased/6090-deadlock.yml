@@ -1,0 +1,4 @@
+description: Added more log info when detecting a deadlock
+issue-nr: 6090
+change-type: patch
+destination-branches: [master, iso6]
