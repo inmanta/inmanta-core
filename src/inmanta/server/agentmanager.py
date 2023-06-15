@@ -411,10 +411,10 @@ class AgentManager(ServerSlice, SessionListener):
         now = datetime.now().astimezone()
         async with data.AgentProcess.get_connection() as connection:
             async with connection.transaction():
+                await data.AgentProcess.update_last_seen(session.id, now, connection)
                 await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, connection)
                 await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now, connection)
                 await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now, connection)
-                await data.AgentProcess.update_last_seen(session.id, now, connection)
 
     # Session registration
     async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
