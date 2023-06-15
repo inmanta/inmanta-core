@@ -108,7 +108,6 @@ def get_bind_port() -> int:
             warnings.warn(
                 "Ignoring the server_rest_transport.port config option since the new config options "
                 "server.bind-port/server.bind-address are used.",
-                category=DeprecationWarning,
             )
         return server_bind_port.get()
     else:
@@ -121,6 +120,7 @@ def get_bind_port() -> int:
 
 
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
+server_auth_method = Option("server", "auth_method", None, "The authentication method to use: oidc or database", is_str_opt)
 
 server_ssl_key = Option(
     "server", "ssl_key_file", None, "Server private key to use for this server Leave blank to disable SSL", is_str_opt
@@ -130,7 +130,7 @@ server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
 
-server_ssl_ca_cert: Option[str] = Option(
+server_ssl_ca_cert = Option(
     "server",
     "ssl_ca_cert_file",
     None,
@@ -189,18 +189,8 @@ server_purge_version_interval = Option(
     "purge-versions-interval",
     3600,
     """The number of seconds between version purging,
-                                          see :inmanta.config:option:`server.available-versions-to-keep`""",
+                                          see :inmanta.environment-settings:setting:`available_versions_to_keep`.""",
     is_time,
-)
-
-server_version_to_keep = Option(
-    "server",
-    "available-versions-to-keep",
-    10,
-    """[DEPRECATED: use AVAILABLE_VERSIONS_TO_KEEP environment setting]
-                                On boot and at regular intervals the server will purge older versions.
-                                This is the number of most recent versions to keep available.""",
-    is_int,
 )
 
 server_compiler_report_retention = Option(
@@ -208,7 +198,7 @@ server_compiler_report_retention = Option(
     "compiler-report-retention",
     604800,
     """The server regularly cleans up old compiler reports.
-    This options specifies the number of seconds to keep old compiler reports for. The default is seven days""",
+    This options specifies the number of seconds to keep old compiler reports for. The default is seven days.""",
     is_time,
 )
 
@@ -274,24 +264,6 @@ server_access_control_allow_origin = Option(
     "Defaults to not sending an Access-Control-Allow-Origin header.",
     is_str_opt,
 )
-
-#############################
-# Dashboard
-#############################
-
-dash_enable = Option("dashboard", "enabled", True, "Determines whether the server should host the dashboard or not", is_bool)
-
-dash_path = Option(
-    "dashboard",
-    "path",
-    "/usr/share/inmanta/dashboard",
-    "The path on the local file system where the dashboard can be found",
-    is_str,
-)
-
-dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.", is_str)
-dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.", is_str)
-dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.", is_str)
 
 
 def default_hangtime() -> str:

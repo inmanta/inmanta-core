@@ -1,0 +1,4 @@
+---
+description: Add step to the quickstart documentation that forces the srlinux image to the latest version.
+change-type: patch
+destination-branches: [master, iso6, iso5]

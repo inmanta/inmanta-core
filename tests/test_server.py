@@ -33,7 +33,7 @@ from inmanta import const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
-from inmanta.data.model import AttributeStateChange, LogLine
+from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
 from inmanta.server import (
@@ -86,14 +86,14 @@ async def test_autostart(server, client, environment, caplog):
     await retry_limited(lambda: len(agentmanager.tid_endpoint_to_session) == 0, 20)
     res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
-    assert len(sessionendpoint._sessions) == 1
-
-    # second agent for same env
-    res = await autostarted_agentmanager._ensure_agents(env, ["iaas_agentx"])
-    assert res
-    await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
-    assert len(sessionendpoint._sessions) == 1
+    await retry_limited(
+        lambda: (
+            len(sessionendpoint._sessions) == 1
+            # starting any agent eventually causes it to reload the agent map, starting all three
+            and len(agentmanager.tid_endpoint_to_session.keys()) == 3
+        ),
+        5,
+    )
 
     # Test stopping all agents
     await autostarted_agentmanager.stop_agents(env)
@@ -259,7 +259,6 @@ async def test_n_versions_env_setting_scope(client, server):
 
     # Create a lot of versions in both environments
     for _ in range(n_many_versions):
-
         env1_version = (await client.reserve_version(env_1_id)).result["data"]
         env2_version = (await client.reserve_version(env_2_id)).result["data"]
 
@@ -302,13 +301,14 @@ async def test_n_versions_env_setting_scope(client, server):
 
 
 @pytest.mark.slowtest
-async def test_get_resource_for_agent(server_multi, client_multi, environment_multi):
+async def test_get_resource_for_agent(server_multi, client_multi, environment_multi, async_finalizer):
     """
     Test the server to manage the updates on a model during agent deploy
     """
     agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
     await agent.add_end_point_name("vm1.dev.inmanta.com")
     await agent.add_end_point_name("vm2.dev.inmanta.com")
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -433,7 +433,6 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
-    await agent.stop()
 
 
 async def test_get_environment(client, clienthelper, server, environment):
@@ -473,11 +472,12 @@ async def test_get_environment(client, clienthelper, server, environment):
     assert len(result.result["environment"]["resources"]) == 9
 
 
-async def test_resource_update(postgresql_client, client, clienthelper, server, environment):
+async def test_resource_update(postgresql_client, client, clienthelper, server, environment, async_finalizer):
     """
     Test updating resources and logging
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
 
@@ -570,7 +570,17 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 10
-    await agent.stop()
+
+
+async def test_get_resource_on_invalid_resource_id(server, client, environment) -> None:
+    """
+    Verify that a clear error message is returned when the resource version id passed to the
+    get_resource() endpoint has an invalid structure.
+    """
+    invalid_resource_version_id = "invalid resource version id"
+    result = await client.get_resource(tid=environment, id=invalid_resource_version_id)
+    assert result.code == 400
+    assert f"{invalid_resource_version_id} is not a valid resource version id" in result.result["message"]
 
 
 async def test_clear_environment(client, server, clienthelper, environment):
@@ -869,6 +879,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             date=datetime.now(),
             total=1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
         res1 = data.Resource.new(
@@ -995,32 +1006,36 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
     model_version = 1
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={model_version}"
-    rvid_r2_v1 = f"std::File[agent1,path=/etc/file2],v={model_version}"
-    rvid_r3_v1 = f"std::File[agent1,path=/etc/file3],v={model_version}"
+    rvid_r1 = "std::File[agent1,path=/etc/file1]"
+    rvid_r2 = "std::File[agent1,path=/etc/file2]"
+    rvid_r3 = "std::File[agent1,path=/etc/file3]"
+    rvid_r1_v1 = f"{rvid_r1},v={model_version}"
+    rvid_r2_v1 = f"{rvid_r2},v={model_version}"
+    rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.skipped,
-        last_non_deploying_status=const.ResourceState.skipped,
+        last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "requires": [rvid_r2_v1, rvid_r3_v1]},
+        attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.deployed,
-        last_non_deploying_status=const.ResourceState.deployed,
+        last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
     await data.Resource.new(
         environment=env_id,
         status=const.ResourceState.failed,
-        last_non_deploying_status=const.ResourceState.failed,
+        last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
     ).insert()
@@ -1094,6 +1109,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1136,6 +1152,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1299,6 +1316,7 @@ async def test_resource_deploy_done_invalid_state(server, client, environment, a
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1337,6 +1355,7 @@ async def test_resource_deploy_done_error_handling(server, client, environment, 
         date=datetime.now().astimezone(),
         total=1,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -1387,3 +1406,209 @@ async def test_start_location_no_redirect(server):
     )
     response = await http_client.fetch(request, raise_error=False)
     assert base_url == response.effective_url
+
+
+@pytest.mark.parametrize("path", ["", "/", "/test"])
+async def test_redirect_dashboard_to_console(server, path):
+    """
+    Ensure that there is a redirection from the dashboard to the webconsole
+    """
+    port = opt.get_bind_port()
+    base_url = "http://localhost:%s/dashboard%s" % (port, path)
+    result_url = "http://localhost:%s/console%s" % (port, path)
+    http_client = AsyncHTTPClient()
+    request = HTTPRequest(
+        url=base_url,
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert result_url == response.effective_url
+
+
+@pytest.mark.parametrize("env1_halted", [True, False])
+@pytest.mark.parametrize("env2_halted", [True, False])
+async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
+    """
+    This test is testing the functionality of cleaning up old agents in the database.
+    The test creates 2 environments and adds agents with various properties (some used in a version,
+    some in the agent map, and some with the primary ID set), and then tests that
+    the cleanup function correctly removes only the agents that meet the criteria for deletion.
+    Also verifies that only agents in envs that are not halted are cleaned up
+    """
+
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="env1", project=project.id)
+    await env1.insert()
+    env2 = data.Environment(name="env2", project=project.id)
+    await env2.insert()
+
+    await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
+    await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
+
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
+    if env1_halted:
+        result = await client.halt_environment(env1.id)
+        assert result.code == 200
+    if env2_halted:
+        result = await client.halt_environment(env2.id)
+        assert result.code == 200
+
+    process_sid = uuid.uuid4()
+    await data.AgentProcess(hostname="localhost-dummy", environment=env1.id, sid=process_sid, last_seen=datetime.now()).insert()
+
+    id_primary = uuid.uuid4()
+    await data.AgentInstance(id=id_primary, process=process_sid, name="dummy-instance", tid=env1.id).insert()
+
+    version = 1
+    await data.ConfigurationModel(
+        environment=env1.id,
+        version=version,
+        date=datetime.now(),
+        total=1,
+        released=True,
+        version_info={},
+        is_suitable_for_partial_compiles=False,
+    ).insert()
+
+    path = "/etc/file1"
+    resource_id = f"std::File[agent4,path={path}]"
+
+    await data.Resource.new(
+        environment=env1.id, resource_version_id=ResourceVersionIdStr(f"{resource_id},v={version}"), attributes={"path": path}
+    ).insert()
+
+    # should get purged
+    await data.Agent(
+        environment=env1.id,
+        name="agent1",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # should not get purged as the id_primary is set -> not down
+    await data.Agent(environment=env1.id, name="agent2", paused=False, id_primary=id_primary).insert()
+    # should not get purged as it is in the agent map
+    await data.Agent(
+        environment=env1.id,
+        name="agent3",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # should not get purged as it is used in a version of the ConfigurationModel
+    await data.Agent(
+        environment=env1.id,
+        name="agent4",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # agent with "agent2" as name but in another env will get purged:
+    await data.Agent(
+        environment=env2.id,
+        name="agent2",
+        paused=False,
+        id_primary=None,
+    ).insert()
+    # agent with "agent1" as name but being present in the agent_map and in another env will not get purged:
+    await data.Agent(
+        environment=env2.id,
+        name="agent1",
+        paused=False,
+        id_primary=None,
+    ).insert()
+
+    agents_before_purge = await data.Agent.get_list()
+    assert len(agents_before_purge) == 6
+
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
+    await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
+    agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
+    number_agents_env1_after_purge = 4 if env1_halted else 3
+    number_agents_env2_after_purge = 2 if env2_halted else 1
+    assert len(agents_after_purge) == number_agents_env1_after_purge + number_agents_env2_after_purge
+    if not (env1_halted or env2_halted):
+        expected_agents_after_purge = [
+            (env1.id, "agent2"),
+            (env1.id, "agent3"),
+            (env1.id, "agent4"),
+            (env2.id, "agent1"),
+        ]
+        assert sorted(agents_after_purge) == sorted(expected_agents_after_purge)
+
+
+async def test_serialization_attributes_of_resource_to_api(client, server, environment, clienthelper) -> None:
+    """
+    Due to a bug, the version of a resource was always included in the attribute dictionary.
+    This issue has been patched in the database, but at the API boundary we still serve the version
+    field in the attributes dictionary for backwards compatibility. This test verifies that behavior.
+    """
+    version = await clienthelper.get_version()
+    resource_id = "test::Resource[agent1,key=key1]"
+    resources = [
+        {
+            "id": f"{resource_id},v={version}",
+            "att": "val",
+            "version": version,
+            "send_event": False,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+    attributes_on_api = {k: v for k, v in resources[0].items() if k != "id"}
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=get_compiler_version(),
+    )
+    assert result.code == 200
+
+    result = await client.release_version(tid=environment, id=version)
+    assert result.code == 200
+
+    # Verify that the version field is not present in the attributes dictionary in the database.
+    result = await data.Resource.get_list()
+    assert len(result) == 1
+    resource_dao = result[0]
+    assert "version" not in resource_dao.attributes
+
+    # Ensure that the serialization of the resource DAO contains the version field in the attributes dictionary
+    resource_dto = resource_dao.to_dto()
+    assert resource_dto.attributes["version"] == version
+    resource_dct = resource_dao.to_dict()
+    assert resource_dct["attributes"]["version"] == version
+
+    # Retrieve the resource via the API and ensure that the version field is present in the attributes dictionary
+    result = await client.resource_history(environment, resource_id)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0]["attributes"] == attributes_on_api
+
+    result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == attributes_on_api
+
+    result = await client.resource_details(tid=environment, rid=resource_id)
+    assert result.code == 200
+    assert result.result["data"]["attributes"] == attributes_on_api

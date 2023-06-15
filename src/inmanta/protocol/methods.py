@@ -94,7 +94,7 @@ def delete_project(id: uuid.UUID):
 @method(path="/project", operation="GET", client_types=[const.ClientType.api])
 def list_projects():
     """
-    Create a list of projects
+    Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
     """
 
 
@@ -148,7 +148,7 @@ def delete_environment(id: uuid.UUID):
 @method(path="/environment", operation="GET", client_types=[const.ClientType.api])
 def list_environments():
     """
-    Create a list of environments
+    Returns a list of environments. The results are sorted by (project id, environment name, environment id).
     """
 
 
@@ -182,7 +182,7 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
 )
 def list_settings(tid: uuid.UUID):
     """
-    List the settings in the current environment
+    List the settings in the current environment ordered by name alphabetically.
     """
 
 
@@ -249,29 +249,6 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
 
 
-#  Decomission an environment
-
-
-@method(
-    path="/decommission/<id>",
-    operation="POST",
-    arg_options={"id": ArgOption(getter=convert_environment)},
-    client_types=[const.ClientType.api],
-    api_version=1,
-)
-def decomission_environment(id: uuid.UUID, metadata: dict = None):
-    """
-    Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
-    removal.
-
-    :param id: The uuid of the environment.
-    :param metadata: Optional metadata associated with the decommissioning
-
-    :raises NotFound: The given environment doesn't exist.
-    :raises Forbidden: The given environment is protected.
-    """
-
-
 @method(
     path="/decommission/<id>",
     operation="DELETE",
@@ -286,6 +263,7 @@ def clear_environment(id: uuid.UUID):
 
     :raises NotFound: The given environment doesn't exist.
     :raises Forbidden: The given environment is protected.
+
     """
 
 
@@ -302,7 +280,7 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
     """
     Send a heartbeat to the server
 
-    :paran sid: The session ID used by this agent at this moment
+    :param sid: The session ID used by this agent at this moment
     :param tid: The environment this node and its agents belongs to
     :param endpoint_names: The names of the endpoints on this node
     :param nodename: The name of the node from which the heart beat comes
@@ -415,7 +393,7 @@ def get_resource(
     Return a resource with the given id.
 
     :param tid: The id of the environment this resource belongs to
-    :param id: Get the resource with the given id
+    :param id: Get the resource with the given resource version id
     :param logs: Include the logs in the response
     :param status: Only return the status of the resource
     :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of
@@ -451,7 +429,7 @@ def resource_action_update(
     action: const.ResourceAction,
     started: datetime.datetime = None,
     finished: datetime.datetime = None,
-    status: const.ResourceState = None,
+    status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]] = None,
     messages: list = [],
     changes: dict = {},
     change: const.Change = None,
@@ -591,7 +569,7 @@ def dryrun_request(tid: uuid.UUID, id: int):
 @method(path="/dryrun", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def dryrun_list(tid: uuid.UUID, version: int = None):
     """
-    Create a list of dry runs
+    Get the list of dry runs for an environment. The results are sorted by dry run id.
 
     :param tid: The id of the environment
     :param version: Only for this version
@@ -750,7 +728,7 @@ def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
 )
 def list_params(tid: uuid.UUID, query: dict = {}):
     """
-    List/query parameters in this environment
+    List/query parameters in this environment. The results are ordered alphabetically by parameter name.
 
     :param tid: The id of the environment
     :param query: A query to match against metadata
@@ -971,10 +949,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
     Get the state for this agent.
 
-    returns a map
-    {
-     enabled: bool
-    }
+    :return: A map with key enabled and value a boolean.
     """
 
 
@@ -995,5 +970,5 @@ def get_server_status() -> model.StatusResponse:
 )
 def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
     """
-    Get the current compiler queue on the server
+    Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
     """

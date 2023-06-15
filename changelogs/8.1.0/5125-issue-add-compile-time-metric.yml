@@ -1,0 +1,5 @@
+description: Add the compile_time metric collector.
+issue-nr: 5125
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]

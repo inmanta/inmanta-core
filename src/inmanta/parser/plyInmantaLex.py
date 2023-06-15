@@ -15,14 +15,16 @@
 
     Contact: code@inmanta.com
 """
+import typing
+import warnings
 from re import error as RegexError
 
 import ply.lex as lex
 
-from inmanta.ast import LocatableString, Range
+from inmanta.ast import LocatableString, Location, Range
 from inmanta.ast.constraint.expression import Regex
 from inmanta.ast.variables import Reference
-from inmanta.parser import ParserException
+from inmanta.parser import ParserException, ParserWarning
 
 keyworldlist = [
     "typedef",
@@ -58,9 +60,25 @@ literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
-tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX", "REL", "PEQ", "RSTRING"] + sorted(
+tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX", "REL", "PEQ", "RSTRING", "FSTRING"] + sorted(
     list(reserved.values())
 )
+
+
+def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
+    r"f(\"([^\\\"\n]|\\.)*\")|f(\'([^\\\'\n]|\\.)*\')"
+    t.value = t.value[2:-1]
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString(
+        t.value, Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end), lexer.lexpos, lexer.namespace
+    )
+
+    return t
 
 
 def t_RSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
@@ -132,7 +150,9 @@ def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
 
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
     r'"{3,5}([\s\S]*?)"{3,5}'
-    value = bytes(t.value[3:-3], "utf-8").decode("unicode_escape")
+
+    value = safe_decode(token=t, warning_message="Invalid escape sequence in multi-line string.", start=3, end=-3)
+
     lexer = t.lexer
     match = lexer.lexmatch[0]
     lines = match.split("\n")
@@ -162,7 +182,9 @@ def t_INT(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"(\"([^\\\"\n]|\\.)*\")|(\'([^\\\'\n]|\\.)*\')"
-    t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
+
+    t.value = safe_decode(token=t, warning_message="Invalid escape sequence in string.", start=1, end=-1)
+
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
@@ -215,3 +237,40 @@ def t_ANY_error(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 # Build the lexer
 lexer = lex.lex()
+
+
+def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: int = -1) -> str:
+    """
+    Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.  # noqa: W605
+    This function assumes to be called from within a t_STRING or a t_MLS rule.
+
+    - Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence
+    - Python 3.12 will raise a SyntaxWarning
+    - Future versions will eventually raise a SyntaxError
+    (see https://docs.python.org/3.12/whatsnew/3.12.html#other-language-changes )
+
+    :param token: The token whose value we want to decode.
+    :param warning_message: The warning message to display.
+    :param start: Start of the value slice (To only decode the characters after the leading quotation mark(s))
+    :param end: End of the value slice (To only decode the characters before the trailing quotation mark(s))
+
+    :return: The token value as a python str.
+    """
+
+    try:
+        # This first block will try to decode the value and turn any deprecation warning into an actual Exception.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", message="invalid escape sequence", category=DeprecationWarning)
+            value: str = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
+    except DeprecationWarning:
+        # If the first block did actually encounter an invalid escape sequence, we have to decode the value again, this time
+        # ignoring this or any other python warning that has already been emitted, and raising a warning of our own.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            value = bytes(typing.cast(str, token.value)[start:end], "utf_8").decode("unicode_escape")
+
+        warnings.warn(
+            ParserWarning(location=Location(file=token.lexer.inmfile, lnr=token.lexer.lineno), msg=warning_message, value=value)
+        )
+
+    return value

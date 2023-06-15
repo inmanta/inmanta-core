@@ -1,0 +1,6 @@
+---
+description: Improve the error reporting regarding the existance of a cross resource set dependency when a partial compile is done.
+issue-nr: 5705
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]

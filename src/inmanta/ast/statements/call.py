@@ -17,6 +17,7 @@
 """
 
 import logging
+from collections import abc
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
@@ -33,7 +34,7 @@ from inmanta.ast import (
     TypeReferenceAnchor,
     WrappingRuntimeException,
 )
-from inmanta.ast.statements import ExpressionStatement, ReferenceStatement
+from inmanta.ast.statements import AttributeAssignmentLHS, ExpressionStatement, ReferenceStatement
 from inmanta.ast.statements.generator import WrappedKwargs
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.proxy import UnknownException, UnsetException
@@ -81,7 +82,7 @@ class FunctionCall(ReferenceStatement):
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         func = self.namespace.get_type(self.name)
         if isinstance(func, InmantaType.Primitive):
@@ -104,7 +105,7 @@ class FunctionCall(ReferenceStatement):
         super().execute(requires, resolver, queue)
         return requires[self]
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         arguments = [a.execute_direct(requires) for a in self.arguments]
         kwargs = {k: v.execute_direct(requires) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:
@@ -262,7 +263,6 @@ class PluginFunction(Function):
 
 
 class FunctionUnit(Waiter):
-
     __slots__ = ("result", "base_requires", "function", "resolver")
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall) -> None:

@@ -33,6 +33,7 @@ from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Dict,
     Generic,
@@ -50,6 +51,7 @@ from typing import (
     cast,
     overload,
 )
+from uuid import UUID
 
 import asyncpg
 import dateutil
@@ -57,15 +59,19 @@ import pydantic
 import pydantic.tools
 import typing_inspect
 from asyncpg import Connection
+from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
+import inmanta.const as const
 import inmanta.db.versions
+import inmanta.resources as resources
+import inmanta.util as util
 from crontab import CronTab
-from inmanta import const, resources, util
 from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import ResourceIdStr
+from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
+from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
 from inmanta.stable_api import stable_api
@@ -76,17 +82,26 @@ LOGGER = logging.getLogger(__name__)
 DBLIMIT = 100000
 APILIMIT = 1000
 
-
 # TODO: disconnect
 # TODO: difference between None and not set
 
 # Used as the 'default' parameter value for the Field class, when no default value has been set
 default_unset = object()
 
+PRIMITIVE_SQL_TYPES = Union[str, int, bool, datetime.datetime, UUID]
+
+"""
+Locking order rules:
+In general, locks should be acquired consistently with delete cascade lock order, which is top down. Additional lock orderings
+are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
+as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
+- Code -> ConfigurationModel
+"""
+
 
 @enum.unique
 class QueryType(str, enum.Enum):
-    def _generate_next_value_(name: str, start: int, count: int, last_values: List[object]) -> object:  # noqa: N805
+    def _generate_next_value_(name, start: int, count: int, last_values: abc.Sequence[object]) -> str:  # noqa: N805
         """
         Make enum.auto() return the name of the enum member in lower case.
         """
@@ -111,16 +126,15 @@ class TableLockMode(enum.Enum):
     """
     Table level locks as defined in the PostgreSQL docs:
     https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
-    locking order accross transactions to prevent deadlocks and to otherwise respect the consistency docs:
-    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY. See relevant data classes'
-    docstrings for appropriate lock orderings.
+    locking order accross transactions (as described at the top of this module) to prevent deadlocks and to otherwise respect
+    the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
 
     Not all lock modes are currently supported to keep the interface minimal (only include what we actually use). This class
     may be extended when a new lock mode is required.
     """
 
     ROW_EXCLUSIVE: str = "ROW EXCLUSIVE"
-    SHARE_UPDATE_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
+    SHARE_UPDATE_EXCLUSIVE: str = "SHARE UPDATE EXCLUSIVE"
     SHARE: str = "SHARE"
     SHARE_ROW_EXCLUSIVE: str = "SHARE ROW EXCLUSIVE"
 
@@ -128,9 +142,9 @@ class TableLockMode(enum.Enum):
 class RowLockMode(enum.Enum):
     """
     Row level locks as defined in the PostgreSQL docs: https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-ROWS.
-    When acquiring a lock, make sure to use the same locking order accross transactions to prevent deadlocks and to otherwise
-    respect the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
-    See relevant data classes' docstrings for appropriate lock orderings.
+    When acquiring a lock, make sure to use the same locking order accross transactions (as described at the top of this
+    module) to prevent deadlocks and to otherwise respect the consistency docs:
+    https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
     """
 
     FOR_UPDATE: str = "FOR UPDATE"
@@ -157,8 +171,8 @@ class RangeOperator(enum.Enum):
             raise ValueError(f"Failed to parse {text} as a RangeOperator")
 
 
-RangeConstraint = List[Tuple[RangeOperator, int]]
-DateRangeConstraint = List[Tuple[RangeOperator, datetime.datetime]]
+RangeConstraint = list[tuple[RangeOperator, int]]
+DateRangeConstraint = list[tuple[RangeOperator, datetime.datetime]]
 QueryFilter = Tuple[QueryType, object]
 
 
@@ -243,35 +257,256 @@ class InvalidSort(Exception):
         self.message = message
 
 
-class DatabaseOrder:
-    """Represents an ordering for database queries"""
+class ColumnType:
+    """
+    Class encapsulating all handling of specific column types
 
-    @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {}
+    This implementation supports the PRIMITIVE_SQL_TYPES types, for more specific behavior, make a subclass.
+    """
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        """The class used for checking whether the ordering is valid for a table"""
-        return BaseDocument
+    def __init__(self, base_type: Type[PRIMITIVE_SQL_TYPES], nullable: bool):
+        self.base_type = base_type
+        self.nullable = nullable
 
-    @classmethod
-    def parse_from_string(
-        cls,
-        sort: str,
-    ) -> "DatabaseOrder":
-        valid_sort_pattern: Pattern[str] = re.compile(
-            f"^({'|'.join(cls.get_valid_sort_columns())})\\.(asc|desc)$", re.IGNORECASE
-        )
-        match = valid_sort_pattern.match(sort)
-        if match and len(match.groups()) == 2:
-            order_by_column = match.groups()[0].lower()
-            validated_order_by_column, validated_order = cls.validator_dataclass()._validate_order_strict(
-                order_by_column=order_by_column, order=match.groups()[1].upper()
-            )
-            return cls(order_by_column=validated_order_by_column, order=validated_order)
-        raise InvalidSort(f"Sort parameter invalid: {sort}")
+    def as_basic_filter_elements(self, name: str, value: object) -> Sequence[Tuple[str, "ColumnType", object]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :param value: the value of this column
+        :return: a list of (name, type, value) items
+        """
+        return [(name, self, self.get_value(value))]
+
+    def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[Tuple[str, "ColumnType", PagingOrder]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :return: a list of (name, type, order) items
+        """
+        return [(name, self, order)]
+
+    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+        """
+        Prepare the actual value for use as an argument in a prepared statement for this type
+        """
+        if value is None:
+            if not self.nullable:
+                raise ValueError("None is not a valid value")
+            else:
+                return None
+        if isinstance(value, self.base_type):
+            # It is as expected
+            return value
+        if self.base_type == bool:
+            return pydantic.validators.bool_validator(value)
+        if self.base_type == datetime.datetime and isinstance(value, str):
+            return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
+        if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
+            # We can cast between those types
+            return self.base_type(value)
+        raise ValueError(f"{value} is not a valid value")
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        """
+        return the sql statement to get this column, as used in filter and other statements
+        """
+        table_prefix_value = "" if table_prefix is None else table_prefix + "."
+        return table_prefix_value + column_name
+
+    def coalesce_to_min(self, value_reference: str) -> str:
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
+        This is required for the comparisons used for paging, because comparing a value to
+        NULL always yields NULL.
+        """
+        if self.nullable:
+            if self.base_type == datetime.datetime:
+                return f"COALESCE({value_reference}, to_timestamp(0))"
+            elif self.base_type == bool:
+                return f"COALESCE({value_reference}, FALSE)"
+            elif self.base_type == int:
+                # we only support positive ints up till now
+                return f"COALESCE({value_reference}, -1)"
+            elif self.base_type == str:
+                return f"COALESCE({value_reference}, '')"
+            elif self.base_type == UUID:
+                return f"COALESCE({value_reference}, '00000000-0000-0000-0000-000000000000'::uuid)"
+            else:
+                assert False, "Unexpected argument type received, this should not happen"
+
+        return value_reference
+
+
+class TablePrefixWrapper(ColumnType):
+    def __init__(self, table_name: str, child: ColumnType) -> None:
+        self.table_name = table_name
+        self.child = child
+
+    @property
+    def nullable(self) -> bool:
+        return self.child.nullable
+
+    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+        return self.child.get_value(value)
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        if not table_prefix:
+            table_prefix = self.table_name
+        return self.child.get_accessor(column_name, table_prefix)
+
+    def coalesce_to_min(self, value_reference: str) -> str:
+        return self.child.coalesce_to_min(value_reference)
+
+
+class ForcedStringColumn(ColumnType):
+    """A string that is explicitly cast to a specific string type"""
+
+    def __init__(self, forced_type: str) -> None:
+        super().__init__(base_type=str, nullable=False)
+        self.forced_type = forced_type
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        """
+        return the sql statement to get this column, as used in filter and other statements
+        """
+        return super().get_accessor(column_name, table_prefix) + "::" + self.forced_type
+
+
+class ResourceVersionIdColumnType(ColumnType):
+    def __init__(self) -> None:
+        self.nullable = False
+
+    def as_basic_filter_elements(self, name: str, value: object) -> Sequence[Tuple[str, "ColumnType", object]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :param value: the value of this column
+        :return: a list of (name, type, value) items
+        """
+        assert isinstance(value, str)
+        id = resources.Id.parse_resource_version_id(value)
+        return [
+            ("resource_id", StringColumn, StringColumn.get_value(id.resource_str())),
+            ("model", PositiveIntColumn, PositiveIntColumn.get_value(id.version)),
+        ]
+
+    def as_basic_order_elements(self, name: str, order: PagingOrder) -> Sequence[Tuple[str, "ColumnType", PagingOrder]]:
+        """
+        Break down this filter into more elementary filters
+
+        :param name: column name, intended to be passed through get_accessor
+        :return: a list of (name, type, order) items
+        """
+        return [("resource_id", StringColumn, order), ("model", PositiveIntColumn, order)]
+
+    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+        """
+        Prepare the actual value for use as an argument in a prepared statement for this type
+        """
+        raise NotImplementedError()
+
+    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+        """
+        return the sql statement to get this column, as used in filter and other statements
+        """
+        raise NotImplementedError()
+
+    def coalesce_to_min(self, value_reference: str) -> str:
+        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
+        This is required for the comparisons used for paging, because comparing a value to
+        NULL always yields NULL.
+        """
+        raise NotImplementedError()
+
+
+StringColumn = ColumnType(base_type=str, nullable=False)
+OptionalStringColumn = ColumnType(base_type=str, nullable=True)
+
+DateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=False)
+OptionalDateTimeColumn = ColumnType(base_type=datetime.datetime, nullable=True)
+
+PositiveIntColumn = ColumnType(base_type=int, nullable=False)
+# Negatives ints require updating coalesce_to_min
+
+TextColumn = ForcedStringColumn("text")
+
+UUIDColumn = ColumnType(base_type=uuid.UUID, nullable=False)
+BoolColumn = ColumnType(base_type=bool, nullable=False)
+ResourceVersionIdColumn = ResourceVersionIdColumnType()
+
+
+class DatabaseOrderV2(ABC):
+    """
+    Helper API for handling database order and filtering
+
+    This class defines the consumer interface,
+
+    It is made into a separate type, to make it very explicit what is exposed externally, to limit feature creep
+    """
+
+    @abstractmethod
+    def as_filter(
+        self,
+        offset: int,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: bool = True,
+    ) -> Tuple[List[str], List[object]]:
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the boundary value for the user specified order
+        :param id_value: the boundary value for the built in order order
+        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+
+        :return: The filter (as a string) and all associated query parameter values
+
+        None values can have a double meaning here:
+        - no value provided
+        - the value is provided and None
+
+        The distinction can be made as follows:
+        1. at least one of the columns must be not nullable (otherwise the sorting is not unique)
+        2. when both value are None, we are not paging and return '[],[]'
+        3. when one of the values is effective, we produce a filter
+
+        More specifically:
+        1. when we have a single order, and `column_value` is not None, this singe value is used for filtering
+        2. when we have a double order and the 'id_value' is not None and `self.get_order_by_column_type().nullable`,
+            we consider the null an effective value and filter on both `column_value` and `id_value`
+        3. when we have a double order and the 'id_value' is not None and `not self.get_order_by_column_type().nullable`,
+            we consider the null not a value and filter only on `id_value`
+
+        """
+        pass
+
+    @abstractmethod
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Get this order as an order_by statement"""
+        pass
+
+    @abstractmethod
+    def get_order(self) -> PagingOrder:
+        """Return the order of this paging request"""
+        pass
+
+    @abstractmethod
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record of the page"""
+        pass
+
+
+T_SELF = TypeVar("T_SELF", bound="SingleDatabaseOrder")
+
+
+class SingleDatabaseOrder(DatabaseOrderV2, ABC):
+    """
+    Abstract Base class for ordering when using
+    - a user specified order, that is always unique
+    """
 
     def __init__(
         self,
@@ -282,38 +517,36 @@ class DatabaseOrder:
         self.order_by_column = order_by_column
         self.order = order
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        """The validated column name string as it should be used in the database queries"""
-        return self.order_by_column
+    # Configuration methods
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        """Return all valid columns for lookup and their type"""
+        raise NotImplementedError()
 
-    def get_order(self) -> PagingOrder:
+    #  Factory
+    @classmethod
+    def parse_from_string(
+        cls: Type[T_SELF],
+        sort: str,
+    ) -> T_SELF:
+        valid_sort_pattern: Pattern[str] = re.compile(
+            f"^({'|'.join(cls.get_valid_sort_columns().keys())})\\.(asc|desc)$", re.IGNORECASE
+        )
+        match = valid_sort_pattern.match(sort)
+        if match and len(match.groups()) == 2:
+            order_by_column = match.groups()[0].lower()
+            # Verify there is no escaping from the regex by exact match
+            assert order_by_column in cls.get_valid_sort_columns()
+            order = match.groups()[1].upper()
+            return cls(order_by_column=ColumnNameStr(order_by_column), order=PagingOrder[order])
+        raise InvalidSort(f"Sort parameter invalid: {sort}")
+
+    # Internal helpers
+    def get_order(self, invert: bool = False) -> PagingOrder:
         """The order string representing the direction the results should be sorted by"""
-        return self.order
+        return self.order.invert() if invert else self.order
 
-    def is_nullable_column(self) -> bool:
-        """Is the current order by column type nullable (optional) or not"""
-        column_type = self.get_order_by_column_type()
-        return typing_inspect.is_optional_type(column_type)
-
-    def coalesce_to_min(self, value_reference: str) -> ColumnNameStr:
-        """If the order by column is nullable, coalesce the parameter value to the minimum value of the specific type
-        This is required for the comparisons used for paging, for example, because comparing a value to
-        NULL always yields NULL.
-        """
-        if self.is_nullable_column():
-            column_type = self.get_order_by_column_type()
-            if typing_inspect.get_args(column_type)[0] == datetime.datetime:
-                return ColumnNameStr(f"COALESCE({value_reference}, to_timestamp(0))")
-            elif typing_inspect.get_args(column_type)[0] == bool:
-                return ColumnNameStr(f"COALESCE({value_reference}, FALSE)")
-            else:
-                return ColumnNameStr(f"COALESCE({value_reference}, '')")
-        return ColumnNameStr(value_reference)
-
-    def __str__(self) -> str:
-        return f"{self.order_by_column}.{self.order}"
-
-    def get_order_by_column_type(self) -> Union[Type[datetime.datetime], Type[int], Type[str]]:
+    def get_order_by_column_type(self) -> ColumnType:
         """The type of the order by column"""
         return self.get_valid_sort_columns()[self.order_by_column]
 
@@ -321,254 +554,365 @@ class DatabaseOrder:
         """The name of the column that the results should be ordered by"""
         return self.order_by_column
 
-    def get_min_time(self) -> Optional[datetime.datetime]:
-        if self.get_order_by_column_type() == datetime.datetime:
-            return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-        else:
-            return None
-
-    def get_max_time(self) -> Optional[datetime.datetime]:
-        if self.get_order_by_column_type() == datetime.datetime:
-            return datetime.datetime.max.replace(tzinfo=datetime.timezone.utc)
-        else:
-            return None
-
-    def ensure_boundary_type(
-        self, order_by_column_value: Union[datetime.datetime, int, bool, str]
-    ) -> Union[datetime.datetime, int, bool, str]:
-        """Converts a value to the type of the order by column,
-        can be used to make sure a boundary (start or end) is the correct type"""
-        column_type = self.get_order_by_column_type()
-        if isinstance(order_by_column_value, str):
-            if column_type == datetime.datetime:
-                return dateutil.parser.isoparse(order_by_column_value)
-            elif column_type == int:
-                return int(order_by_column_value)
-            elif column_type == bool:
-                return order_by_column_value.lower() == "true"
-        return order_by_column_value
-
-    @property
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("id")
-
+    # External API
     def as_filter(
         self,
         offset: int,
-        column_value: Optional[object] = None,
-        id_value: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[bool] = True,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: bool = True,
     ) -> Tuple[List[str], List[object]]:
-        """Get the column and id values as filters"""
-        filter_statements = []
-        values: List[object] = []
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the value for the user specified order
+        :param id_value: the value for the built in order order, if this class has one. Otherwise this value is ignored.
+        :param start: is this the start filter? if so, retain all values`  > (column_value, id_value)`
+
+        :return: The filter (as a string) and all associated query parameter values
+        """
         relation = ">" if start else "<"
-        if (column_value is not None or self.is_nullable_column()) and id_value:
-            filter_statements.append(
-                f"""({self.get_order_by_column_db_name()}, {self.id_column}) {relation}
-                    ({self.coalesce_to_min(f"${str(offset)}")}, ${str(offset + 1)})"""
+
+        if column_value is None:
+            return [], []
+
+        coll_type = self.get_order_by_column_type()
+        col_name = self.order_by_column
+        value = coll_type.get_value(column_value)
+
+        ac = ArgumentCollector(offset=offset - 1)
+        filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
+        return [filter], ac.args
+
+    def get_order_elements(self, invert: bool) -> Sequence[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+        """
+        return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
+        """
+        order = self.get_order(invert)
+        return [
+            (self.order_by_column, self.get_order_by_column_type(), order),
+        ]
+
+    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+        """Return the actual order by statement, as derived from get_order_elements"""
+        order_by_part = ", ".join(
+            (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
+        )
+        return f" ORDER BY {order_by_part}"
+
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record returned"""
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
+
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_order_by_column_type()
+
+        def assert_not_null(in_value: Optional[PRIMITIVE_SQL_TYPES]) -> PRIMITIVE_SQL_TYPES:
+            # Make mypy happy
+            assert in_value is not None
+            return in_value
+
+        return PagingBoundaries(
+            start=assert_not_null(order_type.get_value(first[order_column_name])),
+            first_id=None,
+            end=assert_not_null(order_type.get_value(last[order_column_name])),
+            last_id=None,
+        )
+
+    def __str__(self) -> str:
+        # used to serialize the order back to a  paging url
+        return f"{self.order_by_column}.{self.order.value.lower()}"
+
+
+class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
+    """
+    Abstract Base class for ordering when using
+    - a user specified order
+    - an additional built in order to make the ordering unique (the id_collumn)
+    """
+
+    @property
+    @abstractmethod
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        pass
+
+    # External API
+    def as_filter(
+        self,
+        offset: int,
+        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        start: bool = True,
+    ) -> Tuple[List[str], List[object]]:
+        """
+        Produce a filter for this order, to select all record before or after the given id
+
+        :param offset: the next free number to use for query parameters
+        :param column_value: the value for the user specified order
+        :param id_value: the value for the built in order order
+        :param start: is this the start filter? if so, retain all values`> (column_value, id_value)`,
+            otherwise `< (column_value, id_value)`.
+
+        :return: The filter (as a string) and all associated query parameter values
+        """
+
+        # All the filter elements:
+        # 1. name of the actual collumn in the DB
+        # 2. type of the collumn
+        # 3. sanitized value of the collumn
+
+        filter_elements: list[tuple[str, ColumnType, object]] = []
+
+        order_by_collumns_type = self.get_order_by_column_type()
+        paging_on_nullable = order_by_collumns_type.nullable and id_value is not None
+
+        if column_value is not None or paging_on_nullable:
+            # Have column value or paging on nullable
+            filter_elements.extend(order_by_collumns_type.as_basic_filter_elements(self.order_by_column, column_value))
+
+        if id_value is not None:
+            # Have ID
+            id_name, id_type = self.id_column
+            if id_name != self.order_by_column:
+                filter_elements.extend(id_type.as_basic_filter_elements(id_name, id_value))
+
+        relation = ">" if start else "<"
+
+        if len(filter_elements) == 0:
+            return [], []
+
+        ac = ArgumentCollector(offset=offset - 1)
+        if len(filter_elements) == 1:
+            col_name, coll_type, value = filter_elements[0]
+            filter = f"{coll_type.get_accessor(col_name)} {relation} {ac(value)}"
+            return [filter], ac.args
+        else:
+            # composed filter:
+            # 1. comparison of two tuples (c_a, c_b) < (c_a, c_b)
+            # 2. nulls must be removed to get proper comparison
+            names_tuple = ", ".join(
+                [coll_type.coalesce_to_min(coll_type.get_accessor(col_name)) for col_name, coll_type, value in filter_elements]
             )
-            values.append(BaseDocument._get_value(column_value))
-            values.append(BaseDocument._get_value(id_value))
-        elif column_value is not None:
-            filter_statements.append(f"{self.get_order_by_column_db_name()} {relation} ${str(offset)}")
-            values.append(BaseDocument._get_value(column_value))
-        return filter_statements, values
+            values_references_tuple = ", ".join(
+                [coll_type.coalesce_to_min(ac(value)) for col_name, coll_type, value in filter_elements]
+            )
+            filter = f"({names_tuple}) {relation} ({values_references_tuple})"
+            return [filter], ac.args
 
-    def as_start_filter(
-        self,
-        offset: int,
-        start: Optional[object] = None,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-    ) -> Tuple[List[str], List[object]]:
-        """Get the start and first_id values as start filters"""
-        return self.as_filter(offset, column_value=start, id_value=first_id, start=True)
+    def get_order_elements(self, invert: bool) -> list[tuple[ColumnNameStr, ColumnType, PagingOrder]]:
+        """
+        return a list of column/column type/order triples, to format an ORDER BY or FILTER statement
+        """
+        order = self.get_order(invert)
+        id_name, id_type = self.id_column
 
-    def as_end_filter(
-        self,
-        offset: int,
-        end: Optional[object] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-    ) -> Tuple[List[str], List[object]]:
-        """Get the end and last_id values as end filters"""
-        return self.as_filter(offset, column_value=end, id_value=last_id, start=False)
+        return list(
+            self.get_order_by_column_type().as_basic_order_elements(self.order_by_column, order)
+        ) + id_type.as_basic_order_elements(id_name, order)
+
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        """Return the page boundaries, given the first and last record returned"""
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
+
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_order_by_column_type()
+
+        id_column, id_type = self.id_column
+
+        return PagingBoundaries(
+            start=order_type.get_value(first[order_column_name]),
+            first_id=id_type.get_value(first[id_column]),
+            end=order_type.get_value(last[order_column_name]),
+            last_id=id_type.get_value(last[id_column]),
+        )
 
 
-class VersionedResourceOrder(DatabaseOrder):
+class VersionedResourceOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which resources should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"resource_type": str, "agent": str, "resource_id_value": str}
-
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Resource
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        return {
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
+        }
 
     @property
-    def id_column(self) -> ColumnNameStr:
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
         """Name of the id column of this database order"""
-        return ColumnNameStr("resource_version_id")
+        return ColumnNameStr("resource_id"), StringColumn
 
 
 class ResourceOrder(VersionedResourceOrder):
     """Represents the ordering by which resources should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {**super().get_valid_sort_columns(), "status": str}
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        return {
+            ColumnNameStr("resource_type"): StringColumn,
+            ColumnNameStr("agent"): StringColumn,
+            ColumnNameStr("resource_id"): StringColumn,
+            ColumnNameStr("resource_id_value"): StringColumn,
+            ColumnNameStr("status"): TextColumn,
+        }
 
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        return ColumnNameStr(
-            f"{super().get_order_by_column_db_name()}{'::text' if self._should_be_treated_as_string() else ''}"
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name of the id column of this database order"""
+        return ColumnNameStr("resource_version_id"), ResourceVersionIdColumn
+
+    def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
+        if self.get_order() == PagingOrder.ASC:
+            first, last = last, first
+
+        order_column_name = self.order_by_column
+        order_type: ColumnType = self.get_order_by_column_type()
+
+        def make_id(record: abc.Mapping[str, object]) -> str:
+            resource_id = record["resource_id"]
+            assert isinstance(resource_id, str)
+            model = record["model"]
+            return resource_id + ",v=" + str(model)
+
+        return PagingBoundaries(
+            start=order_type.get_value(first[order_column_name]),
+            first_id=make_id(first),
+            end=order_type.get_value(last[order_column_name]),
+            last_id=make_id(last),
         )
 
-    def _should_be_treated_as_string(self) -> bool:
-        """Ensure that records are sorted alphabetically by status instead of the enum order"""
-        return self.order_by_column == "status"
 
-
-class ResourceHistoryOrder(DatabaseOrder):
+class ResourceHistoryOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which resource history should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"date": datetime.datetime}
+        return {ColumnNameStr("date"): DateTimeColumn}
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        # Sorting based on the date of the configuration model
-        return ConfigurationModel
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("attribute_hash"), StringColumn)
 
 
-class ResourceLogOrder(DatabaseOrder):
+class ResourceLogOrder(SingleDatabaseOrder):
     """Represents the ordering by which resource logs should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"timestamp": datetime.datetime}
-
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return ResourceAction
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        return {
+            ColumnNameStr("timestamp"): DateTimeColumn,
+        }
 
 
-class CompileReportOrder(DatabaseOrder):
+class CompileReportOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which compile reports should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
-        return {"requested": datetime.datetime}
+        return {ColumnNameStr("requested"): DateTimeColumn}
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Compile
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
-class AgentOrder(DatabaseOrder):
+class AgentOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which agents should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            "name": str,
-            "process_name": Optional[str],
-            "paused": bool,
-            "last_failover": Optional[datetime.datetime],
-            "status": str,
+            ColumnNameStr("name"): TablePrefixWrapper("a", StringColumn),
+            ColumnNameStr("process_name"): OptionalStringColumn,
+            ColumnNameStr("paused"): BoolColumn,
+            ColumnNameStr("last_failover"): OptionalDateTimeColumn,
+            ColumnNameStr("status"): StringColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Agent
-
     @property
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("name")
-
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
-        return self.coalesce_to_min(self.order_by_column)
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("name"), TablePrefixWrapper("a", StringColumn))
 
 
-class DesiredStateVersionOrder(DatabaseOrder):
+class DesiredStateVersionOrder(SingleDatabaseOrder):
     """Represents the ordering by which desired state versions should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "version": int,
+            ColumnNameStr("version"): PositiveIntColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return ConfigurationModel
 
-    @property
-    def id_column(self) -> ColumnNameStr:
-        """Name of the id column of this database order"""
-        return ColumnNameStr("version")
-
-
-class ParameterOrder(DatabaseOrder):
+class ParameterOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which parameters should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "name": str,
-            "source": str,
-            "updated": Optional[datetime.datetime],
+            ColumnNameStr("name"): StringColumn,
+            ColumnNameStr("source"): StringColumn,
+            ColumnNameStr("updated"): OptionalDateTimeColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Parameter
-
-    def get_order_by_column_db_name(self) -> ColumnNameStr:
-        # This ordering is valid on nullable columns, which should be coalesced to the minimum value of the specific type
-        return self.coalesce_to_min(self.order_by_column)
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
-class FactOrder(DatabaseOrder):
+class FactOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which facts should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
-        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         return {
-            "name": str,
-            "resource_id": str,
+            ColumnNameStr("name"): StringColumn,
+            ColumnNameStr("resource_id"): StringColumn,
         }
 
-    @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Parameter
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
 
 
-class NotificationOrder(DatabaseOrder):
+class NotificationOrder(AbstractDatabaseOrderV2):
     """Represents the ordering by which notifications should be sorted"""
 
     @classmethod
-    def get_valid_sort_columns(cls) -> Dict[str, Union[Type[datetime.datetime], Type[int], Type[str]]]:
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
         """Describes the names and types of the columns that are valid for this DatabaseOrder"""
         return {
-            "created": datetime.datetime,
+            ColumnNameStr("created"): DateTimeColumn,
         }
 
+    @property
+    def id_column(self) -> Tuple[ColumnNameStr, ColumnType]:
+        """Name and type of the id column of this database order"""
+        return (ColumnNameStr("id"), UUIDColumn)
+
+
+class DiscoveredResourceOrder(SingleDatabaseOrder):
+    """Represents the ordering by which discovered resources should be sorted"""
+
     @classmethod
-    def validator_dataclass(cls) -> Type["BaseDocument"]:
-        return Notification
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {
+            ColumnNameStr("discovered_resource_id"): StringColumn,
+        }
 
 
 class BaseQueryBuilder(ABC):
@@ -632,9 +976,10 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         from_clause: Optional[str] = None,
         filter_statements: Optional[List[str]] = None,
         values: Optional[List[object]] = None,
-        db_order: Optional[DatabaseOrder] = None,
+        db_order: Optional[DatabaseOrderV2] = None,
         limit: Optional[int] = None,
-        backward_paging: Optional[bool] = False,
+        backward_paging: bool = False,
+        prelude: Optional[str] = None,
     ) -> None:
         """
         :param select_clause: The select clause of the query
@@ -645,11 +990,13 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         :param limit: Limit the results to this amount
         :param backward_paging: Whether the ordering of the results should be inverted,
                                 used when going backward through the pages
+        :param prelude: part of the query preceding all else, for use with 'with' binding
         """
         super().__init__(select_clause, from_clause, filter_statements, values)
         self.db_order = db_order
         self.limit = limit
         self.backward_paging = backward_paging
+        self.prelude = prelude
 
     def select(self, select_clause: str) -> "SimpleQueryBuilder":
         """Set the select clause of the query"""
@@ -661,6 +1008,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def from_clause(self, from_clause: str) -> "SimpleQueryBuilder":
@@ -673,14 +1021,22 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def order_and_limit(
-        self, db_order: DatabaseOrder, limit: Optional[int] = None, backward_paging: Optional[bool] = False
+        self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
     ) -> "SimpleQueryBuilder":
         """Set the order and limit of the query"""
         return SimpleQueryBuilder(
-            self.select_clause, self._from_clause, self.filter_statements, self.values, db_order, limit, backward_paging
+            self.select_clause,
+            self._from_clause,
+            self.filter_statements,
+            self.values,
+            db_order,
+            limit,
+            backward_paging,
+            self.prelude,
         )
 
     def filter(self, filter_statements: List[str], values: List[object]) -> "SimpleQueryBuilder":
@@ -692,6 +1048,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.db_order,
             self.limit,
             self.backward_paging,
+            self.prelude,
         )
 
     def build(self) -> Tuple[str, List[object]]:
@@ -701,96 +1058,19 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                          {self._from_clause}
                          {self._join_filter_statements(self.filter_statements)}
                          """
+        if self.prelude:
+            full_query = self.prelude + full_query
         if self.db_order:
-            order = self.db_order.get_order()
-            order_by_column = self.db_order.get_order_by_column_db_name()
-            if self.backward_paging:
-                backward_paging_order = order.invert().db_form
-                full_query += (
-                    f" ORDER BY {order_by_column} {backward_paging_order}, {self.db_order.id_column} {backward_paging_order}"
-                )
-            else:
-                full_query += f" ORDER BY {order_by_column} {order.db_form}, {self.db_order.id_column}  {order.db_form}"
+            full_query += self.db_order.get_order_by_statement(self.backward_paging)
         if self.limit is not None:
             if self.limit > DBLIMIT:
                 raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {self.limit}")
             elif self.limit > 0:
                 full_query += " LIMIT " + str(self.limit)
         if self.db_order and self.backward_paging:
-            full_query = f"""SELECT * FROM ({full_query}) AS matching_records
-                            ORDER BY {self.db_order.get_order_by_column_db_name()} {self.db_order.get_order().db_form},
-                                     {self.db_order.id_column} {self.db_order.get_order().db_form}"""
+            order_by = self.db_order.get_order_by_statement(table="matching_records")
+            full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
 
-        return full_query, self.values
-
-
-class PageCountQueryBuilder(BaseQueryBuilder):
-    """A specific query builder for counting records before and after
-    the current page returned by a select query, as well as the total number of records"""
-
-    def __init__(
-        self,
-        select_clause: Optional[str] = None,
-        from_clause: Optional[str] = None,
-        filter_statements: Optional[List[str]] = None,
-        values: Optional[List[object]] = None,
-    ) -> None:
-        """
-        :param select_clause: The select clause of the query, optional, `page_count()` can be used to provide a query builder
-                              with a specific select clause
-        :param from_clause: The from clause of the query
-        :param filter_statements: A list of filters for the query
-        :param values: The values to be used for the filter statements
-        """
-        super().__init__(select_clause, from_clause, filter_statements, values)
-
-    def page_count(
-        self,
-        db_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-    ) -> "PageCountQueryBuilder":
-        """Determine the filters and select clause for a page count query"""
-        order = db_order.get_order()
-        values = []
-        if "ASC" in order:
-            before_filter_statements, before_values = db_order.as_end_filter(self.offset, end, last_id)
-            values.extend(before_values)
-            after_filter_statements, after_values = db_order.as_start_filter(self.offset + len(before_values), start, first_id)
-            values.extend(after_values)
-        else:
-            before_filter_statements, before_values = db_order.as_start_filter(self.offset, start, first_id)
-            values.extend(before_values)
-            after_filter_statements, after_values = db_order.as_end_filter(self.offset + len(before_values), end, last_id)
-            values.extend(after_values)
-        before_filter = self._join_filter_statements(before_filter_statements)
-        after_filter = self._join_filter_statements(after_filter_statements)
-        id_column_name = db_order.id_column
-        select_clause = (
-            f"SELECT COUNT({id_column_name}) as count_total, "
-            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
-        )
-        return PageCountQueryBuilder(select_clause, self._from_clause, self.filter_statements, self.values + values)
-
-    def from_clause(self, from_clause: str) -> "PageCountQueryBuilder":
-        """Set the from clause of the query"""
-        return PageCountQueryBuilder(self.select_clause, from_clause, self.filter_statements, self.values)
-
-    def filter(self, filter_statements: List[str], values: List[object]) -> "PageCountQueryBuilder":
-        return PageCountQueryBuilder(
-            self.select_clause, self._from_clause, self.filter_statements + filter_statements, self.values + values
-        )
-
-    def build(self) -> Tuple[str, List[object]]:
-        if not self.select_clause or not self._from_clause:
-            raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
-        full_query = f"""{self.select_clause}
-                         {self._from_clause}
-                         {self._join_filter_statements(self.filter_statements)}
-                        """
         return full_query, self.values
 
 
@@ -970,6 +1250,7 @@ class DocumentMeta(type):
 
 
 TBaseDocument = TypeVar("TBaseDocument", bound="BaseDocument")  # Part of the stable API
+TransactionResult = TypeVar("TransactionResult")
 
 
 @stable_api
@@ -1011,9 +1292,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         wrapped around that connection instance. This allows for transparent usage, regardless of whether a connection has
         already been acquired.
         """
+        if connection is not None:
+            return util.nullcontext(connection)
         # Make pypi happy
         assert cls._connection_pool is not None
-        return cls._connection_pool.acquire() if connection is None else util.nullcontext(connection)
+        return cls._connection_pool.acquire()
 
     @classmethod
     def table_name(cls) -> str:
@@ -1166,8 +1449,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             else:
                 value = None
 
-            if value is not None:
-                setattr(self, name, value)
+            setattr(self, name, value)
 
             del fields[name]
 
@@ -1281,9 +1563,19 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
-        query = f"INSERT INTO {self.table_name()} ({column_names_as_sql_string}) VALUES ({values_as_parameterize_sql_string})"
+        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        query = (
+            f"INSERT INTO {self.table_name()} "
+            f"({column_names_as_sql_string}) "
+            f"VALUES ({values_as_parameterized_sql_string})"
+        )
         await self._execute_query(query, *values, connection=connection)
+
+    async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Insert a new document based on the instance passed. If the document already exists, overwrite it.
+        """
+        return await self.insert_many_with_overwrite([self], connection=connection)
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
@@ -1322,7 +1614,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     async def lock_table(cls, mode: TableLockMode, connection: asyncpg.connection.Connection) -> None:
         """
         Acquire a table-level lock on a single environment. Callers should adhere to a consistent locking order accross
-        transactions.
+        transactions as described at the top of this module.
         Passing a connection object is mandatory. The connection is expected to be in a transaction.
         """
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
@@ -1346,7 +1638,44 @@ class BaseDocument(object, metaclass=DocumentMeta):
             records.append(tuple(current_record))
 
         async with cls.get_connection(connection) as con:
-            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records)
+            await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
+
+    @classmethod
+    async def insert_many_with_overwrite(
+        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        Insert new documents. If the document already exists, overwrite it.
+        """
+        if not documents:
+            return
+        column_names = cls.get_field_names()
+        primary_key_fields = cls._get_names_of_primary_key_fields()
+        primary_key_string = ",".join(primary_key_fields)
+        update_set = set(column_names) - set(cls._get_names_of_primary_key_fields())
+        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
+
+        values: List[List[object]] = [document._get_column_names_and_values()[1] for document in documents]
+
+        column_names_as_sql_string = ", ".join(column_names)
+
+        number_of_columns = len(values[0])
+        placeholders = ", ".join(
+            [
+                "(" + ", ".join([f"${doc * number_of_columns + col}" for col in range(1, number_of_columns + 1)]) + ")"
+                for doc in range(len(values))
+            ]
+        )
+
+        query = f"""INSERT INTO {cls.table_name()}
+                    ({column_names_as_sql_string})
+                    VALUES {placeholders}
+                    ON CONFLICT ({primary_key_string})
+                    DO UPDATE SET
+                    {update_set_string};"""
+
+        flattened_values = [item for sublist in values for item in sublist]
+        await cls._execute_query(query, *flattened_values)
 
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
@@ -1365,10 +1694,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
         (column_names, values) = self._get_column_names_and_values()
-        values_as_parameterize_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
-        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
+        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterized_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
 
     def _get_set_statement(self, **kwargs: object) -> Tuple[str, List[object]]:
@@ -1671,7 +2000,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
             query_type, value = value_with_query_type
             filter_statement: str
             filter_values: List[object]
-            cls.validate_field_name(key)
             name = cls._add_column_name_prefix_if_needed(key, col_name_prefix)
             filter_statement, filter_values = cls.get_filter_for_query_type(query_type, name, value, index_count)
             filter_statements.append(filter_statement)
@@ -1795,7 +2123,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @staticmethod
     def _combine_filter_statements(statements_and_values: Iterable[Tuple[str, List[object]]]) -> Tuple[str, List[object]]:
-        statements: Tuple[str]
+        filter_statements: Tuple[str]
         values: Tuple[List[object]]
         filter_statements, values = zip(*statements_and_values)  # type: ignore
         return (
@@ -1848,113 +2176,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if filter_statements:
             return "WHERE " + " AND ".join(filter_statements)
         return ""
-
-    @classmethod
-    def _get_list_query_pagination_parameters(
-        cls,
-        database_order: DatabaseOrder,
-        id_column: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: QueryFilter,
-    ) -> Tuple[List[str], List[object]]:
-        cls._validate_paging_parameters(start, end, first_id, last_id)
-        (filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-
-        start_filter_statements, start_values = cls._add_start_filter(
-            len(values),
-            database_order.get_order_by_column_db_name(),
-            id_column,
-            start,
-            first_id,
-        )
-        filter_statements.extend(start_filter_statements)
-        values.extend(start_values)
-        end_filter_statements, end_values = cls._add_end_filter(
-            len(values),
-            database_order.get_order_by_column_db_name(),
-            id_column,
-            end,
-            last_id,
-        )
-        filter_statements.extend(end_filter_statements)
-        values.extend(end_values)
-
-        return filter_statements, values
-
-    @classmethod
-    def _validate_paging_parameters(
-        cls,
-        start: Optional[Any],
-        end: Optional[Any],
-        first_id: Optional[Union[uuid.UUID, str]],
-        last_id: Optional[Union[uuid.UUID, str]],
-    ) -> None:
-        if start and end:
-            raise InvalidQueryParameter(
-                f"Only one of start and end parameters is allowed at the same time. Received start: {start}, end: {end}"
-            )
-        if first_id and last_id:
-            raise InvalidQueryParameter(
-                f"Only one of first_id and last_id parameters is allowed at the same time. "
-                f"Received first_id: {first_id}, last_id: {last_id}"
-            )
-        if (first_id and not start) or (first_id and end):
-            raise InvalidQueryParameter(
-                f"The first_id parameter should be used in combination with the start parameter. "
-                f"Received first_id: {first_id}, start: {start}, end: {end}"
-            )
-        if (last_id and not end) or (last_id and start):
-            raise InvalidQueryParameter(
-                f"The last_id parameter should be used in combination with the end parameter. "
-                f"Received last_id: {last_id}, start: {start}, end: {end}"
-            )
-
-    @classmethod
-    def _get_item_count_query_conditions(
-        cls,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object], List[str]]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-        (common_filter_statements, values) = cls.get_composed_filter_with_query_types(offset=1, col_name_prefix=None, **query)
-
-        if "ASC" in order:
-            before_filter_statements, before_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(after_values)
-        else:
-            before_filter_statements, before_values = cls._add_start_filter(
-                len(values), order_by_column, id_column_name, start, first_id
-            )
-            values.extend(before_values)
-            after_filter_statements, after_values = cls._add_end_filter(
-                len(values), order_by_column, id_column_name, end, last_id
-            )
-            values.extend(after_values)
-        before_filter = cls._join_filter_statements(before_filter_statements)
-        after_filter = cls._join_filter_statements(after_filter_statements)
-
-        select_clause = (
-            f"SELECT COUNT({id_column_name}) as count_total, "
-            f"COUNT({id_column_name}) filter ({before_filter}) as count_before, "
-            f"COUNT({id_column_name}) filter ({after_filter}) as count_after "
-        )
-
-        return select_clause, values, common_filter_statements
 
     async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
@@ -2024,6 +2245,31 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = metadata.default_value
 
         return result
+
+    @classmethod
+    async def execute_in_retryable_transaction(
+        cls,
+        fnc: Callable[[Connection], Awaitable[TransactionResult]],
+        tx_isolation_level: Optional[str] = None,
+    ) -> TransactionResult:
+        """
+        Execute the queries in fnc using the transaction isolation level `tx_isolation_level` and return the
+        result returned by fnc. This method performs retries when the transaction is aborted due to a
+        serialization error.
+        """
+        async with cls.get_connection() as postgresql_client:
+            attempt = 1
+            while True:
+                try:
+                    async with postgresql_client.transaction(isolation=tx_isolation_level):
+                        return await fnc(postgresql_client)
+                except SerializationError:
+                    if attempt > 3:
+                        raise Exception("Failed to execute transaction after 3 attempts.")
+                    else:
+                        # Exponential backoff
+                        await asyncio.sleep(pow(10, attempt) / 1000)
+                        attempt += 1
 
 
 class Project(BaseDocument):
@@ -2141,11 +2387,11 @@ AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 AUTO_FULL_COMPILE = "auto_full_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
-PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
 RECOMPILE_BACKOFF = "recompile_backoff"
+ENVIRONMENT_METRICS_RETENTION = "environment_metrics_retention"
 
 
 class Setting(object):
@@ -2180,13 +2426,21 @@ class Setting(object):
         """
         self.name: str = name
         self.typ: str = typ
-        self.default = default
+        self._default = default
         self.doc = doc
         self.validator = validator
         self.recompile = recompile
         self.update = update_model
         self.agent_restart = agent_restart
         self.allowed_values = allowed_values
+
+    @property
+    def default(self) -> Optional[m.EnvSettingType]:
+        if self._default and isinstance(self._default, dict):
+            # Dicts are mutable objects. Return a copy.
+            return dict(self._default)
+        else:
+            return self._default
 
     def to_dict(self) -> JsonType:
         return {
@@ -2217,15 +2471,18 @@ class Environment(BaseDocument):
     """
     A deployment environment of a project
 
-    Any transactions that update Environment should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
-
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
     :param project: The project this environment belongs to.
     :param repo_url: The repository url that contains the configuration model code for this environment
     :param repo_branch: The repository branch that contains the configuration model code for this environment
-    :param settings: Key/value settings for this environment
+    :param settings: Key/value settings for this environment. This dictionary does not necessarily contain a key
+                     for every environment setting known by the server. This is done for backwards compatibility reasons.
+                     When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
+                     account. The logic to decide that is the following:
+                        * When the name of the new setting is present in this settings dictionary or when the name of the old
+                          setting is not present in the settings dictionary, use the new setting.
+                        * Otherwise, use the setting with the old name.
     :param last_version: The last version number that was reserved for this environment
     :param description: The description of the environment
     :param icon: An icon for the environment
@@ -2284,11 +2541,11 @@ class Environment(BaseDocument):
         ENVIRONMENT_AGENT_TRIGGER_METHOD: Setting(
             name=ENVIRONMENT_AGENT_TRIGGER_METHOD,
             typ="enum",
-            default=const.AgentTriggerMethod.push_full_deploy.name,
+            default=const.AgentTriggerMethod.push_incremental_deploy.name,
             validator=convert_agent_trigger_method,
-            doc="The agent trigger method to use. "
-            f"If {PUSH_ON_AUTO_DEPLOY} is enabled, "
-            f"{AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} overrides this setting",
+            doc="The agent trigger method to use when no specific method is specified in the API call. "
+            "This determines the behavior of the 'Promote' button. "
+            f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
         AUTOSTART_SPLAY: Setting(
@@ -2391,20 +2648,12 @@ class Environment(BaseDocument):
             validator=convert_int,
             doc="The number of versions to keep stored in the database",
         ),
-        PURGE_ON_DELETE: Setting(
-            name=PURGE_ON_DELETE,
-            default=False,
-            typ="bool",
-            validator=convert_boolean,
-            doc="Enable purge on delete. When set to true, the server will detect the absence of resources with purge_on_delete"
-            " set to true and automatically purges them.",
-        ),
         PROTECTED_ENVIRONMENT: Setting(
             name=PROTECTED_ENVIRONMENT,
             default=False,
             typ="bool",
             validator=convert_boolean,
-            doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
+            doc="When set to true, this environment cannot be cleared or deleted.",
         ),
         NOTIFICATION_RETENTION: Setting(
             name=NOTIFICATION_RETENTION,
@@ -2421,12 +2670,29 @@ class Environment(BaseDocument):
             doc="""The number of seconds to wait before the server may attempt to do a new recompile.
                     Recompiles are triggered after facts updates for example.""",
         ),
+        ENVIRONMENT_METRICS_RETENTION: Setting(
+            name=ENVIRONMENT_METRICS_RETENTION,
+            typ="int",
+            default=8760,
+            doc="The number of hours that environment metrics have to be retained before they are cleaned up. "
+            "Default=8760 hours (1 year). Set to 0 to disable automatic cleanups.",
+            validator=convert_int,
+        ),
     }
 
     _renamed_settings_map = {
         AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
     }  # name new_option -> name deprecated_option
+
+    @classmethod
+    def get_setting_definition(cls, setting_name: str) -> Setting:
+        """
+        Return the definition of the setting with the given name.
+        """
+        if setting_name not in cls._settings:
+            raise KeyError()
+        return cls._settings[setting_name]
 
     async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
         """
@@ -2449,19 +2715,27 @@ class Environment(BaseDocument):
         if key in self.settings:
             return self.settings[key]
 
-        if self._settings[key].default is None:
+        default_value = self._settings[key].default
+        if default_value is None:
             raise KeyError()
 
-        value = self._settings[key].default
-        await self.set(key, value, connection=connection)
-        return value
+        await self.set(key, default_value, connection=connection, allow_override=False)
+        return self.settings[key]
 
-    async def set(self, key: str, value: m.EnvSettingType, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: m.EnvSettingType,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        allow_override: bool = True,
+    ) -> None:
         """
         Set a new setting in this environment.
 
         :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
         :param value: The value of the settings. The value should be of type as defined in _settings
+        :param allow_override: If set to False, don't set the given environment setting when it already exists in the setting
+                               dictionary in the database.
         """
         if key not in self._settings:
             raise KeyError()
@@ -2470,19 +2744,25 @@ class Environment(BaseDocument):
             value = self._settings[key].validator(value)
 
         type = translate_to_postgres_type(self._settings[key].typ)
-        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=3)
-        query = (
-            "UPDATE "
-            + self.table_name()
-            + " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::"
-            + type
-            + "), TRUE)"
-            + " WHERE "
-            + filter_statement
+        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=5)
+        query = f"""
+                UPDATE {self.table_name()}
+                SET settings=(
+                        CASE WHEN $1 IS FALSE AND settings ? $2::text
+                        THEN settings
+                        ELSE jsonb_set(settings, $3::text[], to_jsonb($4::{type}), TRUE)
+                        END
+                    )
+                WHERE {filter_statement}
+                RETURNING settings
+        """
+        values = [allow_override, self._get_value(key), self._get_value([key]), self._get_value(value)] + values
+
+        new_value = await self._fetchval(query, *values, connection=connection)
+        new_value_parsed = cast(
+            Dict[str, m.EnvSettingType], self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
         )
-        values = [self._get_value([key]), self._get_value(value)] + values
-        await self._execute_query(query, *values, connection=connection)
-        self.settings[key] = value
+        self.settings[key] = new_value_parsed[key]
 
     async def unset(self, key: str) -> None:
         """
@@ -2544,11 +2824,9 @@ RETURNING last_version;
         return version
 
     @classmethod
-    async def register_setting(cls, setting: Setting) -> None:
+    def register_setting(cls, setting: Setting) -> None:
         """
-        Adds a new setting to the environments from outside inmanta-core.
-        As example, inmanta-lsm can use this method to add settings that are only
-        relevant for inmanta-lsm but that are needed in the environments.
+        Adds a new environment setting that was defined by an extension.
 
         :param setting: the setting that should be added to the existing settings
         """
@@ -2647,8 +2925,6 @@ RETURNING last_version;
 class Parameter(BaseDocument):
     """
     A parameter that can be used in the configuration model
-    Any transactions that update Parameter should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param name: The name of the parameter
     :param value: The value of the parameter
@@ -2672,8 +2948,19 @@ class Parameter(BaseDocument):
     metadata: Optional[JsonType] = None
 
     @classmethod
-    async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
-        query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
+    async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> List["Parameter"]:
+        """
+        Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
+        """
+        query = f"""
+         WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        SELECT * FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) and updated < $1;
+        """
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result
@@ -2687,6 +2974,7 @@ class Parameter(BaseDocument):
             query += " AND metadata @> $" + str(query_param_index) + "::jsonb"
             dict_value = {key: value}
             values.append(cls._get_value(dict_value))
+        query += " ORDER BY name"
         result = await cls.select_query(query, values)
         return result
 
@@ -2702,177 +2990,6 @@ class Parameter(BaseDocument):
             updated=self.updated,
             metadata=self.metadata,
         )
-
-    @classmethod
-    def parameter_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT p.id, p.name, p.value, p.source, p.updated, p.metadata, p.environment""",
-            from_clause=f" FROM {cls.table_name()} as p",
-            filter_statements=[" environment = $1 ", "p.source != 'fact'"],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_parameters_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.parameter_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_parameter_list(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Parameter]:
-        subquery, subquery_values = cls.parameter_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
-            order == PagingOrder.DESC and (start is not None or first_id)
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        parameter_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        parameter_records = cast(Iterable[Record], parameter_records)
-        dtos = [
-            m.Parameter(
-                id=parameter["id"],
-                name=parameter["name"],
-                value=parameter["value"],
-                source=parameter["source"],
-                updated=parameter["updated"],
-                metadata=json.loads(parameter["metadata"]) if parameter["metadata"] else None,
-                environment=parameter["environment"],
-            )
-            for parameter in parameter_records
-        ]
-        return dtos
-
-    @classmethod
-    def fact_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT p.id, p.name, p.value, p.source, p.resource_id, p.updated, p.metadata, p.environment""",
-            from_clause=f" FROM {cls.table_name()} as p",
-            filter_statements=[" environment = $1 ", "p.source = 'fact'"],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_facts_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.fact_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_fact_list(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Fact]:
-        subquery, subquery_values = cls.fact_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        fact_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        fact_records = cast(Iterable[Record], fact_records)
-        dtos = [
-            m.Fact(
-                id=fact["id"],
-                name=fact["name"],
-                value=fact["value"],
-                source=fact["source"],
-                updated=fact["updated"],
-                resource_id=fact["resource_id"],
-                metadata=json.loads(fact["metadata"]) if fact["metadata"] else None,
-                environment=fact["environment"],
-            )
-            for fact in fact_records
-        ]
-        return dtos
 
 
 class UnknownParameter(BaseDocument):
@@ -2912,6 +3029,46 @@ class UnknownParameter(BaseDocument):
             metadata=self.metadata,
             resolved=self.resolved,
         )
+
+    @classmethod
+    async def get_unknowns_to_copy_in_partial_compile(
+        cls,
+        environment: uuid.UUID,
+        source_version: int,
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
+        rids_in_partial_compile: abc.Set[ResourceIdStr],
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> List["UnknownParameter"]:
+        """
+        Returns a subset of the unknowns in source_version of environment. It returns the unknowns that:
+            * Are not associated with a resource
+            * Are associated with a resource that:
+               - don't belong to the resource set updated_resource_sets and deleted_resource_sets
+               - and, don't have a resource_id in rids_in_partial_compile (An unknown might belong to a shared resource that
+                 is not exported by the partial compile)
+        """
+        query = f"""
+            SELECT u.*
+            FROM {cls.table_name()} AS u LEFT JOIN {Resource.table_name()} AS r
+                ON u.environment=r.environment AND u.version=r.model AND u.resource_id=r.resource_id
+            WHERE
+                u.environment=$1
+                AND u.version=$2
+                AND u.resolved IS FALSE
+                AND (r.resource_id IS NULL OR NOT r.resource_id=ANY($4))
+                AND (r.resource_set IS NULL OR NOT r.resource_set=ANY($3))
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(
+                query,
+                environment,
+                source_version,
+                list(updated_resource_sets | deleted_resource_sets),
+                list(rids_in_partial_compile),
+            )
+            return [cls(from_postgres=True, **uk) for uk in result]
 
 
 class AgentProcess(BaseDocument):
@@ -3002,8 +3159,12 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
         query = f"""
-            DELETE FROM {cls.table_name()} as a1
+            WITH halted_env AS (
+                SELECT id FROM environment WHERE halted = true
+            )
+            DELETE FROM {cls.table_name()} AS a1
             WHERE a1.expired IS NOT NULL AND
+                  a1.environment NOT IN (SELECT id FROM halted_env) AND
                   (
                     -- Take nr_expired_records_to_keep into account
                     SELECT count(*)
@@ -3017,10 +3178,11 @@ class AgentProcess(BaseDocument):
                   -- Agent process only has expired agent instances
                   NOT EXISTS(
                     SELECT 1
-                    FROM {cls.table_name()} as agentprocess INNER JOIN {AgentInstance.table_name()} as agentinstance
-                         ON agentinstance.process = agentprocess.sid
-                    WHERE agentprocess.sid = a1.sid and agentinstance.expired IS NULL
-                  )
+                    FROM {cls.table_name()} AS agentprocess
+                    INNER JOIN {AgentInstance.table_name()} AS agentinstance
+                    ON agentinstance.process = agentprocess.sid
+                    WHERE agentprocess.sid = a1.sid AND agentinstance.expired IS NULL
+                  );
         """
         await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
@@ -3093,7 +3255,6 @@ class AgentInstance(BaseDocument):
         """
         if not endpoints:
             return
-
         async with cls.get_connection(connection) as con:
             await con.executemany(
                 f"""
@@ -3304,7 +3465,7 @@ class Agent(BaseDocument):
                                            primary. If the session id is None, the Agent doesn't have a primary anymore.
         :param now: Timestamp of this failover
         """
-        for (endpoint, sid) in endpoints_with_new_primary:
+        for endpoint, sid in endpoints_with_new_primary:
             # Lock mode is required because we will update in this transaction
             # Deadlocks with cleanup otherwise
             agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
@@ -3330,98 +3491,34 @@ class Agent(BaseDocument):
         await cls._execute_query(query, connection=connection)
 
     @classmethod
-    def agent_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT a.name, a.environment, last_failover, paused, unpause_on_resume,
-                                    ap.hostname as process_name, ai.process as process_id,
-                                    (CASE WHEN paused THEN 'paused'
-                                        WHEN id_primary IS NOT NULL THEN 'up'
-                                        ELSE 'down'
-                                    END) as status""",
-            from_clause=f" FROM {cls.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
-            " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
-            filter_statements=[" a.environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_items_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.agent_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_agents(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[Union[datetime.datetime, bool, str]] = None,
-        end: Optional[Union[datetime.datetime, bool, str]] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Agent]:
-        subquery, subquery_values = cls.agent_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
-            order == PagingOrder.DESC and (start is not None or first_id)
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        agent_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        agent_records = cast(Iterable[Record], agent_records)
-
-        dtos = [
-            m.Agent(
-                name=agent["name"],
-                environment=agent["environment"],
-                last_failover=agent["last_failover"],
-                paused=agent["paused"],
-                unpause_on_resume=agent["unpause_on_resume"],
-                process_id=agent["process_id"],
-                process_name=agent["process_name"],
-                status=agent["status"],
-            )
-            for agent in agent_records
-        ]
-        return dtos
+    async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        query = """
+DELETE FROM public.agent AS a
+WHERE (environment, name) NOT IN (
+    SELECT DISTINCT environment_id as environment, agent as name
+    FROM (
+        -- agent is in the agent map
+        SELECT e.id as environment_id, map.key as agent
+        FROM public.environment e
+        CROSS JOIN LATERAL jsonb_each(e.settings->'autostart_agent_map') AS map(key, value)
+    ) in_agent_map
+)
+-- have no primary ID set (that are down)
+AND id_primary IS NULL
+-- not used by any version
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.resource AS re
+    WHERE a.environment=re.environment
+    AND a.name=re.agent
+)
+AND a.environment IN (
+    SELECT id
+    FROM public.environment
+    WHERE NOT halted
+);
+"""
+        await cls._execute_query(query, connection=connection)
 
 
 @stable_api
@@ -3473,7 +3570,7 @@ class Compile(BaseDocument):
     :param force_update: should this compile definitely update
     :param metadata: exporter metadata to be passed to the compiler
     :param environment_variables: environment variables to be passed to the compiler
-    :param succes: was the compile successful
+    :param success: was the compile successful
     :param handled: were all registered handlers executed?
     :param version: version exported by this compile
     :param remote_id: id as given by the requestor, used by the requestor to distinguish between different requests
@@ -3482,6 +3579,10 @@ class Compile(BaseDocument):
         to this one that actually got compiled.
     :param partial: True if the compile only contains the entities/resources for the resource sets that should be updated
     :param removed_resource_sets: indicates the resource sets that should be removed from the model
+    :param exporter_plugin: Specific exporter plugin to use
+    :param notify_failed_compile: if true use the notification service to notify that a compile has failed.
+        By default, notifications are enabled only for exporting compiles.
+    :param failed_compile_message: Optional message to use when a notification for a failed compile is created
     """
 
     __primary_key__ = ("id",)
@@ -3510,6 +3611,11 @@ class Compile(BaseDocument):
 
     partial: bool = False
     removed_resource_sets: list[str] = []
+
+    exporter_plugin: Optional[str] = None
+
+    notify_failed_compile: Optional[bool] = None
+    failed_compile_message: Optional[str] = None
 
     @classmethod
     async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
@@ -3594,10 +3700,16 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_next_compiles_count(cls) -> int:
-        """Get the number of compiles in the queue for ALL environments"""
-        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled and completed IS NOT NULL")
-        return result
+    async def get_total_length_of_all_compile_queues(cls, exclude_started_compiles: bool = True) -> int:
+        """
+        Return the total length of all the compile queues on the Inmanta server.
+
+        :param exclude_started_compiles: True iff don't count compiles that started running, but are not finished yet.
+        """
+        query = f"SELECT count(*) FROM {cls.table_name()} WHERE completed IS NULL"
+        if exclude_started_compiles:
+            query += " AND started IS NULL"
+        return await cls._fetch_int(query)
 
     @classmethod
     async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
@@ -3611,90 +3723,16 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
-        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
+        query = f"""
+        WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        DELETE FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) AND completed <= $1::timestamp with time zone;
+        """
         await cls._execute_query(query, oldest_retained_date, connection=connection)
-
-    @classmethod
-    async def count_items_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM {cls.table_name()}",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_compile_reports(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.CompileReport]:
-        cls._validate_paging_parameters(start, end, first_id, last_id)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT id, remote_id, environment, requested,
-                    started, completed, do_export, force_update,
-                    metadata, environment_variables, success, version """,
-            from_clause=f" FROM {cls.table_name()}",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        compile_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        compile_records = cast(Iterable[Record], compile_records)
-
-        dtos = [
-            m.CompileReport(
-                id=compile["id"],
-                remote_id=compile["remote_id"],
-                environment=compile["environment"],
-                requested=compile["requested"],
-                started=compile["started"],
-                completed=compile["completed"],
-                success=compile["success"],
-                version=compile["version"],
-                do_export=compile["do_export"],
-                force_update=compile["force_update"],
-                metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
-                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
-            )
-            for compile in compile_records
-        ]
-        return dtos
 
     @classmethod
     async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:
@@ -3718,6 +3756,11 @@ class Compile(BaseDocument):
                 c.environment_variables,
                 c.compile_data,
                 c.substitute_compile_id,
+                c.partial,
+                c.removed_resource_sets,
+                c.exporter_plugin,
+                c.notify_failed_compile,
+                c.failed_compile_message,
                 r.id as report_id,
                 r.started report_started,
                 r.completed report_completed,
@@ -3746,6 +3789,11 @@ class Compile(BaseDocument):
                     comp.environment_variables,
                     comp.compile_data,
                     comp.substitute_compile_id,
+                    comp.partial,
+                    comp.removed_resource_sets,
+                    comp.exporter_plugin,
+                    comp.notify_failed_compile,
+                    comp.failed_compile_message,
                     rep.id as report_id,
                     rep.started as report_started,
                     rep.completed as report_completed,
@@ -3808,6 +3856,11 @@ class Compile(BaseDocument):
             environment_variables=json.loads(requested_compile["environment_variables"])
             if requested_compile["environment_variables"]
             else {},
+            partial=requested_compile["partial"],
+            removed_resource_sets=requested_compile["removed_resource_sets"],
+            exporter_plugin=requested_compile["exporter_plugin"],
+            notify_failed_compile=requested_compile["notify_failed_compile"],
+            failed_compile_message=requested_compile["failed_compile_message"],
             compile_data=json.loads(requested_compile["compile_data"]) if requested_compile["compile_data"] else None,
             reports=reports,
         )
@@ -3826,6 +3879,9 @@ class Compile(BaseDocument):
             compile_data=None if self.compile_data is None else m.CompileData(**self.compile_data),
             partial=self.partial,
             removed_resource_sets=self.removed_resource_sets,
+            exporter_plugin=self.exporter_plugin,
+            notify_failed_compile=self.notify_failed_compile,
+            failed_compile_message=self.failed_compile_message,
         )
 
 
@@ -3877,8 +3933,6 @@ class LogLine(DataDocument):
 class ResourceAction(BaseDocument):
     """
     Log related to actions performed on a specific resource version by Inmanta.
-    Any transactions that update ResourceAction should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`
 
     :param environment: The environment this action belongs to.
     :param version: The version of the configuration model this action belongs to.
@@ -3934,8 +3988,8 @@ class ResourceAction(BaseDocument):
             self.messages = new_messages
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID) -> "ResourceAction":
-        return await cls.get_one(action_id=doc_id)
+    async def get_by_id(cls, doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
+        return await cls.get_one(action_id=doc_id, connection=connection)
 
     @classmethod
     async def get_log(
@@ -3983,122 +4037,6 @@ class ResourceAction(BaseDocument):
     @classmethod
     def get_valid_field_names(cls) -> List[str]:
         return super().get_valid_field_names() + ["timestamp", "level", "msg"]
-
-    @classmethod
-    def _get_resource_logs_base_query(
-        cls,
-        select_clause: str,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        offset: int,
-    ) -> Tuple[str, List[object]]:
-        query = f"""{select_clause}
-                    FROM
-                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
-                    unnested_message ->> 'level' as level,
-                    unnested_message ->> 'msg' as msg,
-                    unnested_message
-                    FROM {cls.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = ${offset} AND position(${offset + 1} in rvid)>0) unnested
-                    """
-        values = [cls._get_value(environment), cls._get_value(resource_id)]
-        return query, values
-
-    @classmethod
-    async def get_logs_paged(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List["m.ResourceLog"]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("resource_version_id"),
-            first_id=None,
-            last_id=None,
-            start=start,
-            end=end,
-            **query,
-        )
-        db_query, base_query_values = cls._get_resource_logs_base_query(
-            select_clause="SELECT action_id, action, timestamp, unnested_message ",
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-        if len(filter_statements) > 0:
-            db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            db_query += f" ORDER BY {order_by_column} {backward_paging_order}"
-        else:
-            db_query += f" ORDER BY {order_by_column} {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                db_query += " LIMIT " + str(limit)
-
-        if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
-                                ORDER BY matching_records.{order_by_column} {order}"""
-
-        records = cast(Iterable[Record], await cls.select_query(db_query, values, no_obj=True, connection=connection))
-        logs = []
-        for record in records:
-            message = json.loads(record["unnested_message"])
-            logs.append(
-                m.ResourceLog(
-                    action_id=record["action_id"],
-                    action=record["action"],
-                    timestamp=record["timestamp"],
-                    level=message.get("level"),
-                    msg=message.get("msg"),
-                    args=message.get("args", []),
-                    kwargs=message.get("kwargs", {}),
-                )
-            )
-        return logs
-
-    @classmethod
-    def _get_paging_resource_log_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls._get_resource_logs_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
 
     @classmethod
     async def get(cls, action_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
@@ -4183,13 +4121,20 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def purge_logs(cls) -> None:
-        environments = await Environment.get_list()
-        for env in environments:
-            time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
-            keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
-            value = cls._get_value(keep_logs_until)
-            await cls._execute_query(query, value)
+        default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
+
+        query = f"""
+            WITH non_halted_envs AS (
+                SELECT id, (COALESCE((settings->>'resource_action_logs_retention')::int, $1)) AS retention_days
+                FROM {Environment.table_name()}
+                WHERE NOT halted
+            )
+            DELETE FROM {cls.table_name()}
+            USING non_halted_envs
+            WHERE environment = non_halted_envs.id
+                AND started < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+        """
+        await cls._execute_query(query, default_retention_time)
 
     @classmethod
     async def query_resource_actions(
@@ -4228,9 +4173,12 @@ class ResourceAction(BaseDocument):
             values.append(cls._get_value(agent))
             parameter_index += 1
         if attribute and attribute_value:
-            query += f" AND position(${parameter_index + 1}::varchar in attributes->>${parameter_index}) > 0 "
+            # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the %
+            # and _ characters in the query
+            escaped_value = attribute_value.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
+            query += f" AND attributes->>${parameter_index} LIKE ${parameter_index + 1} ESCAPE '#' "
             values.append(cls._get_value(attribute))
-            values.append(cls._get_value(attribute_value))
+            values.append(cls._get_value(escaped_value))
             parameter_index += 2
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
@@ -4306,7 +4254,8 @@ class ResourceAction(BaseDocument):
         # find the interval between the current deploy and the previous successful deploy
         # also check we are currently deploying
         # do all of this in one query
-        resource_id_str = resource_id.resource_version_str()
+        resource_version_id_str = resource_id.resource_version_str()
+        resource_id_str = resource_id.resource_str()
 
         # These two variables are actually of type datetime.datetime
         # but mypy doesn't know as they come from the DB
@@ -4331,27 +4280,27 @@ class ResourceAction(BaseDocument):
         """
 
         async with cls.get_connection() as connection:
-            result = await connection.fetchrow(end_query, env.id, resource_id.resource_str())
+            result = await connection.fetchrow(end_query, env.id, resource_id_str)
 
             if not result or result["begin_status"] is None:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Resource"
-                    f" {resource_id_str} has not started deploying yet."
+                    f" {resource_version_id_str} has not started deploying yet."
                 )
             if result["begin_status"] != const.ResourceState.deploying:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_id_str} is {result['begin_status']}."
+                    f" for resource {resource_version_id_str} is {result['begin_status']}."
                 )
             current_deploy_start = result["begin_started"]
             last_deploy_start = result["started"]
 
             # Step3: Get the resource
             resource: Optional[Resource] = await Resource.get_one(
-                environment=env.id, resource_version_id=resource_id_str, connection=connection
+                environment=env.id, resource_id=resource_id_str, model=resource_id.version, connection=connection
             )
             if resource is None:
-                raise NotFound(f"Resource with id {resource_id_str} was not found in environment {env.id}")
+                raise NotFound(f"Resource with id {resource_version_id_str} was not found in environment {env.id}")
 
             # Step 4: get the relevant resource actions
             # Do it in one query for all dependencies
@@ -4364,7 +4313,7 @@ class ResourceAction(BaseDocument):
             if last_deploy_start:
                 filter += f" AND ra.started > {arg(last_deploy_start)}"
             if exclude_change:
-                filter += f"AND ra.change <> {arg(exclude_change.value)}"
+                filter += f" AND ra.change <> {arg(exclude_change.value)}"
 
             # then the query around it
             get_all_query = f"""
@@ -4411,8 +4360,6 @@ class ResourceAction(BaseDocument):
 class Resource(BaseDocument):
     """
     A specific version of a resource. This entity contains the desired state of a resource.
-    Any transactions that update Resource should adhere to the locking order described in
-    :py:class:`inmanta.data.ConfigurationModel`.
 
     :param environment: The environment this resource version is defined in
     :param rid: The id of the resource and its version
@@ -4425,7 +4372,7 @@ class Resource(BaseDocument):
     :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
     """
 
-    __primary_key__ = ("environment", "resource_version_id")
+    __primary_key__ = ("environment", "model", "resource_id")
 
     environment: uuid.UUID
     model: int
@@ -4433,7 +4380,6 @@ class Resource(BaseDocument):
     # ID related
     resource_id: m.ResourceIdStr
     resource_type: m.ResourceType
-    resource_version_id: m.ResourceVersionIdStr
     resource_id_value: str
 
     agent: str
@@ -4445,13 +4391,41 @@ class Resource(BaseDocument):
     attributes: Dict[str, Any] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
-    last_non_deploying_status: const.ResourceState = const.ResourceState.available
+    last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
     resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides: List[m.ResourceVersionIdStr] = []
+    provides: List[m.ResourceIdStr] = []
+
+    # Methods for backward compatibility
+    @property
+    def resource_version_id(self):
+        # This field was removed from the DB, this method keeps code compatibility
+        return resources.Id.set_version_in_id(self.resource_id, self.model)
+
+    @classmethod
+    def __mangle_dict(cls, record: dict) -> None:
+        """
+        Transform the dict of attributes as it exists here/in the database to the backward compatible form
+        Operates in-place
+        """
+        version = record["model"]
+        parsed_id = resources.Id.parse_id(record["resource_id"])
+        parsed_id.set_version(version)
+        record["resource_version_id"] = parsed_id.resource_version_str()
+        record["id"] = record["resource_version_id"]
+        record["resource_type"] = parsed_id.entity_type
+        if "requires" in record["attributes"]:
+            record["attributes"]["requires"] = [
+                resources.Id.set_version_in_id(id, version) for id in record["attributes"]["requires"]
+            ]
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        record["attributes"]["version"] = version
+        record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
@@ -4463,31 +4437,33 @@ class Resource(BaseDocument):
         if not resource_version_id.is_resource_version_id_obj():
             raise Exception("Argument resource_version_id is not a resource_version_id")
         query = """
-            SELECT r1.resource_version_id, r1.last_non_deploying_status
+            SELECT r1.resource_id, r1.model, r1.last_non_deploying_status
             FROM resource AS r1
             WHERE r1.environment=$1
                   AND r1.model=$2
                   AND (
                       SELECT (r2.attributes->'requires')::jsonb
                       FROM resource AS r2
-                      WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_version_id=$3
-                  ) ? r1.resource_version_id
+                      WHERE r2.environment=$1 AND r2.model=$2 AND r2.resource_id=$3
+                  ) ? r1.resource_id
         """
         values = [
             cls._get_value(environment),
             cls._get_value(resource_version_id.version),
-            resource_version_id.resource_version_str(),
+            resource_version_id.resource_str(),
         ]
         result = await cls._fetch_query(query, *values, connection=connection)
-        return {r["resource_version_id"]: const.ResourceState(r["last_non_deploying_status"]) for r in result}
+        return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
-        character = "|".join(
-            sorted([str(k) + "||" + str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]])
+        character = json.dumps(
+            {k: v for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]},
+            default=custom_json_encoder,
+            sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
         )
         m = hashlib.md5()
-        m.update(self.resource_id.encode())
-        m.update(character.encode())
+        m.update(self.resource_id.encode("utf-8"))
+        m.update(character.encode("utf-8"))
         self.attribute_hash = m.hexdigest()
 
     @classmethod
@@ -4495,6 +4471,7 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         resource_version_ids: List[m.ResourceVersionIdStr],
+        lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> List["Resource"]:
         """
@@ -4502,11 +4479,34 @@ class Resource(BaseDocument):
         """
         if not resource_version_ids:
             return []
-        query = f"SELECT * FROM {cls.table_name()} WHERE environment=$1 AND resource_version_id = ANY($2)"
-        resources = await cls.select_query(
-            query, [cls._get_value(environment), cls._get_value(resource_version_ids)], connection=connection
+        query_lock: str = lock.value if lock is not None else ""
+
+        def convert_or_ignore(rvid):
+            """Method to retain backward compatibility, ignore bad ID's"""
+            try:
+                return resources.Id.parse_resource_version_id(rvid)
+            except ValueError:
+                return None
+
+        parsed_rv = (convert_or_ignore(id) for id in resource_version_ids)
+        effective_parsed_rv = [id for id in parsed_rv if id is not None]
+
+        if not effective_parsed_rv:
+            return []
+
+        query = (
+            f"SELECT r.* FROM {cls.table_name()} r"
+            f" INNER JOIN unnest($2::resource_id_version_pair[]) requested(resource_id, model)"
+            f" ON r.resource_id = requested.resource_id AND r.model = requested.model"
+            f" WHERE environment=$1"
+            f" {query_lock}"
         )
-        return resources
+        out = await cls.select_query(
+            query,
+            [cls._get_value(environment), [(id.resource_str(), id.get_version()) for id in effective_parsed_rv]],
+            connection=connection,
+        )
+        return out
 
     @classmethod
     async def get_undeployable(cls, environment: uuid.UUID, version: int) -> List["Resource"]:
@@ -4560,6 +4560,31 @@ class Resource(BaseDocument):
                     # This prevents injection attacks.
                     if util.is_sub_dict(attributes, resource.attributes):
                         result.append(resource)
+        return result
+
+    @classmethod
+    async def get_resource_type_count_for_latest_version(cls, environment: uuid.UUID) -> dict[str, int]:
+        """
+        Returns the count for each resource_type over all resources in the model's latest version
+        """
+        query_latest_model = f"""
+            SELECT max(version)
+            FROM {ConfigurationModel.table_name()}
+            WHERE environment=$1
+        """
+        query = f"""
+            SELECT resource_type, count(*) as count
+            FROM {Resource.table_name()}
+            WHERE environment=$1 AND model=({query_latest_model})
+            GROUP BY resource_type;
+        """
+        values = [cls._get_value(environment)]
+        result: dict[str, int] = {}
+        async with cls.get_connection() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    assert isinstance(record["count"], int)
+                    result[str(record["resource_type"])] = record["count"]
         return result
 
     @classmethod
@@ -4632,16 +4657,14 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
-        resources_list = []
+        resources_list: Union[List[Resource], List[Dict[str, object]]] = []
         async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         record = dict(record)
                         record["attributes"] = json.loads(record["attributes"])
-                        record["id"] = record["resource_version_id"]
-                        parsed_id = resources.Id.parse_id(record["resource_version_id"])
-                        record["resource_type"] = parsed_id.entity_type
+                        cls.__mangle_dict(record)
                         resources_list.append(record)
                     else:
                         resources_list.append(cls(from_postgres=True, **record))
@@ -4673,135 +4696,6 @@ class Resource(BaseDocument):
             return resources[0]
         return None
 
-    @classmethod
-    def _get_released_resources_base_query(cls, select_clause: str, environment: uuid.UUID, offset: int) -> Tuple[str, object]:
-        """A partial query describing the conditions for selecting the latest released resources,
-        according to the model version number."""
-        environment_db_value = cls._get_value(environment)
-        # Emulate a loose index scan with a recursive common table expression (CTE),
-        # Based on https://stackoverflow.com/a/25536748 and https://wiki.postgresql.org/wiki/Loose_indexscan
-        # A loose index scan is "an operation that finds the distinct values of the leading columns of a
-        # btree index efficiently; rather than scanning all equal values of a key,
-        # as soon as a new value is found, restart the search by looking for a larger value"
-        # In this case we don't scan all equal values of a resource_id
-        # we just look for the first one that satisfies the conditions (in descending order according to the version number)
-        # and move on to the next resource_id
-        return (
-            f"""
-            /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-            /* The cm_version CTE finds the maximum released version number in the environment  */
-            WITH RECURSIVE cm_version AS (
-                  SELECT
-                    MAX(public.configurationmodel.version) as max_version
-                    FROM public.configurationmodel
-                WHERE public.configurationmodel.released=TRUE
-                AND environment=${offset}
-                ),
-            /* emulate a loose (or skip) index scan */
-            cte AS (
-               (
-               /* specify the necessary columns */
-               SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned' -- use the CTE to check the status
-                    ELSE r.status::text END) as status
-               FROM   resource r
-               JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-               WHERE  r.environment = ${offset} AND cm.released = TRUE
-               ORDER  BY resource_id, model DESC
-               LIMIT  1
-               )
-               UNION ALL
-               SELECT r.*
-               FROM   cte c
-               CROSS JOIN LATERAL
-               /* specify the same columns in the recursive part */
-                (SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                    r.agent, r.resource_id_value, r.model, r.environment, (CASE WHEN
-                            (SELECT r.model < cm_version.max_version
-                            FROM cm_version)
-                        THEN 'orphaned'
-                    ELSE r.status::text END) as status
-               FROM   resource r JOIN configurationmodel cm on r.model = cm.version AND r.environment = cm.environment
-               /* One result from the recursive call is the latest released version of one specific resource.
-                  We always start looking for this based on the previous resource_id. */
-               WHERE  r.resource_id > c.resource_id AND r.environment = ${offset} AND cm.released = TRUE
-               ORDER  BY r.resource_id, r.model DESC
-               LIMIT  1) r
-               )
-            {select_clause}
-            FROM   cte
-            """,
-            environment_db_value,
-        )
-
-    @classmethod
-    async def get_released_resources(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.LatestReleasedResource]:
-        """
-        Get all resources that are in a released version, sorted, paged and filtered
-        """
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("resource_version_id"),
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            **query,
-        )
-        db_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause="SELECT * ", environment=environment, offset=len(values) + 1
-        )
-        values.append(base_query_values)
-        if len(filter_statements) > 0:
-            db_query += cls._join_filter_statements(filter_statements)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            db_query += f" ORDER BY {order_by_column} {backward_paging_order}, resource_version_id {backward_paging_order}"
-        else:
-            db_query += f" ORDER BY {order_by_column} {order}, resource_version_id {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                db_query += " LIMIT " + str(limit)
-
-        if backward_paging:
-            db_query = f"""SELECT * FROM ({db_query}) AS matching_records
-                        ORDER BY matching_records.{order_by_column} {order}, matching_records.resource_version_id {order}"""
-
-        resource_records = await cls.select_query(db_query, values, no_obj=True, connection=connection)
-        resource_records = cast(Iterable[Record], resource_records)
-
-        dtos = [
-            m.LatestReleasedResource(
-                resource_id=resource["resource_id"],
-                resource_version_id=resource["resource_version_id"],
-                id_details=cls.get_details_from_resource_id(resource["resource_id"]),
-                status=resource["status"],
-                requires=json.loads(resource["attributes"]).get("requires", []),
-            )
-            for resource in resource_records
-        ]
-        return dtos
-
     @staticmethod
     def get_details_from_resource_id(resource_id: m.ResourceIdStr) -> m.ResourceIdDetails:
         parsed_id = resources.Id.parse_id(resource_id)
@@ -4813,34 +4707,6 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    def _get_paging_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls._get_released_resources_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            offset=len(values) + 1,
-        )
-        values.append(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
-
-    @classmethod
     async def get(
         cls,
         environment: uuid.UUID,
@@ -4850,7 +4716,10 @@ class Resource(BaseDocument):
         """
         Get a resource with the given resource version id
         """
-        value = await cls.get_one(environment=environment, resource_version_id=resource_version_id, connection=connection)
+        parsed_id = resources.Id.parse_id(resource_version_id)
+        value = await cls.get_one(
+            environment=environment, resource_id=parsed_id.resource_str(), model=parsed_id.version, connection=connection
+        )
         return value
 
     @classmethod
@@ -4862,7 +4731,6 @@ class Resource(BaseDocument):
             model=vid.version,
             resource_id=vid.resource_str(),
             resource_type=vid.entity_type,
-            resource_version_id=resource_version_id,
             agent=vid.agent_name,
             resource_id_value=vid.attribute_value,
         )
@@ -4871,101 +4739,27 @@ class Resource(BaseDocument):
 
         return cls(**attr)
 
-    @classmethod
-    async def get_deleted_resources(
-        cls,
-        environment: uuid.UUID,
-        current_version: int,
-        current_resources: Sequence[m.ResourceIdStr],
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> List["Resource"]:
+    def copy_for_partial_compile(self, new_version: int) -> "Resource":
         """
-        This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
-        the latest version of the resource from a released model.
-
-        :param environment:
-        :param current_version:
-        :param current_resources: A Sequence of all resource ids in the current version.
+        Create a new resource dao instance from this dao instance. Only creates the object without inserting it.
+        The new instance will have the given version.
         """
-        LOGGER.debug("Starting purge_on_delete queries")
-
-        # get all models that have been released
-        query = (
-            "SELECT version FROM "
-            + ConfigurationModel.table_name()
-            + " WHERE environment=$1 AND released=TRUE ORDER BY version DESC LIMIT "
-            + str(DBLIMIT)
+        new_resource_state = ResourceState.undefined if self.status is ResourceState.undefined else ResourceState.available
+        return Resource(
+            environment=self.environment,
+            model=new_version,
+            resource_id=self.resource_id,
+            resource_type=self.resource_type,
+            resource_id_value=self.resource_id_value,
+            agent=self.agent,
+            last_deploy=None,
+            attributes=self.attributes.copy(),
+            attribute_hash=self.attribute_hash,
+            status=new_resource_state,
+            last_non_deploying_status=const.NonDeployingResourceState[new_resource_state.name],
+            resource_set=self.resource_set,
+            provides=self.provides,
         )
-        versions = set()
-        latest_version = None
-        async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                async for record in con.cursor(query, cls._get_value(environment)):
-                    version = record["version"]
-                    versions.add(version)
-                    if latest_version is None:
-                        latest_version = version
-
-        LOGGER.debug("  All released versions: %s", versions)
-        LOGGER.debug("  Latest released version: %s", latest_version)
-
-        # find all resources in previous versions that have "purge_on_delete" set
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=latest_version)
-        query = (
-            "SELECT DISTINCT resource_id FROM "
-            + cls.table_name()
-            + " WHERE "
-            + filter_statement
-            + " AND attributes @> $"
-            + str(len(values) + 1)
-        )
-        values.append(cls._get_value({"purge_on_delete": True}))
-        resources_records = await cls._fetch_query(query, *values, connection=connection)
-        resources = [r["resource_id"] for r in resources_records]
-
-        LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
-
-        # all resources on current model
-        LOGGER.debug("  All resource in current version (%s): %s", current_version, current_resources)
-
-        # determined deleted resources
-
-        deleted = set(resources) - set(current_resources)
-        LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
-
-        # filter out resources that should not be purged:
-        # 1- resources from versions that have not been deployed
-        # 2- resources that are already recorded as purged (purged and deployed)
-        should_purge = []
-        for deleted_resource in deleted:
-            # get the full resource history, and determine the purge status of this resource
-            (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=deleted_resource)
-            query = (
-                "SELECT *"
-                + " FROM "
-                + cls.table_name()
-                + " WHERE "
-                + filter_statement
-                + " AND model < $"
-                + str(len(values) + 1)
-                + " ORDER BY model DESC"
-            )
-            values.append(cls._get_value(current_version))
-
-            async with cls.get_connection(connection) as con:
-                async with con.transaction():
-                    async for obj in con.cursor(query, *values):
-                        # if a resource is part of a released version and it is deployed (this last condition is actually enough
-                        # at the moment), we have found the last status of the resource. If it was not purged in that version,
-                        # add it to the should purge list.
-                        if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
-                            attributes = json.loads(str(obj["attributes"]))
-                            if not attributes["purged"]:
-                                should_purge.append(cls(from_postgres=True, **obj))
-                            break
-
-        return should_purge
 
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
@@ -4982,26 +4776,9 @@ class Resource(BaseDocument):
 
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
-        first.model as first_model, latest.resource_id as latest_resource_id, latest.resource_type,
-        latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes, latest.status,
-        /* Split up the requires array to its elements and find the latest released version of
-            the resources to get their status, and build a single json object from them */
-        (SELECT JSON_OBJECT_AGG(substring(req.requires from '(.*),v='), s.status) as requires_status
-            FROM
-                (SELECT JSONB_ARRAY_ELEMENTS_TEXT(resource.attributes->'requires') as requires
-                    FROM resource
-                    WHERE resource_id = latest.resource_id and model = latest.model)
-                    as req
-                    INNER JOIN
-                        (SELECT DISTINCT ON (resource_id) resource_id, resource.environment, {status_subquery}
-                        FROM resource
-                        INNER JOIN configurationmodel cm
-                        ON resource.model = cm.version AND resource.environment = cm.environment
-                        WHERE resource.environment = $1 AND cm.released = TRUE
-                        ORDER BY resource_id, model desc
-                        ) as s
-                    ON substring(req.requires from '(.*),v=') = s.resource_id AND s.environment = $1
-                )
+        first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
+        latest.resource_type, latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes,
+        latest.status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
@@ -5026,6 +4803,25 @@ class Resource(BaseDocument):
             return None
         record = result[0]
         parsed_id = resources.Id.parse_id(record["latest_resource_id"])
+        attributes = json.loads(record["attributes"])
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        if "version" not in attributes:
+            attributes["version"] = record["latest_model"]
+        requires = [resources.Id.parse_id(req).resource_str() for req in attributes["requires"]]
+
+        # fetch the status of each of the requires. This is not calculated in the database because the lack of joinable
+        # fields requires to calculate the status for each resource record, before it is filtered
+        status_query = f"""
+        SELECT DISTINCT ON (resource_id) resource_id, {status_subquery}
+        FROM resource
+        INNER JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
+        WHERE resource.environment = $1 AND cm.released = TRUE AND resource_id = ANY($2)
+        ORDER BY resource_id, model DESC;
+        """
+        status_result = await cls.select_query(status_query, [cls._get_value(env), cls._get_value(requires)], no_obj=True)
+
         return m.ReleasedResourceDetails(
             resource_id=record["latest_resource_id"],
             resource_type=record["resource_type"],
@@ -5035,9 +4831,9 @@ class Resource(BaseDocument):
             last_deploy=record["latest_deploy"],
             first_generated_time=record["first_generated_time"],
             first_generated_version=record["first_model"],
-            attributes=json.loads(record["attributes"]),
+            attributes=attributes,
             status=record["status"],
-            requires_status=json.loads(record["requires_status"]) if record["requires_status"] else {},
+            requires_status={record["resource_id"]: record["status"] for record in status_result},
         )
 
     @classmethod
@@ -5048,9 +4844,10 @@ class Resource(BaseDocument):
         if not resource:
             return None
         parsed_id = resources.Id.parse_id(resource.resource_id)
+        parsed_id.set_version(resource.model)
         return m.VersionedResourceDetails(
             resource_id=resource.resource_id,
-            resource_version_id=resource.resource_version_id,
+            resource_version_id=parsed_id.resource_version_str(),
             resource_type=resource.resource_type,
             agent=resource.agent,
             id_attribute=parsed_id.attribute,
@@ -5058,147 +4855,6 @@ class Resource(BaseDocument):
             version=resource.model,
             attributes=resource.attributes,
         )
-
-    @classmethod
-    def get_history_base_query(
-        cls,
-        select_clause: str,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        offset: int,
-    ) -> Tuple[str, List[object]]:
-        query = f"""
-                /* Assign a sequence id to the rows, which is used for grouping consecutive ones with the same hash */
-                WITH resourcewithsequenceids AS (
-                  SELECT
-                    attribute_hash,
-                    model,
-                    attributes,
-                    date,
-                    ROW_NUMBER() OVER (ORDER BY date) - ROW_NUMBER() OVER (
-                      PARTITION BY attribute_hash
-                      ORDER BY date
-                    ) AS seqid
-                  FROM resource JOIN configurationmodel cm
-                    ON resource.model = cm.version AND resource.environment = cm.environment
-                  WHERE resource.environment = ${offset} AND resource_id = ${offset + 1} AND cm.released = TRUE
-                )
-                   {select_clause}
-                    FROM
-                    (SELECT
-                        attribute_hash,
-                        min(date) as date,
-                        (SELECT distinct on (attribute_hash) attributes
-                            FROM resourcewithsequenceids
-                            WHERE resourcewithsequenceids.attribute_hash = rs.attribute_hash
-                            AND resourcewithsequenceids.seqid = rs.seqid
-                            ORDER BY attribute_hash, model
-                        ) as attributes
-                    FROM resourcewithsequenceids rs
-                    GROUP BY attribute_hash,  seqID) as sub
-                    """
-        values = [cls._get_value(environment), cls._get_value(resource_id)]
-        return query, values
-
-    @classmethod
-    async def get_resource_history(
-        cls,
-        env: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        limit: Optional[int] = None,
-    ) -> List[m.ResourceHistory]:
-        order_by_column = database_order.get_order_by_column_db_name()
-        order = database_order.get_order()
-
-        select_clause = """
-        SELECT
-        attribute_hash,
-        date,
-        attributes """
-
-        filter_statements, values = cls._get_list_query_pagination_parameters(
-            database_order=database_order,
-            id_column=ColumnNameStr("attribute_hash"),
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-        )
-        query, base_query_values = cls.get_history_base_query(
-            select_clause=select_clause, environment=env, resource_id=resource_id, offset=len(values) + 1
-        )
-        if len(filter_statements) > 0:
-            query += cls._join_filter_statements(filter_statements)
-        values.extend(base_query_values)
-        backward_paging = (order == PagingOrder.ASC and end) or (order == PagingOrder.DESC and start)
-        if backward_paging:
-            backward_paging_order = order.invert().name
-
-            query += f" ORDER BY {order_by_column} {backward_paging_order}, attribute_hash {backward_paging_order}"
-        else:
-            query += f" ORDER BY {order_by_column} {order}, attribute_hash {order}"
-        if limit is not None:
-            if limit > DBLIMIT:
-                raise InvalidQueryParameter(f"Limit cannot be bigger than {DBLIMIT}, got {limit}")
-            elif limit > 0:
-                query += " LIMIT " + str(limit)
-        else:
-            query += f" LIMIT {DBLIMIT} "
-
-        if backward_paging:
-            query = f"""SELECT * FROM ({query}) AS matching_records
-                        ORDER BY matching_records.{order_by_column} {order}, matching_records.attribute_hash {order}"""
-        result = await cls.select_query(query, values, no_obj=True)
-        result = cast(List[Record], result)
-
-        return [
-            m.ResourceHistory(
-                resource_id=resource_id,
-                attribute_hash=record["attribute_hash"],
-                attributes=json.loads(record["attributes"]),
-                date=record["date"],
-                requires=[
-                    resources.Id.parse_resource_version_id(rvid).resource_str()
-                    for rvid in json.loads(record["attributes"]).get("requires", [])
-                ],
-            )
-            for record in result
-        ]
-
-    @classmethod
-    def _get_paging_history_item_count_query(
-        cls,
-        environment: uuid.UUID,
-        resource_id: m.ResourceIdStr,
-        database_order: DatabaseOrder,
-        id_column_name: ColumnNameStr,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
-        **query: Tuple[QueryType, object],
-    ) -> Tuple[str, List[object]]:
-        select_clause, values, common_filter_statements = cls._get_item_count_query_conditions(
-            database_order, id_column_name, first_id, last_id, start, end, **query
-        )
-
-        sql_query, base_query_values = cls.get_history_base_query(
-            select_clause=select_clause,
-            environment=environment,
-            resource_id=resource_id,
-            offset=len(values) + 1,
-        )
-        values.extend(base_query_values)
-
-        if len(common_filter_statements) > 0:
-            sql_query += cls._join_filter_statements(common_filter_statements)
-
-        return sql_query, values
 
     @classmethod
     async def get_resource_deploy_summary(cls, environment: uuid.UUID) -> m.ResourceDeploySummary:
@@ -5217,91 +4873,93 @@ class Resource(BaseDocument):
         return m.ResourceDeploySummary.create_from_db_result(results)
 
     @classmethod
-    def versioned_resources_subquery(cls, environment: uuid.UUID, version: int) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT r.resource_id, r.attributes, r.resource_version_id, r.resource_type,
-                                    r.agent, r.resource_id_value, r.environment""",
-            from_clause=f" FROM {cls.table_name()} as r",
-            filter_statements=[" environment = $1 ", " model = $2"],
-            values=[cls._get_value(environment), cls._get_value(version)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_versioned_resources_for_paging(
+    async def copy_resources_from_unchanged_resource_set(
         cls,
         environment: uuid.UUID,
-        version: int,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_versioned_resources(
-        cls,
-        version: int,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        source_version: int,
+        destination_version: int,
+        updated_resource_sets: abc.Set[str],
+        deleted_resource_sets: abc.Set[str],
+        *,
         connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.VersionedResource]:
-        subquery, subquery_values = cls.versioned_resources_subquery(environment, version)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
-            order == PagingOrder.DESC and start is not None
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        versioned_resource_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        versioned_resource_records = cast(Iterable[Record], versioned_resource_records)
-
-        dtos = [
-            m.VersionedResource(
-                resource_id=versioned_resource["resource_id"],
-                resource_version_id=versioned_resource["resource_version_id"],
-                id_details=cls.get_details_from_resource_id(versioned_resource["resource_id"]),
-                requires=json.loads(versioned_resource["attributes"]).get("requires", []),
+    ) -> dict[m.ResourceIdStr, str]:
+        """
+        Copy the resources that belong to an unchanged resource set of a partial compile,
+        from source_version to destination_version. This method doesn't copy shared resources.
+        """
+        query = f"""
+            INSERT INTO {cls.table_name()}(
+                environment,
+                model,
+                resource_id,
+                resource_type,
+                resource_id_value,
+                agent,
+                status,
+                attributes,
+                attribute_hash,
+                resource_set,
+                provides
+            )(
+                SELECT
+                    r.environment,
+                    $3,
+                    r.resource_id,
+                    r.resource_type,
+                    r.resource_id_value,
+                    r.agent,
+                    (
+                        CASE WHEN r.status='undefined'::resourcestate
+                        THEN 'undefined'::resourcestate
+                        ELSE 'available'::resourcestate
+                        END
+                    ) AS status,
+                    r.attributes AS attributes,
+                    r.attribute_hash,
+                    r.resource_set,
+                    r.provides
+                FROM {cls.table_name()} AS r
+                WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
             )
-            for versioned_resource in versioned_resource_records
-        ]
-        return dtos
+            RETURNING resource_id, resource_set
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(
+                query,
+                environment,
+                source_version,
+                destination_version,
+                updated_resource_sets | deleted_resource_sets,
+            )
+            return {str(record["resource_id"]): str(record["resource_set"]) for record in result}
+
+    @classmethod
+    async def get_resources_in_resource_sets(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        resource_sets: abc.Set[str],
+        include_shared_resources: bool = False,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> abc.Mapping[ResourceIdStr, "Resource"]:
+        """
+        Returns the resource in the given environment and version that belong to any of the given resource sets.
+        This method also returns the resources in the share resource set iff the include_shared_resources boolean
+        is set to True.
+        """
+        if include_shared_resources:
+            resource_set_filter_statement = "(r.resource_set IS NULL OR r.resource_set=ANY($3))"
+        else:
+            resource_set_filter_statement = "r.resource_set=ANY($3)"
+        query = f"""
+            SELECT *
+            FROM {cls.table_name()} AS r
+            WHERE r.environment=$1 AND r.model=$2 AND {resource_set_filter_statement}
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetch(query, environment, version, resource_sets)
+            return {record["resource_id"]: cls(from_postgres=True, **record) for record in result}
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
@@ -5323,22 +4981,41 @@ class Resource(BaseDocument):
         self.make_hash()
         await super(Resource, self).update_fields(connection=connection, **kwargs)
 
+    def get_requires(self) -> abc.Sequence[ResourceIdStr]:
+        """
+        Returns the content of the requires field in the attributes.
+        """
+        if "requires" not in self.attributes:
+            return []
+        return list(self.attributes["requires"])
+
     def to_dict(self) -> Dict[str, Any]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
-        dct["id"] = dct["resource_version_id"]
+        self.__mangle_dict(dct)
         return dct
 
     def to_dto(self) -> m.Resource:
+        attributes = self.attributes.copy()
+
+        if "requires" in self.attributes:
+            version = self.model
+            attributes["requires"] = [resources.Id.set_version_in_id(id, version) for id in self.attributes["requires"]]
+
+        # Due to a bug, the version field has always been present in the attributes dictionary.
+        # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
+        # version field is present in the attributes dictionary served out via the API.
+        attributes["version"] = self.model
+
         return m.Resource(
             environment=self.environment,
             model=self.model,
             resource_id=self.resource_id,
             resource_type=self.resource_type,
-            resource_version_id=self.resource_version_id,
+            resource_version_id=resources.Id.set_version_in_id(self.resource_id, self.model),
             agent=self.agent,
             last_deploy=self.last_deploy,
-            attributes=self.attributes,
+            attributes=attributes,
             status=self.status,
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
@@ -5349,8 +5026,6 @@ class Resource(BaseDocument):
 class ConfigurationModel(BaseDocument):
     """
     A specific version of the configuration model.
-    Any transactions that update ResourceAction, Resource, Environment, Parameter and/or ConfigurationModel
-    should acquire their locks in that order.
 
     :param version: The version of the configuration model, represented by a unix timestamp.
     :param environment: The environment this configuration model is defined in
@@ -5361,6 +5036,9 @@ class ConfigurationModel(BaseDocument):
     :param result: The result of the deployment. Success or error.
     :param version_info: Version metadata
     :param total: The total number of resources
+    :param is_suitable_for_partial_compiles: This boolean indicates whether the model can later on be updated using a
+                                             partial compile. In other words, the value is True iff no cross resource set
+                                             dependencies exist between the resources.
     """
 
     __primary_key__ = ("version", "environment")
@@ -5374,6 +5052,7 @@ class ConfigurationModel(BaseDocument):
     deployed: bool = False
     result: const.VersionState = const.VersionState.pending
     version_info: Optional[Dict[str, Any]] = None
+    is_suitable_for_partial_compiles: bool
 
     total: int = 0
 
@@ -5397,6 +5076,129 @@ class ConfigurationModel(BaseDocument):
         if self.deployed:
             return self.total
         return self._done
+
+    @classmethod
+    async def create_for_partial_compile(
+        cls,
+        env_id: uuid.UUID,
+        version: int,
+        total: int,
+        version_info: Optional[JsonType],
+        undeployable: abc.Sequence[ResourceIdStr],
+        skipped_for_undeployable: abc.Sequence[ResourceIdStr],
+        partial_base: int,
+        rids_in_partial_compile: abc.Set[ResourceIdStr],
+        connection: Optional[Connection] = None,
+    ) -> "ConfigurationModel":
+        """
+        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigururationModel will
+        contain all the undeployables and skipped_for_undeployables present in the partial_base version that are not part of
+        the partial compile, i.e. not present in rids_in_partial_compile.
+        """
+        query = f"""
+            WITH base_version_exists AS (
+                SELECT EXISTS(
+                    SELECT 1
+                    FROM {cls.table_name()} AS c1
+                    WHERE c1.environment=$1 AND c1.version=$8
+                ) AS base_version_found
+            ),
+            rids_undeployable_base_version AS (
+                SELECT DISTINCT unnest(c2.undeployable) AS rid
+                FROM {cls.table_name()} AS c2
+                WHERE c2.environment=$1 AND c2.version=$8
+            ),
+            rids_skipped_for_undeployable_base_version AS (
+                SELECT DISTINCT unnest(c3.skipped_for_undeployable) AS rid
+                FROM {cls.table_name()} AS c3
+                WHERE c3.environment=$1 AND c3.version=$8
+            )
+            INSERT INTO {cls.table_name()}(
+                environment,
+                version,
+                date,
+                total,
+                version_info,
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                is_suitable_for_partial_compiles
+            ) VALUES(
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                (
+                    SELECT array_agg(rid)
+                    FROM (
+                        -- Undeployables in previous version of the model that are not part of the partial compile.
+                        (
+                            SELECT rid
+                            FROM rids_undeployable_base_version AS undepl
+                            WHERE NOT undepl.rid=ANY($9)
+                        )
+                        UNION
+                        -- Undeployables part of the partial compile.
+                        (
+                            SELECT DISTINCT rid FROM unnest($6::varchar[]) AS undeploy_filtered_new(rid)
+                        )
+                    ) AS all_undeployable
+                ),
+                (
+                    SELECT array_agg(rid)
+                    FROM (
+                        -- skipped_for_undeployables in previous version of the model that are not part of the partial
+                        -- compile.
+                        (
+                            SELECT skipped.rid
+                            FROM rids_skipped_for_undeployable_base_version AS skipped
+                            WHERE NOT skipped.rid=ANY($9)
+                        )
+                        UNION
+                        -- Skipped_for_undeployables part of the partial compile.
+                        (
+                            SELECT DISTINCT rid FROM unnest($7::varchar[]) AS skipped_filtered_new(rid)
+                        )
+                    ) AS all_skipped
+                ),
+                $8,
+                True
+            )
+            RETURNING
+                (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
+                environment,
+                version,
+                date,
+                total,
+                version_info,
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                released,
+                deployed,
+                result,
+                is_suitable_for_partial_compiles
+        """
+        async with cls.get_connection(connection) as con:
+            result = await con.fetchrow(
+                query,
+                env_id,
+                version,
+                datetime.datetime.now().astimezone(),
+                total,
+                cls._get_value(version_info),
+                undeployable,
+                skipped_for_undeployable,
+                partial_base,
+                list(rids_in_partial_compile),
+            )
+            # Make mypy happy
+            assert result is not None
+            if not result["base_version_found"]:
+                raise Exception(f"Model with version {partial_base} not found in environment {env_id}")
+            fields = {name: val for name, val in result.items() if name != "base_version_found"}
+            return cls(from_postgres=True, **fields)
 
     @classmethod
     async def _get_status_field(cls, environment: uuid.UUID, values: str) -> Dict[str, str]:
@@ -5481,7 +5283,7 @@ class ConfigurationModel(BaseDocument):
     def to_dict(self) -> JsonType:
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
-        dct["done"] = self._done
+        dct["done"] = self.done
         return dct
 
     @classmethod
@@ -5567,29 +5369,25 @@ class ConfigurationModel(BaseDocument):
                 # Delete all code associated with this version
                 await Code.delete_all(connection=con, environment=self.environment, version=self.version)
 
-                # Acquire explicit lock to avoid deadlock. See ConfigurationModel docstring
-                await self.lock_table(TableLockMode.SHARE, connection=con)
-                await Resource.delete_all(connection=con, environment=self.environment, model=self.version)
-
-                # Delete facts when the resources in this version are the only
-                await con.execute(
-                    f"""
-                    DELETE FROM {Parameter.table_name()} p
-                    WHERE(
-                        environment=$1 AND
-                        resource_id<>'' AND
-                        NOT EXISTS(
-                            SELECT 1
-                            FROM {Resource.table_name()} r
-                            WHERE p.resource_id=r.resource_id
-                        )
-                    )
-                    """,
-                    self.environment,
-                )
-
                 # Delete ConfigurationModel and cascade delete on connected tables
                 await self.delete(connection=con)
+
+            # Delete facts when the resources in this version are the only
+            await con.execute(
+                f"""
+                DELETE FROM {Parameter.table_name()} p
+                WHERE(
+                    environment=$1 AND
+                    resource_id<>'' AND
+                    NOT EXISTS(
+                        SELECT 1
+                        FROM {Resource.table_name()} r
+                        WHERE p.resource_id=r.resource_id
+                    )
+                )
+                """,
+                self.environment,
+            )
 
     async def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
@@ -5634,17 +5432,10 @@ class ConfigurationModel(BaseDocument):
     ) -> None:
         async with cls.get_connection(connection) as con:
             """
-            Performs the query to mark done if done. Acquires a lock that blocks execution until other transactions holding
-            this lock have committed. This makes sure that once a transaction performs this query, it needs to commit before
-            another transaction is able to perform it. This way no race condition is possible where the deployed state is
-            not set: when a transaction A is in this part of its lifecycle, either all other related (possibly conflicting)
-            transactions have committed already, or they will only start this part of their lifecycle when A has committed
-            itself.
+            Performs the query to mark done if done. Expects to be called outside of any transaction that writes resource state
+            in order to prevent race conditions.
             """
             async with con.transaction():
-                # SHARE UPDATE EXCLUSIVE is self-conflicting
-                # and does not conflict with the ROW EXCLUSIVE lock acquired by UPDATE
-                await cls.lock_table(TableLockMode.SHARE_UPDATE_EXCLUSIVE, connection=con)
                 query = f"""UPDATE {ConfigurationModel.table_name()}
                                 SET deployed=True,
                                     result=(CASE WHEN (
@@ -5671,9 +5462,7 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(
-        cls, environment: uuid.UUID, version: int
-    ) -> Tuple[Set[m.ResourceVersionIdStr], Set[m.ResourceVersionIdStr]]:
+    async def get_increment(cls, environment: uuid.UUID, version: int) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5685,17 +5474,17 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
         """
-        projection_a = ["resource_version_id", "resource_id", "status", "attribute_hash", "attributes"]
-        projection = ["resource_version_id", "resource_id", "status", "attribute_hash"]
+        projection_a = ["resource_id", "status", "attribute_hash", "attributes"]
+        projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
 
         # to increment
-        increment = []
-        not_increment = []
+        increment: list[abc.Mapping[str, Any]] = []
+        not_increment: list[abc.Mapping[str, Any]] = []
         # todo in this version
-        work = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
+        work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
@@ -5706,7 +5495,7 @@ class ConfigurationModel(BaseDocument):
 
         for version in versions:
             # todo in next version
-            next = []
+            next: list[abc.Mapping[str, object]] = []
 
             vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
@@ -5721,14 +5510,22 @@ class ConfigurationModel(BaseDocument):
 
                 status = ores["status"]
                 # available -> next version
-                if status in [ResourceState.available.name]:
+                if status == ResourceState.available.name:
                     next.append(res)
+
+                # deploying
+                # same hash -> next version
+                # different hash -> increment
+                elif status == ResourceState.deploying.name:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
+                        next.append(res)
+                    else:
+                        increment.append(res)
 
                 # -> increment
                 elif status in [
                     ResourceState.failed.name,
                     ResourceState.cancelled.name,
-                    ResourceState.deploying.name,
                     ResourceState.skipped_for_undefined.name,
                     ResourceState.undefined.name,
                     ResourceState.skipped.name,
@@ -5753,28 +5550,28 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        negative = {res["resource_version_id"] for res in not_increment}
+        negative: set[ResourceIdStr] = {res["resource_id"] for res in not_increment}
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = {res["resource_version_id"] for res in increment}  # type: Set[str]
-        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
-        send_events = []  # type: List[str]
+        outset: set[ResourceIdStr] = {res["resource_id"] for res in increment}
+        original_provides: dict[str, List[ResourceIdStr]] = defaultdict(lambda: [])
+        send_events: list[ResourceIdStr] = []
 
         # build lookup tables
         for res in resources:
             for req in res["attributes"]["requires"]:
-                original_provides[req].append(res["resource_version_id"])
+                original_provides[req].append(res["resource_id"])
             if "send_event" in res["attributes"] and res["attributes"]["send_event"]:
-                send_events.append(res["resource_version_id"])
+                send_events.append(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
-        work = list(outset)
-        done = set()
-        while work:
-            current = work.pop()
+        increment_work: list[ResourceIdStr] = list(outset)
+        done: set[ResourceIdStr] = set()
+        while increment_work:
+            current: ResourceIdStr = increment_work.pop()
             if current not in send_events:
                 # not sending events, so no receivers
                 continue
@@ -5784,7 +5581,7 @@ class ConfigurationModel(BaseDocument):
             done.add(current)
 
             provides = original_provides[current]
-            work.extend(provides)
+            increment_work.extend(provides)
             outset.update(provides)
             negative.difference_update(provides)
 
@@ -5822,79 +5619,26 @@ class ConfigurationModel(BaseDocument):
         )
         return query_builder.build()
 
-    @classmethod
-    async def count_items_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.desired_state_versions_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def get_desired_state_versions(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.DesiredStateVersion]:
-        subquery, subquery_values = cls.desired_state_versions_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and end is not None) or (
-            order == PagingOrder.DESC and start is not None
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        desired_state_version_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-
-        dtos = [
-            m.DesiredStateVersion(
-                version=desired_state["version"],
-                date=desired_state["date"],
-                total=desired_state["total"],
-                labels=[m.DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
-                if desired_state["type"] and desired_state["message"]
-                else [],
-                status=desired_state["status"],
+    async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Make the total field of this ConfigurationModel in-line with the number
+        of resources that are associated with it.
+        """
+        query = f"""
+            UPDATE {self.table_name()} AS c_outer
+            SET total=(
+                SELECT COUNT(*)
+                FROM {self.table_name()} AS c INNER JOIN {Resource.table_name()} AS r
+                     ON c.environment = r.environment AND c.version=r.model
+                WHERE c.environment=$1 AND c.version=$2
             )
-            for desired_state in desired_state_version_records
-        ]
-        return dtos
+            WHERE c_outer.environment=$1 AND c_outer.version=$2
+            RETURNING total
+        """
+        new_total = await self._fetchval(query, self.environment, self.version, connection=connection)
+        if new_total is None:
+            raise KeyError(f"Configurationmodel {self.version} in environment {self.environment} was deleted.")
+        self.total = new_total
 
 
 class Code(BaseDocument):
@@ -6088,104 +5832,21 @@ class Notification(BaseDocument):
     cleared: bool = False
 
     @classmethod
-    def notification_list_subquery(cls, environment: uuid.UUID) -> Tuple[str, List[object]]:
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT n.*""",
-            from_clause=f" FROM {cls.table_name()} as n",
-            filter_statements=[" environment = $1 "],
-            values=[cls._get_value(environment)],
-        )
-        return query_builder.build()
-
-    @classmethod
-    async def count_notifications_for_paging(
-        cls,
-        environment: uuid.UUID,
-        database_order: DatabaseOrder,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        **query: Tuple[QueryType, object],
-    ) -> PagingCounts:
-        subquery, subquery_values = cls.notification_list_subquery(environment)
-        base_query = PageCountQueryBuilder(
-            from_clause=f"FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        paging_query = base_query.page_count(database_order, first_id, last_id, start, end)
-        filtered_query = paging_query.filter(
-            *cls.get_composed_filter_with_query_types(offset=paging_query.offset, col_name_prefix=None, **query)
-        )
-        sql_query, values = filtered_query.build()
-        result = await cls.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
-        if not result:
-            raise InvalidQueryParameter(f"Environment {environment} doesn't exist")
-        return PagingCounts(total=result[0]["count_total"], before=result[0]["count_before"], after=result[0]["count_after"])
-
-    @classmethod
-    async def list_notifications(
-        cls,
-        database_order: DatabaseOrder,
-        limit: int,
-        environment: uuid.UUID,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Tuple[QueryType, object],
-    ) -> List[m.Notification]:
-        subquery, subquery_values = cls.notification_list_subquery(environment)
-
-        query_builder = SimpleQueryBuilder(
-            select_clause="""SELECT * """,
-            from_clause=f" FROM ({subquery}) as result",
-            values=subquery_values,
-        )
-        filtered_query = query_builder.filter(
-            *cls.get_composed_filter_with_query_types(offset=query_builder.offset, col_name_prefix=None, **query)
-        )
-        paged_query = filtered_query.filter(*database_order.as_start_filter(filtered_query.offset, start, first_id)).filter(
-            *database_order.as_end_filter(filtered_query.offset, end, last_id)
-        )
-        order = database_order.get_order()
-        backward_paging: bool = (order == PagingOrder.ASC and (end is not None or last_id)) or (
-            order == PagingOrder.DESC and (start is not None or first_id)
-        )
-        ordered_query = paged_query.order_and_limit(database_order, limit, backward_paging)
-        sql_query, values = ordered_query.build()
-
-        notification_records = await cls.select_query(sql_query, values, no_obj=True, connection=connection)
-        notification_records = cast(Iterable[Record], notification_records)
-        dtos = [
-            m.Notification(
-                id=notification["id"],
-                title=notification["title"],
-                message=notification["message"],
-                severity=notification["severity"],
-                created=notification["created"],
-                read=notification["read"],
-                cleared=notification["cleared"],
-                uri=notification["uri"],
-                environment=notification["environment"],
-            )
-            for notification in notification_records
-        ]
-        return dtos
-
-    @classmethod
     async def clean_up_notifications(cls) -> None:
-        environments = await Environment.get_list()
-        for env in environments:
-            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
-            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            LOGGER.info(
-                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
-            )
-            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
-            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
+        default_retention_time = Environment._settings[NOTIFICATION_RETENTION].default
+        LOGGER.info("Cleaning up notifications")
+        query = f"""
+                   WITH non_halted_envs AS (
+                       SELECT id, (COALESCE((settings->>'notification_retention')::int, $1)) AS retention_days
+                       FROM {Environment.table_name()}
+                       WHERE NOT halted
+                   )
+                   DELETE FROM {cls.table_name()}
+                   USING non_halted_envs
+                   WHERE environment = non_halted_envs.id
+                       AND created < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+               """
+        await cls._execute_query(query, default_retention_time)
 
     def to_dto(self) -> m.Notification:
         return m.Notification(
@@ -6199,6 +5860,89 @@ class Notification(BaseDocument):
             uri=self.uri,
             environment=self.environment,
         )
+
+
+class EnvironmentMetricsGauge(BaseDocument):
+    """
+    A metric that is of type gauge
+
+    :param environment: the environment to which this metric is related
+    :param metric_name: The name of the metric
+    :param timestamp: The timestamps at which a new record is created
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
+    :param count: the counter for the metric for the given timestamp
+    """
+
+    environment: uuid.UUID
+    metric_name: str
+    category: str
+    timestamp: datetime.datetime
+    count: int
+
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
+
+
+class EnvironmentMetricsTimer(BaseDocument):
+    """
+    A metric that is type timer
+
+    :param environment: the environment to which this metric is related
+    :param metric_name: The name of the metric
+    :category: The name of the group/category this metric represents (e.g. red if grouped by color).
+               __None__ iff metrics of this type are not divided in groups.
+    :param timestamp: The timestamps at which a new record is created
+    :param count: the number of occurrences of the monitored event in the interval [previous.timestamp, self.timestamp[
+    :param value: the sum of the values of the metric for each occurrence in the interval [previous.timestamp, self.timestamp[
+    """
+
+    environment: uuid.UUID
+    metric_name: str
+    category: str
+    timestamp: datetime.datetime
+    count: int
+    value: float
+
+    __primary_key__ = ("environment", "metric_name", "category", "timestamp")
+
+
+class User(BaseDocument):
+    """A user that can authenticate against inmanta"""
+
+    __primary_key__ = ("id",)
+
+    id: uuid.UUID
+    username: str
+    password_hash: str
+    auth_method: AuthMethod
+
+    @classmethod
+    def table_name(cls) -> str:
+        """
+        Return the name of table. we call it inmanta_user to differentiate it from the pg user table.
+        """
+        return "inmanta_user"
+
+    def to_dao(self) -> m.User:
+        return m.User(username=self.username, auth_method=self.auth_method)
+
+
+class DiscoveredResource(BaseDocument):
+    """
+    :param environment: the environment of the resource
+    :param discovered_resource_id: The id of the resource
+    :param values: The values associated with the discovered_resource
+    """
+
+    environment: uuid.UUID
+    discovered_at: datetime.datetime
+    discovered_resource_id: m.ResourceIdStr
+    values: dict[str, str]
+
+    __primary_key__ = ("environment", "discovered_resource_id")
+
+    def to_dto(self) -> m.DiscoveredResource:
+        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
 
 
 _classes = [
@@ -6217,6 +5961,10 @@ _classes = [
     Compile,
     Report,
     Notification,
+    EnvironmentMetricsGauge,
+    EnvironmentMetricsTimer,
+    User,
+    DiscoveredResource,
 ]
 
 

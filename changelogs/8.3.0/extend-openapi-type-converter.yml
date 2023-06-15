@@ -1,0 +1,10 @@
+---
+description: |
+   * Extend OpenAPI type converter with features required by lsm extension.
+   * Bugfix: Ensure OpenAPI enum values always have the type field set.
+   * Bugfix: Ensure that the OpenAPI type reference resolver populates the `allOf` and `oneOf` properties of the OpenAPI schema.
+   * Bugfix: Ensure that the OpenApiTypeConverter.get_openapi_type_of_parameter() method populates the default value of a parameter.
+issue-nr: 1169
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso6]

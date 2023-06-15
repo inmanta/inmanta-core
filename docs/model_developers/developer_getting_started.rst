@@ -22,18 +22,18 @@ Install VS Code and Inmanta extension
 
 The developer setup is based on VSCode with the Inmanta extension.
 
-In order to install VS Code, you can refer to `this <https://code.visualstudio.com/learn/get-started/basics>`_ page.
+In order to install VS Code, you can refer to `this <https://code.visualstudio.com/learn/get-started/basics>`__ page.
 
 Inmanta's extension in VS Code marketplace can be found `here <https://marketplace.visualstudio.com/items?itemName=inmanta.inmanta>`_.
 
-Further information about Inmanta VS Code extension is available on `this <https://github.com/inmanta/vscode-inmanta>`_ page.
+Further information about Inmanta VS Code extension is available on `this <https://github.com/inmanta/vscode-inmanta>`__ page.
 
 
 Setting up Python virtual environments
 ########################################
 
 For every project that you work on, we recommend using a new virtual environment.
-If you are unfamiliar with venv's, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`_ page.
+If you are unfamiliar with venv's, you can check out `this <https://docs.python.org/3/tutorial/venv.html>`__ page.
 
 To create a virtual environment:
 

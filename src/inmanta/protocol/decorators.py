@@ -31,7 +31,7 @@ class handle(object):  # noqa: N801
     Decorator for subclasses of an endpoint to handle protocol methods
 
     :param method: A subclass of method that defines the method
-    :param api_version: When specific this handler is only associated with a method of the specific api verision. If the
+    :param api_version: When specific this handler is only associated with a method of the specific api version. If the
                         version is not defined, the handler is not associated with a rest endpoint.
     :param kwargs: Map arguments in the message from one name to an other
     """
@@ -78,25 +78,28 @@ def method(
     and model the protocol.
 
     :param path: The url path to use for this call. This path can contain parameter names of the function. These names
-                 should be enclosed in < > brackets.
-    :param operation: The type of HTTP operation (verb)
-    :param timeout: nr of seconds before request it terminated
-    :param api: This is a call from the client to the Server (True if not server_agent and not agent_server)
-    :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
-    :param agent_server: This is a call from the Agent to the Server
+        should be enclosed in < > brackets.
+    :param operation: The type of HTTP operation (verb).
+    :param timeout: nr of seconds before request it terminated.
+    :param api: This is a call from the client to the Server (True if not server_agent and not agent_server).
+    :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll).
+    :param agent_server: This is a call from the Agent to the Server.
     :param validate_sid: This call requires a valid session, true by default if agent_server and not api
     :param client_types: The allowed client types for this call.
-            The valid values are defined by the :const:`inmanta.const.ClientType` enum.
+        The valid values are defined by the :const:`inmanta.const.ClientType` enum.
     :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
         which the options apply. The value is another dict that can contain the following options:
+
             header: Map this argument to a header with the following name.
             reply_header: If the argument is mapped to a header, this header will also be included in the reply
             getter: Call this method after validation and pass its return value to the method call. This may change the
-                    type of the argument. This method can raise an HTTPException to return a 404 for example.
-    :param api_version: The version of the api this method belongs to
-    :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>
+            type of the argument. This method can raise an HTTPException to return a 404 for example.
+
+    :param api_version: The version of the api this method belongs to.
+    :param api_prefix: The prefix of the method: /<prefix>/v<version>/<method_name>.
     :param envelope: Put the response of the call under an envelope with key envelope_key.
     :param envelope_key: The envelope key to use.
+
     """
 
     def wrapper(func: MethodT) -> MethodT:
@@ -139,6 +142,7 @@ def typedmethod(
     api_prefix: str = "api",
     envelope_key: str = const.ENVELOPE_KEY,
     strict_typing: bool = True,
+    enforce_auth: bool = True,
     varkw: bool = False,
 ) -> Callable[..., Callable]:
     """
@@ -167,6 +171,8 @@ def typedmethod(
     :param strict_typing: If true, does not allow `Any`. Setting this option to False is heavily discouraged except for some
         few very specific cases where the type system does not allow the strict type to be specified, for example in case of
         infinite recursion.
+    :param enforce_auth: When set to true authentication is enforced on this endpoint. When set to false, authentication is not
+                         enforced, even if auth is enabled.
     :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                   responsible for the validation.
     """
@@ -190,6 +196,7 @@ def typedmethod(
             True,
             envelope_key,
             strict_typing=strict_typing,
+            enforce_auth=enforce_auth,
             varkw=varkw,
         )
         common.MethodProperties.register_method(properties)

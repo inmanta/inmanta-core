@@ -15,11 +15,14 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import json
 import logging
 import os
 import uuid
 from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
+
+from tornado import routing, web
 
 from inmanta import data
 from inmanta.const import ApiDocsFormat
@@ -31,7 +34,6 @@ from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
-from inmanta.server.extensions import BoolFeature, Feature
 from inmanta.types import Apireturn, JsonType, Warnings
 
 LOGGER = logging.getLogger(__name__)
@@ -40,11 +42,6 @@ if TYPE_CHECKING:
     from inmanta.server.services.compilerservice import CompilerService
 
 DBLIMIT = 100000
-
-
-dashboard_feature = BoolFeature(
-    slice=SLICE_SERVER, name="dashboard", description="Serve the dashboard under the /dashboard endpoint."
-)
 
 
 class Server(protocol.ServerSlice):
@@ -67,51 +64,14 @@ class Server(protocol.ServerSlice):
     def get_depended_by(self) -> List[str]:
         return [SLICE_TRANSPORT]
 
-    def define_features(self) -> List[Feature[object]]:
-        return [dashboard_feature]
-
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
         self._server_storage: Dict[str, str] = self.check_storage()
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
-
-        self.setup_dashboard()
-
-    def setup_dashboard(self) -> None:
-        """
-        If configured, set up tornado to serve the dashboard
-        """
-        if not opt.dash_enable.get() or not self.feature_manager.enabled(dashboard_feature):
-            return
-
-        dashboard_path = opt.dash_path.get()
-        if dashboard_path is None:
-            LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
-            return
-
-        if not opt.server_enable_auth.get():
-            auth = ""
-        else:
-            auth = """,
-    'auth': {
-        'realm': '%s',
-        'url': '%s',
-        'clientId': '%s'
-    }""" % (
-                opt.dash_realm.get(),
-                opt.dash_auth_url.get(),
-                opt.dash_client_id.get(),
-            )
-
-        content = """
-angular.module('inmantaApi.config', []).constant('inmantaConfig', {
-    'backend': window.location.origin+'/'%s
-});
-        """ % (
-            auth
+        self._handlers.append(routing.Rule(routing.PathMatches(r"/dashboard"), web.RedirectHandler, dict(url=r"/console")))
+        self._handlers.append(
+            routing.Rule(routing.PathMatches(r"/dashboard/(.*)"), web.RedirectHandler, dict(url=r"/console/{0}"))
         )
-        self.add_static_content("/dashboard/config.js", content=content)
-        self.add_static_handler("/dashboard", dashboard_path)
 
     def check_storage(self) -> Dict[str, str]:
         """
@@ -169,15 +129,27 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 "Is inmanta installed? Use setuptools install or setuptools dev to install."
             )
 
-        slices = []
-        for slice_name, slice in self._server.get_slices().items():
+        async def collect_for_slice(slice_name: str, slice: protocol.ServerSlice) -> SliceStatus:
             try:
-                slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+                return SliceStatus(name=slice_name, status=await asyncio.wait_for(slice.get_status(), 0.1))
+            except asyncio.TimeoutError:
+                return SliceStatus(
+                    name=slice_name,
+                    status={
+                        "error": f"timeout on data collection for {slice_name}, "
+                        "consult the server log for additional information"
+                    },
+                )
             except Exception:
                 LOGGER.error(
                     f"The following error occured while trying to determine the status of slice {slice_name}",
                     exc_info=True,
                 )
+                return SliceStatus(name=slice_name, status={"error": "An unexpected error occurred, reported to server log"})
+
+        slices = await asyncio.gather(
+            *(collect_for_slice(slice_name, slice) for slice_name, slice in self._server.get_slices().items())
+        )
 
         response = StatusResponse(
             product=product_metadata.product,

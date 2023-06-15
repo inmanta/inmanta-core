@@ -1,0 +1,8 @@
+---
+description: Removed support to use a dictionary in the requires metadata field of a V1 module or an Inmanta project.
+issue-nr: 4974
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"

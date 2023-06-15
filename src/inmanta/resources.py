@@ -74,6 +74,8 @@ class resource(object):  # noqa: N801
                   ``host.name``
     """
 
+    # The _resources dict is accessed by the compile function in pytest-inmanta.
+    # see https://github.com/inmanta/pytest-inmanta/pull/381
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
@@ -378,7 +380,6 @@ class Resource(metaclass=ResourceMeta):
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id
-        self.version = 0
         self.requires: Set[Id] = set()
         self.resource_requires: Set[Resource] = set()
         self.unknowns: Set[str] = set()
@@ -388,6 +389,8 @@ class Resource(metaclass=ResourceMeta):
 
         for field in self.__class__.fields:
             setattr(self, field, None)
+
+        self.version = _id.version
 
     def populate(self, fields: Dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
@@ -527,7 +530,7 @@ class Id(object):
         return self._version
 
     def set_version(self, version: int) -> None:
-        if self._version > 0:
+        if self._version > 0 and version != self._version:
             raise AttributeError("can't set attribute version")
 
         self._version = version
@@ -595,35 +598,30 @@ class Id(object):
     def parse_resource_version_id(cls, resource_id: ResourceVersionIdStr) -> "Id":
         id: Id = Id.parse_id(resource_id)
         if id.version == 0:
-            raise Exception(f"Version is missing from resource id: {resource_id}")
+            raise ValueError(f"Version is missing from resource id: {resource_id}")
         return id
 
     @classmethod
-    def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr]) -> "Id":
+    def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr], version: Optional[int] = None) -> "Id":
         """
         Parse the resource id and return the type, the hostname and the
         resource identifier.
+
+        :param version: If provided, the version field of the returned Id will be set to this version.
         """
         result = PARSE_ID_REGEX.search(resource_id)
 
         if result is None:
-            raise Exception("Invalid id for resource %s" % resource_id)
+            raise ValueError("Invalid id for resource %s" % resource_id)
 
-        version_match: str = result.group("version")
+        if version is None:
+            version_match: str = result.group("version")
 
-        version = 0
-        if version_match is not None:
-            version = int(version_match)
+            version = 0
+            if version_match is not None:
+                version = int(version_match)
 
-        parts = {
-            "type": result.group("type"),
-            "hostname": result.group("hostname"),
-            "attr": result.group("attr"),
-            "value": result.group("value"),
-            "id": result.group("id"),
-        }
-
-        id_obj = Id(parts["type"], parts["hostname"], parts["attr"], parts["value"], version)
+        id_obj = Id(result.group("type"), result.group("hostname"), result.group("attr"), result.group("value"), version)
         return id_obj
 
     @classmethod
@@ -632,6 +630,14 @@ class Id(object):
         Check whether the given value is a resource version id
         """
         result = PARSE_RVID_REGEX.search(value)
+        return result is not None
+
+    @classmethod
+    def is_resource_id(cls, value: str) -> bool:
+        """
+        Check whether the given value is a resource id
+        """
+        result = PARSE_ID_REGEX.search(value)
         return result is not None
 
     def is_resource_version_id_obj(self) -> bool:

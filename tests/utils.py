@@ -25,7 +25,8 @@ import shutil
 import uuid
 from collections import abc
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Union
+from datetime import timezone
+from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 
 import pytest
 import yaml
@@ -43,6 +44,15 @@ from inmanta.server.extensions import ProductMetadata
 from inmanta.util import get_compiler_version
 from libpip2pi.commands import dir2pi
 from packaging import version
+
+T = TypeVar("T")
+
+
+def get_all_subclasses(cls: Type[T]) -> set[Type[T]]:
+    """
+    Returns all loaded subclasses of any depth for a given class. Includes the class itself.
+    """
+    return {cls}.union(*(get_all_subclasses(sub) for sub in cls.__subclasses__()))
 
 
 async def retry_limited(
@@ -92,7 +102,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
             minimal = sorted(minimal, key=keyfunc)
             actual = sorted(actual, key=keyfunc)
-        for (m, a) in zip(minimal, actual):
+        for m, a in zip(minimal, actual):
             assert_equal_ish(m, a, sortby)
     elif minimal is UNKWN:
         return
@@ -227,7 +237,7 @@ def assert_no_warning(caplog, loggers_to_allow: list[str] = NOISY_LOGGERS):
     Assert there are no warning, except from the list of loggers to allow
     """
     for record in caplog.records:
-        assert record.levelname != "WARNING" or (record.name in loggers_to_allow)
+        assert record.levelname != "WARNING" or (record.name in loggers_to_allow), record
 
 
 def configure(unused_tcp_port, database_name, database_port):
@@ -260,7 +270,11 @@ async def report_db_index_usage(min_precent=100):
         print(row)
 
 
-async def wait_for_version(client, environment, cnt):
+async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
+    """
+    :param compile_timeout: Raise an AssertionError if the compilation didn't finish after this amount of seconds.
+    """
+
     # Wait until the server is no longer compiling
     # wait for it to finish
     async def compile_done():
@@ -268,7 +282,7 @@ async def wait_for_version(client, environment, cnt):
         code = compiling.code
         return code == 204
 
-    await retry_limited(compile_done, 30)
+    await retry_limited(compile_done, compile_timeout)
 
     reports = await client.get_reports(environment)
     for report in reports.result["reports"]:
@@ -614,18 +628,18 @@ async def resource_action_consistency_check():
         - both methods are in use (i.e. the queries return at least one record)
     """
 
-    async with data.ResourceAction.get_connection() as postgresql_client:
+    async def get_data(postgresql_client):
         post_ra_one = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resourceaction as ra
+            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resourceaction as ra
                     INNER JOIN public.resource as r
-                    ON r.resource_version_id = ANY(ra.resource_version_ids)
+                    ON r.resource_id || ',v=' || r.model = ANY(ra.resource_version_ids)
                     AND r.environment = ra.environment
             """
         )
-        all_ra_set = {(r[0], r[1], r[2]) for r in post_ra_one}
+        post_ra_one_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_one}
 
         post_ra_two = await postgresql_client.fetch(
-            """SELECT ra.action_id, r.environment, r.resource_version_id FROM public.resource as r
+            """SELECT ra.action_id, r.environment, r.resource_id, r.model FROM public.resource as r
                     INNER JOIN public.resourceaction_resource as jt
                          ON r.environment = jt.environment
                         AND r.resource_id = jt.resource_id
@@ -634,6 +648,22 @@ async def resource_action_consistency_check():
                         ON ra.action_id = jt.resource_action_id
             """
         )
-        assert all_ra_set == {(r[0], r[1], r[2]) for r in post_ra_two}
+        post_ra_two_set = {(r[0], r[1], r[2], r[3]) for r in post_ra_two}
+        return post_ra_one_set, post_ra_two_set
 
-        assert all_ra_set
+    # The above-mentioned queries have to be executed with at least the repeatable_read isolation level.
+    # Otherwise it might happen that a repair run adds more resource actions between the execution of both queries.
+    (post_ra_one_set, post_ra_two_set) = await data.ResourceAction.execute_in_retryable_transaction(
+        get_data, tx_isolation_level="repeatable_read"
+    )
+    assert post_ra_one_set == post_ra_two_set
+    assert post_ra_one_set
+
+
+def get_as_naive_datetime(timestamp: datetime) -> datetime:
+    """
+    Convert the give timestamp, which is timezone aware, into a naive timestamp object in UTC.
+    """
+    if timestamp.tzinfo is None:
+        return timestamp
+    return timestamp.astimezone(timezone.utc).replace(tzinfo=None)

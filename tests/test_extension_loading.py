@@ -28,6 +28,7 @@ import yaml
 
 import inmanta.server
 import inmanta_ext
+from inmanta import data
 from inmanta.config import feature_file_config
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -59,7 +60,6 @@ def splice_extension_in(name: str) -> Generator[Any, Any, None]:
 
 def test_discover_and_load():
     with splice_extension_in("test_module_path"):
-
         config.server_enabled_extensions.set("testplugin")
 
         ibl = InmantaBootloader()
@@ -67,9 +67,9 @@ def test_discover_and_load():
 
         assert "inmanta_ext.testplugin" in ibl._discover_plugin_packages()
 
-        tpl = ibl._load_extension("inmanta_ext.testplugin")
+        mod = ibl._load_extension("inmanta_ext.testplugin")
 
-        assert tpl == inmanta_ext.testplugin.extension.setup
+        assert mod == inmanta_ext.testplugin.extension
 
         with pytest.raises(PluginLoadFailed):
             ibl._load_extension("inmanta_ext.noext")
@@ -84,12 +84,19 @@ def test_phase_1(caplog):
 
         config.server_enabled_extensions.set("testplugin,noext")
 
-        all = ibl._load_extensions()
+        with caplog.at_level(logging.INFO):
+            all = ibl._load_extensions()
 
-        assert "testplugin" in all
-        assert all["testplugin"] == inmanta_ext.testplugin.extension.setup
+            assert "testplugin" in all
+            assert all["testplugin"] == inmanta_ext.testplugin.extension
 
-        log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Enabled extensions: inmanta_ext.testplugin, inmanta_ext.noext, inmanta_ext.core",
+            )
+            log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 
 
 def test_phase_2():
@@ -97,7 +104,7 @@ def test_phase_2():
         import inmanta_ext.testplugin.extension
 
         ibl = InmantaBootloader()
-        all = {"testplugin": inmanta_ext.testplugin.extension.setup}
+        all = {"testplugin": inmanta_ext.testplugin.extension}
 
         ctx = ibl._collect_slices(all)
 
@@ -107,8 +114,8 @@ def test_phase_2():
 
         # load slice in wrong namespace
         with pytest.raises(InvalidSliceNameException):
-            all = {"test": inmanta_ext.testplugin.extension.setup}
-            ctx = ibl._collect_slices(all)
+            all = {"test": inmanta_ext.testplugin.extension}
+            ibl._collect_slices(all)
 
 
 def test_phase_3():
@@ -259,3 +266,13 @@ async def test_custom_feature_manager(
 
         assert not fm.enabled(None)
         assert not fm.enabled("a")
+
+
+async def test_register_setting() -> None:
+    """
+    Test registering a new setting.
+    """
+    with splice_extension_in("test_load_env_setting"):
+        ibl = InmantaBootloader()
+        ibl.load_slices(load_all_extensions=True, only_register_environment_settings=True)
+        assert "test" in data.Environment._settings

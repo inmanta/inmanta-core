@@ -17,7 +17,7 @@
 """
 import datetime
 from collections import defaultdict
-from typing import Dict
+from typing import Any, Dict
 from uuid import UUID
 
 import pytest
@@ -58,6 +58,7 @@ async def env_with_resources(server, client):
             total=1,
             released=i != 1 and i != 5,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         cm_time_idx += 1
         await cm.insert()
@@ -69,6 +70,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -80,6 +82,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -127,7 +130,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file1",
             ResourceState.undefined,
             1,
-            {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1],v=1"]},
+            {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file1]"].append(
@@ -138,7 +141,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=2", "std::File[internal,path=/tmp/dir1/file2],v=2"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -150,7 +153,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=3", "std::File[internal,path=/tmp/dir1/file2],v=3"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -162,7 +165,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=4", "std::File[internal,path=/tmp/dir1/file2],v=4"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -174,7 +177,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=5", "std::File[internal,path=/tmp/dir1/file2],v=5"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -216,7 +219,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deployed,
             2,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=2"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
@@ -224,7 +227,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deployed,
             3,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=3"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/dir1/file2]"].append(
@@ -232,7 +235,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deploying,
             4,
-            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1],v=4"]},
+            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
 
@@ -285,7 +288,7 @@ async def env_with_resources(server, client):
             "/etc/deployed_only_in_earlier_version",
             ResourceState.deployed,
             3,
-            {"key7": "val7", "requires": ["std::File[internal,path=/etc/requirement_in_later_version],v=3"]},
+            {"key7": "val7", "requires": ["std::File[internal,path=/etc/requirement_in_later_version]"]},
         )
     )
 
@@ -319,7 +322,7 @@ async def env_with_resources(server, client):
             "/tmp/orphaned",
             ResourceState.deployed,
             3,
-            {"key9": "val9", "requires": ["std::File[internal,path=/tmp/orphaned_req],v=3"]},
+            {"key9": "val9", "requires": ["std::File[internal,path=/tmp/orphaned_req]"]},
         )
     )
     resources[env.id]["std::File[internal,path=/tmp/orphaned_req]"].append(
@@ -337,7 +340,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.unavailable,
             4,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=4"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
             resource_type="std::Directory",
             environment=env2.id,
         )
@@ -363,7 +366,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=6", "std::File[internal,path=/tmp/dir1/file2],v=6"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
             environment=env3.id,
         )
@@ -380,6 +383,19 @@ async def env_with_resources(server, client):
     }
 
     yield env, cm_times, ids, resources
+
+
+async def assert_matching_attributes(resource_api: dict[str, Any], resource_db: data.Resource) -> None:
+    """
+    This method throws an AssertionError when the attributes of the resource retrieved via the API
+    doesn't match with the attributes present in the DAO.
+    """
+    attributes_api = resource_api["attributes"]
+    # Due to a bug, the version field has always been present in the attributes dictionary sent to the server.
+    # This bug has been fixed in the database. For backwards compatibility reason the version field is present
+    # in the attributes dictionary served out via the API.
+    attributes_db = {**resource_db.attributes, "version": resource_db.model}
+    assert attributes_api == attributes_db
 
 
 async def test_resource_details(server, client, env_with_resources):
@@ -399,7 +415,7 @@ async def test_resource_details(server, client, env_with_resources):
         tzinfo=datetime.timezone.utc
     )
     assert deploy_time == resources[env.id][multiple_requires][3].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][multiple_requires][3].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][multiple_requires][3])
     assert result.result["data"]["requires_status"] == {
         "std::Directory[internal,path=/tmp/dir1]": "deployed",
         "std::File[internal,path=/tmp/dir1/file2]": "deploying",
@@ -418,7 +434,7 @@ async def test_resource_details(server, client, env_with_resources):
         tzinfo=datetime.timezone.utc
     )
     assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][no_requires][3].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][no_requires][3])
     assert result.result["data"]["requires_status"] == {}
     assert result.result["data"]["status"] == "deployed"
 
@@ -434,7 +450,7 @@ async def test_resource_details(server, client, env_with_resources):
         tzinfo=datetime.timezone.utc
     )
     assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.timezone.utc)
-    assert result.result["data"]["attributes"] == resources[env.id][single_requires][3].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][single_requires][3])
     assert result.result["data"]["requires_status"] == {"std::Directory[internal,path=/tmp/dir1]": "deployed"}
     assert result.result["data"]["status"] == "deploying"
 
@@ -449,21 +465,21 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "unavailable"
-    assert result.result["data"]["attributes"] == resources[env.id][never_deployed_resource][1].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][never_deployed_resource][1])
 
     deployed_only_with_different_hash = ids["deployed_only_with_different_hash"]
     result = await client.resource_details(env.id, deployed_only_with_different_hash)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 4
     assert result.result["data"]["status"] == "undefined"
-    assert result.result["data"]["attributes"] == resources[env.id][deployed_only_with_different_hash][1].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][deployed_only_with_different_hash][1])
 
     deployed_only_in_earlier_version = ids["deployed_only_in_earlier_version"]
     result = await client.resource_details(env.id, deployed_only_in_earlier_version)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "orphaned"
-    assert result.result["data"]["attributes"] == resources[env.id][deployed_only_in_earlier_version][0].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][deployed_only_in_earlier_version][0])
     assert result.result["data"]["requires_status"] == {
         "std::File[internal,path=/etc/requirement_in_later_version]": "deployed"
     }
@@ -473,5 +489,5 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 3
     assert result.result["data"]["status"] == "orphaned"
-    assert result.result["data"]["attributes"] == resources[env.id][orphaned][0].attributes
+    await assert_matching_attributes(result.result["data"], resources[env.id][orphaned][0])
     assert result.result["data"]["requires_status"] == {"std::File[internal,path=/tmp/orphaned_req]": "orphaned"}

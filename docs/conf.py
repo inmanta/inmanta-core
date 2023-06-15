@@ -13,6 +13,7 @@
 # serve to show the default.
 
 import sys, os, pkg_resources, datetime
+from sphinx.errors import ConfigError
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -27,10 +28,13 @@ import sys, os, pkg_resources, datetime
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = [
-    'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig', 'sphinx.ext.viewcode',
-    'sphinxarg.ext', 'sphinxcontrib.inmanta.config', 'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs',
-    'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'recommonmark'
+    'sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.graphviz', 'sphinx.ext.ifconfig',
+    'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.contentui', 'sphinxcontrib.inmanta.config',
+    'sphinxcontrib.inmanta.dsl', 'sphinxcontrib.inmanta.environmentsettings', 'sphinx_click.ext', 'sphinx_design',
+    'myst_parser',
 ]
+
+myst_enable_extensions = ["colon_fence"]
 
 def setup(app):
     # cut off license headers
@@ -92,7 +96,18 @@ if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
     #    this value will be overwritten with the ISO product version.
     version = "1.0.0"
 else:
-    version = pkg_resources.get_distribution("inmanta").version
+    try:
+        version = pkg_resources.get_distribution("inmanta").version
+    except pkg_resources.DistributionNotFound:
+        raise ConfigError(
+            """
+The inmanta package is not installed. This way sphinx failed to discover the version number that should be
+displayed on the documentation pages. Either install the inmanta package or set the environment variable
+INMANTA_DONT_DISCOVER_VERSION when the version number is not important for this documentation build. The latter
+solution will set the version number to 1.0.0.
+            """
+        )
+
 # The full version, including alpha/beta/rc tags.
 release = version
 
@@ -109,7 +124,7 @@ release = version
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # The documentation build tool overrides this when extensions are included in the documentation build.
-exclude_patterns = ['extensions.rst']
+exclude_patterns = ['adr/*.md']
 
 # The reST default role (used for this markup: `text`) to use for all documents.
 # default_role = None
@@ -134,18 +149,36 @@ pygments_style = 'sphinx'
 
 # -- Options for HTML output ---------------------------------------------------
 
-html_theme_options = {
-    'logo_only': True,
-    'display_version': True,
-}
-import sphinx_rtd_theme
+html_theme = "furo"
 
-html_theme = "sphinx_rtd_theme"
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
+html_theme_options = {
+    "footer_icons": [
+        {
+            "name": "Website",
+            "url": "https://inmanta.com",
+            "class": "fa-solid fa-globe",
+        },
+        {
+            "name": "Linkedin",
+            "url": "https://www.linkedin.com/company/inmanta-nv/",
+            "class": "fa-brands fa-linkedin",
+        },
+        {
+            "name": "Twitter",
+            "url": "https://twitter.com/inmanta_com",
+            "class": "fa-brands fa-twitter",
+        },
+        {
+            "name": "GitHub",
+            "url": "https://github.com/inmanta",
+            "class": "fa-brands fa-github",
+        },
+    ],
+}
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
-# html_title = None
+html_title = f"Inmanta OSS {release}"
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 # html_short_title = None
@@ -173,9 +206,7 @@ html_static_path = ['_static']
 # html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-html_sidebars = {
-   '**': ['globaltoc.html', 'sourcelink.html', 'searchbox.html']
-}
+# html_sidebars = {}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -194,7 +225,7 @@ html_sidebars = {
 html_show_sourcelink = False
 
 # If true, "Created using Sphinx" is shown in the HTML footer. Default is True.
-# html_show_sphinx = True
+html_show_sphinx = False
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 html_show_copyright = True
@@ -211,7 +242,10 @@ html_show_copyright = True
 htmlhelp_basename = 'InmantaDoc'
 
 html_css_files = [
-    'css/custom.css',
+    "css/custom.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/fontawesome.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/solid.min.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/brands.min.css",
 ]
 
 
@@ -219,7 +253,7 @@ html_css_files = [
 
 latex_elements = {
 # The paper size ('letterpaper' or 'a4paper').
-# 'papersize': 'letterpaper',
+    'papersize': 'a4paper',
 
 # The font size ('10pt', '11pt' or '12pt').
 # 'pointsize': '10pt',
@@ -300,8 +334,7 @@ linkcheck_ignore = [
     '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
+    '../../../reference/modules/std.html#std.validate_type',
 ]
 
-# Do not print the warning that tabs only work in html
-# https://github.com/djungelorm/sphinx-tabs/issues/39
-sphinx_tabs_nowarn = True
+graphviz_output_format = "svg"

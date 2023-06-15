@@ -34,6 +34,27 @@ class ResourceState(str, Enum):
     skipped_for_undefined = "skipped_for_undefined"  # This resource depends on an undefined resource
 
 
+class NonDeployingResourceState(str, Enum):
+    unavailable = ResourceState.unavailable.value
+    skipped = ResourceState.skipped.value
+    dry = ResourceState.dry.value
+    deployed = ResourceState.deployed.value
+    failed = ResourceState.failed.value
+    available = ResourceState.available.value
+    cancelled = ResourceState.cancelled.value
+    undefined = ResourceState.undefined.value
+    skipped_for_undefined = ResourceState.skipped_for_undefined.value
+
+
+class DeprecatedResourceState(str, Enum):
+    """
+    Deprecated resource states kept for backwards compatibility.
+    """
+
+    # deprecated in iso5
+    processing_events = "processing_events"
+
+
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNDEPLOYABLE_NAMES = [s.name for s in UNDEPLOYABLE_STATES]
@@ -182,13 +203,11 @@ LOG_LEVEL_AS_INTEGER = {
     LogLevel.TRACE: 3,
 }
 
-
 # The following code registers the integer log levels as values
 # in the LogLevel enum.  It allows to pass them in the constructor
 # as if it was an integer enum: LogLevel(50) == LogLevel.CRITICAL
 for level, value in LOG_LEVEL_AS_INTEGER.items():
     LogLevel._value2member_map_[value] = level
-
 
 INMANTA_URN = "urn:inmanta:"
 
@@ -208,7 +227,7 @@ INMANTA_MT_HEADER = "X-Inmanta-tid"
 
 
 class ClientType(str, Enum):
-    # api: The method with this client type can be used by external clients like the Dashboard, cli or 3rd party services
+    # api: The method with this client type can be used by external clients like the Web-console, cli or 3rd party services
     # compiler: The method with this client type is called by the compiler to communicate with the server
     # agent: The method with this client type is called by the agent to communicate with the server
     api = "api"
@@ -221,11 +240,9 @@ class ClientType(str, Enum):
 # assume we are running in a tty
 ENVIRON_FORCE_TTY = "FORCE_TTY"
 
-
 LOG_LEVEL_TRACE = 3
 
 NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
-
 
 # Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
 SHUTDOWN_GRACE_IOLOOP = 10
@@ -235,7 +252,6 @@ SHUTDOWN_GRACE_HARD = 15
 EXIT_HARD = 3
 # Startup failed exit code
 EXIT_START_FAILED = 4
-
 
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 TIME_LOGFMT = "%Y-%m-%d %H:%M:%S%z"
@@ -252,6 +268,9 @@ ENVELOPE_KEY = "data"
 
 # Max number of attempts when updating modules
 MAX_UPDATE_ATTEMPT = 5
+
+# Minimum password length
+MIN_PASSWORD_LENGTH = 8
 
 
 class AgentAction(str, Enum):
@@ -305,3 +324,8 @@ class NotificationSeverity(str, Enum):
 
 
 CF_CACHE_DIR = ".cfcache"
+
+PG_ADVISORY_KEY_PUT_VERSION = 1
+
+# The filename of the changelog file in an Inmanta module
+MODULE_CHANGELOG_FILE = "CHANGELOG.md"

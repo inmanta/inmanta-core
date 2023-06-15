@@ -1,0 +1,5 @@
+description: Remove resource.resource_version_id fields from the database and use resource id instead 
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

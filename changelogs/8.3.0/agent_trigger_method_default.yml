@@ -1,0 +1,6 @@
+description: Changed the default value of `environment_agent_trigger_method` environment setting to `push_incremental_deploy`
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  upgrade-note: "{{description}}"
+

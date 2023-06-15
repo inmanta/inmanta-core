@@ -40,27 +40,28 @@ import sys
 import threading
 import time
 import traceback
+from argparse import ArgumentParser
 from asyncio import ensure_future
+from collections import abc
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
-import colorlog
-import yaml
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
-from inmanta import const, module, moduletool, protocol
+from inmanta import const, module, moduletool, protocol, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
 from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
-from inmanta.export import ModelExporter, cfg_env
+from inmanta.export import cfg_env
+from inmanta.logging import InmantaLoggerConfig, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
@@ -80,6 +81,8 @@ def start_server(options: argparse.Namespace) -> None:
 
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
+
+    util.ensure_event_loop()
 
     ibl = InmantaBootloader()
     setup_signal_handlers(ibl.stop)
@@ -110,6 +113,8 @@ def start_server(options: argparse.Namespace) -> None:
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
+
+    util.ensure_event_loop()
 
     a = agent.Agent()
     setup_signal_handlers(a.stop)
@@ -249,7 +254,7 @@ class ExperimentalFeatureFlags:
                 option.set("true")
 
 
-def compiler_config(parser: argparse.ArgumentParser) -> None:
+def compiler_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -257,10 +262,10 @@ def compiler_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors_subcommand",
+        dest="errors",
         help="Show stack traces for compile errors",
         action="store_true",
-        default=False,
+        default=argparse.SUPPRESS,
     )
     parser.add_argument("--server_address", dest="server", help="The address of the server hosting the environment")
     parser.add_argument("--server_port", dest="port", help="The port of the server hosting the environment")
@@ -364,18 +369,18 @@ def compile_project(options: argparse.Namespace) -> None:
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
 
 
-@command("list-commands", help_msg="Print out an overview of all commands")
+@command("list-commands", help_msg="Print out an overview of all commands", add_verbose_flag=False)
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
         print(" %s: %s" % (cmd, info["help"]))
 
 
-def help_parser_config(parser: argparse.ArgumentParser) -> None:
+def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument("subcommand", help="Output help for a particular subcommand", nargs="?", default=None)
 
 
-@command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
+@command("help", help_msg="show a help message and exit", parser_config=help_parser_config, add_verbose_flag=False)
 def help_command(options: argparse.Namespace) -> None:
     if options.subcommand is None:
         cmd_parser().print_help()
@@ -403,17 +408,9 @@ def project(options: argparse.Namespace) -> None:
     tool.execute(options.cmd, options)
 
 
-def deploy_parser_config(parser: argparse.ArgumentParser) -> None:
+def deploy_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
-    parser.add_argument(
-        "--dashboard",
-        dest="dashboard",
-        help="Start the dashboard and keep the server running. "
-        "The server uses the current project as the source for server recompiles",
-        action="store_true",
-        default=False,
-    )
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -430,7 +427,7 @@ def deploy(options: argparse.Namespace) -> None:
         run.stop()
 
 
-def export_parser_config(parser: argparse.ArgumentParser) -> None:
+def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
     """
     Configure the compiler of the export function
     """
@@ -454,15 +451,15 @@ def export_parser_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
-    parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
+    parser.add_argument("--ssl", help="Enable SSL", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument(
         "-X",
         "--extended-errors",
-        dest="errors_subcommand",
+        dest="errors",
         help="Show stack traces for compile errors",
         action="store_true",
-        default=False,
+        default=argparse.SUPPRESS,
     )
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
     parser.add_argument(
@@ -546,8 +543,8 @@ def export(options: argparse.Namespace) -> None:
     if options.token is not None:
         Config.set("compiler_rest_transport", "token", options.token)
 
-    if options.ssl:
-        Config.set("compiler_rest_transport", "ssl", "true")
+    if options.ssl is not None:
+        Config.set("compiler_rest_transport", "ssl", f"{options.ssl}".lower())
 
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
@@ -613,12 +610,6 @@ def export(options: argparse.Namespace) -> None:
     if exp is not None:
         raise exp
 
-    if options.model:
-        modelexporter = ModelExporter(types)
-        with open("testdump.json", "w", encoding="utf-8") as fh:
-            print(yaml.dump(modelexporter.export_all()))
-            json.dump(modelexporter.export_all(), fh)
-
     if options.deploy:
         conn = protocol.SyncClient("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
@@ -627,11 +618,9 @@ def export(options: argparse.Namespace) -> None:
         conn.release_version(tid, version, True, agent_trigger_method)
 
 
-log_levels = {0: logging.ERROR, 1: logging.WARNING, 2: logging.INFO, 3: logging.DEBUG, 4: 2}
-
-
 def cmd_parser() -> argparse.ArgumentParser:
     # create the argument compiler
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help="Profile this run of the program")
     parser.add_argument("-c", "--config", dest="config_file", help="Use this config file", default=None)
@@ -645,8 +634,8 @@ def cmd_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--log-file-level",
         dest="log_file_level",
-        default=2,
-        type=int,
+        choices=["0", "1", "2", "3", "4", "ERROR", "WARNING", "INFO", "DEBUG", "TRACE"],
+        default="INFO",
         help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG",
     )
     parser.add_argument("--timed-logs", dest="timed", help="Add timestamps to logs", action="store_true")
@@ -663,7 +652,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         dest="warnings",
         choices=["warn", "ignore", "error"],
         default="warn",
-        help="The warning behaviour of the compiler. Must be one of 'warn', 'ignore', 'error'",
+        help="The warning behaviour. Must be one of 'warn', 'ignore', 'error'",
     )
     parser.add_argument(
         "-X", "--extended-errors", dest="errors", help="Show stack traces for errors", action="store_true", default=False
@@ -676,11 +665,27 @@ def cmd_parser() -> argparse.ArgumentParser:
         default=False,
         required=False,
     )
+
+    verbosity_parser = argparse.ArgumentParser(add_help=False)
+    verbosity_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=argparse.SUPPRESS,
+        help="Log level for messages going to the console. Default is warnings,"
+        "-v warning, -vv info, -vvv debug and -vvvv trace",
+    )
+
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
-        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
+        parent_parsers: list[argparse.ArgumentParser] = []
+        if cmd_options["add_verbose_flag"]:
+            parent_parsers.append(verbosity_parser)
+        cmd_subparser = subparsers.add_parser(
+            cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"], parents=parent_parsers
+        )
         if cmd_options["parser_config"] is not None:
-            cmd_options["parser_config"](cmd_subparser)
+            cmd_options["parser_config"](cmd_subparser, parent_parsers)
         cmd_subparser.set_defaults(func=cmd_options["function"])
         cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
 
@@ -706,71 +711,11 @@ def print_versions_installed_components_and_exit() -> None:
     sys.exit(0)
 
 
-def _is_on_tty() -> bool:
-    return (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
-
-
-def _get_default_stream_handler() -> logging.StreamHandler:
-    stream_handler = logging.StreamHandler(stream=sys.stdout)
-    stream_handler.setLevel(logging.INFO)
-
-    formatter = _get_log_formatter_for_stream_handler(timed=False)
-    stream_handler.setFormatter(formatter)
-
-    return stream_handler
-
-
-def _get_watched_file_handler(options: argparse.Namespace) -> logging.handlers.WatchedFileHandler:
-    if not options.log_file:
-        raise Exception("No logfile was provided.")
-    level = _convert_to_log_level(options.log_file_level)
-    formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-    file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode="a+")
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(level)
-
-    return file_handler
-
-
-def _convert_to_log_level(level: int) -> int:
-    if level >= len(log_levels):
-        level = len(log_levels) - 1
-    return log_levels[level]
-
-
-def _convert_cli_log_level(level: int) -> int:
-    if level < 1:
-        # The minimal log level on the CLI is always WARNING
-        return logging.WARNING
-    else:
-        return _convert_to_log_level(level)
-
-
-def _get_log_formatter_for_stream_handler(timed: bool) -> logging.Formatter:
-    log_format = "%(asctime)s " if timed else ""
-    if _is_on_tty():
-        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
-        formatter = colorlog.ColoredFormatter(
-            log_format,
-            datefmt=None,
-            reset=True,
-            log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
-        )
-    else:
-        log_format += "%(name)-25s%(levelname)-8s%(message)s"
-        formatter = logging.Formatter(fmt=log_format)
-    return formatter
-
-
 def app() -> None:
     """
     Run the compiler
     """
-    # Send logs to stdout
-    stream_handler = _get_default_stream_handler()
-    logging.root.handlers = []
-    logging.root.addHandler(stream_handler)
-    logging.root.setLevel(0)
+    log_config = InmantaLoggerConfig.get_instance()
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -778,17 +723,7 @@ def app() -> None:
     options, other = parser.parse_known_args()
     options.other = other
 
-    # Log everything to a log_file if logfile is provided
-    if options.log_file:
-        watched_file_handler = _get_watched_file_handler(options)
-        logging.root.addHandler(watched_file_handler)
-        logging.root.removeHandler(stream_handler)
-    else:
-        if options.timed:
-            formatter = _get_log_formatter_for_stream_handler(timed=True)
-            stream_handler.setFormatter(formatter)
-        log_level = _convert_cli_log_level(options.verbose)
-        stream_handler.setLevel(log_level)
+    log_config.apply_options(options)
 
     logging.captureWarnings(True)
 
@@ -815,9 +750,7 @@ def app() -> None:
         return
 
     def report(e: BaseException) -> None:
-        minus_x_set_top_level_command = options.errors
-        minus_x_set_subcommand = hasattr(options, "errors_subcommand") and options.errors_subcommand
-        if not minus_x_set_top_level_command and not minus_x_set_subcommand:
+        if not options.errors:
             if isinstance(e, CompilerException):
                 print(e.format_trace(indent="  "), file=sys.stderr)
             else:

@@ -15,18 +15,16 @@
 
     Contact: code@inmanta.com
 """
-
+import warnings
 from collections.abc import Set
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Iterator, List, Optional, Sequence, Tuple
 
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
 from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise
 from inmanta.execute.runtime import QueueScheduler, Resolver
 
 if TYPE_CHECKING:
-
     from inmanta.execute.runtime import ExecutionContext
 
 
@@ -114,7 +112,7 @@ class BasicBlock(object):
         scope and only that block is searched for shadowing with respect to the scope.
         """
         for var, shadowed_locs, orig_locs in self.shadowed_variables():
-            inmanta_warnings.warn(
+            warnings.warn(
                 VariableShadowWarning(
                     None,
                     "Variable `%s` shadowed: originally declared at %s, shadowed at %s"

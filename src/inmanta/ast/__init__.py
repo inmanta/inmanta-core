@@ -30,9 +30,9 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast.entity import Entity
     from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.statements.define import DefineEntity, DefineImport  # noqa: F401
     from inmanta.ast.type import NamedType, Type  # noqa: F401
@@ -42,7 +42,6 @@ if TYPE_CHECKING:
 
 
 class Location(export.Exportable):
-
     __slots__ = ("file", "lnr")
 
     def __init__(self, file: str, lnr: int) -> None:
@@ -75,7 +74,6 @@ class Location(export.Exportable):
 
 
 class Range(Location):
-
     __slots__ = ("start_char", "end_lnr", "end_char")
 
     def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
@@ -145,6 +143,33 @@ class Range(Location):
         return False
 
 
+class AnchorTarget(object):
+    """AnchorTarget is used purely at the periphery of the compiler"""
+
+    __slots__ = ("location", "docstring")
+
+    def __init__(
+        self,
+        location: Location,
+        docstring: Optional[str] = None,
+    ) -> None:
+        """
+        Create a new AnchorTarget instance.
+        :param location: the location of the target of the anchor
+        :param docstring: the docstring attached to the target
+        """
+        self.location = location
+        self.docstring = docstring
+
+
+class WithComment(object):
+    """
+    Mixin class for AST nodes that can have a comment attached to them.
+    """
+
+    comment: Optional[str] = None
+
+
 class Locatable(object):
     __slots__ = ("_location",)
 
@@ -155,7 +180,7 @@ class Locatable(object):
         assert location is not None and location.lnr > 0
         self._location = location
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Optional[Location]:
         assert self._location is not None
         return self._location
 
@@ -215,7 +240,7 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         raise NotImplementedError()
 
 
@@ -225,9 +250,13 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
-        return t.get_location()
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class AttributeReferenceAnchor(Anchor):
@@ -237,11 +266,17 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> Location:
+    def resolve(self) -> Optional[AnchorTarget]:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
-        # assert isinstance(instancetype, EntityLike)
-        return instancetype.get_entity().get_attribute(self.attribute).get_location()
+        # assert isinstance(instancetype, Entity)
+        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
+        assert entity_attribute is not None
+        location = entity_attribute.get_location()
+        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
 
 
 class Namespaced(Locatable):
@@ -283,11 +318,12 @@ class Namespace(Namespaced):
         self.__parent = parent
         self.__children = {}  # type: Dict[str,Namespace]
         self.defines_types = {}  # type: Dict[str,NamedType]
+        self.visible_namespaces: Dict[str, Import]
         if self.__parent is not None:
-            self.visible_namespaces = {self.get_full_name(): MockImport(self)}  # type: Dict[str, Import]
+            self.visible_namespaces = {self.get_full_name(): MockImport(self)}
             self.__parent.add_child(self)
         else:
-            self.visible_namespaces = {name: MockImport(self)}  # type: Dict[str, Import]
+            self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Optional[Dict[str,Type]]
         self.scope = None  # type:  Optional[ExecutionContext]
 
@@ -321,16 +357,16 @@ class Namespace(Namespaced):
                 raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
 
+    def lookup_namespace(self, name: str) -> Import:
+        if name not in self.visible_namespaces:
+            raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
+        return self.visible_namespaces[name]
+
     def lookup(self, name: str) -> "Union[Type, ResultVariable]":
         if "::" not in name:
             return self.get_scope().direct_lookup(name)
-
         parts = name.rsplit("::", 1)
-
-        if parts[0] not in self.visible_namespaces:
-            raise NotFoundException(None, name, "Variable %s not found" % parts[0])
-
-        return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
+        return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
     def get_type(self, typ: LocatableString) -> "Type":
         name: str = str(typ)
@@ -596,6 +632,17 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
+class InvalidCompilerState(RuntimeException):
+    def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
+        super().__init__(stmt, "Invalid compiler state, this likely indicates a bug in the compiler. Details: %s" % msg)
+
+
+class HyphenException(RuntimeException):
+    def __init__(self, stmt: LocatableString) -> None:
+        msg: str = "The use of '-' in identifiers is not allowed. please rename %s." % stmt.value
+        RuntimeException.__init__(self, stmt, msg)
+
+
 class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
     """
     Baseclass for compiler warnings after parsing is complete.
@@ -608,12 +655,6 @@ class CompilerRuntimeWarning(InmantaWarning, RuntimeException):
 
 class CompilerDeprecationWarning(CompilerRuntimeWarning):
     def __init__(self, stmt: Optional["Locatable"], msg: str) -> None:
-        CompilerRuntimeWarning.__init__(self, stmt, msg)
-
-
-class HyphenDeprecationWarning(CompilerDeprecationWarning):
-    def __init__(self, stmt: LocatableString) -> None:
-        msg: str = "The use of '-' in identifiers is deprecated. Consider renaming %s." % (stmt.value)
         CompilerRuntimeWarning.__init__(self, stmt, msg)
 
 
@@ -633,6 +674,23 @@ class TypeNotFoundException(RuntimeException):
 
     def importantance(self) -> int:
         return 20
+
+
+class AmbiguousTypeException(TypeNotFoundException):
+    """Exception raised when a type is referenced that does not exist"""
+
+    def __init__(self, type: LocatableString, candidates: List["Entity"]) -> None:
+        candidates = sorted(candidates, key=lambda x: x.get_full_name())
+        RuntimeException.__init__(
+            self,
+            stmt=None,
+            msg="Could not determine namespace for type %s. %d possible candidates exists: [%s]."
+            " To resolve this, use the fully qualified name instead of the short name."
+            % (type, len(candidates), ", ".join([x.get_full_name() for x in candidates])),
+        )
+        self.candidates = candidates
+        self.type = type
+        self.set_location(type.get_location())
 
 
 def stringify_exception(exn: Exception) -> str:
@@ -716,6 +774,7 @@ class WrappingRuntimeException(RuntimeException):
         return self.__cause__.importantance() + 1
 
 
+@stable_api
 class AttributeException(WrappingRuntimeException):
     """Exception raise when an attribute could not be set, always wraps another exception"""
 
@@ -802,6 +861,7 @@ class NotFoundException(RuntimeException):
         return 20
 
 
+@stable_api
 class DoubleSetException(RuntimeException):
     def __init__(
         self, variable: "ResultVariable", stmt: "Optional[Statement]", newvalue: object, newlocation: Location
@@ -858,7 +918,6 @@ class DuplicateException(TypingException):
 
 
 class CompilerError(Exception):
-
     pass
 
 

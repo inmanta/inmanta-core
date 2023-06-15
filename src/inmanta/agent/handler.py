@@ -22,9 +22,10 @@ import logging
 import traceback
 import typing
 import uuid
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -133,7 +134,6 @@ def cache(
         myargs = list(sig.parameters.keys())[1:]
 
         def wrapper(self, *args: object, **kwds: object) -> object:
-
             kwds.update(dict(zip(myargs, args)))
 
             def bound(**kwds):
@@ -160,7 +160,47 @@ def cache(
 
 
 @stable_api
-class HandlerContext(object):
+class LoggerABC(ABC):
+    """
+    Minimal logging interface exposing logging methods for commonly used
+    logging levels.
+
+    Child classes are responsible for implementing a _log_msg method with the
+    concrete logging implementation.
+    """
+
+    def critical(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.CRITICAL, msg, *args, exc_info=exc_info, **kwargs)
+
+    def error(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.ERROR, msg, *args, exc_info=exc_info, **kwargs)
+
+    def warning(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.WARNING, msg, *args, exc_info=exc_info, **kwargs)
+
+    def info(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.INFO, msg, *args, exc_info=exc_info, **kwargs)
+
+    def debug(self, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
+        self._log_msg(logging.DEBUG, msg, *args, exc_info=exc_info, **kwargs)
+
+    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
+        self.error(msg, *args, exc_info=exc_info, **kwargs)
+
+    @abstractmethod
+    def _log_msg(
+        self,
+        level: int,
+        msg: str,
+        *args: object,
+        exc_info: bool = False,
+        **kwargs: object,
+    ) -> None:
+        raise NotImplementedError
+
+
+@stable_api
+class HandlerContext(LoggerABC):
     """
     Context passed to handler methods for state related "things"
     """
@@ -355,16 +395,13 @@ class HandlerContext(object):
     def changes(self) -> Dict[str, AttributeStateChange]:
         return self._changes
 
-    def log_msg(self, level: int, msg: str, args: Sequence[object], kwargs: Dict[str, object]) -> None:
+    def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
         if len(args) > 0:
             raise Exception("Args not supported")
-        if "exc_info" in kwargs:
-            exc_info = kwargs["exc_info"]
+        if exc_info:
             kwargs["traceback"] = traceback.format_exc()
-        else:
-            exc_info = False
 
-        for k, v in dict(kwargs).items():
+        for k, v in kwargs.items():
             try:
                 json_encode(v)
             except TypeError:
@@ -380,73 +417,6 @@ class HandlerContext(object):
         log = data.LogLine.log(level, msg, **kwargs)
         self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
-
-    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'DEBUG'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        Keyword arguments should be JSON serializable.
-
-        ``logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)``
-        """
-        self.log_msg(logging.DEBUG, msg, args, kwargs)
-
-    def info(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'INFO'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        Keyword arguments should be JSON serializable.
-
-        ``logger.info("Houston, we have a %s", "interesting problem", exc_info=1)``
-        """
-        self.log_msg(logging.INFO, msg, args, kwargs)
-
-    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'WARNING'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        Keyword arguments should be JSON serializable.
-
-        ``logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)``
-        """
-        self.log_msg(logging.WARNING, msg, args, kwargs)
-
-    def error(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'ERROR'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        ``logger.error("Houston, we have a %s", "major problem", exc_info=1)``
-        """
-        self.log_msg(logging.ERROR, msg, args, kwargs)
-
-    def exception(self, msg: str, *args: object, exc_info: bool = True, **kwargs: object) -> None:
-        """
-        Convenience method for logging an ERROR with exception information.
-        """
-        self.error(msg, *args, exc_info=exc_info, **kwargs)
-
-    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
-        """
-        Log 'msg % args' with severity 'CRITICAL'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        ``logger.critical("Houston, we have a %s", "major disaster", exc_info=1)``
-        """
-        self.log_msg(logging.CRITICAL, msg, args, kwargs)
 
 
 @stable_api
@@ -497,7 +467,7 @@ class ResourceHandler(object):
             except Exception as e:
                 f.set_exception(e)
 
-        self._ioloop.add_callback(run)
+        self._ioloop.call_soon_threadsafe(run)
 
         return f.result()
 
@@ -1068,3 +1038,29 @@ class HandlerNotAvailableException(Exception):
     This exception is thrown when a resource handler cannot perform its job. For example, the admin interface
     it connects to is not available.
     """
+
+
+@stable_api
+class PythonLogger(LoggerABC):
+    """
+    This class implements the LoggerABC interface and is a standalone wrapper around a logging.Logger.
+    """
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self.logger = logger
+
+    def _log_msg(
+        self,
+        level: int,
+        msg: str,
+        *args: object,
+        exc_info: bool = False,
+        **kwargs: object,
+    ) -> None:
+        if len(args) > 0:
+            raise Exception("Args not supported")
+
+        if kwargs:
+            self.logger.log(level, msg, kwargs, exc_info=exc_info)
+        else:
+            self.logger.log(level, msg, exc_info=exc_info)

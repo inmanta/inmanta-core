@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from collections import abc
 from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
@@ -23,12 +24,14 @@ import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     Anchor,
     DirectExecuteException,
+    Locatable,
     Location,
     Named,
     Namespace,
     Namespaced,
     OptionalValueException,
     RuntimeException,
+    WithComment,
 )
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
@@ -48,7 +51,7 @@ from inmanta.execute.runtime import (
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
     from inmanta.ast.blocks import BasicBlock  # noqa: F401
-    from inmanta.ast.type import NamedType  # noqa: F401
+    from inmanta.ast.type import NamedType, Type  # noqa: F401
     from inmanta.ast.variables import Reference  # noqa: F401
 
 
@@ -116,16 +119,9 @@ class DynamicStatement(Statement):
     def normalize(self) -> None:
         raise NotImplementedError()
 
-    def requires(self) -> List[str]:
-        """List of all variable names used by this statement"""
-        raise NotImplementedError()
-
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise NotImplementedError()
-
-    def execute_direct(self, requires: Dict[object, object]) -> object:
-        raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     def declared_variables(self) -> Iterator[str]:
         """
@@ -135,12 +131,21 @@ class DynamicStatement(Statement):
 
 
 class RequiresEmitStatement(DynamicStatement):
+    """
+    Statements that execute in two stages based on their requirements. These statements have a well defined set of
+    names/variables they require before they can execute. When these are emitted, they schedule their own execution to continue
+    as soon as the requirements are met.
+    If a RequiresEmitStatement does not appear as a top-level statement in a block but as a child of another statement, instead
+    of being emitted, its requirements may be requested through `requires_emit`. These should then be used to schedule `execute`
+    when the requirements are met.
+    """
+
     __slots__ = ()
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Emits this statement by scheduling its promises and scheduling a unit to wait on its requirements. Injects the
-        schedulred promise objects in the waiter's requires in order to pass it on to the execute method.
+        scheduled promise objects in the waiter's requires in order to pass it on to the execute method.
         """
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
@@ -157,7 +162,7 @@ class RequiresEmitStatement(DynamicStatement):
         return self._requires_emit_promises(resolver, queue)
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> Dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
@@ -201,8 +206,38 @@ class RequiresEmitStatement(DynamicStatement):
             promise.fulfill()
 
 
+@dataclass(frozen=True)
+class AttributeAssignmentLHS:
+    instance: "Reference"
+    attribute: str
+    type_hint: Optional["Type"] = None
+
+
 class ExpressionStatement(RequiresEmitStatement):
     __slots__ = ()
+
+    def requires(self) -> List[str]:
+        """
+        List of all variable names used by this statement. Artifact from the past, hardly used anymore.
+        """
+        raise NotImplementedError()
+
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
+        """
+        Execute this statement in a static context without any scheduling, returning the expression's result.
+
+        :param requires: A dictionary mapping names to values.
+        """
+        raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
+
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        """
+        :param lhs_attribute: The left hand side attribute if this expression is a right hand side in an attribute assignment.
+            If not None, that caller is responsible for making sure the reference resolves to the correct instance as soon as
+            this statement enters the `requires_emit` stage. As a result, it should always be None if the instance construction
+            depends on this statement.
+        """
+        raise NotImplementedError()
 
     def as_constant(self) -> object:
         """
@@ -217,7 +252,7 @@ class ExpressionStatement(RequiresEmitStatement):
         raise NotImplementedError()
 
 
-class Resumer(ExpressionStatement):
+class Resumer(Locatable):
     """
     Resume on a set of requirement variables' values when they become ready (i.e. they are complete).
     """
@@ -228,7 +263,7 @@ class Resumer(ExpressionStatement):
         pass
 
 
-class RawResumer(ExpressionStatement):
+class RawResumer(Locatable):
     """
     Resume on a set of requirement variables when they become ready (i.e. they are complete).
     """
@@ -457,12 +492,12 @@ class ReferenceStatement(ExpressionStatement):
 
     __slots__ = ("children",)
 
-    def __init__(self, children: List[ExpressionStatement]) -> None:
+    def __init__(self, children: Sequence[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
         self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         for c in self.children:
             c.normalize()
 
@@ -523,7 +558,7 @@ class Literal(ExpressionStatement):
         self.value = value
         self.lexpos: Optional[int] = None
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         pass
 
     def __repr__(self) -> str:
@@ -538,7 +573,7 @@ class Literal(ExpressionStatement):
         super().execute(requires, resolver, queue)
         return self.value
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         return self.value
 
     def as_constant(self) -> object:
@@ -557,16 +592,13 @@ class DefinitionStatement(Statement):
         Statement.__init__(self)
 
 
-class TypeDefinitionStatement(DefinitionStatement, Named):
-    comment: Optional[str]
-
+class TypeDefinitionStatement(DefinitionStatement, Named, WithComment):
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
         self.name = name
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
-        self.comment = None
 
     def register_types(self) -> Tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)

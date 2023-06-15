@@ -21,13 +21,13 @@ import py_compile
 import shutil
 import sys
 from collections import abc
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Sequence, Set
 
 import py
 import pytest
 from pkg_resources import Requirement
 
-from inmanta import const, loader, plugins, resources
+from inmanta import compiler, const, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
@@ -44,7 +44,7 @@ from inmanta.module import (
 )
 from inmanta.moduletool import ModuleConverter, ModuleTool, ProjectTool
 from packaging.version import Version
-from utils import PipIndex, create_python_package, module_from_template, v1_module_from_template
+from utils import PipIndex, create_python_package, log_contains, module_from_template, v1_module_from_template
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
@@ -130,7 +130,9 @@ def test_v1_and_v2_module_installed_simultaneously(
     assert isinstance(Project.get().modules[module_name], ModuleV2)
 
 
-def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
+def test_v1_module_depends_on_v1_and_v2_module(
+    tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str, caplog
+) -> None:
     module_dir = os.path.join(modules_v2_dir, "elaboratev2module")
     module_copy_dir = os.path.join(tmpdir, "module")
     shutil.copytree(module_dir, module_copy_dir)
@@ -148,6 +150,15 @@ def test_v1_module_depends_on_v1_and_v2_module(tmpdir: py.path.local, snippetcom
     assert "Print from v2 module" in output
     assert "Hello world" in output
 
+    # Assert deprecation warnings regarding the use of V1 modules
+    for v1_module_name in [module_name, "elaboratev1module"]:
+        log_contains(
+            caplog,
+            "inmanta.warnings",
+            logging.WARNING,
+            f"Loaded V1 module {v1_module_name}. The use of V1 modules is deprecated. Use the equivalent V2 module instead.",
+        )
+
 
 def test_install_module_no_v2_source(snippetcompiler) -> None:
     """
@@ -163,11 +174,13 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
                 InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
             ],
         )
-    message: str = (
+    message_part1: str = (
         "Attempting to install a v2 module non_existing_module but no v2 module source is configured. Add at least one repo of "
         'type "package" to the project config file.'
     )
-    assert message in e.value.format_trace()
+    message_part2: str = "Another option is to set the use_config_file project option to true to use the pip config file."
+    assert message_part1 in e.value.format_trace()
+    assert message_part2 in e.value.format_trace()
 
 
 @pytest.mark.parametrize("allow_v1", [True, False])
@@ -1352,3 +1365,114 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     module: Optional[ModuleV2] = ModuleV2Source([]).get_installed_module(DummyProject(autostd=False), "minimalv2module")
     assert module is not None
     assert module.path == module_dir
+
+
+def test_cross_module_dependency(local_module_package_index: str, snippetcompiler, capsys) -> None:
+    """
+    This test checks that the python code living in the inmanta_plugins dir of a module ('anothermod' in this test case)
+    that is not loaded, can be used from the plugins of another module. ('cross_module_dependency' in this test case)
+    """
+
+    def check_name_space(name_space: Dict[str, object], includes: Sequence[str], excludes: Sequence[str]) -> None:
+        """
+        Check that all the items in `includes` are present in `name_space`
+        and that no item in `excludes` is present in `name_space`
+        """
+        for x in includes:
+            assert x in name_space
+        for x in excludes:
+            assert x not in name_space
+
+    project: Project = snippetcompiler.setup_for_snippet(
+        """
+import cross_module_dependency
+
+cross_module_dependency::print_message('message from project model')
+cross_module_dependency::call_to_triple_from_another_mod('triple this string')
+
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
+            InmantaModuleRequirement.parse("cross_module_dependency").get_python_package_requirement(),
+        ],
+        autostd=False,
+    )
+
+    check_name_space(
+        name_space=project.modules, includes=["cross_module_dependency"], excludes=["minimalv2module", "anothermod"]
+    )
+    check_name_space(
+        name_space=sys.modules,
+        includes=[],
+        excludes=["inmanta_plugins.cross_module_dependency", "inmanta_plugins.minimalv2module", "inmanta_plugins.anothermod"],
+    )
+
+    types, _ = compiler.do_compile()
+
+    out, _ = capsys.readouterr()
+    output = out.strip()
+
+    expected_output: List[str] = [
+        "message from project model",
+        "triple this string" * 3,
+        "message from cross_module_dependency model",
+    ]
+    for line in expected_output:
+        assert line in output
+
+    check_name_space(
+        name_space=project.modules, includes=["cross_module_dependency"], excludes=["minimalv2module", "anothermod"]
+    )
+    check_name_space(
+        name_space=sys.modules,
+        includes=["inmanta_plugins.cross_module_dependency", "inmanta_plugins.anothermod"],
+        excludes=["inmanta_plugins.minimalv2module"],
+    )
+    # Check that the flag_plugin Plugin object is kept in PluginMeta
+    check_name_space(
+        name_space=plugins.PluginMeta.get_functions(),
+        includes=[
+            "cross_module_dependency::print_message",
+            "cross_module_dependency::call_to_triple_from_another_mod",
+            "anothermod::flag_plugin",
+        ],
+        excludes=[],
+    )
+    # ...but that the corresponding statement is NOT created
+    check_name_space(
+        name_space=types,
+        includes=[
+            "cross_module_dependency::print_message",
+            "cross_module_dependency::call_to_triple_from_another_mod",
+        ],
+        excludes=["anothermod::flag_plugin"],
+    )
+
+
+def test_cross_module_dependency_sub_module(local_module_package_index: str, snippetcompiler, capsys) -> None:
+    """
+    This test checks that the plugins of a top-level module still work even if one of its sub-modules is not loaded.
+    """
+
+    snippetcompiler.setup_for_snippet(
+        """
+import complex_module_dependencies_mod2
+
+complex_module_dependencies_mod2::cmd_mod2()
+        """.strip(),
+        python_package_sources=[local_module_package_index],
+        python_requires=[
+            InmantaModuleRequirement.parse("complex_module_dependencies_mod2").get_python_package_requirement(),
+        ],
+        autostd=False,
+    )
+
+    compiler.do_compile()
+
+    out, _ = capsys.readouterr()
+    output = out.strip()
+
+    expected_output: str = "Hello from complex_module_dependencies_mod2"
+
+    assert expected_output in output

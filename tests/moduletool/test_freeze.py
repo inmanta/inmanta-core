@@ -16,20 +16,22 @@
     Contact: code@inmanta.com
 """
 import os
+import shutil
 import subprocess
 import sys
 
 import pytest
 
 from inmanta.ast import CompilerException
+from inmanta.command import CLIException
 from inmanta.moduletool import ModuleTool
 from moduletool.common import install_project
 from test_app_cli import app
 
 
 @pytest.mark.slowtest
-def test_freeze_basic(git_modules_dir, modules_repo):
-    install_project(git_modules_dir, "projectA")
+def test_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
+    install_project(git_modules_dir, "projectA", tmpdir)
     modtool = ModuleTool()
     cmod = modtool.get_module("modC")
     assert cmod.get_freeze("modC", recursive=False, mode="==") == {"std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2"}
@@ -45,8 +47,8 @@ def test_freeze_basic(git_modules_dir, modules_repo):
 
 
 @pytest.mark.slowtest
-def test_project_freeze_basic(git_modules_dir, modules_repo):
-    install_project(git_modules_dir, "projectA")
+def test_project_freeze_basic(git_modules_dir: str, modules_repo: str, tmpdir):
+    install_project(git_modules_dir, "projectA", tmpdir)
     modtool = ModuleTool()
     proj = modtool.get_project()
     assert proj.get_freeze(recursive=False, mode="==") == {
@@ -69,8 +71,8 @@ def test_project_freeze_basic(git_modules_dir, modules_repo):
 
 
 @pytest.mark.slowtest
-def test_project_freeze_bad(git_modules_dir, modules_repo, capsys, caplog):
-    coroot = install_project(git_modules_dir, "baddep", config=False)
+def test_project_freeze_bad(git_modules_dir: str, modules_repo: str, tmpdir):
+    coroot = install_project(git_modules_dir, "baddep", tmpdir, config=False)
 
     with pytest.raises(CompilerException) as e:
         app(["project", "freeze"])
@@ -81,8 +83,8 @@ def test_project_freeze_bad(git_modules_dir, modules_repo, capsys, caplog):
 
 
 @pytest.mark.slowtest
-def test_project_freeze(git_modules_dir, modules_repo, capsys):
-    coroot = install_project(git_modules_dir, "projectA")
+def test_project_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+    coroot = install_project(git_modules_dir, "projectA", tmpdir)
 
     app(["project", "freeze", "-o", "-"])
 
@@ -109,8 +111,8 @@ requires:
 
 
 @pytest.mark.slowtest
-def test_project_freeze_disk(git_modules_dir, modules_repo, capsys):
-    coroot = install_project(git_modules_dir, "projectA")
+def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+    coroot = install_project(git_modules_dir, "projectA", tmpdir)
 
     app(["project", "freeze"])
 
@@ -139,8 +141,8 @@ requires:
 
 
 @pytest.mark.slowtest
-def test_project_freeze_odd_opperator(git_modules_dir, modules_repo):
-    coroot = install_project(git_modules_dir, "projectA")
+def test_project_freeze_odd_opperator(git_modules_dir: str, modules_repo: str, tmpdir):
+    coroot = install_project(git_modules_dir, "projectA", tmpdir)
 
     # Start a new subprocess, because inmanta-cli executes sys.exit() when an invalid argument is used.
     process = subprocess.Popen(
@@ -159,10 +161,11 @@ def test_project_freeze_odd_opperator(git_modules_dir, modules_repo):
 
 
 @pytest.mark.slowtest
-def test_project_options_in_config(git_modules_dir, modules_repo, capsys):
+def test_project_options_in_config(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
     coroot = install_project(
         git_modules_dir,
         "projectA",
+        tmpdir,
         config_content=f"""
 name: projectA
 license: Apache 2.0
@@ -213,8 +216,8 @@ requires:
 
 
 @pytest.mark.slowtest
-def test_module_freeze(git_modules_dir, modules_repo, capsys):
-    coroot = install_project(git_modules_dir, "projectA")
+def test_module_freeze(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+    coroot = install_project(git_modules_dir, "projectA", tmpdir)
 
     def verify():
         out, err = capsys.readouterr()
@@ -238,8 +241,8 @@ requires:
 
 
 @pytest.mark.slowtest
-def test_module_freeze_self_disk(git_modules_dir, modules_repo, capsys):
-    coroot = install_project(git_modules_dir, "projectA")
+def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys, tmpdir):
+    coroot = install_project(git_modules_dir, "projectA", tmpdir)
 
     def verify():
         out, err = capsys.readouterr()
@@ -270,3 +273,27 @@ requires:
     os.chdir(modp)
     app(["module", "freeze"])
     verify()
+
+
+@pytest.mark.parametrize("use_min_m_option", [True, False])
+def test_module_freeze_on_v2_module(tmpdir, monkeypatch, use_min_m_option: bool) -> None:
+    """
+    Verify that an appropriate error message is returned when the `inmanta module freeze` command is executed on a V2 module.
+    """
+    v2_mod_path_original = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules_v2", "minimalv2module")
+    v2_mod_path = os.path.join(tmpdir, "minimalv2module")
+    shutil.copytree(v2_mod_path_original, v2_mod_path)
+
+    if use_min_m_option:
+        cmd = ["module", "-m", v2_mod_path, "freeze"]
+    else:
+        cmd = ["module", "freeze"]
+        monkeypatch.chdir(v2_mod_path)
+
+    with pytest.raises(CLIException) as exc_info:
+        app(cmd)
+
+    assert "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead." in str(
+        exc_info.value
+    )
+    assert exc_info.value.exitcode == 1

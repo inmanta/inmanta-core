@@ -18,7 +18,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterator
+from collections import abc
 from itertools import chain
 from typing import Dict, List, Optional, Type
 
@@ -26,6 +26,7 @@ import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
 from inmanta.ast import LocatableString, RuntimeException, TypingException
 from inmanta.ast.statements import (
+    AttributeAssignmentLHS,
     ExpressionStatement,
     Literal,
     ReferenceStatement,
@@ -159,7 +160,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         super().execute(requires, resolver, queue)
         return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         return self._op([x.execute_direct(requires) for x in self._arguments])
 
     def get_op(self) -> str:
@@ -236,12 +237,12 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1, op2])
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         super().normalize()
         # lazy execution: we don't immediately emit the second operator so we need to hold its promises until we do
         self._own_eager_promises = list(self.children[1].get_all_eager_promises())
 
-    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+    def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.children[0].get_all_eager_promises())
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
@@ -280,7 +281,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
                 queue, resolver, target, self.children[1].requires_emit(resolver, queue), self.children[1], owner=self
             )
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         lhs = self.children[0].execute_direct(requires)
         self._validate_value(lhs, 0)
         assert isinstance(lhs, bool)

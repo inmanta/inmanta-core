@@ -17,18 +17,17 @@
 """
 
 # pylint: disable-msg=W0613
-
 import typing
-from collections.abc import Iterator
+from collections import abc
 from itertools import chain
-from typing import Dict, Optional, TypeVar
+from string import Formatter
+from typing import Dict, Optional, Tuple, TypeVar
 
 import inmanta.execute.dataflow as dataflow
-import inmanta.warnings as inmanta_warnings
 from inmanta.ast import (
     AttributeException,
     DuplicateException,
-    HyphenDeprecationWarning,
+    HyphenException,
     KeyException,
     LocatableString,
     Location,
@@ -40,6 +39,7 @@ from inmanta.ast import (
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.ast.statements import (
     AssignStatement,
+    AttributeAssignmentLHS,
     ExpressionStatement,
     RequiresEmitStatement,
     Resumer,
@@ -85,6 +85,11 @@ class CreateList(ReferenceStatement):
     def __init__(self, items: typing.List[ExpressionStatement]) -> None:
         ReferenceStatement.__init__(self, items)
         self.items = items
+
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        for item in self.items:
+            # pass on lhs_attribute to children
+            item.normalize(lhs_attribute=lhs_attribute)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
@@ -139,7 +144,7 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         qlist = []
 
         for i in range(len(self.items)):
@@ -173,7 +178,7 @@ class CreateDict(ReferenceStatement):
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
             seen[x] = v
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         qlist = {}
 
         for i in range(len(self.items)):
@@ -220,7 +225,11 @@ class SetAttribute(AssignStatement, Resumer):
         self.list_only = list_only
         self._assignment_promise: StaticEagerPromise = StaticEagerPromise(self.instance, self.attribute_name, self)
 
-    def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        # register this assignment as left hand side to the value on the right hand side
+        self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
+
+    def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks
         return chain(super().get_all_eager_promises(), [self._assignment_promise])
 
@@ -281,9 +290,10 @@ class GradualSetAttributeHelper(ResultCollector[T]):
         self.next = next
         self.attribute_name = attribute_name
 
-    def receive_result(self, value: T, location: Location) -> None:
+    def receive_result(self, value: T, location: Location) -> bool:
         try:
             self.next.receive_result(value, location)
+            return False
         except AttributeException as e:
             e.set_statement(self.stmt, False)
             raise
@@ -293,7 +303,6 @@ class GradualSetAttributeHelper(ResultCollector[T]):
 
 
 class SetAttributeHelper(ExecutionUnit):
-
     __slots__ = ("stmt", "instance", "attribute_name")
 
     def __init__(
@@ -347,7 +356,7 @@ class Assign(AssignStatement):
         self.name = name
         self.value = value
         if "-" in str(self.name):
-            inmanta_warnings.warn(HyphenDeprecationWarning(self.name))
+            raise HyphenException(name)
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
@@ -362,7 +371,7 @@ class Assign(AssignStatement):
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
 
-    def declared_variables(self) -> typing.Iterator[str]:
+    def declared_variables(self) -> abc.Iterator[str]:
         yield str(self.name)
 
     def pretty_print(self) -> str:
@@ -433,7 +442,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.query = [(str(n), e) for n, e in query]
         self.wrapped_query: typing.List["WrappedKwargs"] = wrapped_query
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
 
@@ -497,7 +506,7 @@ class ShortIndexLookup(IndexLookup):
         self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
         self.wrapped_querypart: typing.List["WrappedKwargs"] = wrapped_query
 
-    def normalize(self) -> None:
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None
@@ -546,16 +555,33 @@ class ShortIndexLookup(IndexLookup):
         )
 
 
-class StringFormat(ReferenceStatement):
+class FormattedString(ReferenceStatement):
     """
-    Create a new string by doing a string interpolation
+    This class is an abstraction around a string containing references to variables.
     """
 
     __slots__ = ("_format_string", "_variables")
 
-    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
-        ReferenceStatement.__init__(self, [k for (k, _) in variables])
+    def __init__(self, format_string: str, variables: abc.Sequence["Reference"]) -> None:
+        super().__init__(variables)
         self._format_string = format_string
+
+    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
+        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
+
+    def __repr__(self) -> str:
+        return "Format(%s)" % self._format_string
+
+
+class StringFormat(FormattedString):
+    """
+    Create a new string by doing a string interpolation
+    """
+
+    __slots__ = ()
+
+    def __init__(self, format_string: str, variables: abc.Sequence[Tuple["Reference", str]]) -> None:
+        super().__init__(format_string, [k for (k, _) in variables])
         self._variables = variables
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -572,8 +598,47 @@ class StringFormat(ReferenceStatement):
 
         return result_string
 
-    def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
-        return dataflow.NodeStub("StringFormat.get_node() placeholder for %s" % self).reference()
 
-    def __repr__(self) -> str:
-        return "Format(%s)" % self._format_string
+class FStringFormatter(Formatter):
+    def __init__(self) -> None:
+        Formatter.__init__(self)
+
+    def get_field(self, key: str, args: abc.Sequence[object], kwds: abc.Mapping[str, object]) -> Tuple[object, str]:
+        """
+        Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
+        retrieved by their full name.
+        """
+        return (kwds[key], key)
+
+
+class StringFormatV2(FormattedString):
+    """
+    Create a new string by using python build in formatting
+    """
+
+    __slots__ = ()
+
+    def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
+        only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
+        super().__init__(format_string, only_refs)
+        self._variables = only_refs
+
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
+        formatter: FStringFormatter = FStringFormatter()
+
+        # We can't cache the formatter because it has no ability to cache the parsed string
+
+        kwargs = {}
+        for _var in self._variables:
+            value = _var.execute(requires, resolver, queue)
+            if isinstance(value, Unknown):
+                return Unknown(self)
+            if isinstance(value, float) and (value - int(value)) == 0:
+                value = int(value)
+
+            kwargs[_var.full_name] = value
+
+        result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
+
+        return result_string

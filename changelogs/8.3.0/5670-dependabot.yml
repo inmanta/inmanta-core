@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump types-setuptools from 67.4.0.3 to 67.5.0.0
+destination-branches:
+- master
+- iso6
+sections: {}

@@ -21,7 +21,6 @@ import datetime
 import json
 import os
 import random
-import threading
 import time
 import urllib.parse
 import uuid
@@ -33,10 +32,9 @@ import pydantic
 import pytest
 import tornado
 from pydantic.types import StrictBool
-from tornado import gen, web
+from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, const, protocol
 from inmanta.const import ClientType
@@ -111,12 +109,7 @@ async def test_client_files_lost(client):
 
 
 async def test_sync_client_files(client):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-
     done = []
-    limit = 100
-    sleep = 0.01
 
     def do_test():
         sync_client = protocol.SyncClient("client")
@@ -139,19 +132,11 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    thread = threading.Thread(target=do_test)
-    thread.start()
-
-    while len(done) == 0 and limit > 0:
-        await gen.sleep(sleep)
-        limit -= 1
-
-    thread.join()
+    await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, do_test), timeout=1)
     assert len(done) > 0
 
 
 async def test_client_files_stat(client):
-
     file_names = []
     i = 0
     while i < 10:
@@ -456,7 +441,6 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
 
         @protocol.handle(test_method2)
         async def test_method2i(self, project: List[Project]) -> ReturnValue[List[Project]]:
-
             return ReturnValue(response=project)
 
     rs = Server()
@@ -1336,7 +1320,6 @@ async def test_html_content_type_with_utf8_encoding(unused_tcp_port, postgres_db
     class TestServer(ServerSlice):
         @protocol.handle(test_method)
         async def test_methodY(self) -> ReturnValue[str]:  # NOQA
-
             return ReturnValue(response=html_content, content_type=HTML_CONTENT_WITH_UTF8_CHARSET)
 
     rs = Server()
@@ -1545,7 +1528,7 @@ async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name,
     assert request.url == "/api/v1/test/1/monty?age=42"
 
 
-async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
+async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_port) -> None:
     async def _id(x: object, dct: Dict[str, str]) -> object:
         return x
 
@@ -1565,6 +1548,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
         async def test_method_implementation(self, header_param: str, body_param: str) -> None:
             pass
 
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
@@ -1595,7 +1579,7 @@ async def test_2151_method_header_parameter_in_body(async_finalizer) -> None:
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
-async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool) -> None:
+async def test_2277_typedmethod_return_optional(async_finalizer, return_value: object, valid: bool, unused_tcp_port) -> None:
     @protocol.typedmethod(
         path="/typedtestmethod",
         operation="GET",
@@ -1612,6 +1596,7 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
         async def test_method_typed_implementation(self) -> Optional[int]:
             return return_value  # type: ignore
 
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
@@ -1637,7 +1622,7 @@ def test_method_strict_exception() -> None:
             pass
 
 
-async def test_method_nonstrict_allowed(async_finalizer) -> None:
+async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port) -> None:
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
     def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
         """
@@ -1649,6 +1634,7 @@ async def test_method_nonstrict_allowed(async_finalizer) -> None:
         async def merge_dicts_impl(self, one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
             return {**one, **other}
 
+    configure(unused_tcp_port, "", "")
     server: Server = Server()
     server_slice: ServerSlice = TestSlice("my_test_slice")
     server.add_slice(server_slice)
@@ -2167,3 +2153,44 @@ async def test_kwargs(unused_tcp_port, postgres_db, database_name, async_finaliz
     assert result.code == 200
     assert result.result["data"]["name"] == "test"
     assert result.result["data"]["value"]
+
+
+async def test_get_description_foreach_http_status_code() -> None:
+    """
+    Test whether the `MethodProperties.get_description_foreach_http_status_code()` method works as expected.
+    """
+
+    class ProjectServer(ServerSlice):
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
+        def test_method1(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+            """
+            Create a new project
+
+            :returns: A new project
+            :raises NotFound: The id was not found.
+            :raises 500: A server error.
+            """
+
+        @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
+        def test_method2(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+            """
+            Create a new project
+
+            :returns:
+            :raises NotFound:
+            :raises 500:
+            """
+
+    method_properties = protocol.common.MethodProperties.methods["test_method1"][0]
+    response_code_to_description: Dict[int, str] = method_properties.get_description_foreach_http_status_code()
+    assert len(response_code_to_description) == 3
+    assert response_code_to_description[200] == "A new project"
+    assert response_code_to_description[404] == "The id was not found."
+    assert response_code_to_description[500] == "A server error."
+
+    method_properties = protocol.common.MethodProperties.methods["test_method2"][0]
+    response_code_to_description: Dict[int, str] = method_properties.get_description_foreach_http_status_code()
+    assert len(response_code_to_description) == 3
+    assert response_code_to_description[200] == ""
+    assert response_code_to_description[404] == ""
+    assert response_code_to_description[500] == ""

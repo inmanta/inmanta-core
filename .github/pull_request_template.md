@@ -16,9 +16,4 @@ Strike through any lines that are not applicable (`~~line~~`) then check the box
 - [ ] Sufficient test cases (reproduces the bug/tests the requested feature)
 - [ ] Correct, in line with design
 - [ ] End user documentation is included or an issue is created for end-user documentation (add ref to issue here: )
-
-# Reviewer Checklist:
-
-- [ ] Sufficient test cases (reproduces the bug/tests the requested feature)
-- [ ] Code is clear and sufficiently documented
-- [ ] Correct, in line with design
+- [ ] If this PR fixes a race condition in the test suite, also push the fix to the relevant stable branche(s) (see [test-fixes](https://internal.inmanta.com/development/core/tasks/build-master.html#test-fixes) for more info)

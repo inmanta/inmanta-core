@@ -27,10 +27,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
-
-from tornado import ioloop
-from tornado.concurrent import Future
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -45,10 +42,9 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future
+from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future, join_threadpools
 
 LOGGER = logging.getLogger(__name__)
-GET_RESOURCE_BACKOFF = 5
 
 
 class ResourceActionResult(object):
@@ -62,11 +58,7 @@ class ResourceActionResult(object):
         return "%r" % self.cancel
 
 
-# https://mypy.readthedocs.io/en/latest/common_issues.html#using-classes-that-are-generic-in-stubs-but-not-at-runtime
-if TYPE_CHECKING:
-    ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
-else:
-    ResourceActionResultFuture = asyncio.Future
+ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
 
 
 class ResourceActionBase(abc.ABC):
@@ -84,7 +76,9 @@ class ResourceActionBase(abc.ABC):
         """
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource_id: Id = resource_id
-        self.future: ResourceActionResultFuture = Future()
+        self.future: ResourceActionResultFuture = asyncio.Future()
+        # This variable is used to indicate that the future of a ResourceAction will get a value, because of a deploy
+        # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
@@ -169,7 +163,7 @@ class ResourceAction(ResourceActionBase):
         else:
             # main execution
             try:
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     self.scheduler.agent.thread_pool,
                     provider.deploy,
                     ctx,
@@ -218,66 +212,67 @@ class ResourceAction(ResourceActionBase):
                 )
 
                 self.running = True
-                if self.is_done():
-                    # Action is cancelled
-                    self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
-                    self.running = False
-                    return
-
-                result = sum(results, ResourceActionResult(cancel=False))
-
-                if result.cancel:
-                    # self.running will be set to false when self.cancel is called
-                    # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                    return
-
                 try:
-                    requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
-                except Exception:
-                    ctx.set_status(const.ResourceState.failed)
-                    ctx.exception("Failed to report the start of the deployment to the server")
-                else:
-                    if self.undeployable is not None:
-                        ctx.set_status(self.undeployable)
+                    if self.is_done():
+                        # Action is cancelled
+                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
+                        return
+
+                    result = sum(results, ResourceActionResult(cancel=False))
+
+                    if result.cancel:
+                        # self.running will be set to false when self.cancel is called
+                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                        return
+
+                    try:
+                        requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
+                    except Exception:
+                        ctx.set_status(const.ResourceState.failed)
+                        ctx.exception("Failed to report the start of the deployment to the server")
                     else:
-                        await self._execute(ctx=ctx, requires=requires)
+                        if self.undeployable is not None:
+                            ctx.set_status(self.undeployable)
+                        else:
+                            await self._execute(ctx=ctx, requires=requires)
 
-                ctx.debug(
-                    "End run for resource %(resource)s in deploy %(deploy_id)s",
-                    resource=str(self.resource.id),
-                    deploy_id=self.gid,
-                )
-
-                changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
-                    self.resource.id.resource_version_str(): ctx.changes
-                }
-
-                if ctx.facts:
-                    ctx.debug("Sending facts to the server")
-                    set_fact_response = await self.scheduler.get_client().set_parameters(
-                        tid=self.scheduler._env_id, parameters=ctx.facts
+                    ctx.debug(
+                        "End run for resource %(resource)s in deploy %(deploy_id)s",
+                        resource=str(self.resource.id),
+                        deploy_id=self.gid,
                     )
-                    if set_fact_response.code != 200:
-                        ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-                response = await self.scheduler.get_client().resource_deploy_done(
-                    tid=self.scheduler._env_id,
-                    rvid=self.resource.id.resource_version_str(),
-                    action_id=ctx.action_id,
-                    status=ctx.status,
-                    messages=ctx.logs,
-                    changes=changes,
-                    change=ctx.change,
-                )
+                    changes: Dict[ResourceVersionIdStr, Dict[str, AttributeStateChange]] = {
+                        self.resource.id.resource_version_str(): ctx.changes
+                    }
 
-                if response.code != 200:
-                    LOGGER.error("Resource status update failed %s", response.result)
+                    if ctx.facts:
+                        ctx.debug("Sending facts to the server")
+                        set_fact_response = await self.scheduler.get_client().set_parameters(
+                            tid=self.scheduler._env_id, parameters=ctx.facts
+                        )
+                        if set_fact_response.code != 200:
+                            ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-                self.status = ctx.status
-                self.change = ctx.change
-                self.changes = changes
-                self.future.set_result(ResourceActionResult(cancel=False))
-                self.running = False
+                    response = await self.scheduler.get_client().resource_deploy_done(
+                        tid=self.scheduler._env_id,
+                        rvid=self.resource.id.resource_version_str(),
+                        action_id=ctx.action_id,
+                        status=ctx.status,
+                        messages=ctx.logs,
+                        changes=changes,
+                        change=ctx.change,
+                    )
+
+                    if response.code != 200:
+                        LOGGER.error("Resource status update failed %s", response.result)
+
+                    self.status = ctx.status
+                    self.change = ctx.change
+                    self.changes = changes
+                    self.future.set_result(ResourceActionResult(cancel=False))
+                finally:
+                    self.running = False
 
 
 class RemoteResourceAction(ResourceActionBase):
@@ -301,6 +296,7 @@ class RemoteResourceAction(ResourceActionBase):
                 return
 
             status = const.ResourceState[result.result["resource"]["status"]]
+            self.running = True
             if status in const.TRANSIENT_STATES or self.future.done():
                 # wait for event
                 pass
@@ -320,10 +316,10 @@ class RemoteResourceAction(ResourceActionBase):
                     self.status = status
 
                 self.future.set_result(ResourceActionResult(cancel=False))
-
-            self.running = False
         except Exception:
             LOGGER.exception("could not get status for remote resource")
+        finally:
+            self.running = False
 
     def notify(
         self,
@@ -348,16 +344,14 @@ class ResourceScheduler(object):
     2 - we don't need to figure out exactly when a run is done
     """
 
-    def __init__(
-        self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache, ratelimiter: asyncio.Semaphore
-    ) -> None:
+    def __init__(self, agent: "AgentInstance", env_id: uuid.UUID, name: str, cache: AgentCache) -> None:
         self.generation: Dict[ResourceIdStr, ResourceActionBase] = {}
         self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
         self.name = name
-        self.ratelimiter = ratelimiter
+        self.ratelimiter = agent.ratelimiter
         self.version: int = 0
         # the reason the last run was started
         self.reason: str = ""
@@ -467,7 +461,11 @@ class ResourceScheduler(object):
         dummy.future.set_result(ResourceActionResult(cancel=False))
 
     async def mark_deployment_as_finished(self, resource_actions: Iterable[ResourceActionBase]) -> None:
-        await asyncio.gather(*[resource_action.future for resource_action in resource_actions])
+        # This method is executing as a background task. As such, it will get cancelled when the agent is stopped.
+        # Because the asyncio.gather() call propagates cancellation, we shield the ResourceActionBase.future.
+        # Cancellation of these futures is handled by the ResourceActionBase.cancel() method. Not shielding them
+        # would cause the result of the future to be set twice, which results in an undesired InvalidStateError.
+        await asyncio.gather(*[asyncio.shield(resource_action.future) for resource_action in resource_actions])
         async with self.agent.critical_ratelimiter:
             if not self.finished():
                 return
@@ -531,8 +529,8 @@ class AgentInstance(object):
         self.sessionid: uuid.UUID = process.sessionid
 
         # init
-        self._cache = AgentCache()
-        self._nq = ResourceScheduler(self, self._env_id, name, self._cache, ratelimiter=self.ratelimiter)
+        self._cache = AgentCache(self)
+        self._nq = ResourceScheduler(self, self._env_id, name, self._cache)
         self._time_triggered_actions: Set[ScheduledTask] = set()
         self._enabled = False
         self._stopped = False
@@ -558,6 +556,16 @@ class AgentInstance(object):
         self._cache.close()
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
+
+    def join(self, thread_pool_finalizer: List[ThreadPoolExecutor]) -> None:
+        """
+        Called after stop to ensure complete shutdown
+
+        :param thread_pool_finalizer: all threadpools that should be joined should be added here.
+        """
+        assert self._stopped
+        thread_pool_finalizer.append(self.provider_thread_pool)
+        thread_pool_finalizer.append(self.thread_pool)
 
     @property
     def environment(self) -> uuid.UUID:
@@ -663,7 +671,7 @@ class AgentInstance(object):
             return False
         if time.time() < self._get_resource_timeout:
             self.logger.info(
-                "Attempting to get resources during backoff %g seconds left, last download took %d seconds",
+                "Attempting to get resources during backoff %g seconds left, last download took %f seconds",
                 self._get_resource_timeout - time.time(),
                 self._get_resource_duration,
             )
@@ -671,7 +679,7 @@ class AgentInstance(object):
         return True
 
     async def get_provider(self, resource: Resource) -> ResourceHandler:
-        provider = await asyncio.get_event_loop().run_in_executor(
+        provider = await asyncio.get_running_loop().run_in_executor(
             self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
         )
         provider.set_cache(self._cache)
@@ -705,7 +713,7 @@ class AgentInstance(object):
                 self._getting_resources = False
             end = time.time()
             self._get_resource_duration = end - start
-            self._get_resource_timeout = GET_RESOURCE_BACKOFF * self._get_resource_duration + end
+            self._get_resource_timeout = cfg.agent_get_resource_backoff.get() * self._get_resource_duration + end
             if result.code == 404:
                 self.logger.info("No released configuration model version available for %s", reason)
             elif result.code == 409:
@@ -777,7 +785,7 @@ class AgentInstance(object):
                             )
                         else:
                             try:
-                                await asyncio.get_event_loop().run_in_executor(
+                                await asyncio.get_running_loop().run_in_executor(
                                     self.thread_pool, provider.execute, ctx, resource, True
                                 )
 
@@ -848,7 +856,7 @@ class AgentInstance(object):
                 try:
                     self._cache.open_version(version)
                     provider = await self.get_provider(resource_obj)
-                    result = await asyncio.get_event_loop().run_in_executor(
+                    result = await asyncio.get_running_loop().run_in_executor(
                         self.thread_pool, provider.check_facts, ctx, resource_obj
                     )
 
@@ -955,7 +963,7 @@ class Agent(SessionEndpoint):
 
     # cache reference to THIS ioloop for handlers to push requests on it
     # defer to start, just to be sure
-    _io_loop: ioloop.IOLoop
+    _io_loop: asyncio.AbstractEventLoop
 
     def __init__(
         self,
@@ -964,14 +972,12 @@ class Agent(SessionEndpoint):
         code_loader: bool = True,
         environment: Optional[uuid.UUID] = None,
         poolsize: int = 1,
-        cricital_pool_size: int = 5,
     ):
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.hostname = hostname
         self.poolsize = poolsize
         self.ratelimiter = asyncio.Semaphore(poolsize)
-        self.critical_ratelimiter = asyncio.Semaphore(cricital_pool_size)
         self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
         self._storage = self.check_storage()
@@ -1029,8 +1035,11 @@ class Agent(SessionEndpoint):
     async def stop(self) -> None:
         await super(Agent, self).stop()
         self.thread_pool.shutdown(wait=False)
+        threadpools_to_join = [self.thread_pool]
         for instance in self._instances.values():
             await instance.stop()
+            instance.join(threadpools_to_join)
+        await join_threadpools(threadpools_to_join)
 
     async def start_connected(self) -> None:
         """
@@ -1049,7 +1058,7 @@ class Agent(SessionEndpoint):
 
     async def start(self) -> None:
         # cache reference to THIS ioloop for handlers to push requests on it
-        self._io_loop = ioloop.IOLoop.current()
+        self._io_loop = asyncio.get_running_loop()
         await super(Agent, self).start()
 
     async def add_end_point_name(self, name: str) -> None:
@@ -1232,7 +1241,7 @@ class Agent(SessionEndpoint):
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
         async with self._loader_lock:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(self.thread_pool, self._env.install_from_list, requirements)
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
 

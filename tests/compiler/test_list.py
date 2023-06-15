@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import textwrap
+
 import pytest
 
 import inmanta.compiler as compiler
@@ -418,11 +420,12 @@ def test_emptylists(snippetcompiler):
     compiler.do_compile()
 
 
-def test_653_list_attribute_unset(snippetcompiler):
+@pytest.mark.parametrize_any("type", ["[]", "[]?"])
+def test_653_list_attribute_unset(snippetcompiler, type: str):
     snippetcompiler.setup_for_error(
-        """
+        f"""
         entity Test:
-            string[] bla
+            string{type} bla
         end
 
         Test()
@@ -430,7 +433,7 @@ def test_653_list_attribute_unset(snippetcompiler):
         implement Test using std::none
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
-        " attribute bla ({dir}/main.cf:3:22) requires 1 values but only 0 are set",
+        f" attribute bla ({{dir}}/main.cf:3:{20 + len(type)}) is not set",
     )
 
 
@@ -528,3 +531,28 @@ x.lst = [x]
         "  Invalid value '__config__::ListContainer (instantiated at {dir}/main.cf:12)', expected Literal"
         " (reported in x.lst = List() ({dir}/main.cf:13))",
     )
+
+
+def test_relation_list_duplicate_assignment(snippetcompiler):
+    """
+    Verify that including the same instance twice in a list for relation assignment works without issue.
+
+    This test was included because naive implementations of ResultVariable listener tracking would break this.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            x = A()
+            y = A()
+
+            x.others += [y.others, y.others]
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()

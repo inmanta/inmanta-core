@@ -2,35 +2,38 @@ from setuptools import setup, find_namespace_packages
 from os import path
 
 requires = [
-    "asyncpg~=0.25",
+    "asyncpg~=0.25,<0.28",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
     "click>=8.0,<8.2",
-    "colorlog~=6.0",
+    "colorlog~=6.4",
     "cookiecutter>=1,<3",
-    "crontab~=0.23",
-    "cryptography>=36,<39",
+    "crontab>=0.23,<2.0",
+    "cryptography>=36,<42",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.16",
-    "email-validator~=1.0",
+    "email-validator>=1,<3",
     "execnet~=1.0",
-    "importlib_metadata~=4.0",
+    "importlib_metadata>=4,<7",
     "jinja2~=3.0",
-    "more-itertools~=8.0",
+    "more-itertools>=8,<10",
     "netifaces~=0.11",
-    "packaging~=21.3",
+    # leave upper bound floating for fast-moving and extremely stable packaging
+    "packaging>=21.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
-    "pydantic~=1.0,!=1.9.0a1",
+    # lower bound because of pydantic/pydantic#5821
+    "pydantic>=1.10.8,<2",
     "pyformance~=0.4",
     "PyJWT~=2.0",
+    "pynacl~=1.5",
     "python-dateutil~=2.0",
     "pyyaml~=6.0",
     "texttable~=1.0",
     "tornado~=6.0",
-    "typing_inspect~=0.7",
+    # lower bound because of ilevkivskyi/typing_inspect#100
+    "typing_inspect~=0.9",
     "build~=0.7",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
@@ -42,7 +45,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "7.0.1"
+version = "9.2.0"
 
 setup(
     version=version,
@@ -89,6 +92,7 @@ setup(
         "console_scripts": [
             "inmanta-cli = inmanta.main:main",
             "inmanta = inmanta.app:app",
+            "inmanta-initial-user-setup = inmanta.user_setup:main",
         ],
     },
 )

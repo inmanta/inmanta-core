@@ -17,12 +17,14 @@
 """
 
 import logging
+from collections import abc
 from typing import Dict, Generic, List, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
 from inmanta.ast.statements import (
     AssignStatement,
+    AttributeAssignmentLHS,
     ExpressionStatement,
     RawResumer,
     Statement,
@@ -66,8 +68,15 @@ class Reference(ExpressionStatement):
         self.name = str(name)
         self.full_name = str(name)
 
-    def normalize(self) -> None:
-        pass
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        split: abc.Sequence[str] = self.name.rsplit("::", maxsplit=1)
+        if len(split) > 1:
+            # fail-fast if namespace does not exist
+            try:
+                self.namespace.lookup_namespace(split[0])
+            except NotFoundException as e:
+                e.set_statement(self)
+                raise
 
     def requires(self) -> List[str]:
         return [self.full_name]
@@ -93,7 +102,7 @@ class Reference(ExpressionStatement):
         super().execute(requires, resolver, queue)
         return requires[self.name]
 
-    def execute_direct(self, requires: Dict[object, object]) -> object:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         if self.name not in requires:
             raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[self.name]
@@ -186,12 +195,17 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         self.owner: Statement = owner
         self.target: ResultVariable[bool] = target
 
-    def receive_result(self, value: object, location: Location) -> None:
+    def pure_gradual(self) -> bool:
+        # freezing an empty variable causes progress
+        return False
+
+    def receive_result(self, value: object, location: Location) -> bool:
         """
         Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
         value implies that the variable is defined.
         """
         self.target.set_value(True, self.owner.location)
+        return True
 
     def variable_resume(
         self,

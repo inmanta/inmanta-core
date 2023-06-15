@@ -17,13 +17,15 @@
 """
 import logging
 import sys
+from collections import abc
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Set, Tuple
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta import const, module
 from inmanta.ast import (
+    AnchorTarget,
     AttributeException,
     CompilerException,
     DoubleSetException,
@@ -44,6 +46,7 @@ from inmanta.execute.proxy import UnsetException
 from inmanta.execute.runtime import ResultVariable
 from inmanta.parser import ParserException
 from inmanta.plugins import Plugin, PluginMeta
+from inmanta.stable_api import stable_api
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -51,7 +54,7 @@ if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 
-def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
+def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
@@ -68,14 +71,17 @@ def do_compile(refs: Dict[Any, Any] = {}) -> Tuple[Dict[str, inmanta_type.Type],
     except ParserException as e:
         compiler.handle_exception(e)
     sched = scheduler.Scheduler(compiler_config.track_dataflow(), project.get_relation_precedence_policy())
+    raised_compile_exception: bool = False
     try:
         success = sched.run(compiler, statements, blocks)
     except CompilerException as e:
+        raised_compile_exception = True
         if compiler_config.dataflow_graphic_enable.get():
             show_dataflow_graphic(sched, compiler)
         compiler.handle_exception(e)
         success = False
-
+    finally:
+        Finalizers.call_finalizers(raised_compile_exception)
     LOGGER.debug("Compile done")
 
     if not success:
@@ -103,7 +109,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
+def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, AnchorTarget]]:
     """
     Return all lexical references
 
@@ -118,7 +124,7 @@ def anchormap(refs: Dict[Any, Any] = {}) -> Sequence[Tuple[Location, Location]]:
 
     (statements, blocks) = compiler.compile()
     sched = scheduler.Scheduler()
-    return sched.anchormap(compiler, statements, blocks)
+    return sched.get_anchormap(compiler, statements, blocks)
 
 
 def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
@@ -141,11 +147,11 @@ class Compiler(object):
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
 
-    def __init__(self, cf_file: str = "main.cf", refs: Dict[Any, Any] = {}) -> None:
+    def __init__(self, cf_file: str = "main.cf", refs: Optional[abc.Mapping[object, object]] = None) -> None:
         self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
         self.plugins: Dict[str, Plugin] = {}
-        self.refs = refs
+        self.refs = refs if refs is not None else {}
 
     def get_plugins(self) -> Dict[str, Plugin]:
         return self.plugins
@@ -190,8 +196,14 @@ class Compiler(object):
 
         project.log_installed_modules()
 
+        # This lookup variable provides efficiency in the loop below by skipping iterations for plugins
+        # that are part of modules that are not imported in the model.
+        non_imported_modules: set[str] = set()
+
         # load plugins
         for name, cls in PluginMeta.get_functions().items():
+            if cls.__module__ in non_imported_modules:
+                continue
 
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
@@ -208,11 +220,13 @@ class Compiler(object):
                 ns = ns.get_child(part)
 
             if ns is None:
-                raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
-
-            name = name.split("::")[-1]
-            statement = PluginStatement(ns, name, cls)
-            statements.append(statement)
+                # This plugin is part of a module that is not imported in the model. We mark this module as such
+                # so that future iterations on other plugins from this module can be skipped.
+                non_imported_modules.add(cls.__module__)
+            else:
+                name = name.split("::")[-1]
+                statement = PluginStatement(ns, name, cls)
+                statements.append(statement)
 
         # add the entity type (hack?)
         ns = self.__root_ns.get_child_or_create("std")
@@ -314,3 +328,48 @@ class Compiler(object):
         add_trace(exception)
         exception.attach_compile_info(self)
         raise exception
+
+
+class Finalizers:
+    """
+    This class keeps all the finalizers that need to be called right after the compilation finishes
+    """
+
+    __finalizers: list[abc.Callable[[], object]] = []
+
+    @classmethod
+    def add_function(cls, fnc: abc.Callable[[], object]) -> None:
+        cls.__finalizers.append(fnc)
+
+    @classmethod
+    def call_finalizers(cls, should_log: bool = False) -> None:
+        """
+        by default this function will raise exceptions caused by errors in the finalizer functions
+        if 'should_log' is set to True the exceptions will not be raised but logged instead.
+        """
+        excns: list[CompilerException] = []
+        for fnc in cls.__finalizers:
+            try:
+                fnc()
+            except Exception as e:
+                excns.append(CompilerException("Finalizer failed: " + str(e)))
+        if excns:
+            if should_log:
+                for exception in excns:
+                    LOGGER.error(exception.msg)
+            else:
+                raise excns[0] if len(excns) == 1 else MultiException(excns)
+
+    @classmethod
+    def reset_finalizers(cls) -> None:
+        cls.__finalizers = []
+
+
+@stable_api
+def finalizer(fnc: abc.Callable[[], object]) -> None:
+    """
+    Python decorator to register functions with inmanta as Finalizers
+    :param fnc: The function to register with inmanta as a finalizer. When used as a decorator this is the function to which the
+     decorator is attached.
+    """
+    Finalizers.add_function(fnc)

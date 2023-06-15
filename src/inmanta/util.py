@@ -27,19 +27,20 @@ import itertools
 import logging
 import os
 import socket
+import threading
 import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from tornado import gen
-from tornado.ioloop import IOLoop
 
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
@@ -243,7 +244,7 @@ class Scheduler(object):
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[ScheduledTask, object] = {}
+        self._scheduled: Dict[ScheduledTask, asyncio.TimerHandle] = {}
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
@@ -324,10 +325,10 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
-                    ihandle = IOLoop.current().call_later(schedule_typed.get_next_delay(), action_function)
+                    ihandle = asyncio.get_running_loop().call_later(schedule_typed.get_next_delay(), action_function)
                     self._scheduled[task_spec] = ihandle
 
-        handle = IOLoop.current().call_later(schedule_typed.get_initial_delay(), action_function)
+        handle: asyncio.TimerHandle = asyncio.get_running_loop().call_later(schedule_typed.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
         return task_spec
 
@@ -337,7 +338,7 @@ class Scheduler(object):
         Remove a scheduled action
         """
         if task in self._scheduled:
-            IOLoop.current().remove_timeout(self._scheduled[task])
+            self._scheduled[task].cancel()
             del self._scheduled[task]
 
     @stable_api
@@ -350,7 +351,7 @@ class Scheduler(object):
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:
                 _, handle = self._scheduled.popitem()
-                IOLoop.current().remove_timeout(handle)
+                handle.cancel()
         except KeyError:
             pass
 
@@ -359,7 +360,18 @@ class Scheduler(object):
             for task in tasks:
                 if task not in self._await_tasks[action]:
                     task.cancel()
-        await gather(*[handle for handles in self._await_tasks.values() for handle in handles])
+
+        results = await gather(
+            *[handle for handles in self._await_tasks.values() for handle in handles], return_exceptions=True
+        )
+
+        # Log any exception that happened during shutdown
+        for result in results:
+            if isinstance(result, CancelledError):
+                # Ignore this, it is ok to leak a cancel here
+                pass
+            if isinstance(result, Exception):
+                LOGGER.error("Exception during shutdown", exc_info=result)
 
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
@@ -487,17 +499,36 @@ async def retry_limited(
     *args: object,
     **kwargs: object,
 ) -> None:
+    """
+    This function makes use of the INMANTA_RETRY_LIMITED_MULTIPLIER env variable. If set, INMANTA_RETRY_LIMITED_MULTIPLIER
+    serves as multiplier: The timeout given as argument becomes a 'soft limit' and the 'soft limit' multiplied by the
+    multiplier (from the env var) becomes a 'hard limit'. If the hard limit is reached before the wait condition is fulfilled
+    a Timeout exception is raised. If the wait condition is fulfilled before the hard limit is reached but after the soft
+    limit is reached, a different Timeout exception is raised. if the Env var is not set, then the soft and hard limit are
+    the same.
+    """
+
     async def fun_wrapper() -> bool:
         if inspect.iscoroutinefunction(fun):
             return await fun(*args, **kwargs)
         else:
             return fun(*args, **kwargs)
 
+    multiplier: int = int(os.environ.get("INMANTA_RETRY_LIMITED_MULTIPLIER", 1))
+    if multiplier < 1:
+        raise ValueError("value of INMANTA_RETRY_LIMITED_MULTIPLIER must be bigger or equal to 1.")
+    hard_timeout = timeout * multiplier
     start = time.time()
-    while time.time() - start < timeout and not (await fun_wrapper()):
+    result = await fun_wrapper()
+    while time.time() - start < hard_timeout and not result:
         await asyncio.sleep(interval)
-    if not (await fun_wrapper()):
-        raise asyncio.TimeoutError()
+        result = await fun_wrapper()
+    if not result:
+        raise asyncio.TimeoutError(f"Wait condition was not reached after hard limit of {hard_timeout} seconds")
+    if time.time() - start > timeout:
+        raise asyncio.TimeoutError(
+            f"Wait condition was met after {time.time() - start} seconds, but soft limit was set to {timeout} seconds"
+        )
 
 
 class StoppedException(Exception):
@@ -669,3 +700,50 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
 
     async def __aexit__(self, *excinfo: object) -> None:
         pass
+
+
+async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
+    """
+    Asynchronously join a set of threadpools
+
+    idea borrowed from BaseEventLoop.shutdown_default_executor
+
+    We implemented this method because:
+    1. ThreadPoolExecutor.shutdown(wait=True)` is a blocking call, blocking the ioloop.
+       This doesn't work because we often have back-and-forth between the ioloop and the thread
+       due to our `ResourceHandler.run_sync` method.
+    2.The python sdk has no support for async awaiting threadpool shutdown (except for the default pool)
+    """
+
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+
+    def join() -> None:
+        for threadpool in threadpools:
+            try:
+                threadpool.shutdown(wait=True)
+            except Exception:
+                LOGGER.exception("Exception during threadpool shutdown")
+        loop.call_soon_threadsafe(future.set_result, None)
+
+    thread = threading.Thread(target=join)
+    thread.start()
+    try:
+        await future
+    finally:
+        thread.join()
+
+
+def ensure_event_loop() -> asyncio.AbstractEventLoop:
+    """
+    Returns the event loop for this thread. Creates a new one if none exists yet and registers it with asyncio's active event
+    loop policy.
+    """
+    try:
+        # nothing needs to be done if this thread already has an event loop
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        # asyncio.set_event_loop sets the event loop for this thread only
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        return new_loop

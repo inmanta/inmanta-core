@@ -39,6 +39,7 @@ async def env_with_versions(environment):
             total=1,
             released=i != 1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -53,7 +54,6 @@ async def create_resource_in_multiple_versions(
 ):
     key = f"{resource_type}[{agent},path={path}]"
     for version, attributes in version_attributes_map.items():
-        attributes["requires"] = [f"{req},v={version}" for req in attributes.get("requires", [])]
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),

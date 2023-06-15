@@ -63,6 +63,7 @@ async def env_with_resources(server, client):
             total=1,
             released=i != 1 and i != 9,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         cm_time_idx += 1
         await cm.insert()
@@ -74,6 +75,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -85,6 +87,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     cm_time_idx += 1
     await cm.insert()
@@ -106,7 +109,7 @@ async def env_with_resources(server, client):
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}},
+            attributes={**attributes, **{"path": path}, "version": version},
             status=status,
             last_deploy=resource_deploy_times[total_number_of_resources()],
         )
@@ -120,7 +123,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file1",
             ResourceState.undefined,
             1,
-            {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1],v=1"]},
+            {"key1": "val1", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources["std::File[internal,path=/tmp/dir1/file1]"].append(
@@ -130,7 +133,7 @@ async def env_with_resources(server, client):
             2,
             {
                 "key1": "val1",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=2", "std::File[internal,path=/tmp/dir1/file2],v=2"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -142,7 +145,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=3", "std::File[internal,path=/tmp/dir1/file2],v=3"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -154,7 +157,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=4", "std::File[internal,path=/tmp/dir1/file2],v=4"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -166,7 +169,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value2",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=5", "std::File[internal,path=/tmp/dir1/file2],v=5"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -178,7 +181,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=6", "std::File[internal,path=/tmp/dir1/file2],v=6"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -190,7 +193,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=7", "std::File[internal,path=/tmp/dir1/file2],v=7"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -202,7 +205,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "different_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=8", "std::File[internal,path=/tmp/dir1/file2],v=8"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -214,7 +217,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "different_value_2",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=9", "std::File[internal,path=/tmp/dir1/file2],v=9"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
         )
     )
@@ -241,7 +244,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deployed,
             2,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=2"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources["std::File[internal,path=/tmp/dir1/file2]"].append(
@@ -249,7 +252,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deployed,
             3,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=3"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
     resources["std::File[internal,path=/tmp/dir1/file2]"].append(
@@ -257,7 +260,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.deploying,
             8,
-            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1],v=8"]},
+            {"key3": "val3updated", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
         )
     )
 
@@ -277,7 +280,7 @@ async def env_with_resources(server, client):
             "/tmp/dir1/file2",
             ResourceState.unavailable,
             8,
-            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1],v=4"]},
+            {"key3": "val3", "requires": ["std::Directory[internal,path=/tmp/dir1]"]},
             resource_type="std::Directory",
             environment=env2.id,
         )
@@ -303,7 +306,7 @@ async def env_with_resources(server, client):
             {
                 "key1": "modified_value",
                 "another_key": "val",
-                "requires": ["std::Directory[internal,path=/tmp/dir1],v=6", "std::File[internal,path=/tmp/dir1/file2],v=6"],
+                "requires": ["std::Directory[internal,path=/tmp/dir1]", "std::File[internal,path=/tmp/dir1/file2]"],
             },
             environment=env3.id,
         )
@@ -494,7 +497,7 @@ async def test_history_not_continuous_versions(server, client, environment):
         res = data.Resource.new(
             environment=environment,
             resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-            attributes={**attributes, **{"path": path}},
+            attributes={**attributes, **{"path": path}, "version": version},
             status=status,
             last_deploy=datetime.datetime.now(),
         )
@@ -511,6 +514,7 @@ async def test_history_not_continuous_versions(server, client, environment):
             total=1,
             released=True,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         ).insert()
         await create_resource(
             "/tmp/dir1/file1",
@@ -524,4 +528,4 @@ async def test_history_not_continuous_versions(server, client, environment):
     result = await client.resource_history(environment, "std::File[internal,path=/tmp/dir1/file1]")
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert result.result["data"][0]["attributes"] == {"key1": "val1", "path": "/tmp/dir1/file1"}
+    assert result.result["data"][0]["attributes"] == {"key1": "val1", "path": "/tmp/dir1/file1", "version": 1}

@@ -1,0 +1,8 @@
+description: Added the inmanta-workon command
+issue-nr: 4376
+sections:
+  feature: "{{description}}"
+change-type: minor
+destination-branches:
+  - master
+  - iso5

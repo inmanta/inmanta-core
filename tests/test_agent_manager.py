@@ -30,6 +30,7 @@ import pytest
 from inmanta import config, data
 from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
+from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
@@ -730,8 +731,8 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
-    await a.start()
     async_finalizer(a.stop)
+    await a.start()
 
     # Wait until session is created
     await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
@@ -763,6 +764,7 @@ async def test_session_creation_fails(server, environment, async_finalizer, capl
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
     await a.start()
+    async_finalizer(a.stop)
 
     # Verify that session creation fails and server state is stays consistent
     await retry_limited(lambda: "Heartbeat failed" in caplog.text, 10)
@@ -1179,35 +1181,6 @@ async def test_failover_doesnt_make_paused_agent_primary(server, client, environ
     assert len(agentmanager.tid_endpoint_to_session) == 0
 
 
-async def test_add_internal_agent_when_missing_in_agent_map(server, environment, postgresql_client):
-    """
-    The internal agent should always be present in the autostart_agent_map. If it is not present, it is added when to
-    auto-started agent is started. This test case verifies this behavior.
-    """
-    # Ensure agent1
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-    env = await data.Environment.get_by_id(UUID(environment))
-    await agentmanager.ensure_agent_registered(env=env, nodename="agent1")
-
-    # Remove the internal agent from the autostart_agent_map
-    query = "UPDATE public.environment SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::jsonb), TRUE)"
-    await postgresql_client.execute(query, [data.AUTOSTART_AGENT_MAP], "{}")
-
-    # Assert internal agent not in autostart_agent_map
-    env = await data.Environment.get_by_id(UUID(environment))
-    autostart_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-    assert "internal" not in autostart_agent_map
-
-    # Start autostarted agent1
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    await autostarted_agent_manager._ensure_agents(env=env, agents=["agent1"])
-
-    # Verify patch on autostart_agent_map
-    env = await data.Environment.get_by_id(UUID(environment))
-    autostart_agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
-    assert "internal" in autostart_agent_map
-
-
 async def test_error_handling_agent_fork(server, environment, monkeypatch):
     """
     Verifies resolution of issue: inmanta/inmanta-core#2777
@@ -1235,7 +1208,6 @@ async def test_are_agents_active(server, client, environment, agent_factory) -> 
     Ensure that the `AgentManager.are_agents_active()` method returns True when an agent
     is in the up or the paused state.
     """
-    agent_config.use_autostart_agent_map.set("True")
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agent_name = "agent1"
     env_id = UUID(environment)
@@ -1300,3 +1272,27 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     assert "Started new agent with PID" not in caplog.text
     # Ensure no timeout happened
     assert "took too long to start" not in caplog.text
+
+
+async def test_auto_started_agent_log_in_debug_mode(server, environment):
+    """
+    Test the logging of an autostarted agent
+    """
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "test1": ""})
+
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    autostarted_agentmanager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+    await agentmanager.ensure_agent_registered(env, "test1")
+    await autostarted_agentmanager._ensure_agents(env, ["test1"])
+
+    logdir = Config.get("config", "log-dir")
+    log_file_path = f"{logdir}/agent-{environment}.log"  # Path to the log file
+
+    def log_contains_debug_line():
+        with open(log_file_path, mode="r") as f:
+            log_content = f.read()
+        return "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
+
+    await retry_limited(log_contains_debug_line, 10)

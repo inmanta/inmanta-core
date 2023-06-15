@@ -18,29 +18,22 @@
 import datetime
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource
-from inmanta.data import APILIMIT, FactOrder, InvalidSort, ParameterOrder, QueryType
+from inmanta.data import InvalidSort
+from inmanta.data.dataview import FactsView, ParameterView
 from inmanta.data.model import Fact, Parameter, ResourceIdStr
-from inmanta.data.paging import (
-    FactPagingCountsProvider,
-    FactPagingHandler,
-    ParameterPagingCountsProvider,
-    ParameterPagingHandler,
-    QueryIdentifier,
-)
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_PARAM, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.server import Server
-from inmanta.server.validate_filter import FactsFilterValidator, InvalidFilter, ParameterFilterValidator
+from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType
 
 LOGGER = logging.getLogger(__name__)
@@ -70,27 +63,25 @@ class ParameterService(protocol.ServerSlice):
         self.agentmanager = cast(AgentManager, server.get_slice(SLICE_AGENT_MANAGER))
 
     async def start(self) -> None:
-        self.schedule(self.renew_expired_facts, self._fact_renew, cancel_on_stop=False)
+        self.schedule(self.renew_facts, self._fact_renew, cancel_on_stop=False)
         await super().start()
 
-    async def renew_expired_facts(self) -> None:
+    async def renew_facts(self) -> None:
         """
-        Send out requests to renew expired facts
+        Send out requests to renew facts.
         """
-        LOGGER.info("Renewing expired parameters")
+        LOGGER.info("Renewing parameters")
 
-        updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
-        expired_params = await data.Parameter.get_updated_before(updated_before)
+        updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
+        params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before)
 
-        LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
+        LOGGER.debug("Renewing %d parameters", len(params_to_renew))
 
-        for param in expired_params:
-            if param.environment is None:
-                LOGGER.warning(
-                    "Found parameter without environment (%s for resource %s). Deleting it.", param.name, param.resource_id
-                )
-                await param.delete()
-            else:
+        environments = await data.Environment.get_list(halted=False)
+        ids_non_halted_envs = [env.id for env in environments]
+
+        for param in params_to_renew:
+            if param.environment in ids_non_halted_envs:
                 LOGGER.debug(
                     "Requesting new parameter value for %s of resource %s in env %s",
                     param.name,
@@ -98,19 +89,29 @@ class ParameterService(protocol.ServerSlice):
                     param.environment,
                 )
                 await self.agentmanager.request_parameter(param.environment, param.resource_id)
+            else:
+                LOGGER.debug(
+                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
+                    param.name,
+                    param.resource_id,
+                    param.environment,
+                )
 
         unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
         for u in unknown_parameters:
-            if u.environment is None:
-                LOGGER.warning(
-                    "Found unknown parameter without environment (%s for resource %s). Deleting it.", u.name, u.resource_id
+            if u.environment in ids_non_halted_envs:
+                LOGGER.debug(
+                    "Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.environment
                 )
-                await u.delete()
-            else:
-                LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
                 await self.agentmanager.request_parameter(u.environment, u.resource_id)
-
-        LOGGER.info("Done renewing expired parameters")
+            else:
+                LOGGER.debug(
+                    "Not Requesting value for unknown parameter %s of resource %s in env %s as the env is halted",
+                    u.name,
+                    u.resource_id,
+                    u.environment,
+                )
+        LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")
     async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
@@ -287,7 +288,7 @@ class ParameterService(protocol.ServerSlice):
 
     @handle(methods_v2.get_facts, env="tid")
     async def get_facts(self, env: data.Environment, rid: ResourceIdStr) -> List[Fact]:
-        params = await data.Parameter.get_list(environment=env.id, resource_id=rid)
+        params = await data.Parameter.get_list(environment=env.id, resource_id=rid, order_by_column="name")
         dtos = [param.as_fact() for param in params]
         return dtos
 
@@ -309,62 +310,22 @@ class ParameterService(protocol.ServerSlice):
         end: Optional[Union[datetime.datetime, str]] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "name.asc",
-    ) -> ReturnValue[List[Parameter]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(ParameterFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
+    ) -> ReturnValue[Sequence[Parameter]]:
         try:
-            parameter_order = ParameterOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-
-        typed_start, typed_end = None, None
-        if start is not None:
-            typed_start = parameter_order.ensure_boundary_type(start)
-        if end is not None:
-            typed_end = parameter_order.ensure_boundary_type(end)
-
-        try:
-            dtos = await data.Parameter.get_parameter_list(
-                database_order=parameter_order,
+            handler = ParameterView(
+                environment=env,
                 limit=limit,
-                environment=env.id,
+                sort=sort,
                 first_id=first_id,
                 last_id=last_id,
-                start=typed_start,
-                end=typed_end,
-                connection=None,
-                **query,
+                start=start,
+                end=end,
+                filter=filter,
             )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = ParameterPagingHandler(ParameterPagingCountsProvider())
-        paging_metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, parameter_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            parameter_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=typed_start,
-            end=typed_end,
-            has_next=paging_metadata.after > 0,
-            has_prev=paging_metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(paging_metadata))
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
     @handle(methods_v2.get_all_facts, env="tid")
     async def get_all_facts(
@@ -377,53 +338,19 @@ class ParameterService(protocol.ServerSlice):
         end: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "name.asc",
-    ) -> ReturnValue[List[Fact]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(FactsFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
+    ) -> ReturnValue[Sequence[Fact]]:
         try:
-            parameter_order = FactOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-
-        try:
-            dtos = await data.Parameter.get_fact_list(
-                database_order=parameter_order,
+            handler = FactsView(
+                environment=env,
                 limit=limit,
-                environment=env.id,
+                sort=sort,
                 first_id=first_id,
                 last_id=last_id,
                 start=start,
                 end=end,
-                connection=None,
-                **query,
+                filter=filter,
             )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = FactPagingHandler(FactPagingCountsProvider())
-        paging_metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, parameter_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            parameter_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            has_next=paging_metadata.after > 0,
-            has_prev=paging_metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(paging_metadata))
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e

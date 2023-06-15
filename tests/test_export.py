@@ -23,11 +23,14 @@ from typing import Dict, List, Optional
 
 import pytest
 
+import inmanta.resources
 from inmanta import config, const
 from inmanta.ast import CompilerException, ExternalException
 from inmanta.const import ResourceState
-from inmanta.data import Resource
+from inmanta.data import Environment, Resource
 from inmanta.export import DependencyCycleException
+from inmanta.server import SLICE_RESOURCE
+from inmanta.server.server import Server
 from utils import LogSequence, v1_module_from_template
 
 
@@ -182,7 +185,7 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         """
     )
     config.Config.set("unknown_handler", "default", "prune-resource")
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 3
     assert len([x for x in status.values() if x == const.ResourceState.available]) == 2
@@ -210,7 +213,7 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
     assert len(response.result["versions"]) == 1
 
 
-async def test_server_export(snippetcompiler, server, client, environment):
+async def test_server_export(snippetcompiler, server: Server, client, environment):
     snippetcompiler.setup_for_snippet(
         """
             h = std::Host(name="test", os=std::linux)
@@ -223,6 +226,21 @@ async def test_server_export(snippetcompiler, server, client, environment):
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
+
+    version = result.result["versions"][0]["version"]
+    result = await client.get_version(tid=environment, id=result.result["versions"][0]["version"])
+    assert result.code == 200
+
+    for res in result.result["resources"]:
+        res["attributes"]["id"] = res["id"]
+        resource = inmanta.resources.Resource.deserialize(res["attributes"])
+        assert resource.version == resource.id.version == version
+
+    resources = await server.get_slice(SLICE_RESOURCE).get_resources_in_latest_version(
+        environment=await Environment.get_by_id(environment)
+    )
+
+    assert resources[0].attributes["version"] == version
 
 
 async def test_dict_export_server(snippetcompiler, server, client, environment):
@@ -256,7 +274,7 @@ import exp
 a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
 
@@ -269,7 +287,7 @@ import exp
 a = exp::Test2(mydict={"a": null}, mylist=["a",null])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 1
     json_dict = snippetcompiler.get_exported_json()
@@ -288,7 +306,7 @@ a = exp::Test2(mydict={"a": tests::unknown()}, mylist=["a"])
 b = exp::Test2(name="idb", mydict={"a": "b"}, mylist=["a", tests::unknown()])
 """
     )
-    _version, json_value, status, model = snippetcompiler.do_export(include_status=True)
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
     assert len(json_value) == 2
     assert status["exp::Test2[agenta,name=ida]"] == ResourceState.undefined

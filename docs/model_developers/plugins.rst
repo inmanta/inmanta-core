@@ -2,6 +2,11 @@
 
 Developing Plugins
 *********************
+
+
+Adding new plugins
+========================
+
 Plugins provide :ref:`functions<lang-plugins>` that can be called from the :term:`DSL`. This is the
 primary mechanism to interface Python code with the orchestration model at compile time. For Example,
 this mechanism is also used for std::template and std::file. In addition to this, Inmanta also registers all
@@ -60,8 +65,8 @@ the DSL. This can be used to create plugins that use python reserved names such 
         print("inmanta")
 
 
-A more complex plugin accepts arguments and returns a value. The following example creates a plugin
-that converts a string to uppercase:
+A more complex plugin accepts arguments and returns a value. Regular arguments and keyword-only arguments are both supported.
+The following example creates a plugin that converts a string to uppercase:
 
 .. code-block:: python
     :linenos:
@@ -103,3 +108,67 @@ see :ref:`moddev-module`.
 
 .. todo:: context
 .. todo:: new statements
+
+
+
+
+Deprecate plugins
+========================
+
+To deprecate a plugin the :func:`~inmanta.plugins.deprecated` decorator can be used in combination with the :func:`~inmanta.plugins.plugin`
+decorator. Using this decorator will log a warning message when the function is called. This decorator also accepts an
+optional argument ``replaced_by`` which can be used to potentially improve the warning message by telling which other
+plugin should be used in the place of the current one.
+
+for example if the plugin below is called:
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin, deprecated
+
+    @deprecated(replaced_by="my_new_plugin")
+    @plugin
+    def printf():
+        """
+            Prints inmanta
+        """
+        print("inmanta")
+
+
+it will give following warning:
+
+.. code-block::
+
+    Plugin 'printf' in module 'inmanta_plugins.<module_name>' is deprecated. It should be replaced by 'my_new_plugin'
+
+Should the replace_by argument be omitted, the warning would look like this:
+
+.. code-block::
+
+    Plugin 'printf' in module 'inmanta_plugins.<module_name>' is deprecated.
+
+If you want your module to stay compatible with older versions of inmanta you will also need to add a little piece of code that changes how
+:func:`~inmanta.plugins.deprecated` is imported as it does not exist in all versions.
+
+The previous example would then look like this. For older inmanta versions, replace the decorator with a no-op.
+
+.. code-block:: python
+    :linenos:
+
+    from inmanta.plugins import plugin
+
+    try:
+        from inmanta.plugins import deprecated
+    except ImportError:
+        deprecated = lambda function=None, **kwargs: function if function is not None else deprecated
+
+
+    @deprecated(replaced_by="my_new_plugin")
+    @plugin
+    def printf():
+        """
+            Prints inmanta
+        """
+        print("inmanta")
+

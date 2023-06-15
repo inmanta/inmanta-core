@@ -58,9 +58,8 @@ Context
 
 Pre-Upgrade steps
 ++++++++++++++++++
-1. Verify that environment safety setting are on (this should always be the case)
+1. Verify that environment safety settings are on (this should always be the case)
 
-    * `purge_on_delete = False`
     * `protected_environment = True`
 
 2. Temporarily disable auto_deploy
@@ -118,12 +117,11 @@ Procedure
 1. Cross check all settings in the environment settings tab with the development team.
 2. Verify that environment safety settings are on (should always be the case)
 
-   * `purge_on_delete = False`
    * `protected_environment = True`
 
 3. Temporarily disable auto_deploy
 
-    * `auto_deploy = False`
+  * `auto_deploy = False`
 
 4. Click ‘recompile’ to install the project.
 
@@ -136,12 +134,13 @@ Procedure
 
   * Keep a close eye on progress and problems that may arise.
   * In case of trouble, hit the emergency stop. Resuming after a stop is very easy and stopping gives you the time to investigate.
+
 7. Verify that automation setting are on
 
-    * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
-    * `auto_deploy = true`
-    * `push_on_auto_deploy = true`
-    * `server_compile = true`
+  * `agent_trigger_method_on_auto_deploy = push_incremental_deploy`
+  * `auto_deploy = true`
+  * `push_on_auto_deploy = true`
+  * `server_compile = true`
 
 8. If this model uses LSM, perform initial tests of all services via the API.
 
@@ -212,9 +211,8 @@ Upgrade of service model on the orchestrator
 
    * Pre-Upgrade steps:
 
-   1. Verify that environment safety setting are on (this should always be the case)
+   1. Verify that environment safety settings are on (this should always be the case)
 
-       * [ ] `purge_on_delete = False`
        * [ ] `protected_environment = True`
 
    2. Temporarily disable auto_deploy

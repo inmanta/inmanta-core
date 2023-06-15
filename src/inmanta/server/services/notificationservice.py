@@ -18,21 +18,20 @@
 import datetime
 import logging
 import uuid
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Dict, List, Optional, Sequence, cast
 
 from asyncpg import Connection
 
 from inmanta import const, data
-from inmanta.data import APILIMIT, InvalidSort, NotificationOrder, QueryType
+from inmanta.data import InvalidSort
+from inmanta.data.dataview import NotificationsView
 from inmanta.data.model import Notification
-from inmanta.data.paging import NotificationPagingCountsProvider, NotificationPagingHandler, QueryIdentifier
 from inmanta.protocol import handle, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
-from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_NOTIFICATION, SLICE_TRANSPORT, protocol
 from inmanta.server.services.compilerservice import CompilerService, CompileStateListener
-from inmanta.server.validate_filter import InvalidFilter, NotificationFilterValidator
+from inmanta.server.validate_filter import InvalidFilter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +69,18 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
             failed_pull_stage = next(
                 (report for report in reports if report["name"] == "Pulling updates" and report["returncode"] != 0), None
             )
-            if failed_pull_stage:
+            if compile.notify_failed_compile is False:
+                return
+            elif compile.notify_failed_compile and compile.failed_compile_message:
+                # Use specific message provided in request
+                await self.notify(
+                    compile.environment,
+                    title="Compilation failed",
+                    message=compile.failed_compile_message,
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif failed_pull_stage:
                 await self.notify(
                     compile.environment,
                     title="Pulling updates during compile failed",
@@ -83,6 +93,15 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
                     compile.environment,
                     title="Compilation failed",
                     message="An exporting compile has failed",
+                    severity=const.NotificationSeverity.error,
+                    uri=f"/api/v2/compilereport/{compile.id}",
+                )
+            elif compile.notify_failed_compile:
+                # Send notification with generic message as fallback
+                await self.notify(
+                    compile.environment,
+                    title="Compilation failed",
+                    message="A compile has failed",
                     severity=const.NotificationSeverity.error,
                     uri=f"/api/v2/compilereport/{compile.id}",
                 )
@@ -125,57 +144,22 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         end: Optional[datetime.datetime] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "created.desc",
-    ) -> ReturnValue[List[Notification]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(NotificationFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
-
+    ) -> ReturnValue[Sequence[Notification]]:
         try:
-            notification_order = NotificationOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-
-        try:
-            dtos = await data.Notification.list_notifications(
-                database_order=notification_order,
+            handler = NotificationsView(
+                environment=env,
                 limit=limit,
-                environment=env.id,
+                sort=sort,
                 first_id=first_id,
                 last_id=last_id,
                 start=start,
                 end=end,
-                connection=None,
-                **query,
+                filter=filter,
             )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = NotificationPagingHandler(NotificationPagingCountsProvider())
-        metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, notification_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            notification_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
     @handle(methods_v2.get_notification, env="tid")
     async def get_notification(

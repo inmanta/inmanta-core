@@ -345,7 +345,6 @@ a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
 
 
 def test_veryhardsequencing(snippetcompiler):
-
     snippetcompiler.setup_for_snippet(
         """
 implementation none for std::Entity:
@@ -379,9 +378,9 @@ implement KafkaNode using fromtarball
 
 
 
-kafka-user = std::Entity()
-kafka-volume = Volume(requires=kafka-user)
-KafkaNode(requires=kafka-volume)
+kafka_user = std::Entity()
+kafka_volume = Volume(requires=kafka_user)
+KafkaNode(requires=kafka_volume)
 """,
         autostd=False,
     )

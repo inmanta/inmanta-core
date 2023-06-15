@@ -15,9 +15,14 @@
 
     Contact: code@inmanta.com
 """
+from typing import Union
+
+import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import Namespace
+from inmanta.ast import Namespace, NotFoundException
+from inmanta.ast.variables import AttributeReference, Reference
+from test_parser import parse_code
 
 
 def test_multiline_string_interpolation(snippetcompiler):
@@ -157,3 +162,177 @@ world
     compiler.do_compile()
     out, err = capsys.readouterr()
     assert expected == out
+
+
+def test_fstring_float_formatting(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+arg = 12.23455
+z=f"{arg:.4f}"
+std::print(z)
+        """,
+    )
+    expected = "12.2346\n"
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected
+
+
+@pytest.mark.parametrize(
+    "f_string,expected_output",
+    [
+        (r"f'{arg}'", "123\n"),
+        (r"f'{arg}{arg}{arg}'", "123123123\n"),
+        (r"f'{arg:@>5}'", "@@123\n"),
+        (r"f'{arg:^5}'", " 123 \n"),
+    ],
+)
+def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
+    snippetcompiler.setup_for_snippet(
+        f"""
+arg = 123
+z={f_string}
+std::print(z)
+        """,
+    )
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected_output
+
+
+def test_fstring_expected_error(snippetcompiler, capsys):
+    with pytest.raises(NotFoundException):
+        snippetcompiler.setup_for_snippet(
+            """
+std::print(f"{unknown}")
+            """,
+        )
+        compiler.do_compile()
+
+
+def test_fstring_relations(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+
+entity B:
+end
+
+entity C:
+    int n_c = 3
+end
+
+implement A using std::none
+implement B using std::none
+implement C using std::none
+
+A.b [1] -- B [1]
+B.c [1] -- C [1]
+
+a = A(b=b)
+b = B(c=c)
+c = C()
+
+std::print(f"{a.b.c.n_c}")
+        """
+    )
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    expected_output = "3\n"
+    assert out == expected_output
+
+
+def test_fstring_numbering_logic():
+    statements = parse_code(
+        """
+std::print(f"---{s}{mm} - {sub.attr}")
+        """
+    )
+
+    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
+        assert variable.location.start_char == start
+        assert variable.location.end_char == end
+
+    # Ranges are 1-indexed [start:end[
+    ranges = [
+        (len('std::print(f"---{s'), len('std::print(f"---{s}')),
+        (len('std::print(f"---{s}{m'), len('std::print(f"---{s}{mm}')),
+        (len('std::print(f"---{s}{mm} - {sub.a'), len('std::print(f"---{s}{mm} - {sub.attr}')),
+    ]
+    variables = statements[0].children[0]._variables
+
+    for var, range in zip(variables, ranges):
+        check_range(var, *range)
+
+
+def test_fstring_float_nested_formatting(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+width = 10
+precision = 2
+arg = 12.34567
+z=f"result: {arg:{width}.{precision}f}"
+std::print(z)
+        """,
+    )
+    expected = "result:      12.35\n"
+
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected
+
+
+def test_fstring_double_brackets(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+z=f"not {{replaced}}"
+std::print(z)
+        """,
+    )
+    expected = "not {replaced}\n"
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert out == expected
+
+
+def test_fstring_numbering_logic_complex():
+    statements = parse_code(
+        """
+std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
+        """
+    )
+
+    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
+        assert variable.location.start_char == start, print(variable)
+        assert variable.location.end_char == end, print(variable)
+
+    # Ranges are 1-indexed [start:end[
+    ranges = [
+        (len('std::print(f"-{a'), len('std::print(f"-{arg:')),
+        (len('std::print(f"-{arg:{w'), len('std::print(f"-{arg:{width}')),
+        (len('std::print(f"-{arg:{width}.{p'), len('std::print(f"-{arg:{width}.{precision}')),
+        (len('std::print(f"-{arg:{width}.{precision}}{o'), len('std::print(f"-{arg:{width}.{precision}}{other}')),
+        (
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:'),
+        ),
+        (
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}'),
+        ),
+        (
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}'),
+        ),
+        (
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w'),
+            len('std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}'),
+        ),
+    ]
+    variables = statements[0].children[0]._variables
+
+    for var, range in zip(variables, ranges):
+        check_range(var, *range)

@@ -1,7 +1,7 @@
 from _collections import defaultdict
-from inmanta.execute.util import Unknown
-from inmanta.plugins import plugin, PluginException
 from inmanta import resources
+from inmanta.execute.util import Unknown
+from inmanta.plugins import PluginException, plugin
 
 
 @plugin
@@ -11,6 +11,7 @@ def unknown() -> "any":
 
 @plugin
 def length(string: "string") -> "number":
+    """returns the length of the string"""
     return len(string)
 
 
@@ -63,3 +64,8 @@ class TestPluginException(PluginException):
 @plugin
 def raise_exception(message: "string") -> None:
     raise TestPluginException(message)
+
+
+@plugin
+def sum(x: "int", y: "int") -> "int":
+    return x + y

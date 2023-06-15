@@ -132,6 +132,7 @@ class DBSchema(object):
                 SCHEMA_VERSION_TABLE,
                 "current_version",
             )
+
             if legacy_column is None:
                 raise Exception("Failed to query existence of legacy column, this should not happen.")
             if legacy_column["exists"]:

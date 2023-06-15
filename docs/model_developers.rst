@@ -11,7 +11,10 @@ Model developer documentation
     model_developers/modules.rst
     model_developers/release.rst
     model_developers/plugins.rst
+    model_developers/finalizers.rst
     model_developers/handlers.rst
     model_developers/test_plugins
-    model_developers/*
-
+    model_developers/projects.rst
+    model_developers/model_debugging.rst
+    model_developers/model_design.rst
+    model_developers/resource_sets.rst

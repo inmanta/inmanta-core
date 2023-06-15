@@ -20,18 +20,27 @@ import datetime
 import logging
 import os
 import uuid
-from collections import defaultdict
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, cast
+from collections import abc, defaultdict
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
+from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort, QueryType, ResourceOrder, VersionedResourceOrder
+from inmanta.data import APILIMIT, InvalidSort
+from inmanta.data.dataview import (
+    DiscoveredResourceView,
+    ResourceHistoryView,
+    ResourceLogsView,
+    ResourcesInVersionView,
+    ResourceView,
+)
 from inmanta.data.model import (
     AttributeStateChange,
+    DiscoveredResource,
     LatestReleasedResource,
     LogLine,
     ReleasedResourceDetails,
@@ -45,19 +54,6 @@ from inmanta.data.model import (
     VersionedResource,
     VersionedResourceDetails,
 )
-from inmanta.data.paging import (
-    QueryIdentifier,
-    ResourceHistoryPagingCountsProvider,
-    ResourceHistoryPagingHandler,
-    ResourceLogPagingCountsProvider,
-    ResourceLogPagingHandler,
-    ResourcePagingCountsProvider,
-    ResourcePagingHandler,
-    ResourceQueryIdentifier,
-    VersionedQueryIdentifier,
-    VersionedResourcePagingCountsProvider,
-    VersionedResourcePagingHandler,
-)
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
@@ -67,13 +63,8 @@ from inmanta.server import SLICE_AGENT_MANAGER, SLICE_DATABASE, SLICE_RESOURCE, 
 from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
-from inmanta.server.validate_filter import (
-    InvalidFilter,
-    ResourceFilterValidator,
-    ResourceLogFilterValidator,
-    VersionedResourceFilterValidator,
-)
-from inmanta.types import Apireturn, PrimitiveTypes
+from inmanta.server.validate_filter import InvalidFilter
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -120,7 +111,8 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
-        self._increment_cache: Dict[uuid.UUID, Optional[Tuple[Set[ResourceVersionIdStr], List[ResourceVersionIdStr]]]] = {}
+        # Dict: environment_id: (model_version, increment, negative_increment)
+        self._increment_cache: Dict[uuid.UUID, Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -147,7 +139,6 @@ class ResourceService(protocol.ServerSlice):
     def clear_env_cache(self, env: data.Environment) -> None:
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
-        # ??? del self._increment_cache[env.id]
 
     @staticmethod
     def get_resource_action_log_file(environment: uuid.UUID) -> str:
@@ -230,6 +221,12 @@ class ResourceService(protocol.ServerSlice):
         log_action: const.ResourceAction,
         log_limit: int,
     ) -> Apireturn:
+        # Validate resource version id
+        try:
+            Id.parse_resource_version_id(resource_id)
+        except ValueError:
+            return 400, {"message": f"{resource_id} is not a valid resource version id"}
+
         resv = await data.Resource.get(env.id, resource_id)
         if resv is None:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
@@ -249,7 +246,7 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"resource": resv, "logs": actions}
 
-    # This endpoint does't have a method associated yet.
+    # This endpoint doesn't have a method associated yet.
     # Intended for use by other slices
     async def get_resources_in_latest_version(
         self,
@@ -324,64 +321,35 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increment = self._increment_cache.get(env.id, None)
-        if increment is None:
-            lock = self._increment_cache_locks[env.id]
-            async with lock:
-                increment = self._increment_cache.get(env.id, None)
-                if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version)
-                    self._increment_cache[env.id] = increment
+        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.get_increment(env, version)
+        increment_ids, neg_increment = increments
 
-        increment_ids, neg_increment = increment
-
-        # set already done to deployed
         now = datetime.datetime.now().astimezone()
 
-        def on_agent(res: ResourceVersionIdStr) -> bool:
+        def on_agent(res: ResourceIdStr) -> bool:
             idr = Id.parse_id(res)
             return idr.get_agent_name() == agent
 
-        neg_increment = [res_id for res_id in neg_increment if on_agent(res_id)]
-
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_utc_isoformat(now),
-            "args": [],
-        }
-        await self.resource_action_update(
-            env,
-            neg_increment,
-            action_id=uuid.uuid4(),
-            started=now,
-            finished=now,
-            status=const.ResourceState.deployed,
-            # does this require a different ResourceAction?
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[logline],
-            change=const.Change.nochange,
-            send_events=False,
-            keep_increment_cache=True,
-        )
+        # set already done to deployed
+        await self.mark_deployed(env, neg_increment, now, version, filter=on_agent)
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
         deploy_model: List[Dict[str, Any]] = []
         resource_ids: List[str] = []
+
         for rv in resources:
-            if rv.resource_version_id not in increment_ids:
+            if rv.resource_id not in increment_ids:
                 continue
 
-            def in_requires(req: ResourceVersionIdStr) -> bool:
+            # TODO double parsing of ID
+            def in_requires(req: ResourceIdStr) -> bool:
                 if req in increment_ids:
                     return True
                 idr = Id.parse_id(req)
                 return idr.get_agent_name() != agent
 
             rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
-
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
@@ -403,6 +371,82 @@ class ResourceService(protocol.ServerSlice):
             await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+
+    async def mark_deployed(
+        self,
+        env: data.Environment,
+        resources_id: abc.Set[ResourceIdStr],
+        timestamp: datetime.datetime,
+        version: int,
+        filter: Callable[[ResourceIdStr], bool] = lambda x: True,
+    ) -> None:
+        """
+        Set the status of the provided resources as deployed
+        :param env: Environment to consider.
+        :param resources_id: Set of resources to mark as deployed.
+        :param timestamp: Timestamp for the log message and the resource action entry.
+        :param version: Version of the resources to consider.
+        :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
+        """
+        resources_version_ids: list[ResourceVersionIdStr] = [
+            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
+        ]
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": util.datetime_utc_isoformat(timestamp),
+            "args": [],
+        }
+        await self.resource_action_update(
+            env,
+            resources_version_ids,
+            action_id=uuid.uuid4(),
+            started=timestamp,
+            finished=timestamp,
+            status=const.ResourceState.deployed,
+            # does this require a different ResourceAction?
+            action=const.ResourceAction.deploy,
+            changes={},
+            messages=[logline],
+            change=const.Change.nochange,
+            send_events=False,
+            keep_increment_cache=True,
+        )
+
+    async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+        """
+        Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
+        In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
+        version, per environment.
+
+        :param env: The environment to consider.
+        :parma version: The version of the model to consider.
+        """
+
+        def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
+            """
+            Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
+            or None if no such cache entry exists.
+            """
+            cache_entry = self._increment_cache.get(env.id, None)
+            if cache_entry is None:
+                # No cache entry found
+                return None
+            (version_cache_entry, incr, neg_incr) = cache_entry
+            if version_cache_entry != version:
+                # Cache entry exists for another version
+                return None
+            return incr, neg_incr
+
+        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
+        if increment is None:
+            lock = self._increment_cache_locks[env.id]
+            async with lock:
+                increment = _get_cache_entry()
+                if increment is None:
+                    increment = await data.ConfigurationModel.get_increment(env.id, version)
+                    self._increment_cache[env.id] = (version, *increment)
+        return increment
 
     @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")
     async def resource_deploy_done(
@@ -439,7 +483,13 @@ class ResourceService(protocol.ServerSlice):
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
                 resource = await data.Resource.get_one(
-                    connection=connection, environment=env.id, resource_version_id=resource_id_str
+                    connection=connection,
+                    environment=env.id,
+                    resource_id=resource_id.resource_str(),
+                    model=resource_id.version,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_UPDATE,
                 )
                 if resource is None:
                     raise NotFound("The resource with the given id does not exist in the given environment.")
@@ -490,13 +540,16 @@ class ResourceService(protocol.ServerSlice):
                     self.clear_env_cache(env)
 
                 await resource.update_fields(
-                    last_deploy=finished, status=status, last_non_deploying_status=status, connection=connection
+                    last_deploy=finished,
+                    status=status,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    connection=connection,
                 )
 
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-                await data.ConfigurationModel.mark_done_if_done(env.id, resource.model, connection=connection)
+        self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
         waiting_agents = set([(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides])
         for agent, resource_id in waiting_agents:
@@ -523,7 +576,7 @@ class ResourceService(protocol.ServerSlice):
         action: const.ResourceAction,
         started: datetime.datetime,
         finished: datetime.datetime,
-        status: const.ResourceState,
+        status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
         messages: List[Dict[str, Any]],
         changes: Dict[str, Any],
         change: const.Change,
@@ -532,6 +585,18 @@ class ResourceService(protocol.ServerSlice):
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
+        def convert_legacy_state(
+            status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
+        ) -> Optional[const.ResourceState]:
+            if status is None or isinstance(status, const.ResourceState):
+                return status
+            if status == const.DeprecatedResourceState.processing_events:
+                return const.ResourceState.deploying
+            else:
+                raise BadRequest(f"Unsupported deprecated resources state {status.value}")
+
+        status = convert_legacy_state(status)
+
         # can update resource state
         is_resource_state_update = action in STATE_UPDATE
         # this ra is finishing
@@ -577,11 +642,20 @@ class ResourceService(protocol.ServerSlice):
                         action_id=action_id,
                     )
 
+        assert all(Id.is_resource_version_id(rvid) for rvid in resource_ids)
+
         resources: List[data.Resource]
         async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
-                resources = await data.Resource.get_resources(env.id, resource_ids, connection=connection)
+                resources = await data.Resource.get_resources(
+                    env.id,
+                    resource_ids,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_UPDATE,
+                    connection=connection,
+                )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
                     return (
                         404,
@@ -667,7 +741,7 @@ class ResourceService(protocol.ServerSlice):
                     is updated correctly when the `status` field of a resource is updated.
                     """
                     if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
-                        kwargs["last_non_deploying_status"] = kwargs["status"]
+                        kwargs["last_non_deploying_status"] = const.NonDeployingResourceState(kwargs["status"])
                     await resource.update_fields(**kwargs, connection=connection)
 
                 if is_resource_state_update:
@@ -698,9 +772,8 @@ class ResourceService(protocol.ServerSlice):
                                     environment=env.id, resource_id=res.resource_id, connection=connection
                                 )
 
-                        await data.ConfigurationModel.mark_done_if_done(env.id, model_version, connection=connection)
-
         if is_resource_state_update and is_resource_action_finished:
+            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
             waiting_agents = set(
                 [(Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides]
             )
@@ -727,7 +800,10 @@ class ResourceService(protocol.ServerSlice):
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
                 resource = await data.Resource.get_one(
-                    connection=connection, environment=env.id, resource_version_id=resource_id_str
+                    connection=connection,
+                    environment=env.id,
+                    resource_id=resource_id.resource_str(),
+                    model=resource_id.version,
                 )
                 if resource is None:
                     raise NotFound(message=f"Environment {env.id} doesn't contain a resource with id {resource_id_str}")
@@ -882,63 +958,22 @@ class ResourceService(protocol.ServerSlice):
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
-    ) -> ReturnValue[List[LatestReleasedResource]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(ResourceFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
+    ) -> ReturnValueWithMeta[Sequence[LatestReleasedResource]]:
         try:
-            resource_order = ResourceOrder.parse_from_string(sort)
-        except InvalidSort as e:
+            handler = ResourceView(env, limit, first_id, last_id, start, end, filter, sort, deploy_summary)
+
+            out = await handler.execute()
+            if deploy_summary:
+                out.metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
+            return out
+
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-        try:
-            dtos = await data.Resource.get_released_resources(
-                database_order=resource_order,
-                limit=limit,
-                environment=env.id,
-                first_id=first_id,
-                last_id=last_id,
-                start=start,
-                end=end,
-                connection=None,
-                **query,
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
 
-        paging_handler = ResourcePagingHandler(ResourcePagingCountsProvider(data.Resource))
-        paging_metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            has_next=paging_metadata.after > 0,
-            has_prev=paging_metadata.before > 0,
-            deploy_summary=deploy_summary,
-        )
-        metadata = vars(paging_metadata)
-        if deploy_summary:
-            metadata["deploy_summary"] = await data.Resource.get_resource_deploy_summary(env.id)
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=metadata)
+        # TODO: optimize for no orphans
 
     @handle(methods_v2.resource_details, env="tid")
     async def resource_details(self, env: data.Environment, rid: ResourceIdStr) -> ReleasedResourceDetails:
-
         details = await data.Resource.get_resource_details(env.id, rid)
         if not details:
             raise NotFound("The resource with the given id does not exist, or was not released yet in the given environment.")
@@ -955,51 +990,22 @@ class ResourceService(protocol.ServerSlice):
         start: Optional[datetime.datetime] = None,
         end: Optional[datetime.datetime] = None,
         sort: str = "date.desc",
-    ) -> ReturnValue[List[ResourceHistory]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
+    ) -> ReturnValue[Sequence[ResourceHistory]]:
         try:
-            resource_order = data.ResourceHistoryOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-        try:
-            history = await data.Resource.get_resource_history(
-                env.id,
-                rid,
-                database_order=resource_order,
+            handler = ResourceHistoryView(
+                environment=env,
+                rid=rid,
+                limit=limit,
+                sort=sort,
                 first_id=first_id,
                 last_id=last_id,
                 start=start,
                 end=end,
-                limit=limit,
             )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = ResourceHistoryPagingHandler(ResourceHistoryPagingCountsProvider(data.Resource), rid)
-        metadata = await paging_handler.prepare_paging_metadata(
-            ResourceQueryIdentifier(environment=env.id, resource_id=rid),
-            history,
-            limit=limit,
-            database_order=resource_order,
-            db_query={},
-        )
-        links = await paging_handler.prepare_paging_links(
-            history,
-            database_order=resource_order,
-            limit=limit,
-            filter=None,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-        return ReturnValueWithMeta(response=history, links=links if links else {}, metadata=vars(metadata))
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
     @handle(methods_v2.resource_logs, env="tid")
     async def resource_logs(
@@ -1011,45 +1017,13 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[datetime.datetime] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "timestamp.desc",
-    ) -> ReturnValue[List[ResourceLog]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
+    ) -> ReturnValue[Sequence[ResourceLog]]:
         try:
-            resource_order = data.ResourceLogOrder.parse_from_string(sort)
-        except InvalidSort as e:
+            handler = ResourceLogsView(environment=env, rid=rid, limit=limit, sort=sort, start=start, end=end, filter=filter)
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(ResourceLogFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
-        try:
-            dtos = await data.ResourceAction.get_logs_paged(
-                resource_order, limit, env.id, rid, start=start, end=end, connection=None, **query
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-        paging_handler = ResourceLogPagingHandler(ResourceLogPagingCountsProvider(data.ResourceAction), rid)
-        metadata = await paging_handler.prepare_paging_metadata(
-            ResourceQueryIdentifier(environment=env.id, resource_id=rid), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            first_id=None,
-            last_id=None,
-            start=start,
-            end=end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
     @handle(methods_v2.get_resources_in_version, env="tid")
     async def get_resources_in_version(
@@ -1063,56 +1037,12 @@ class ResourceService(protocol.ServerSlice):
         end: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "resource_type.desc",
-    ) -> ReturnValue[List[VersionedResource]]:
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(VersionedResourceFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
+    ) -> ReturnValueWithMeta[Sequence[VersionedResource]]:
         try:
-            resource_order = VersionedResourceOrder.parse_from_string(sort)
-        except InvalidSort as e:
+            handler = ResourcesInVersionView(env, version, limit, filter, sort, first_id, last_id, start, end)
+            return await handler.execute()
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
-        try:
-            dtos = await data.Resource.get_versioned_resources(
-                version=version,
-                database_order=resource_order,
-                limit=limit,
-                environment=env.id,
-                first_id=first_id,
-                last_id=last_id,
-                start=start,
-                end=end,
-                connection=None,
-                **query,
-            )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = VersionedResourcePagingHandler(VersionedResourcePagingCountsProvider(), version)
-        metadata = await paging_handler.prepare_paging_metadata(
-            VersionedQueryIdentifier(environment=env.id, version=version), dtos, query, limit, resource_order
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            filter,
-            resource_order,
-            limit,
-            first_id=first_id,
-            last_id=last_id,
-            start=start,
-            end=end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
 
     @handle(methods_v2.versioned_resource_details, env="tid")
     async def versioned_resource_details(
@@ -1122,3 +1052,55 @@ class ResourceService(protocol.ServerSlice):
         if not resource:
             raise NotFound("The resource with the given id does not exist")
         return resource
+
+    @handle(methods_v2.discovered_resource_create, env="tid")
+    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
+        try:
+            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
+        except ValidationError as e:
+            # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
+            error_msg = f"Failed to validate argument\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise BadRequest(error_msg, {"validation_errors": e.errors()})
+
+        dao = discovered_resource.to_dao(env.id)
+        await dao.insert_with_overwrite()
+
+    @handle(methods_v2.discovered_resource_create_batch, env="tid")
+    async def discovered_resources_create_batch(
+        self, env: data.Environment, discovered_resources: List[DiscoveredResource]
+    ) -> None:
+        dao_list = [res.to_dao(env.id) for res in discovered_resources]
+        await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
+
+    @handle(methods_v2.discovered_resources_get, env="tid")
+    async def discovered_resources_get(
+        self, env: data.Environment, discovered_resource_id: ResourceIdStr
+    ) -> DiscoveredResource:
+        result = await data.DiscoveredResource.get_one(environment=env.id, discovered_resource_id=discovered_resource_id)
+        if not result:
+            raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env.id}")
+        dto = result.to_dto()
+        return dto
+
+    @protocol.handle(methods_v2.discovered_resources_get_batch, env="tid")
+    async def discovered_resources_get_batch(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        sort: str = "discovered_resource_id.asc",
+    ) -> ReturnValue[Sequence[DiscoveredResource]]:
+        try:
+            handler = DiscoveredResourceView(
+                environment=env,
+                limit=limit,
+                sort=sort,
+                start=start,
+                end=end,
+            )
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e

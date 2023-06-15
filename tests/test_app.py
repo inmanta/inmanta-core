@@ -188,8 +188,8 @@ def test_verify_that_colorama_package_is_not_present():
             False,
             True,
             [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint",
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint",
+                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint",
+                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint",
             ],
             [],
         ),
@@ -197,8 +197,8 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             False,
             True,
-            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
-            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint"],
         ),
         (
             3,
@@ -219,8 +219,8 @@ def test_verify_that_colorama_package_is_not_present():
             True,
             True,
             [
-                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint",
-                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint",
+                r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint",
+                r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint",
             ],
             [],
         ),
@@ -228,8 +228,8 @@ def test_verify_that_colorama_package_is_not_present():
             2,
             True,
             True,
-            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint"],
-            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint"],
+            [r"\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m\x1b\[34mStarting server endpoint"],
+            [r"\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m\x1b\[34mStarting Server Rest Endpoint"],
         ),
     ],
 )
@@ -250,7 +250,7 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 
 
 @pytest.mark.parametrize_any(
-    "log_level, with_tty, regexes_required_lines, regexes_forbidden_lines",
+    "log_level,with_tty, regexes_required_lines, regexes_forbidden_lines",
     [
         (
             3,
@@ -262,7 +262,22 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
             [],
         ),
         (
+            "DEBUG",
+            False,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
             2,
+            False,
+            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
+            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+        ),
+        (
+            "INFO",
             False,
             [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
             [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
@@ -290,7 +305,7 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
         pytest.skip("Colorama is present")
 
     log_file = "server.log"
-    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
+    (args, log_dir) = get_command(tmpdir, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
         (stdout, _, _) = run_with_tty(args)
     else:
@@ -302,6 +317,55 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
     check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=False)
+
+
+@pytest.mark.parametrize_any(
+    "log_level, regexes_required_lines, regexes_forbidden_lines",
+    [
+        (
+            5,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            4,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            3,
+            [
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+            ],
+            [],
+        ),
+        (
+            2,
+            [r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint"],
+            [r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint"],
+        ),
+        (
+            1,
+            [],
+            [
+                r"[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint",
+                r"[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint",
+            ],
+        ),
+    ],
+)
+@pytest.mark.timeout(60)
+def test_log_stdout_log_level(tmpdir, log_level, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level)
+    (stdout, _, _) = run_without_tty(args)
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed=False)
 
 
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
@@ -360,8 +424,8 @@ def test_startup_failure(tmpdir, postgres_db, database_name):
     (stdout, stderr, code) = run_without_tty(args, env={"PYTHONPATH": pp + ":" + extrapath}, killtime=15, termtime=10)
     assert "inmanta                  ERROR   Server setup failed" in stdout
     assert (
-        "inmanta.server.protocol.SliceStartupException: "
-        "Slice badplugin.badslice failed to start because: Too bad, this plugin is broken"
+        "                                 " + "inmanta.server.protocol.SliceStartupException: Slice badplugin.badslice "
+        "failed to start because: Too bad, this plugin is broken"
     ) in stdout
     assert code == 4
 

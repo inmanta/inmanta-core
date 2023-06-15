@@ -15,14 +15,12 @@
 
     Contact: code@inmanta.com
 """
-
-import sys
-from io import StringIO
+import textwrap
 
 import inmanta.compiler as compiler
 
 
-def test_order_of_execution(snippetcompiler):
+def test_order_of_execution(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
 for i in std::sequence(10):
@@ -31,15 +29,11 @@ end
         """
     )
 
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == "\n".join([str(x) for x in range(10)])
-    finally:
-        sys.stdout = saved_stdout
+    capsys.readouterr()
+    compiler.do_compile()
+    out, _ = capsys.readouterr()
+    output = out.strip()
+    assert output == "\n".join([str(x) for x in range(10)])
 
 
 def test_for_error(snippetcompiler):
@@ -65,3 +59,41 @@ def test_for_error_2(snippetcompiler):
     """,
         "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:2))",
     )
+
+
+def test_for_loop_fully_gradual(snippetcompiler):
+    """
+    Verify that the compiler does not produce progress potential for the for loop because it may cause it too freeze too
+    eagerly.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.x [0:] -- A
+            A.y [0:] -- A
+
+            implement A using std::none
+
+
+            a = A()
+            if a.x is defined:
+                # this is a nonsensical statement but it is a simple way to force the compiler to see the same progress
+                # potential for a.x as it does for a.y, in a way that it can not trivially resolve without freezing something
+                # (as would be the case with e.g. `if true`.
+                a.x += a.x
+            else:
+                # a.x should clearly be frozen before a.x
+                a.y += A()
+            end
+            # Pure gradual execution of the for loop ensures that this statement does produce progress potential for a.y.
+            # If it did, it might cause the compiler to freeze a.y first.
+            for y in a.y:
+                std::print(y)
+            end
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()

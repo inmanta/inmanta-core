@@ -27,18 +27,17 @@ from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 from uuid import UUID
 
-import asyncpg
 import asyncpg.connection
 
 from inmanta import const, data, util
+from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
-from inmanta.data import APILIMIT, InvalidSort, QueryType, model, paging
+from inmanta.data import APILIMIT, InvalidSort, model
 from inmanta.data.model import ResourceIdStr
 from inmanta.protocol import encode_token, handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Forbidden, NotFound, ShutdownInProgress
-from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -54,9 +53,9 @@ from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, 
 from inmanta.server.server import Server
 from inmanta.types import Apireturn, ArgumentTypes
 
-from ..data.paging import QueryIdentifier
+from ..data.dataview import AgentView
 from . import config as server_config
-from .validate_filter import AgentFilterValidator, InvalidFilter
+from .validate_filter import InvalidFilter
 
 LOGGER = logging.getLogger(__name__)
 
@@ -671,7 +670,7 @@ class AgentManager(ServerSlice, SessionListener):
     ) -> data.Agent:
         """
         This method creates a new agent (agent in the model) in the database.
-        If an active agent instance exists for the given agent, it is marked as a the
+        If an active agent instance exists for the given agent, it is marked as the
         primary instance for that agent in the database.
 
         Note: This method must be called under session lock
@@ -843,7 +842,6 @@ class AgentManager(ServerSlice, SessionListener):
                 resource_id not in self._fact_resource_block_set
                 or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now
             ):
-
                 agents = await data.ConfigurationModel.get_agents(env.id, version)
                 await self._autostarted_agent_manager._ensure_agents(env, agents)
 
@@ -875,59 +873,22 @@ class AgentManager(ServerSlice, SessionListener):
         last_id: Optional[str] = None,
         filter: Optional[Dict[str, List[str]]] = None,
         sort: str = "name.asc",
-    ) -> ReturnValue[List[model.Agent]]:
-
-        if limit is None:
-            limit = APILIMIT
-        elif limit > APILIMIT:
-            raise BadRequest(f"limit parameter can not exceed {APILIMIT}, got {limit}.")
-        query: Dict[str, Tuple[QueryType, object]] = {}
-        if filter:
-            try:
-                query.update(AgentFilterValidator().process_filters(filter))
-            except InvalidFilter as e:
-                raise BadRequest(e.message) from e
+    ) -> ReturnValue[Sequence[model.Agent]]:
         try:
-            agent_order = data.AgentOrder.parse_from_string(sort)
-        except InvalidSort as e:
-            raise BadRequest(e.message) from e
-        typed_start, typed_end = None, None
-        if start is not None and start != "None":
-            typed_start = agent_order.ensure_boundary_type(start)
-        if end is not None and end != "None":
-            typed_end = agent_order.ensure_boundary_type(end)
-
-        try:
-            dtos = await data.Agent.get_agents(
-                environment=env.id,
-                database_order=agent_order,
+            handler = AgentView(
+                environment=env,
+                limit=limit,
+                sort=sort,
                 first_id=first_id,
                 last_id=last_id,
-                start=typed_start,
-                end=typed_end,
-                limit=limit,
-                **query,
+                start=start,
+                end=end,
+                filter=filter,
             )
-        except (data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message)
-
-        paging_handler = paging.AgentPagingHandler(paging.AgentPagingCountsProvider())
-        metadata = await paging_handler.prepare_paging_metadata(
-            QueryIdentifier(environment=env.id), dtos, limit=limit, database_order=agent_order, db_query=query
-        )
-        links = await paging_handler.prepare_paging_links(
-            dtos,
-            database_order=agent_order,
-            limit=limit,
-            filter=filter,
-            first_id=first_id,
-            last_id=last_id,
-            start=typed_start,
-            end=typed_end,
-            has_next=metadata.after > 0,
-            has_prev=metadata.before > 0,
-        )
-        return ReturnValueWithMeta(response=dtos, links=links if links else {}, metadata=vars(metadata))
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e
 
     @protocol.handle(methods_v2.get_agent_process_details, env="tid")
     async def get_agent_process_details(self, env: data.Environment, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
@@ -1053,16 +1014,9 @@ class AutostartedAgentManager(ServerSlice):
         if self._stopping:
             raise ShutdownInProgress()
 
-        agent_map: Dict[str, str]
-        agent_map = cast(
+        agent_map: Dict[str, str] = cast(
             Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
         )  # we know the type of this map
-
-        # The internal agent should always be present in the autostart_agent_map. If it's not, this autostart_agent_map was
-        # set in a previous version of the orchestrator which didn't have this constraint. This code fixes the inconsistency.
-        if "internal" not in agent_map:
-            agent_map["internal"] = "local:"
-            await env.set(data.AUTOSTART_AGENT_MAP, dict(agent_map), connection=connection)
 
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
@@ -1119,7 +1073,8 @@ class AutostartedAgentManager(ServerSlice):
         try:
             proc = await self._fork_inmanta(
                 [
-                    "-vvvv",
+                    "--log-file-level",
+                    "DEBUG",
                     "--timed-logs",
                     "--config",
                     config_path,
@@ -1241,6 +1196,8 @@ agent-deploy-interval=%(agent_deploy_interval)d
 agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)d
 
+agent-get-resource-backoff=%(agent_get_resource_backoff)f
+
 [agent_rest_transport]
 port=%(port)s
 host=%(serveradress)s
@@ -1254,6 +1211,7 @@ host=%(serveradress)s
             "agent_repair_splay": agent_repair_splay,
             "agent_repair_interval": agent_repair_interval,
             "serveradress": server_config.server_address.get(),
+            "agent_get_resource_backoff": agent_cfg.agent_get_resource_backoff.get(),
         }
 
         if server_config.server_enable_auth.get():
@@ -1299,7 +1257,6 @@ ssl=True
             if errfile is not None:
                 errhandle = open(errfile, "wb+")
 
-            # TODO: perhaps show in dashboard?
             return await asyncio.create_subprocess_exec(
                 sys.executable, *full_args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle
             )

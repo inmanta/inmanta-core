@@ -46,6 +46,7 @@ async def test_resource_list_no_released_version(server, client):
         total=1,
         released=False,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
 
@@ -80,6 +81,7 @@ async def test_has_only_one_version_from_resource(server, client):
             total=1,
             released=i != 1 and i != 4,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -153,6 +155,7 @@ async def env_with_resources(server, client):
             total=1,
             released=i != 1,
             version_info={},
+            is_suitable_for_partial_compiles=False,
         )
         await cm.insert()
 
@@ -164,7 +167,7 @@ async def env_with_resources(server, client):
             res = data.Resource.new(
                 environment=environment,
                 resource_version_id=ResourceVersionIdStr(f"{key},v={version}"),
-                attributes={"path": path},
+                attributes={"path": path, "version": version},
                 status=status,
             )
             await res.insert()
@@ -185,6 +188,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     await create_resource("agent1", "/tmp/file7", "std::File", ResourceState.deployed, [3], environment=env2.id)
@@ -200,6 +204,7 @@ async def env_with_resources(server, client):
         total=1,
         released=True,
         version_info={},
+        is_suitable_for_partial_compiles=False,
     )
     await cm.insert()
     await create_resource("agent2", "/etc/file3", "std::File", ResourceState.deployed, [6], environment=env3.id)
@@ -345,6 +350,17 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     port = get_bind_port()
     base_url = "http://localhost:%s" % (port,)
     http_client = AsyncHTTPClient()
+
+    # Test link for self page
+    url = f"""{base_url}{result.result["links"]["self"]}"""
+    request = HTTPRequest(
+        url=url,
+        headers={"X-Inmanta-tid": str(env.id)},
+    )
+    response = await http_client.fetch(request, raise_error=False)
+    assert response.code == 200
+    response = json.loads(response.body.decode("utf-8"))
+    assert response == result.result
 
     # Test link for next page
     url = f"""{base_url}{result.result["links"]["next"]}"""

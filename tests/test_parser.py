@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
-
+import logging
 import re
 import warnings
 from typing import List
 
 import pytest
 
+from inmanta import compiler
 from inmanta.ast import LocatableString, Namespace, Range
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, Equals, GreaterThan, In, IsDefined, Not, Or, Regex
@@ -37,19 +38,13 @@ from inmanta.ast.statements.assign import (
     StringFormat,
 )
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.define import (
-    DefineEntity,
-    DefineImplement,
-    DefineIndex,
-    DefineTypeConstraint,
-    DefineTypeDefault,
-    TypeDeclaration,
-)
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineIndex, DefineTypeConstraint, TypeDeclaration
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
 from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning
 from inmanta.parser.plyInmantaParser import base_parse
+from utils import log_contains, log_doesnt_contain
 
 
 def parse_code(model_code: str):
@@ -596,20 +591,6 @@ typedef abc as string matching std::is_base64_encoded(self)
     assert isinstance(left_side_equals, FunctionCall)
     assert isinstance(right_side_equals, Literal)
     assert isinstance(right_side_equals.value, bool) and right_side_equals.value
-
-
-def test_typedef2():
-    statements = parse_code(
-        """
-typedef ConfigFile as File(mode = 644, owner = "root", group = "root")
-"""
-    )
-
-    assert len(statements) == 1
-    stmt = statements[0]
-    assert isinstance(stmt, DefineTypeDefault)
-    assert stmt.name == "ConfigFile"
-    assert isinstance(stmt.ctor, Constructor)
 
 
 def test_index():
@@ -1548,21 +1529,6 @@ typedef foo as string matching /^a+$/
     assert str(stmt.comment).strip() == 'Foo is a stringtype that only allows "a"'
 
 
-def test_doc_string_on_typedefault():
-    statements = parse_code(
-        """
-typedef Foo as File(x=5)
-\"""
-    Foo is a stringtype that only allows "a"
-\"""
-"""
-    )
-    assert len(statements) == 1
-
-    stmt = statements[0]
-    assert str(stmt.comment).strip() == 'Foo is a stringtype that only allows "a"'
-
-
 def test_doc_string_on_impl():
     statements = parse_code(
         """
@@ -2375,3 +2341,45 @@ y > 0 ? y : y < 0 ? -1 : 0
     assert isinstance(index_lookup, IndexLookup)
     assert isinstance(conditional_expression, ConditionalExpression)
     assert isinstance(regex, Regex)
+
+
+def test_invalid_escape_sequence(snippetcompiler, caplog):
+    """
+    Check that invalid escape sequences in regular strings and multi-line strings raise warnings.
+    Check that raw strings don't raise such warnings.
+    """
+    snippetcompiler.setup_for_snippet(
+        r'''
+s1 = r"No warnings in raw strings: \."
+s2 = 'Warnings in standard strings: \.'
+s3 = "Warnings in standard strings: \."
+s4 = """l1
+Warnings in MLS:
+Bad escape sequence: \.
+"""
+std::print(s1)
+        '''
+    )
+    compiler.do_compile()
+
+    dir = snippetcompiler.project_dir
+    expected_warnings = [
+        f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:3)",
+        f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:4)",
+        f"ParserWarning: Invalid escape sequence in multi-line string. ({dir}/main.cf:5)",
+    ]
+    for warning in expected_warnings:
+        log_contains(
+            caplog,
+            "inmanta.warnings",
+            logging.WARNING,
+            warning,
+        )
+
+    absent_warning = f"ParserWarning: Invalid escape sequence in string. ({dir}/main.cf:2)"
+    log_doesnt_contain(
+        caplog,
+        "inmanta.warnings",
+        logging.WARNING,
+        absent_warning,
+    )

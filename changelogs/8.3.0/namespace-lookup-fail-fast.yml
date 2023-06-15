@@ -1,0 +1,7 @@
+description: Raise namespace lookup exception earlier (normalization phase) for improved diagnostics
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - master
+  - iso6

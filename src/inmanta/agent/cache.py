@@ -22,9 +22,13 @@ import logging
 import sys
 import time
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
 
 from inmanta.resources import Resource
+from inmanta.stable_api import stable_api
+
+if TYPE_CHECKING:
+    from inmanta.agent.agent import AgentInstance
 
 LOGGER = logging.getLogger()
 
@@ -72,6 +76,7 @@ class CacheVersionContext(contextlib.AbstractContextManager):
         return None
 
 
+@stable_api
 class AgentCache(object):
     """
     Caching system for the agent:
@@ -84,7 +89,11 @@ class AgentCache(object):
     when a version is closed as many times as it was opened, all cache items linked to this version are dropped
     """
 
-    def __init__(self) -> None:
+    def __init__(self, agent_instance: Optional["AgentInstance"] = None) -> None:
+        """
+        :param agent_instance: The AgentInstance that is using the cache. The value is None when the cache
+                               is used from pytest-inmanta.
+        """
         self.cache: Dict[str, Any] = {}
         self.counterforVersion: Dict[int, int] = {}
         self.keysforVersion: Dict[int, Set[str]] = {}
@@ -92,6 +101,7 @@ class AgentCache(object):
         self.nextAction: float = sys.maxsize
         self.addLock = Lock()
         self.addLocks: Dict[str, Lock] = {}
+        self._agent_instance = agent_instance
 
     def close(self) -> None:
         """
@@ -100,7 +110,7 @@ class AgentCache(object):
         for version in list(self.counterforVersion.keys()):
             while self.is_open(version):
                 self.close_version(version)
-        self.nextAction: float = sys.maxsize
+        self.nextAction = sys.maxsize
         self.timerqueue.clear()
         for key in list(self.cache.keys()):
             self._evict_item(key)
@@ -136,7 +146,13 @@ class AgentCache(object):
         :param version: the version id to close the cache for
         """
         if version not in self.counterforVersion:
-            raise Exception("Closed version that does not exist")
+            if self._agent_instance and self._agent_instance.is_stopped():
+                # When a AgentInstance is stopped, all cache entries are cleared and all ResourceActions are cancelled.
+                # However, all ResourceActions that are in-flight keep executing. As such, close_version() might get called
+                # on an already closed cache.
+                return
+            else:
+                raise Exception("Closed version that does not exist")
 
         self.counterforVersion[version] -= 1
 
