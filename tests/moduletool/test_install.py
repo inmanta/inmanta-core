@@ -375,6 +375,7 @@ def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompi
     )
 
 
+@pytest.mark.slowtest
 def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
     """
     Verify that installing a module from source cleans up any old installation's data files.

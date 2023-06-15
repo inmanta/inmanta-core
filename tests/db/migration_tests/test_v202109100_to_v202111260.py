@@ -44,6 +44,7 @@ async def migrate_v202109100_to_v202111260(
     await ibl.stop(timeout=15)
 
 
+@pytest.mark.slowtest
 async def test_added_environment_columns(
     migrate_v202109100_to_v202111260: Callable[[], Awaitable[None]],
     get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
