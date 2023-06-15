@@ -1,0 +1,6 @@
+description: Only print exception trace on cache failure when log level is at least DEBUG (-vvv)
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+
