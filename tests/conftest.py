@@ -241,13 +241,15 @@ def postgres_db(request: pytest.FixtureRequest):
     pg = request.getfixturevalue(fixture)
     yield pg
 
-    with open(os.path.join(initial_cwd, "pg.log"), "r") as fh:
-        for line in fh:
-            if "deadlock" in line:
-                break
-        sublogger = logging.getLogger("pytest.postgresql.deadlock")
-        for line in fh:
-            sublogger.warning("%s", line)
+    logfile = os.path.join(initial_cwd, "pg.log")
+    if os.path.exists(logfile):
+        with open(logfile, "r") as fh:
+            for line in fh:
+                if "deadlock" in line:
+                    break
+            sublogger = logging.getLogger("pytest.postgresql.deadlock")
+            for line in fh:
+                sublogger.warning("%s", line)
 
 
 @pytest.fixture
