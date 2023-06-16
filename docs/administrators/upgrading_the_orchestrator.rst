@@ -2,7 +2,7 @@
 
 
 Upgrading the orchestrator
--------------------------
+--------------------------
 
 Upgrading by migrating from one orchestrator to another orchestrator
 #######################################################################
@@ -34,8 +34,7 @@ Procedure
 _________
 
 1. **[New Orchestrator]**: Make sure the desired version of the orchestrator is installed, by following the
-installation instructions (see :ref:`install-server`) and set up a project manually, validating that the setup
-of the orchestrator works (config, credentials, access to packages, etc.).
+installation instructions (see :ref:`install-server`) and set up a project to validate that the orchestrator is configured correctly (config, credentials, access to packages, etc.).
 
 _________
 
@@ -47,12 +46,12 @@ _________
 
     sudo systemctl disable --now inmanta-server.service
 
-4. **[Old Orchestrator]** Make a dump of the server database using ``pgdump``.
+4. **[Old Orchestrator]** Make a dump of the server database using ``pg_dump``.
 
 
 .. code-block:: bash
 
-    pg_dump -U <user> -W -h <host> <db_name> > <db_dump_file>
+    pg_dump -U <db_user> -W -h <host> <db_name> > <db_dump_file>
 
 _________
 
@@ -70,11 +69,12 @@ _________
 .. code-block:: bash
 
     # drop the database
-    psql -h <host> -U <user> -W
+    $ psql -h <host> -U <db_user> -W
     drop database <db_name>;
+    exit
 
     # re-create it
-    sudo -u postgres -i bash -c "createdb -O <user> <db_name>"
+    $ sudo -u postgres -i bash -c "createdb -O <db_user> <db_name>"
 
 
 7. **[New Orchestrator]** Load the dump of the server database using ``psql``.
@@ -82,10 +82,10 @@ _________
 
 .. code-block:: bash
 
-    cat <db_dump_file> | psql -U <user> -W -h <host> <db_name>
+    cat <db_dump_file> | psql -U <db_user> -W -h <host> <db_name>
 
 
-8. **[New Orchestrator]** Start the orchestrator service, it will take some time before the orchestrator goes up, as some database migration will be done:
+8. **[New Orchestrator]** Start the orchestrator service, it might take some time before the orchestrator goes up, as some database migration will be done:
 
 .. code-block:: bash
 
