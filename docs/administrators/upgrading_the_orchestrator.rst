@@ -10,8 +10,8 @@ Upgrading by migrating from one orchestrator to another orchestrator
 This document describes how to upgrade to a new version of the orchestrator by setting
 up a new orchestrator next to the existing orchestrator and migrating all the state from
 the existing to the new orchestrator. This procedure should be followed when an in-place
-update of the orchestrator is not possible e.g. when the operating system needs to be
-updated alongside the orchestrator.
+upgrade of the orchestrator is not possible e.g. when the operating system needs to be
+upgraded alongside the orchestrator.
 
 Terminology
 +++++++++++
