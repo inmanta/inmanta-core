@@ -1299,9 +1299,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         try:
             return cls._connection_pool.acquire(timeout=1.0)
         except asyncio.TimeoutError:
-            # log pool event
-            LOGGER.warning("Connection pool is exhausted")
-            # exhausted_connections_logger.log()
+            # record exhausted pool event
+            util.ExhaustedPoolWatcher.record_event()
             return cls._connection_pool.acquire()
 
     @classmethod

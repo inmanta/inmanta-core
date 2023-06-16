@@ -747,3 +747,33 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
         new_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(new_loop)
         return new_loop
+
+
+class ExhaustedPoolWatcher:
+    """
+    This class keeps track of database pool exhaustion events and offers reporting capabilities.
+
+    When the DatabaseService is started, a daily recurring task is created that calls the report method
+    """
+    _exhausted_pool_events_count: int = 0
+
+    @classmethod
+    def reset_counter(cls):
+        cls._exhausted_pool_events_count = 0
+
+    @classmethod
+    def record_event(cls):
+        """
+        The _exhausted_pool_events_count counter is increased when a timeout occurs on get_connection.
+        """
+        cls._exhausted_pool_events_count += 1
+
+    @classmethod
+    def report(cls, logger):
+        """
+        Log how many exhausted pool events were recorded in the past 24h, if any, and reset the counter.
+        """
+        if cls._exhausted_pool_events_count > 0:
+            logger.warning("Database pool was empty %d times in the past 24h." % cls._exhausted_pool_events_count)
+            cls.reset_counter()
+
