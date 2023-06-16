@@ -238,7 +238,18 @@ def postgres_db(request: pytest.FixtureRequest):
         fixture = "postgresql_proc"
 
     logger.info("Using database fixture %s", fixture)
-    yield request.getfixturevalue(fixture)
+    pg = request.getfixturevalue(fixture)
+    yield pg
+
+    logfile = os.path.join(initial_cwd, "pg.log")
+    if os.path.exists(logfile):
+        with open(logfile, "r") as fh:
+            for line in fh:
+                if "deadlock" in line:
+                    break
+            sublogger = logging.getLogger("pytest.postgresql.deadlock")
+            for line in fh:
+                sublogger.warning("%s", line)
 
 
 @pytest.fixture
