@@ -755,6 +755,7 @@ class ExhaustedPoolWatcher:
 
     When the DatabaseService is started, a daily recurring task is created that calls the report method
     """
+
     _exhausted_pool_events_count: int = 0
 
     @classmethod
@@ -776,4 +777,3 @@ class ExhaustedPoolWatcher:
         if cls._exhausted_pool_events_count > 0:
             logger.warning("Database pool was empty %d times in the past 24h." % cls._exhausted_pool_events_count)
             cls.reset_counter()
-
