@@ -759,18 +759,18 @@ class ExhaustedPoolWatcher:
     _exhausted_pool_events_count: int = 0
 
     @classmethod
-    def reset_counter(cls):
+    def reset_counter(cls) -> None:
         cls._exhausted_pool_events_count = 0
 
     @classmethod
-    def record_event(cls):
+    def record_event(cls) -> None:
         """
         The _exhausted_pool_events_count counter is increased when a timeout occurs on get_connection.
         """
         cls._exhausted_pool_events_count += 1
 
     @classmethod
-    def report(cls, logger):
+    def report(cls, logger: logging.Logger) -> None:
         """
         Log how many exhausted pool events were recorded in the past 24h, if any, and reset the counter.
         """
