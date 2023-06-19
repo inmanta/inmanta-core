@@ -776,21 +776,10 @@ class ExhaustedPoolWatcher:
             cls.reset_counter()
 
     @classmethod
-    def check_for_pool_exhaustion(cls, pool: asyncpg.pool.Pool, configured_max_size: int, logger: logging.Logger) -> None:
+    def check_for_pool_exhaustion(cls, pool: asyncpg.pool.Pool) -> None:
         """
         Checks if the database pool is exhausted
         """
-        real_max_size: int = pool.get_max_size()
-
-        if real_max_size < configured_max_size:
-            logger.warning(
-                "Mismatch in database pool connection settings. The database server's maximum pool "
-                "size (%d) is lower than the expected value set through the Inmanta server "
-                "connection_pool_max_size setting (%d).",
-                real_max_size,
-                configured_max_size,
-            )
-
-        pool_exhausted: bool = pool.get_size() == real_max_size and pool.get_idle_size() == 0
+        pool_exhausted: bool = pool.get_size() == pool.get_max_size() and pool.get_idle_size() == 0
         if pool_exhausted:
             cls._exhausted_pool_events_count += 1

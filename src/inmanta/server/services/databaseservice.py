@@ -135,6 +135,5 @@ class DatabaseService(protocol.ServerSlice):
         util.ExhaustedPoolWatcher.report_and_reset(LOGGER)
 
     async def _check_database_pool_exhaustion(self) -> None:
-        max_size: int = opt.db_connection_pool_max_size.get()
         assert self._pool  # Make mypy happy
-        util.ExhaustedPoolWatcher.check_for_pool_exhaustion(self._pool, max_size, LOGGER)
+        util.ExhaustedPoolWatcher.check_for_pool_exhaustion(self._pool)
