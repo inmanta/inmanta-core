@@ -759,7 +759,7 @@ class ExhaustedPoolWatcher:
     - a task that calls the check method every 5 min.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._exhausted_pool_events_count: int = 0
 
     def reset_counter(self) -> None:
