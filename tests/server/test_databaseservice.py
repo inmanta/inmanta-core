@@ -85,7 +85,7 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
         n_events: int = database_slice._db_pool_watcher._exhausted_pool_events_count
         assert n_events > 0
 
-        # Call _report_database_pool_exhaustion manually  (scheduled to run every 24h)
+        # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
         await database_slice._report_database_pool_exhaustion()
 
         # Check that _report_database_pool_exhaustion resets the counter:
