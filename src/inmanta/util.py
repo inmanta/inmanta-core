@@ -754,9 +754,6 @@ class ExhaustedPoolWatcher:
     """
     This class keeps track of database pool exhaustion events and offers reporting capabilities.
 
-    When the DatabaseService is started, 2 recurring tasks are started:
-    - a task that calls the report method every 24 H.
-    - a task that calls the check method every 5 min.
     """
 
     def __init__(self) -> None:
