@@ -25,7 +25,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -797,7 +797,7 @@ TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableReso
 
 
 @stable_api
-class CRUDHandler(ResourceHandler[TPurgeableResource]):
+class CRUDHandler(ResourceHandler, Generic[TPurgeableResource]):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
