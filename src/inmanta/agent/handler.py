@@ -835,9 +835,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         :param resource: The desired resource state.
         """
 
-    def update_resource(
-        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource
-    ) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
@@ -949,7 +947,7 @@ class Commander(object):
     @classmethod
     def reset(cls) -> None:
         cls.__command_functions = defaultdict(dict)
-    
+
     @classmethod
     def close(cls) -> None:
         pass
