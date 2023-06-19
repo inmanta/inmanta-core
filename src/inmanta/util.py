@@ -759,27 +759,25 @@ class ExhaustedPoolWatcher:
     - a task that calls the check method every 5 min.
     """
 
-    _exhausted_pool_events_count: int = 0
+    def __init__(self):
+        self._exhausted_pool_events_count: int = 0
 
-    @classmethod
-    def reset_counter(cls) -> None:
-        cls._exhausted_pool_events_count = 0
+    def reset_counter(self) -> None:
+        self._exhausted_pool_events_count = 0
 
-    @classmethod
-    def report_and_reset(cls, logger: logging.Logger) -> None:
+    def report_and_reset(self, logger: logging.Logger) -> None:
         """
         Log how many exhausted pool events were recorded since the last time the counter
         was reset, if any, and reset the counter.
         """
-        if cls._exhausted_pool_events_count > 0:
-            logger.warning("Database pool was empty %d times in the past 24h." % cls._exhausted_pool_events_count)
-            cls.reset_counter()
+        if self._exhausted_pool_events_count > 0:
+            logger.warning("Database pool was exhausted %d times in the past 24h.", self._exhausted_pool_events_count)
+            self.reset_counter()
 
-    @classmethod
-    def check_for_pool_exhaustion(cls, pool: asyncpg.pool.Pool) -> None:
+    def check_for_pool_exhaustion(self, pool: asyncpg.pool.Pool) -> None:
         """
         Checks if the database pool is exhausted
         """
         pool_exhausted: bool = pool.get_size() == pool.get_max_size() and pool.get_idle_size() == 0
         if pool_exhausted:
-            cls._exhausted_pool_events_count += 1
+            self._exhausted_pool_events_count += 1

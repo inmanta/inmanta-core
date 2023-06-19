@@ -37,22 +37,25 @@ class DatabaseService(protocol.ServerSlice):
     def __init__(self) -> None:
         super(DatabaseService, self).__init__(SLICE_DATABASE)
         self._pool: Optional[asyncpg.pool.Pool] = None
+        self._db_pool_watcher: util.ExhaustedPoolWatcher = util.ExhaustedPoolWatcher()
 
     async def start(self) -> None:
         await super().start()
         self.start_monitor()
         await self.connect_database()
+
         # Schedule cleanup agentprocess and agentinstance tables
         agent_process_purge_interval = opt.agent_process_purge_interval.get()
         if agent_process_purge_interval > 0:
             self.schedule(
                 self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
             )
+
         # Schedule database pool exhaustion watch
-        interval: int = 60 * 5  # Check for pool exhaustion every 5 min
-        self.schedule(self._check_database_pool_exhaustion, interval=interval, cancel_on_stop=True)
-        interval = 3_600 * 24  # Report for pool exhaustion every 24h
-        self.schedule(self._report_database_pool_exhaustion, interval=interval, cancel_on_stop=True)
+        # Check for pool exhaustion every 200 ms
+        self.schedule(self._check_database_pool_exhaustion, interval=0.2, cancel_on_stop=True)
+        # Report pool exhaustion every 24h
+        self.schedule(self._report_database_pool_exhaustion, interval=3_600 * 24, cancel_on_stop=True)
 
     async def stop(self) -> None:
         await self.disconnect_database()
@@ -132,8 +135,8 @@ class DatabaseService(protocol.ServerSlice):
         await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
     async def _report_database_pool_exhaustion(self) -> None:
-        util.ExhaustedPoolWatcher.report_and_reset(LOGGER)
+        self._db_pool_watcher.report_and_reset(LOGGER)
 
     async def _check_database_pool_exhaustion(self) -> None:
         assert self._pool  # Make mypy happy
-        util.ExhaustedPoolWatcher.check_for_pool_exhaustion(self._pool)
+        self._db_pool_watcher.check_for_pool_exhaustion(self._pool)
