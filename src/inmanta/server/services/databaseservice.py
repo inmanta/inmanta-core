@@ -48,8 +48,11 @@ class DatabaseService(protocol.ServerSlice):
             self.schedule(
                 self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
             )
-        interval: int = 3_600 * 24  # Check for pool exhaustion every 24h
-        self.schedule(self._check_database_pool_exhaustion, interval=interval, initial_delay=0, cancel_on_stop=True)
+        # Schedule database pool exhaustion watch
+        interval: int = 60 * 5  # Check for pool exhaustion every 5 min
+        self.schedule(self._check_database_pool_exhaustion, interval=interval, cancel_on_stop=True)
+        interval: int = 3_600 * 24  # Report for pool exhaustion every 24h
+        self.schedule(self._report_database_pool_exhaustion, interval=interval, cancel_on_stop=True)
 
     async def stop(self) -> None:
         await self.disconnect_database()
@@ -128,5 +131,9 @@ class DatabaseService(protocol.ServerSlice):
         agent_processes_to_keep = opt.agent_processes_to_keep.get()
         await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
+    async def _report_database_pool_exhaustion(self) -> None:
+        util.ExhaustedPoolWatcher.report_and_reset(LOGGER)
+
     async def _check_database_pool_exhaustion(self) -> None:
-        util.ExhaustedPoolWatcher.report(LOGGER)
+        max_size: int = opt.db_connection_pool_max_size.get()
+        util.ExhaustedPoolWatcher.check_for_pool_exhaustion(self._pool, max_size, LOGGER)

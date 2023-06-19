@@ -40,6 +40,7 @@ from logging import Logger
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
+import asyncpg
 from tornado import gen
 
 from crontab import CronTab
@@ -753,7 +754,9 @@ class ExhaustedPoolWatcher:
     """
     This class keeps track of database pool exhaustion events and offers reporting capabilities.
 
-    When the DatabaseService is started, a daily recurring task is created that calls the report method
+    When the DatabaseService is started, 2 recurring tasks are started:
+    - a task that calls the report method every 24 H.
+    - a task that calls the check method every 5 min.
     """
 
     _exhausted_pool_events_count: int = 0
@@ -763,17 +766,31 @@ class ExhaustedPoolWatcher:
         cls._exhausted_pool_events_count = 0
 
     @classmethod
-    def record_event(cls) -> None:
+    def report_and_reset(cls, logger: logging.Logger) -> None:
         """
-        The _exhausted_pool_events_count counter is increased when a timeout occurs on get_connection.
-        """
-        cls._exhausted_pool_events_count += 1
-
-    @classmethod
-    def report(cls, logger: logging.Logger) -> None:
-        """
-        Log how many exhausted pool events were recorded in the past 24h, if any, and reset the counter.
+        Log how many exhausted pool events were recorded since the last time the counter
+        was reset, if any, and reset the counter.
         """
         if cls._exhausted_pool_events_count > 0:
             logger.warning("Database pool was empty %d times in the past 24h." % cls._exhausted_pool_events_count)
             cls.reset_counter()
+
+    @classmethod
+    def check_for_pool_exhaustion(cls, pool: asyncpg.pool.Pool, configured_max_size: int, logger: logging.Logger) -> None:
+        """
+        Checks if the database pool is exhausted
+        """
+        real_max_size: int = pool.get_max_size()
+
+        if real_max_size < configured_max_size:
+            logger.warning(
+                "Mismatch in database pool connection settings. The database server's maximum pool "
+                "size (%d) is lower than the expected value set through the Inmanta server "
+                "connection_pool_max_size setting (%d).",
+                real_max_size,
+                configured_max_size,
+            )
+
+        pool_exhausted: bool = pool.get_size() == real_max_size and pool.get_idle_size() == 0
+        if pool_exhausted:
+            cls._exhausted_pool_events_count += 1
