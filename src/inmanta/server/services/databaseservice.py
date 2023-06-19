@@ -37,7 +37,7 @@ class DatabaseService(protocol.ServerSlice):
     def __init__(self) -> None:
         super(DatabaseService, self).__init__(SLICE_DATABASE)
         self._pool: Optional[asyncpg.pool.Pool] = None
-        self._db_pool_watcher: util.ExhaustedPoolWatcher = util.ExhaustedPoolWatcher()
+        self._db_pool_watcher: Optional[util.ExhaustedPoolWatcher] = None
 
     async def start(self) -> None:
         await super().start()
@@ -51,7 +51,9 @@ class DatabaseService(protocol.ServerSlice):
                 self._purge_agent_processes, interval=agent_process_purge_interval, initial_delay=0, cancel_on_stop=False
             )
 
-        # Schedule database pool exhaustion watch
+        assert self._pool is not None  # Make mypy happy
+        self._db_pool_watcher = util.ExhaustedPoolWatcher(self._pool)
+        # Schedule database pool exhaustion watch:
         # Check for pool exhaustion every 200 ms
         self.schedule(self._check_database_pool_exhaustion, interval=0.2, cancel_on_stop=True)
         # Report pool exhaustion every 24h
@@ -135,8 +137,9 @@ class DatabaseService(protocol.ServerSlice):
         await data.AgentProcess.cleanup(nr_expired_records_to_keep=agent_processes_to_keep)
 
     async def _report_database_pool_exhaustion(self) -> None:
+        assert self._db_pool_watcher is not None  # Make mypy happy
         self._db_pool_watcher.report_and_reset(LOGGER)
 
     async def _check_database_pool_exhaustion(self) -> None:
-        assert self._pool  # Make mypy happy
-        self._db_pool_watcher.check_for_pool_exhaustion(self._pool)
+        assert self._db_pool_watcher is not None  # Make mypy happy
+        self._db_pool_watcher.check_for_pool_exhaustion()

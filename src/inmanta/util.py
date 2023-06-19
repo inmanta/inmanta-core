@@ -756,11 +756,9 @@ class ExhaustedPoolWatcher:
 
     """
 
-    def __init__(self) -> None:
+    def __init__(self, pool: asyncpg.pool.Pool) -> None:
         self._exhausted_pool_events_count: int = 0
-
-    def reset_counter(self) -> None:
-        self._exhausted_pool_events_count = 0
+        self._pool: asyncpg.pool.Pool = pool
 
     def report_and_reset(self, logger: logging.Logger) -> None:
         """
@@ -769,12 +767,15 @@ class ExhaustedPoolWatcher:
         """
         if self._exhausted_pool_events_count > 0:
             logger.warning("Database pool was exhausted %d times in the past 24h.", self._exhausted_pool_events_count)
-            self.reset_counter()
+            self._reset_counter()
 
-    def check_for_pool_exhaustion(self, pool: asyncpg.pool.Pool) -> None:
+    def check_for_pool_exhaustion(self) -> None:
         """
         Checks if the database pool is exhausted
         """
-        pool_exhausted: bool = pool.get_size() == pool.get_max_size() and pool.get_idle_size() == 0
+        pool_exhausted: bool = self._pool.get_size() == self._pool.get_max_size() and self._pool.get_idle_size() == 0
         if pool_exhausted:
             self._exhausted_pool_events_count += 1
+
+    def _reset_counter(self) -> None:
+        self._exhausted_pool_events_count = 0
