@@ -51,7 +51,7 @@ class DatabaseService(protocol.ServerSlice):
         # Schedule database pool exhaustion watch
         interval: int = 60 * 5  # Check for pool exhaustion every 5 min
         self.schedule(self._check_database_pool_exhaustion, interval=interval, cancel_on_stop=True)
-        interval: int = 3_600 * 24  # Report for pool exhaustion every 24h
+        interval = 3_600 * 24  # Report for pool exhaustion every 24h
         self.schedule(self._report_database_pool_exhaustion, interval=interval, cancel_on_stop=True)
 
     async def stop(self) -> None:
@@ -136,4 +136,5 @@ class DatabaseService(protocol.ServerSlice):
 
     async def _check_database_pool_exhaustion(self) -> None:
         max_size: int = opt.db_connection_pool_max_size.get()
+        assert self._pool  # Make mypy happy
         util.ExhaustedPoolWatcher.check_for_pool_exhaustion(self._pool, max_size, LOGGER)
