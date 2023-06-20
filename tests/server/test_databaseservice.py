@@ -63,7 +63,6 @@ async def set_pool_size_to_one():
     opt.db_connection_pool_max_size.set(str(save_max_size))
 
 
-@pytest.mark.slowtest
 async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
     """
     Test the basic functionalities of the ExhaustedPoolWatcher class
