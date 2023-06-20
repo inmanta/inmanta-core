@@ -60,10 +60,9 @@ class DatabaseService(protocol.ServerSlice):
         self.schedule(self._report_database_pool_exhaustion, interval=3_600 * 24, cancel_on_stop=True)
 
     async def stop(self) -> None:
-        await self.disconnect_database()
-
-        self._pool = None
         await super().stop()
+        await self.disconnect_database()
+        self._pool = None
 
     def get_dependencies(self) -> List[str]:
         return []
