@@ -303,7 +303,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
     # utility methods for extensions developers
     def schedule(
-        self, call: TaskMethod, interval: int = 60, initial_delay: Optional[float] = None, cancel_on_stop: bool = True
+        self, call: TaskMethod, interval: float = 60, initial_delay: Optional[float] = None, cancel_on_stop: bool = True
     ) -> None:
         """
         Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
@@ -312,7 +312,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         :param interval: The interval between executions of the task.
         :param initial_delay: The delay to execute the task for the first time. If not set, interval is used.
         """
-        self._sched.add_action(call, IntervalSchedule(float(interval), initial_delay), cancel_on_stop)
+        self._sched.add_action(call, IntervalSchedule(interval, initial_delay), cancel_on_stop)
 
     def schedule_cron(self, call: TaskMethod, cron: str, cancel_on_stop: bool = True) -> None:
         """
