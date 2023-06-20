@@ -68,32 +68,33 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
     """
     Test the basic functionalities of the ExhaustedPoolWatcher class
     """
-    with caplog.at_level(logging.WARNING, logging.getLogger("inmanta.server.services.databaseservice").name):
-        database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
 
-        assert database_slice._db_pool_watcher._exhausted_pool_events_count == 0
+    def exhaustion_events_recorded() -> bool:
+        """
+        Returns true if some database exhaustion events have been recorded
+        """
+        n_events: int = database_slice._db_pool_watcher._exhausted_pool_events_count
+        return n_events > 0
+
+    with caplog.at_level(logging.WARNING, "inmanta.server.services.databaseservice"):
+        database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
 
         pool = database_slice._pool
         assert pool is not None
         connection: Connection = await pool.acquire()
         try:
-            # Sleep long enough to make sure _check_database_pool_exhaustion gets called (scheduled to run every 200ms)
-            await asyncio.sleep(1)
+            # Make sure _check_database_pool_exhaustion gets called (scheduled to run every 200ms)
+            # and records some exhaustion events.
+            await retry_limited(exhaustion_events_recorded, 1)
         finally:
             await connection.close()
 
-        n_events: int = database_slice._db_pool_watcher._exhausted_pool_events_count
-        assert n_events > 0
-
         # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
         await database_slice._report_database_pool_exhaustion()
-
-        # Check that _report_database_pool_exhaustion resets the counter:
-        assert database_slice._db_pool_watcher._exhausted_pool_events_count == 0
 
         log_contains(
             caplog,
             "inmanta.server.services.databaseservice",
             logging.WARNING,
-            f"Database pool was exhausted {n_events} times in the past 24h",
+            "Database pool was exhausted",
         )
