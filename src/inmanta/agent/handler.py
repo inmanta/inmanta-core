@@ -25,7 +25,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -793,14 +793,17 @@ class ResourceHandler(object):
             raise Exception("Unable to upload file to the server.")
 
 
+TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
+
+
 @stable_api
-class CRUDHandler(ResourceHandler):
+class CRUDHandler(ResourceHandler, Generic[TPurgeableResource]):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
     """
 
-    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
         the method implementation should modify the attributes of this resource to the current state.
@@ -812,7 +815,7 @@ class CRUDHandler(ResourceHandler):
         :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
 
-    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be created.
 
@@ -822,7 +825,7 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be deleted.
 
@@ -832,9 +835,7 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def update_resource(
-        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
-    ) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
