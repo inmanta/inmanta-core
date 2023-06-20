@@ -68,8 +68,10 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
     """
     Test the basic functionalities of the ExhaustedPoolWatcher class
     """
-    with caplog.at_level(logging.WARNING, "inmanta.server.services.databaseservice"):
+    with caplog.at_level(logging.WARNING, logging.getLogger("inmanta.server.services.databaseservice").name):
         database_slice = server.get_slice(databaseservice.SLICE_DATABASE)
+
+        assert database_slice._db_pool_watcher._exhausted_pool_events_count == 0
 
         pool = database_slice._pool
         assert pool is not None
@@ -77,28 +79,21 @@ async def test_pool_exhaustion_watcher(set_pool_size_to_one, server, caplog):
         try:
             # Sleep long enough to make sure _check_database_pool_exhaustion gets called (scheduled to run every 200ms)
             await asyncio.sleep(1)
-
-            n_events: int = database_slice._db_pool_watcher._exhausted_pool_events_count
-            assert n_events > 0
-
-            # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
-            await database_slice._report_database_pool_exhaustion()
-
-            # Check that _report_database_pool_exhaustion resets the counter:
-            assert database_slice._db_pool_watcher._exhausted_pool_events_count == 0
-
-            log_contains(
-                caplog,
-                "inmanta.server.services.databaseservice",
-                logging.WARNING,
-                f"Database pool was exhausted {n_events} times in the past 24h",
-            )
-            await asyncio.sleep(1)
-            log_contains(
-                caplog,
-                "inmanta.server.services.databaseservice",
-                logging.WARNING,
-                f"Database pool was exhausted {n_events} times in the past 24h",
-            )
         finally:
             await connection.close()
+
+        n_events: int = database_slice._db_pool_watcher._exhausted_pool_events_count
+        assert n_events > 0
+
+        # Call _report_database_pool_exhaustion manually (scheduled to run every 24h)
+        await database_slice._report_database_pool_exhaustion()
+
+        # Check that _report_database_pool_exhaustion resets the counter:
+        assert database_slice._db_pool_watcher._exhausted_pool_events_count == 0
+
+        log_contains(
+            caplog,
+            "inmanta.server.services.databaseservice",
+            logging.WARNING,
+            f"Database pool was exhausted {n_events} times in the past 24h",
+        )
