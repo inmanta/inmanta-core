@@ -352,8 +352,8 @@ def resource_container():
             raise Exception("An\nError\tMessage")
 
     @provider("test::FailFastCRUD", name="test_failfast_crud")
-    class FailFastCRUD(CRUDHandler[FailFastPR]):
-        def read_resource(self, ctx: HandlerContext, resource: FailFastPR) -> None:
+    class FailFastCRUD(CRUDHandler):
+        def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             raise Exception("An\nError\tMessage")
 
     @provider("test::Fact", name="test_fact")
@@ -387,24 +387,24 @@ def resource_container():
             return {"fact": resource.factvalue}
 
     @provider("test::SetFact", name="test_set_fact")
-    class SetFact(CRUDHandler[SetFactResource]):
-        def read_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+    class SetFact(CRUDHandler):
+        def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             self._do_set_fact(ctx, resource)
 
-        def create_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+        def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             pass
 
-        def delete_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+        def delete_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             pass
 
-        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetFactResource) -> None:
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: PurgeableResource) -> None:
             pass
 
         def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
             self._do_set_fact(ctx, resource)
             return {f"returned_fact_{resource.key}": "test"}
 
-        def _do_set_fact(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+        def _do_set_fact(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             ctx.set_fact(fact_id=resource.key, value=resource.value)
 
     @provider("test::BadPost", name="test_bad_posts")
@@ -413,7 +413,7 @@ def resource_container():
             raise Exception("An\nError\tMessage")
 
     @provider("test::BadPostCRUD", name="test_bad_posts_crud")
-    class BadPostCRUD(CRUDHandler[BadPostPR]):
+    class BadPostCRUD(CRUDHandler):
         def post(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             raise Exception("An\nError\tMessage")
 
@@ -448,7 +448,7 @@ def resource_container():
             return obj.autostart
 
     @provider("test::AgentConfig", name="agentrest")
-    class AgentConfigHandler(CRUDHandler[AgentConfig]):
+    class AgentConfigHandler(CRUDHandler):
         def _get_map(self) -> dict:
             def call():
                 return self.get_client().get_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP)
