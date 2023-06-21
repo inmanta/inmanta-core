@@ -1,0 +1,10 @@
+description: Add dedicated project-wide pip index url configuration option to the project.yml.
+issue-nr: 5933
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+  deprecation-note: >
+    Setting a package source through the `repo -> url <index_url> with type `package`
+    is now deprecated in favour of the `pip -> index_url <index_url> option.`
+

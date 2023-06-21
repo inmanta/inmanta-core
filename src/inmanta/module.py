@@ -79,7 +79,7 @@ from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, DeprecatedEnum
 from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
@@ -323,7 +323,7 @@ class PluginModuleLoadException(Exception):
         return exception
 
 
-class UntrackedFilesMode(enum.Enum):
+class UntrackedFilesMode(Enum):
     """
     The different options that can be passed to the --untracked-files option of the `git status` command.
     """
@@ -714,12 +714,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         module_name: str = self._get_module_name(module_spec)
         if not self.urls and not project.metadata.pip.use_config_file:
             raise Exception(
-                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
-                'repo of type "package" to the project config file.  e.g. to add PyPi as a module source, add the following to '
-                "the `repo` section of the project's `project.yml`:"
-                "\n\t- type: package"
-                "\n\t  url: https://pypi.org/simple"
-                "\nAnother option is to set the use_config_file project option to true to use the pip config file."
+                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add the relevant pip "
+                f"indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
+                "the `pip` section of the project's `project.yml`:"
+                "\n\t  index_url:"
+                "\n\t\t  - https://pypi.org/simple"
+                "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
             )
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
@@ -1066,7 +1066,7 @@ def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "Lis
 
 
 @stable_api
-class InstallMode(str, enum.Enum):
+class InstallMode(str, Enum):
     """
     The module install mode determines what version of a module should be selected when a module is downloaded.
     """
@@ -1103,7 +1103,7 @@ List of possible module install modes, kept for backwards compatibility. New cod
 
 
 @stable_api
-class FreezeOperator(str, enum.Enum):
+class FreezeOperator(str, Enum):
     eq = "=="
     compatible = "~="
     ge = ">="
@@ -1484,52 +1484,15 @@ class ModuleV2Metadata(ModuleMetadata):
 
         return out
 
-class OnAccess(EnumMeta):
-    """
-    runs a user-specified function whenever member is accessed
-    """
-    #
-    def __getattribute__(cls, name):
-        obj = super().__getattribute__(name)
-        if isinstance(obj, Enum) and obj._on_access:
-            obj._on_access()
-        return obj
-    #
-    def __getitem__(cls, name):
-        member = super().__getitem__(name)
-        if member._on_access:
-            member._on_access()
-        return member
-    #
-    def __call__(cls, value, names=None, *, module=None, qualname=None, type=None, start=1):
-        obj = super().__call__(value, names, module=module, qualname=qualname, type=type, start=start)
-        if isinstance(obj, Enum) and obj._on_access:
-            obj._on_access()
-        return obj
-
-class DeprecatedEnum(Enum, metaclass=OnAccess):
-    #
-    def __new__(cls, value, *args):
-        member = object.__new__(cls)
-        member._value_ = value
-        member._args = args
-        member._on_access = member.deprecate if args else None
-        return member
-    #
-    def deprecate(self):
-        args = (self.name, ) + self._args
-        import warnings
-        warnings.warn(
-                "member %r is deprecated; %s" % args,
-                DeprecationWarning,
-                stacklevel=3,
-                )
 
 
 @stable_api
 class ModuleRepoType(DeprecatedEnum):
     git = "git"
-    package = "package", "Please set the pip index url through the project.yml `pip -> index_url` option."
+    package = "package", LOGGER, (
+        "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
+        "Please set the pip index url through the project.yml `pip -> index_url` option instead."
+    )
 
 
 @stable_api
@@ -1576,7 +1539,13 @@ class RelationPrecedenceRule:
 
 @stable_api
 class ProjectPipConfig(BaseModel):
+    """
+        :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
+                          Python packages.
+        :param index_url: List of pip indexes to use project-wide.
+    """
     use_config_file: bool = False
+    index_url: List[str] = []
 
 
 @stable_api
@@ -1691,7 +1660,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
     def get_index_urls(self) -> List[str]:
-        return [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
+        return self.pip.index_url
 
 
 @stable_api
@@ -2727,7 +2696,7 @@ class DummyProject(Project):
 
 
 @stable_api
-class ModuleGeneration(enum.Enum):
+class ModuleGeneration(Enum):
     """
     The generation of a module. This might affect the on-disk structure of a module as well as how it's distributed.
     """
@@ -3367,3 +3336,4 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Reload in-memory state
         with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             self._metadata = ModuleV2Metadata.parse(fd)
+
