@@ -478,7 +478,9 @@ def test_project_install(
         "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
         autostd=False,
         python_package_sources=[local_module_package_index],
-        python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
+        # We add tornado, as there is a code path in update for the case where the project has python requires
+        python_requires=["tornado"]
+        + [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
         install_project=False,
     )
 
@@ -488,6 +490,8 @@ def test_project_install(
     # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
     module.Project.get().autostd = False
     ProjectTool().execute("install", [])
+    # Make sure update works in all cases where install passed
+    ProjectTool().execute("update", [])
     for fq_mod_name in fq_mod_names:
         module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
