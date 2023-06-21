@@ -244,9 +244,15 @@ def postgres_db(request: pytest.FixtureRequest):
     logfile = os.path.join(initial_cwd, "pg.log")
     if os.path.exists(logfile):
         with open(logfile, "r") as fh:
+            has_deadlock = False
             for line in fh:
                 if "deadlock" in line:
-                    assert False
+                    has_deadlock = True
+                    break
+            sublogger = logging.getLogger("pytest.postgresql.deadlock")
+            for line in fh:
+                sublogger.warning("%s", line)
+            assert not has_deadlock
 
 
 @pytest.fixture
