@@ -1,8 +1,0 @@
----
-description: The CRUDHandler has been made generic with respect to the specific PurgeableResource it acts on.
-issue-nr: 5555
-issue-repo: inmanta-core
-change-type: minor
-destination-branches: [master, iso6]
-sections:
-  minor-improvement: "{{description}}"
