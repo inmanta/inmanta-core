@@ -789,7 +789,7 @@ class DeprecatedEnum(enum.Enum, metaclass=OnAccess):
         member._on_access = member.deprecate if args else None
         return member
 
-    def deprecate(self):
+    def deprecate(self) -> None:
         logger: Logger = self._args[0]
         message: str = self._args[1]
 
