@@ -904,7 +904,8 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             FROM
                 (
                     SELECT action_id,
-                           action, (unnested_message ->> 'timestamp')::timestamptz AS timestamp,
+                           action,
+                           (unnested_message ->> 'timestamp')::timestamptz AS timestamp,
                            unnested_message ->> 'level' AS level,
                            unnested_message ->> 'msg' AS msg,
                            unnested_message
