@@ -1539,6 +1539,7 @@ class ProjectPipConfig(BaseModel):
     :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
                             Python packages.
     """
+
     use_config_file: bool = False
 
 
