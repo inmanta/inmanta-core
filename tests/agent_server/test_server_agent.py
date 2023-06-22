@@ -56,7 +56,6 @@ from utils import (
     resource_action_consistency_check,
     retry_limited,
     wait_until_logs_are_available,
-    wait_until_resource_done_state,
 )
 
 logger = logging.getLogger("inmanta.test.server_agent")
