@@ -43,7 +43,7 @@ import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import parse_version
+from pkg_resources import Requirement, parse_version
 
 import build
 import build.env
@@ -78,8 +78,6 @@ from inmanta.stable_api import stable_api
 from packaging.version import Version
 
 if TYPE_CHECKING:
-    from pkg_resources import Requirement  # noqa: F401
-
     from packaging.requirements import InvalidRequirement
 else:
     from pkg_resources.extern.packaging.requirements import InvalidRequirement
