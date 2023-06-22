@@ -54,6 +54,7 @@ from inmanta.data import (
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
+    Resource,
 )
 from inmanta.data.model import (
     BaseModel,
@@ -882,21 +883,34 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/logs"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
-        # characters in the query
-        resource_id = self.rid.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
         query_builder = SimpleQueryBuilder(
+            prelude=f"""
+                WITH actions AS (
+                    SELECT DISTINCT ON (ra.action_id) ra.*
+                    FROM {Resource.table_name()} AS r INNER JOIN resourceaction_resource AS rr ON (
+                                                          r.environment=rr.environment
+                                                          AND r.resource_id=rr.resource_id
+                                                          AND r.model=rr.resource_version
+                                                      )
+                                                      INNER JOIN {ResourceAction.table_name()} AS ra ON (
+                                                          rr.resource_action_id=ra.action_id
+                                                      )
+                    WHERE r.environment=$1 AND r.resource_id=$2
+                )
+            """,
             select_clause="SELECT action_id, action, timestamp, unnested_message",
             from_clause=f"""
             FROM
-                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
-                    unnested_message ->> 'level' as level,
-                    unnested_message ->> 'msg' as msg,
-                    unnested_message
-                    FROM {ResourceAction.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = $1 AND rvid LIKE $2 ESCAPE '#') unnested
+                (
+                    SELECT action_id,
+                           action, (unnested_message ->> 'timestamp')::timestamptz AS timestamp,
+                           unnested_message ->> 'level' AS level,
+                           unnested_message ->> 'msg' AS msg,
+                           unnested_message
+                    FROM actions, unnest(messages) AS unnested_message
+                ) AS unnested
             """,
-            values=[self.environment.id, resource_id],
+            values=[self.environment.id, self.rid],
         )
         return query_builder
 
