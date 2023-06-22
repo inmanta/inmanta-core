@@ -885,6 +885,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
             prelude=f"""
+                -- Get all resource action in the given environment for the given resource_id
                 WITH actions AS (
                     SELECT DISTINCT ON (ra.action_id) ra.*
                     FROM {Resource.table_name()} AS r INNER JOIN resourceaction_resource AS rr ON (
