@@ -311,15 +311,6 @@ async def _wait_until_deployment_finishes(client: Client, environment: str, vers
     await retry_limited(is_deployment_finished, timeout)
 
 
-async def wait_until_resource_done_state(client: Client, environment: str, resource_id: str, timeout: int = 10) -> None:
-    async def resource_is_done() -> bool:
-        result = await client.get_resource(environment, resource_id, logs=True)
-        print("resource_state: %s:" % result.result["resource"]["status"])
-        return result.result["resource"]["status"] in DONE_STATES
-
-    await retry_limited(resource_is_done, timeout)
-
-
 class ClientHelper(object):
     def __init__(self, client: Client, environment: uuid.UUID) -> None:
         self.client = client
