@@ -521,16 +521,21 @@ async def agent_factory(server):
 
 
 @pytest.fixture(scope="function")
-async def autostarted_agent(server, environment):
+async def autostarted_agent(server, client, environment):
     """Configure agent1 as an autostarted agent."""
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
-    await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
+    assert result.code == 200
     # disable deploy and repair intervals
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
-    await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
-    await env.set(data.AUTOSTART_ON_START, True)
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_ON_START, True)
+    assert result.code == 200
 
 
 @pytest.fixture(scope="function")
