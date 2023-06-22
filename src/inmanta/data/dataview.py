@@ -887,7 +887,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             prelude=f"""
                 -- Get all resource action in the given environment for the given resource_id
                 WITH actions AS (
-                    SELECT DISTINCT ON (ra.action_id) ra.*
+                    SELECT  ra.*
                     FROM {Resource.table_name()} AS r INNER JOIN resourceaction_resource AS rr ON (
                                                           r.environment=rr.environment
                                                           AND r.resource_id=rr.resource_id
