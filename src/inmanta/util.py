@@ -793,9 +793,8 @@ class DeprecatedEnum(enum.Enum, metaclass=OnAccess):
         logger: Logger = self._args[0]
         message: str = self._args[1]
 
-        logger.warning(
-            "%s" % message
-        )
+        logger.warning("%s" % message)
+
 
 class ExhaustedPoolWatcher:
     """

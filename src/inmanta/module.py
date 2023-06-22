@@ -34,7 +34,7 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import ConfigParser
 from dataclasses import dataclass
-from enum import EnumMeta, Enum
+from enum import Enum
 from functools import reduce
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
@@ -79,7 +79,7 @@ from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
-from inmanta.util import get_compiler_version, DeprecatedEnum
+from inmanta.util import DeprecatedEnum, get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
@@ -1485,13 +1485,16 @@ class ModuleV2Metadata(ModuleMetadata):
         return out
 
 
-
 @stable_api
 class ModuleRepoType(DeprecatedEnum):
     git = "git"
-    package = "package", LOGGER, (
-        "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
-        "Please set the pip index url through the project.yml `pip -> index_url` option instead."
+    package = (
+        "package",
+        LOGGER,
+        (
+            "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
+            "Please set the pip index url through the project.yml `pip -> index_url` option instead."
+        ),
     )
 
 
@@ -1540,10 +1543,11 @@ class RelationPrecedenceRule:
 @stable_api
 class ProjectPipConfig(BaseModel):
     """
-        :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
-                          Python packages.
-        :param index_url: List of pip indexes to use project-wide.
+    :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
+                      Python packages.
+    :param index_url: List of pip indexes to use project-wide.
     """
+
     use_config_file: bool = False
     index_url: List[str] = []
 
@@ -3336,4 +3340,3 @@ class ModuleV2(Module[ModuleV2Metadata]):
         # Reload in-memory state
         with open(self.get_metadata_file_path(), "r", encoding="utf-8") as fd:
             self._metadata = ModuleV2Metadata.parse(fd)
-
