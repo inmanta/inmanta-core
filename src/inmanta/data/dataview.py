@@ -47,6 +47,7 @@ from inmanta.data import (
     Parameter,
     ParameterOrder,
     QueryFilter,
+    Resource,
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
@@ -54,7 +55,6 @@ from inmanta.data import (
     SimpleQueryBuilder,
     VersionedResourceOrder,
     model,
-    Resource,
 )
 from inmanta.data.model import (
     BaseModel,
@@ -900,7 +900,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
                 )
             """,
             select_clause="SELECT action_id, action, timestamp, unnested_message",
-            from_clause=f"""
+            from_clause="""
             FROM
                 (
                     SELECT action_id,
