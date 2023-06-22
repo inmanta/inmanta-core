@@ -3092,7 +3092,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     await clienthelper.put_version_simple(resources, version)
 
     await _wait_until_deployment_finishes(client, environment, version)
-    # The version, resource state and its logs are not set atomically. This call prevents a race condition.
+    # The resource state and its logs are not set atomically. This call prevents a race condition.
     await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=4)
 
     response = await client.get_resource(environment, resource_id, logs=True)
