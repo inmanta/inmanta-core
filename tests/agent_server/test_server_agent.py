@@ -56,6 +56,7 @@ from utils import (
     resource_action_consistency_check,
     retry_limited,
     wait_until_logs_are_available,
+    wait_until_resource_done_state,
 )
 
 logger = logging.getLogger("inmanta.test.server_agent")
@@ -3094,6 +3095,7 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     await _wait_until_deployment_finishes(client, environment, version)
     # The resource state and its logs are not set atomically. This call prevents a race condition.
     await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=4)
+    await wait_until_resource_done_state(client, environment, resource_id)
 
     response = await client.get_resource(environment, resource_id, logs=True)
     assert response.code == 200

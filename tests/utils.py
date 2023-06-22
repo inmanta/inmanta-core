@@ -37,6 +37,7 @@ import build
 import build.env
 from _pytest.mark import MarkDecorator
 from inmanta import const, data, env, module, util
+from inmanta.const import DONE_STATES
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -308,6 +309,15 @@ async def _wait_until_deployment_finishes(client: Client, environment: str, vers
         return result.result["model"]["deployed"]
 
     await retry_limited(is_deployment_finished, timeout)
+
+
+async def wait_until_resource_done_state(client: Client, environment: str, resource_id: str, timeout: int = 10) -> None:
+    async def resource_is_done() -> bool:
+        result = await client.get_resource(environment, resource_id, logs=True)
+        print("resource_state: %s:" % result.result["resource"]["status"])
+        return result.result["resource"]["status"] in DONE_STATES
+
+    await retry_limited(resource_is_done, timeout)
 
 
 class ClientHelper(object):
