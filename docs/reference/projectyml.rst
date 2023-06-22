@@ -16,11 +16,7 @@ The ``project.yml`` file defines the following settings:
 
 .. autoclass:: inmanta.module.ProjectMetadata
 
-.. autoclass:: inmanta.module.ModuleRepoInfo
-    :show-inheritance:
-
-.. autoclass:: inmanta.module.ModuleRepoType
-    :show-inheritance:
+.. autoclass:: inmanta.module.ProjectPipConfig
 
 
 The code snippet below provides an example of a complete ``project.yml`` file:
