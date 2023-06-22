@@ -1,0 +1,5 @@
+---
+description: Fix race condition in test 'test_deploy_no_code'
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
