@@ -186,14 +186,14 @@ reason to create a new realm (or not) is that the master realm also provides the
 
 For example call the realm inmanta
 
-.. figure:: /administrators/images/kc_realm.png
+.. figure:: docs/administrators/images/kc_realm.png
    :width: 100%
    :align: center
 
    Create a new realm
 
 
-.. figure:: /administrators/images/kc_add_realm.png
+.. figure:: docs/administrators/images/kc_add_realm.png
    :width: 100%
    :align: center
 
