@@ -248,8 +248,7 @@ Go to the client scopes in your Client details.
 
    Click on inmantaso-dedicated to edit the dedicated scope and mappers.
 
-Add a mapper to add custom claims to the issued tokens for the API client type. Open de mappers tab of your new client and click
-`add`.
+Add a mapper to add custom claims to the issued tokens for the API client type. Click on adding a new mapper.
 
 .. figure:: /administrators/images/kc_mappers.png
    :width: 100%
