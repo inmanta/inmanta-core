@@ -227,8 +227,7 @@ Provide an id for the client and make sure that the client protocol is ``openid-
 
    Create client screen
 
-After clicking save, keycloak opens the configuration of the client. Modify the client to allow implicit flows and add
-valid redirect URIs and valid post logout redirect URIs. As a best practice, also add the allowed web origins. See the screenshot below as an example.
+After clicking save, keycloak opens the configuration of the client. Modify the client to allow implicit flows and add valid redirect URIs and valid post logout redirect URIs. As a best practice, also add the allowed web origins. See the screenshot below as an example.
 
 .. figure:: /administrators/images/kc_client_details.png
    :width: 100%
@@ -247,7 +246,7 @@ Go to the client scopes in your Client details.
    :width: 100%
    :align: center
 
-   Click on the inmantaso-dedicated to edit the dedicated scope and mappers.
+   Click on inmantaso-dedicated to edit the dedicated scope and mappers.
 
 Add a mapper to add custom claims to the issued tokens for the API client type. Open de mappers tab of your new client and click
 `add`.
@@ -267,8 +266,7 @@ added to the access token.
 
    Add the ct claim to all access tokens for this client.
 
-Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the
-previous step. 
+Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the previous step. 
 
 .. figure:: /administrators/images/kc_audience_mapper.png
    :width: 100%
