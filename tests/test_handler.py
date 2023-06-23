@@ -20,7 +20,7 @@ from typing import Any, Dict
 
 import pytest
 
-from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourcePurged
+from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler, HandlerContext, ResourcePurged
 from inmanta.const import ResourceState
 from inmanta.resources import Id, PurgeableResource, resource
 from utils import log_contains, no_error_in_logs

@@ -11,7 +11,7 @@ from uuid import UUID
 
 import psycopg2
 from inmanta.agent import handler
-from inmanta.agent.handler import CRUDHandler, ResourcePurged, provider
+from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler, ResourcePurged, provider
 from inmanta.resources import PurgeableResource, resource
 from inmanta_plugins.lsm.allocation import AllocationSpec, ExternalServiceIdAllocator
 from psycopg2.extensions import ISOLATION_LEVEL_SERIALIZABLE

@@ -27,7 +27,7 @@ from pytest import fixture
 
 from inmanta import const, data
 from inmanta.agent.agent import Agent
-from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -183,7 +183,7 @@ def resource_container():
     @resource("test::BadPostCRUD", agent="agent", id_attribute="key")
     class BadPostPR(PurgeableResource):
         """
-        Raise an exception in the post() method of the CRUDHandler.
+        Raise an exception in the post() method of the CRUDHandlerGeneric.
         """
 
         fields = ("key", "value", "purged", "purge_on_delete")

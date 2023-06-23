@@ -797,7 +797,7 @@ TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableReso
 
 
 @stable_api
-class CRUDHandler(ResourceHandler, Generic[TPurgeableResource]):
+class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
@@ -931,6 +931,10 @@ class CRUDHandler(ResourceHandler, Generic[TPurgeableResource]):
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
+
+
+# Maintain backwards compatibility with the non-generic CRUDHandler
+CRUDHandler = CRUDHandlerGeneric[resources.PurgeableResource]
 
 
 class Commander(object):
