@@ -848,7 +848,7 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
         """
 
     def calculate_diff(
-        self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
+        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
     ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
@@ -863,7 +863,7 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
+    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: Optional[bool] = None) -> None:
         """
         Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
