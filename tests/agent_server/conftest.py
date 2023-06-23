@@ -27,7 +27,8 @@ from pytest import fixture
 
 from inmanta import const, data
 from inmanta.agent.agent import Agent
-from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
+from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER

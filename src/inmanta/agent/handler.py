@@ -15,11 +15,11 @@
 
     Contact: code@inmanta.com
 """
-
 import base64
 import inspect
 import logging
 import traceback
+import types
 import typing
 import uuid
 from abc import ABC, abstractmethod
@@ -933,8 +933,9 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
                 )
 
 
-# Maintain backwards compatibility with the non-generic CRUDHandler
-CRUDHandler = CRUDHandlerGeneric[resources.PurgeableResource]
+CRUDHandler = types.new_class(
+    "CRUDHandler", bases=(ResourceHandler,), exec_body=lambda ns: ns.update(dict(CRUDHandlerGeneric.__dict__))
+)
 
 
 class Commander(object):
