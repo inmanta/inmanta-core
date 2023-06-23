@@ -933,6 +933,9 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
                 )
 
 
+# Keep the CRUDHandler class for backwards compatibility. Making the CRUDHandler class generic can cause MRO issues
+# if a subclass of CRUDHandler is generic as well. The code below makes a copy of the CRUDHandlerGeneric class
+# and removes Generic as a base class.
 CRUDHandler = types.new_class(
     "CRUDHandler", bases=(ResourceHandler,), exec_body=lambda ns: ns.update(dict(CRUDHandlerGeneric.__dict__))
 )
