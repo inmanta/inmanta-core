@@ -229,7 +229,7 @@ def pytest_runtest_setup(item: "pytest.Item"):
 
 
 # adds a custom log location for postgres
-postgresql_proc_with_log = factories.postgresql_proc(startparams=f"--log={pg_logfile}")
+postgresql_proc_with_log = factories.postgresql_proc(startparams=f"--log='{pg_logfile}'")
 
 
 @pytest.fixture(scope="session")
