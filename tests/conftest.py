@@ -127,6 +127,7 @@ from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
+from pytest_postgresql import factories
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -148,6 +149,8 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_reso
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
 initial_cwd = os.getcwd()
+
+pg_logfile = os.path.join(initial_cwd, "pg.log")
 
 
 def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
@@ -225,11 +228,15 @@ def pytest_runtest_setup(item: "pytest.Item"):
             pytest.skip("Skipping old migration test")
 
 
+postgresql_proc = factories.postgresql_proc(startparams=f"--log={pg_logfile}")
+
+
 @pytest.fixture(scope="session")
 def postgres_db(request: pytest.FixtureRequest):
     """This fixture loads the pytest-postgresql fixture. When --postgresql-host is set, it will use the noproc
     fixture to use an external database. Without this option, an "embedded" postgres is started.
     """
+
     option_name = "postgresql_host"
     conf = request.config.getoption(option_name)
     if conf:
@@ -241,9 +248,8 @@ def postgres_db(request: pytest.FixtureRequest):
     pg = request.getfixturevalue(fixture)
     yield pg
 
-    logfile = os.path.join(initial_cwd, "pg.log")
-    if os.path.exists(logfile):
-        with open(logfile, "r") as fh:
+    if os.path.exists(pg_logfile):
+        with open(pg_logfile, "r") as fh:
             has_deadlock = False
             for line in fh:
                 if "deadlock" in line:
