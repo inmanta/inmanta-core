@@ -50,7 +50,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_recursive: true
     freeze_operator: ~=
     pip:
-      use_config_file: False
+      use_config_file: false
       index_url:
         - https://pypi.org/simple/
 
