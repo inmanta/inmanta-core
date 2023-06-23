@@ -228,7 +228,8 @@ def pytest_runtest_setup(item: "pytest.Item"):
             pytest.skip("Skipping old migration test")
 
 
-postgresql_proc = factories.postgresql_proc(startparams=f"--log={pg_logfile}")
+# adds a custom log location for postgres
+postgresql_proc_with_log = factories.postgresql_proc(startparams=f"--log={pg_logfile}")
 
 
 @pytest.fixture(scope="session")
@@ -242,7 +243,7 @@ def postgres_db(request: pytest.FixtureRequest):
     if conf:
         fixture = "postgresql_noproc"
     else:
-        fixture = "postgresql_proc"
+        fixture = "postgresql_proc_with_log"
 
     logger.info("Using database fixture %s", fixture)
     pg = request.getfixturevalue(fixture)
