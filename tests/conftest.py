@@ -260,6 +260,7 @@ def postgres_db(request: pytest.FixtureRequest):
             for line in fh:
                 sublogger.warning("%s", line)
             assert not has_deadlock
+        os.remove(pg_logfile)
 
 
 @pytest.fixture
@@ -538,10 +539,6 @@ def reset_all_objects():
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
-    # truncate the logs produced by postgres
-    if os.path.exists(pg_logfile):
-        with open(pg_logfile, "w") as file:
-            file.truncate()
 
 
 @pytest.fixture()
