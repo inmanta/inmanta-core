@@ -538,6 +538,10 @@ def reset_all_objects():
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
+    # truncate the logs produced by postgres
+    if os.path.exists(pg_logfile):
+        with open(pg_logfile, "w") as file:
+            file.truncate()
 
 
 @pytest.fixture()
