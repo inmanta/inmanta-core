@@ -267,7 +267,6 @@ def postgres_db(request: pytest.FixtureRequest):
 async def run_without_keeping_psql_logs(postgres_db):
     if os.path.exists(pg_logfile):
         # Store the original content of the logfile
-        original_content = ""
         with open(pg_logfile, "r") as file:
             original_content = file.read()
         yield
