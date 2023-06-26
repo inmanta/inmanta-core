@@ -79,7 +79,7 @@ from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.stable_api import stable_api
-from inmanta.util import DeprecatedEnum, get_compiler_version
+from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
@@ -1486,16 +1486,9 @@ class ModuleV2Metadata(ModuleMetadata):
 
 
 @stable_api
-class ModuleRepoType(DeprecatedEnum):
+class ModuleRepoType(Enum):
     git = "git"
-    package = (
-        "package",
-        LOGGER,
-        (
-            "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
-            "Please set the pip index url through the project.yml `pip -> index_url` option instead."
-        ),
-    )
+    package = "package"
 
 
 @stable_api
@@ -1654,6 +1647,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
                 result.append({"url": elem, "type": ModuleRepoType.git})
             elif isinstance(elem, dict):
+                msg = (
+                    "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
+                    "Please set the pip index url through the project.yml `pip -> index_url` option instead."
+                )
+                if elem["type"] == ModuleRepoType.package.value:
+                    LOGGER.warning(msg)
                 result.append(elem)
             else:
                 raise ValueError(f"Value should be either a string of a dict, got {elem}")
@@ -1666,7 +1665,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
     def get_index_urls(self) -> List[str]:
-        return self.pip.index_url
+        """
+        Once setting repos with type package is no longer supported, this method can return self.pip.index_url alone.
+        """
+        return self.pip.index_url + [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
 
 
 @stable_api
