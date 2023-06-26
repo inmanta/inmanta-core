@@ -110,7 +110,9 @@ def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
     repo:
        - url: https://pypi.org/simple
          type: package
-
+    pip:
+        index_url:
+            - https://pypi.org/simple
     """
             )
 
@@ -122,6 +124,15 @@ def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
         (
             "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
             "Please set the pip index url through the project.yml `pip -> index_url` option instead."
+        ),
+    )
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.WARNING,
+        (
+            "Pip indexes are configured in two places. Setting them through the `repo -> url` option is being "
+            "deprecated in favour of the `pip -> index_url` option."
         ),
     )
 
