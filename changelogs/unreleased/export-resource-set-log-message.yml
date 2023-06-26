@@ -1,0 +1,5 @@
+description: Improved log message for exported resources' resource set
+change-type: patch
+destination-branches:
+  - master
+  - iso6
