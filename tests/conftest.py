@@ -264,6 +264,19 @@ def postgres_db(request: pytest.FixtureRequest):
 
 
 @pytest.fixture
+async def run_without_keeping_psql_logs(postgres_db):
+    if os.path.exists(pg_logfile):
+        # Store the original content of the logfile
+        original_content = ""
+        with open(pg_logfile, "r") as file:
+            original_content = file.read()
+        yield
+        # Restore the original content of the logfile
+        with open(pg_logfile, "w") as file:
+            file.write(original_content)
+
+
+@pytest.fixture
 async def postgres_db_debug(postgres_db, database_name) -> abc.AsyncIterator[None]:
     """
     Fixture meant for debugging through manual interaction with the database. Run pytest with `-s/--capture=no`.
