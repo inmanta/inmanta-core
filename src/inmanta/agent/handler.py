@@ -952,6 +952,14 @@ class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
     def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
         pass
 
+    def calculate_diff(
+        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
+    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        super().calculate_diff(ctx, current, desired)
+
+    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
+        super().execute(ctx, resource, dry_run)
+
 
 class Commander(object):
     """
