@@ -269,7 +269,9 @@ async def run_without_keeping_psql_logs(postgres_db):
         # Store the original content of the logfile
         with open(pg_logfile, "r") as file:
             original_content = file.read()
-        yield
+    yield
+
+    if os.path.exists(pg_logfile):
         # Restore the original content of the logfile
         with open(pg_logfile, "w") as file:
             file.write(original_content)
