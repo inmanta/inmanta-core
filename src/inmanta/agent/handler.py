@@ -19,7 +19,6 @@ import base64
 import inspect
 import logging
 import traceback
-import types
 import typing
 import uuid
 from abc import ABC, abstractmethod
@@ -793,17 +792,14 @@ class ResourceHandler(object):
             raise Exception("Unable to upload file to the server.")
 
 
-TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
-
-
 @stable_api
-class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
+class CRUDHandler(ResourceHandler):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
     """
 
-    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
         This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
         the method implementation should modify the attributes of this resource to the current state.
@@ -815,7 +811,7 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
         :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
 
-    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be created.
 
@@ -825,7 +821,7 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
         :param resource: The desired resource state.
         """
 
-    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be deleted.
 
@@ -835,7 +831,9 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
         :param resource: The desired resource state.
         """
 
-    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
+    def update_resource(
+        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
+    ) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
@@ -848,7 +846,7 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
         """
 
     def calculate_diff(
-        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
+        self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
     ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
@@ -863,7 +861,7 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: Optional[bool] = None) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
         """
         Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
@@ -933,12 +931,26 @@ class CRUDHandlerGeneric(ResourceHandler, Generic[TPurgeableResource]):
                 )
 
 
-# Keep the CRUDHandler class for backwards compatibility. Making the CRUDHandler class generic can cause MRO issues
-# if a subclass of CRUDHandler is generic as well. The code below makes a copy of the CRUDHandlerGeneric class
-# and removes Generic as a base class.
-CRUDHandler = types.new_class(
-    "CRUDHandler", bases=(ResourceHandler,), exec_body=lambda ns: ns.update(dict(CRUDHandlerGeneric.__dict__))
-)
+TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
+
+
+@stable_api
+class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
+    """
+    This class offers the same functionality as the CRUDHandler class, but was made generic on the type of PurgeableResource.
+    """
+
+    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+        pass
+
+    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+        pass
+
+    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+        pass
+
+    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
+        pass
 
 
 class Commander(object):
