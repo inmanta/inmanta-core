@@ -293,7 +293,8 @@ class Scheduler(object):
         :param action: A function to call periodically
         :param schedule: The schedule for this action
         :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
-        :param quiet_mode: Set to true to disable logging the notification that the action is being called. Use this to
+        :param quiet_mode: Set to true to disable logging the recurring  notification that the action is being called.
+        Use this to avoid polluting the server log for very frequent actions.
         """
         assert is_coroutine(action)
 
