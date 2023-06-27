@@ -1647,12 +1647,11 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
                 result.append({"url": elem, "type": ModuleRepoType.git})
             elif isinstance(elem, dict):
-                msg = (
-                    "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
-                    "Please set the pip index url through the project.yml `pip -> index_url` option instead."
-                )
                 if elem["type"] == ModuleRepoType.package.value:
-                    LOGGER.warning(msg)
+                    LOGGER.warning(
+                        "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
+                        "Please set the pip index url through the project.yml `pip -> index_url` option instead."
+                    )
                 result.append(elem)
             else:
                 raise ValueError(f"Value should be either a string of a dict, got {elem}")
