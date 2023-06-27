@@ -308,7 +308,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         interval: float = 60,
         initial_delay: Optional[float] = None,
         cancel_on_stop: bool = True,
-        quiet_mode=False,
+        quiet_mode: bool = False,
     ) -> None:
         """
         Schedule a task repeatedly with a given interval. Tasks with the same call and the same schedule are considered the
