@@ -1649,8 +1649,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
             elif isinstance(elem, dict):
                 if elem["type"] == ModuleRepoType.package.value:
                     LOGGER.warning(
-                        "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file is deprecated. "
-                        "Please set the pip index url through the `pip -> index_url` option instead."
+                        "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file "
+                        "is deprecated. Please set the pip index url through the `pip -> index_url` option instead."
                     )
                 result.append(elem)
             else:
