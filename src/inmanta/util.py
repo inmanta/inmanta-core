@@ -285,6 +285,7 @@ class Scheduler(object):
         action: TaskMethod,
         schedule: Union[TaskSchedule, int],  # int for backward compatibility,
         cancel_on_stop: bool = True,
+        quiet_mode: bool = False,
     ) -> ScheduledTask:
         """
         Add a new action
@@ -292,6 +293,8 @@ class Scheduler(object):
         :param action: A function to call periodically
         :param schedule: The schedule for this action
         :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
+        :param quiet_mode: Set to true to disable logging the recurring  notification that the action is being called.
+        Use this to avoid polluting the server log for very frequent actions.
         """
         assert is_coroutine(action)
 
@@ -313,7 +316,8 @@ class Scheduler(object):
             self.remove(task_spec)
 
         def action_function() -> None:
-            LOGGER.info("Calling %s" % action)
+            if not quiet_mode:
+                LOGGER.info("Calling %s", action)
             if task_spec in self._scheduled:
                 try:
                     task = ensure_future_and_handle_exception(
