@@ -717,7 +717,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
                 f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add the relevant pip "
                 f"indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
                 "the `pip` section of the project's `project.yml`:"
-                "\n\t  index_url:"
+                "\n\t  index_urls:"
                 "\n\t\t  - https://pypi.org/simple"
                 "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
             )
@@ -1542,7 +1542,7 @@ class ProjectPipConfig(BaseModel):
     """
 
     use_config_file: bool = False
-    index_url: List[str] = []
+    index_urls: List[str] = []
 
 
 @stable_api
@@ -1650,7 +1650,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 if elem["type"] == ModuleRepoType.package.value:
                     LOGGER.warning(
                         "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file "
-                        "is deprecated. Please set the pip index url through the `pip -> index_url` option instead."
+                        "is deprecated. Please set the pip index url through the `pip -> index_urls` option instead."
                     )
                 result.append(elem)
             else:
@@ -1664,9 +1664,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
     def get_index_urls(self) -> List[str]:
-        # Once setting repos with type package is no longer supported, this method can return self.pip.index_url alone.
+        # Once setting repos with type package is no longer supported, this method can return self.pip.index_urls alone.
         index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
-        return list(set(self.pip.index_url + index_urls_deprecated_option))
+        return list(set(self.pip.index_urls + index_urls_deprecated_option))
 
 
 @stable_api

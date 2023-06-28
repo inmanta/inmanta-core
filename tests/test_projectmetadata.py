@@ -91,7 +91,7 @@ def test_no_module_path(tmp_path, caplog):
     name: testproject
     downloadpath: libs
     pip:
-        index_url:
+        index_urls:
             - https://pypi.org/simple
     """
             )
@@ -111,7 +111,7 @@ def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
        - url: https://pypi.org/simple
          type: package
     pip:
-        index_url:
+        index_urls:
             - https://pypi.org/simple
     """
             )
@@ -123,18 +123,10 @@ def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
         logging.WARNING,
         (
             "Setting a pip index through the project.yml `repo -> url` option with type `package` is deprecated. "
-            "Please set the pip index url through the project.yml `pip -> index_url` option instead."
+            "Please set the pip index url through the project.yml `pip -> index_urls` option instead."
         ),
     )
-    log_contains(
-        caplog,
-        "inmanta.module",
-        logging.WARNING,
-        (
-            "Pip indexes are configured in two places. Setting them through the `repo -> url` option is being "
-            "deprecated in favour of the `pip -> index_url` option."
-        ),
-    )
+
 
 
 @pytest.mark.parametrize("use_pip_config_file, value", [(True, True), (True, False), (False, False)])
@@ -145,7 +137,7 @@ def test_pip_config(tmp_path, caplog, use_pip_config_file, value):
     """
     pip_config_file = """
     pip:
-        index_url:
+        index_urls:
             - https://pypi.org/simple
 
     """

@@ -51,7 +51,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_operator: ~=
     pip:
       use_config_file: false
-      index_url:
+      index_urls:
         - https://pypi.org/simple/
 
 Module metadata files

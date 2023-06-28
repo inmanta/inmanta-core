@@ -179,7 +179,7 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
         "Attempting to install a v2 module non_existing_module but no v2 module source is configured. Add the relevant pip "
         "indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
         "the `pip` section of the project's `project.yml`:"
-        "\n\t  index_url:"
+        "\n\t  index_urls:"
         "\n\t\t  - https://pypi.org/simple"
         "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
     )

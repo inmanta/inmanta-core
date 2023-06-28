@@ -1234,7 +1234,7 @@ class SnippetCompilationTest(KeepOnFail):
                 f"""
             pip:
                 use_config_file: {use_pip_config_file}
-                index_url: [{", ".join(url for url in python_package_sources)}]
+                index_urls: [{", ".join(url for url in python_package_sources)}]
             """
             )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
