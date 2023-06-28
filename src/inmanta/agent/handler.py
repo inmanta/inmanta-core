@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import base64
 import inspect
 import logging
@@ -25,7 +24,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -930,6 +929,36 @@ class CRUDHandler(ResourceHandler):
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
+
+
+TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
+
+
+@stable_api
+class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
+    """
+    This class offers the same functionality as the CRUDHandler class, but was made generic on the type of PurgeableResource.
+    """
+
+    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+        pass
+
+    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+        pass
+
+    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
+        pass
+
+    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
+        pass
+
+    def calculate_diff(
+        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
+    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        return super().calculate_diff(ctx, current, desired)
+
+    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
+        super().execute(ctx, resource, dry_run)
 
 
 class Commander(object):

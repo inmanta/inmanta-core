@@ -27,7 +27,8 @@ from pytest import fixture
 
 from inmanta import const, data
 from inmanta.agent.agent import Agent
-from inmanta.agent.handler import CRUDHandler, HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
+from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -183,7 +184,7 @@ def resource_container():
     @resource("test::BadPostCRUD", agent="agent", id_attribute="key")
     class BadPostPR(PurgeableResource):
         """
-        Raise an exception in the post() method of the CRUDHandler.
+        Raise an exception in the post() method of the CRUDHandlerGeneric.
         """
 
         fields = ("key", "value", "purged", "purge_on_delete")
@@ -352,8 +353,8 @@ def resource_container():
             raise Exception("An\nError\tMessage")
 
     @provider("test::FailFastCRUD", name="test_failfast_crud")
-    class FailFastCRUD(CRUDHandler):
-        def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+    class FailFastCRUD(CRUDHandler[FailFastPR]):
+        def read_resource(self, ctx: HandlerContext, resource: FailFastPR) -> None:
             raise Exception("An\nError\tMessage")
 
     @provider("test::Fact", name="test_fact")
@@ -387,24 +388,24 @@ def resource_container():
             return {"fact": resource.factvalue}
 
     @provider("test::SetFact", name="test_set_fact")
-    class SetFact(CRUDHandler):
-        def read_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+    class SetFact(CRUDHandler[SetFactResource]):
+        def read_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
             self._do_set_fact(ctx, resource)
 
-        def create_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+        def create_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
             pass
 
-        def delete_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+        def delete_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
             pass
 
-        def update_resource(self, ctx: HandlerContext, changes: dict, resource: PurgeableResource) -> None:
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetFactResource) -> None:
             pass
 
         def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
             self._do_set_fact(ctx, resource)
             return {f"returned_fact_{resource.key}": "test"}
 
-        def _do_set_fact(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
+        def _do_set_fact(self, ctx: HandlerContext, resource: SetFactResource) -> None:
             ctx.set_fact(fact_id=resource.key, value=resource.value)
 
     @provider("test::BadPost", name="test_bad_posts")
@@ -413,7 +414,7 @@ def resource_container():
             raise Exception("An\nError\tMessage")
 
     @provider("test::BadPostCRUD", name="test_bad_posts_crud")
-    class BadPostCRUD(CRUDHandler):
+    class BadPostCRUD(CRUDHandler[BadPostPR]):
         def post(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
             raise Exception("An\nError\tMessage")
 
@@ -448,7 +449,7 @@ def resource_container():
             return obj.autostart
 
     @provider("test::AgentConfig", name="agentrest")
-    class AgentConfigHandler(CRUDHandler):
+    class AgentConfigHandler(CRUDHandler[AgentConfig]):
         def _get_map(self) -> dict:
             def call():
                 return self.get_client().get_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP)
