@@ -122,8 +122,8 @@ def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
         "inmanta.module",
         logging.WARNING,
         (
-            'Setting a pip index through the `repo -> url` option with type `package` in the project.yml file is deprecated. '
-            'Please set the pip index url through the `pip -> index_urls` option instead.'
+            "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file is deprecated. "
+            "Please set the pip index url through the `pip -> index_urls` option instead."
         ),
     )
 
