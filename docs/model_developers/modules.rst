@@ -333,9 +333,9 @@ from the Python package repository but instead contains all Python code as prese
 Configure project to install modules form a private python package repository
 --------------------
 
-Modules v2 are python packages and are installed from python package registries. Such repositories can be private and
-therefore protected by a password. This section will explain how to install such module.
-1. Using netrc, create a file in the orchestrator file system, in the inmanta directory with the following content:
+Modules v2 are Python packages that can be installed from private Python package repositories, which may require authentication. This section explains the steps to install such modules.
+
+Create a file named ".netrc" in the orchestrator's file system, specifically in the "inmanta" directory. Add the following content to the file:
 
 .. code-block:: text
 
@@ -343,8 +343,9 @@ therefore protected by a password. This section will explain how to install such
   login token
   password <the token to access the private repository>
 
-2. In the ``project.yml`` of the project, make sur that in the pip section, ``use_config_file`` is set to True.
-3. Create a pip config ``pip.conf`` file with following content:
+In the "project.yml" file of your project, ensure that the "use_config_file" option under the "pip" section is set to True.
+
+Create a file named "pip.conf" and add the following content to it:
 
 .. code-block:: text
 
@@ -352,11 +353,16 @@ therefore protected by a password. This section will explain how to install such
   timeout = 60
   index-url = <url of the repository >
 
-4. Set the ``PIP_CONFIG_FILE`` environment variable to the path of the pip config file
+Set the "PIP_CONFIG_FILE" environment variable to the path of the "pip.conf" file. You can do this by running the following command:
 
 .. code-block:: bash
 
   $ export PIP_CONFIG_FILE=<path/to/pip.conf>
 
-5. Run ``inmanta project install``
+Run the following command to install the modules:
 
+.. code-block:: bash
+
+  $ inmanta project install
+
+By following these steps, you will be able to configure your project to install modules from a private Python package repository.
