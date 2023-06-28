@@ -55,7 +55,7 @@ class DatabaseService(protocol.ServerSlice):
         self._db_pool_watcher = util.ExhaustedPoolWatcher(self._pool)
         # Schedule database pool exhaustion watch:
         # Check for pool exhaustion every 200 ms
-        self.schedule(self._check_database_pool_exhaustion, interval=0.2, cancel_on_stop=True)
+        self.schedule(self._check_database_pool_exhaustion, interval=0.2, cancel_on_stop=True, quiet_mode=True)
         # Report pool exhaustion every 24h
         self.schedule(self._report_database_pool_exhaustion, interval=3_600 * 24, cancel_on_stop=True)
 
