@@ -1666,11 +1666,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     def get_index_urls(self) -> List[str]:
         # Once setting repos with type package is no longer supported, this method can return self.pip.index_url alone.
         index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
-        if all([index_urls_deprecated_option, self.pip.index_url]):
-            LOGGER.warning(
-                "Pip indexes are configured in two places. Setting them through the `repo -> url` option has been "
-                "deprecated in favour of the `pip -> index_url` option."
-            )
         return list(set(self.pip.index_url + index_urls_deprecated_option))
 
 
