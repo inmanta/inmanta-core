@@ -335,7 +335,7 @@ Configure a project to install modules form a private python package repository
 
 Modules v2 are Python packages that can be installed from private Python package repositories, which may require authentication. This section explains the steps to install such modules.
 
-Create a file named ".netrc" in the orchestrator's file system, specifically in the "inmanta" directory. 
+Create a file named ``.netrc`` in the orchestrator's file system, specifically in the "inmanta" directory. 
 Add the following content to the file:
 
 .. code-block:: text
@@ -344,9 +344,9 @@ Add the following content to the file:
   login token
   password <the token to access the private repository>
 
-In the "project.yml" file of your project, ensure that the "use_config_file" option under the "pip" section is set to True.
+In the ``project.yml`` file of your project, ensure that the ``use_config_file`` option under the ``pip`` section is set to True.
 
-Create a file named "pip.conf" and add the following content to it:
+Create a file named ``pip.conf`` and add the following content to it:
 
 .. code-block:: text
 
@@ -354,7 +354,7 @@ Create a file named "pip.conf" and add the following content to it:
   timeout = 60
   index-url = <url of the repository >
 
-Set the "PIP_CONFIG_FILE" environment variable to the path of the "pip.conf" file. You can do this by running the following command:
+Set the ``PIP_CONFIG_FILE`` environment variable to the path of the ``pip.conf`` file. You can do this by running the following command:
 
 .. code-block:: bash
 
