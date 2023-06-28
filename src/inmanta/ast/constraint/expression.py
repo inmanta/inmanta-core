@@ -243,7 +243,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
         self._own_eager_promises = list(self.children[1].get_all_eager_promises())
 
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
-        return chain(super().get_all_eager_promises(), self.children[0].get_all_eager_promises())
+        return chain(self._own_eager_promises, self.children[0].get_all_eager_promises())
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)

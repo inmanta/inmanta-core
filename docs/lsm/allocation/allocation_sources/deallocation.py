@@ -11,7 +11,8 @@ from uuid import UUID
 
 import psycopg2
 from inmanta.agent import handler
-from inmanta.agent.handler import CRUDHandler, ResourcePurged, provider
+from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
+from inmanta.agent.handler import ResourcePurged, provider
 from inmanta.resources import PurgeableResource, resource
 from inmanta_plugins.lsm.allocation import AllocationSpec, ExternalServiceIdAllocator
 from psycopg2.extensions import ISOLATION_LEVEL_SERIALIZABLE
@@ -101,7 +102,7 @@ class PGAllocationResource(PurgeableResource):
 
 
 @provider("vlan_assignment::PGAllocation", name="pgallocation")
-class PGAllocation(CRUDHandler):
+class PGAllocation(CRUDHandler[PGAllocationResource]):
     def __init__(self, *args, **kwargs):
         super(PGAllocation, self).__init__(*args, **kwargs)
         self._allocator = PGServiceIdAllocator(attribute="vlan_id")

@@ -241,6 +241,7 @@ class Scheduler(object):
     An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
     same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
     `call` functions.
+    Assumes an event loop is already running on this thread.
     """
 
     def __init__(self, name: str) -> None:
@@ -284,6 +285,7 @@ class Scheduler(object):
         action: TaskMethod,
         schedule: Union[TaskSchedule, int],  # int for backward compatibility,
         cancel_on_stop: bool = True,
+        quiet_mode: bool = False,
     ) -> ScheduledTask:
         """
         Add a new action
@@ -291,6 +293,8 @@ class Scheduler(object):
         :param action: A function to call periodically
         :param schedule: The schedule for this action
         :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
+        :param quiet_mode: Set to true to disable logging the recurring  notification that the action is being called.
+        Use this to avoid polluting the server log for very frequent actions.
         """
         assert is_coroutine(action)
 
@@ -312,7 +316,8 @@ class Scheduler(object):
             self.remove(task_spec)
 
         def action_function() -> None:
-            LOGGER.info("Calling %s" % action)
+            if not quiet_mode:
+                LOGGER.info("Calling %s", action)
             if task_spec in self._scheduled:
                 try:
                     task = ensure_future_and_handle_exception(
@@ -738,7 +743,7 @@ async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
 def ensure_event_loop() -> asyncio.AbstractEventLoop:
     """
     Returns the event loop for this thread. Creates a new one if none exists yet and registers it with asyncio's active event
-    loop policy.
+    loop policy. Does not ensure that the event loop is running.
     """
     try:
         # nothing needs to be done if this thread already has an event loop
