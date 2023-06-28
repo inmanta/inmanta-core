@@ -128,7 +128,6 @@ def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
     )
 
 
-
 @pytest.mark.parametrize("use_pip_config_file, value", [(True, True), (True, False), (False, False)])
 def test_pip_config(tmp_path, caplog, use_pip_config_file, value):
     """
