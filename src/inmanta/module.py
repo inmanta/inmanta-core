@@ -19,6 +19,7 @@
 import configparser
 import glob
 import importlib
+import itertools
 import logging
 import operator
 import os
@@ -1666,7 +1667,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     def get_index_urls(self) -> List[str]:
         # Once setting repos with type package is no longer supported, this method can return self.pip.index_urls alone.
         index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
-        return list(set(self.pip.index_urls + index_urls_deprecated_option))
+
+        # This ensures no duplicates are returned and insertion order is preserved.
+        # i.e. the left-most index will be passed to pip as --index-url and the others as --extra-index-url
+        return list({value: None for value in itertools.chain(self.pip.index_urls, index_urls_deprecated_option)})
 
 
 @stable_api
