@@ -674,7 +674,7 @@ class ModuleSource(Generic[TModule]):
 
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
-    def __init__(self, urls: List[str]) -> None:
+    def __init__(self, urls: Sequence[str]) -> None:
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
 
     @classmethod
@@ -1663,7 +1663,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         """
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
-    def get_index_urls(self) -> List[str]:
+    def get_index_urls(self) -> Set[str]:
         # Once setting repos with type package is no longer supported, this method can return self.pip.index_url alone.
         index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
         if all([index_urls_deprecated_option, self.pip.index_url]):
@@ -1671,7 +1671,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 "Pip indexes are configured in two places. Setting them through the `repo -> url` option has been "
                 "deprecated in favour of the `pip -> index_url` option."
             )
-        return self.pip.index_url + index_urls_deprecated_option
+        return set(self.pip.index_url + index_urls_deprecated_option)
 
 
 @stable_api
@@ -2079,7 +2079,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
-        indexes_urls: List[str] = self.metadata.get_index_urls()
+        indexes_urls: Set[str] = self.metadata.get_index_urls()
         # Verify non-python part
         self.verify_modules_cache()
         self.verify_module_version_compatibility()

@@ -757,7 +757,7 @@ class ActiveEnv(PythonEnvironment):
     def install_from_index(
         self,
         requirements: List[Requirement],
-        index_urls: Optional[List[str]] = None,
+        index_urls: Optional[Sequence[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
@@ -1315,7 +1315,7 @@ import sys
     def install_from_index(
         self,
         requirements: List[Requirement],
-        index_urls: Optional[List[str]] = None,
+        index_urls: Optional[Sequence[str]] = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
