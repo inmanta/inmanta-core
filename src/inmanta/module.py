@@ -1538,7 +1538,7 @@ class ProjectPipConfig(BaseModel):
     """
     :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
         Python packages.
-    :param index_url: List of pip indexes to use project-wide.
+    :param index_urls: List of pip indexes to use project-wide.
     """
 
     use_config_file: bool = False
