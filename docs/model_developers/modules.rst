@@ -344,7 +344,7 @@ Add the following content to the file:
   login token
   password <the token to access the private repository>
 
-In the ``project.yml`` file of your project, ensure that the ``use_config_file`` option under the ``pip`` section is set to True.
+In the ``project.yml`` file of your project, ensure that the ``use_config_file`` option under the ``pip`` section is set to ``True``.
 
 Create a file named ``pip.conf`` and add the following content to it:
 
