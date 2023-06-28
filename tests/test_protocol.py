@@ -1599,8 +1599,10 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
     response = await client.fetch(request, raise_error=False)
     assert response.code == 400
     body = json.loads(response.body)
-    assert "Value for argument header_param was provided via a header and a non-header argument, but both" \
-           f" values don\'t match (header={param_different_value}; non-header={param_value})" in body["message"]
+    assert (
+        "Value for argument header_param was provided via a header and a non-header argument, but both"
+        f" values don't match (header={param_different_value}; non-header={param_value})" in body["message"]
+    )
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
