@@ -335,7 +335,8 @@ Configure a project to install modules form a private python package repository
 
 Modules v2 are Python packages that can be installed from private Python package repositories, which may require authentication. This section explains the steps to install such modules.
 
-Create a file named ".netrc" in the orchestrator's file system, specifically in the "inmanta" directory. Add the following content to the file:
+Create a file named ".netrc" in the orchestrator's file system, specifically in the "inmanta" directory. 
+Add the following content to the file:
 
 .. code-block:: text
 
