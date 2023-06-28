@@ -1,0 +1,6 @@
+description: Document the proper way to configure a project to access a private python package repository
+issue-nr: 392
+issue-repo: inmanta-service-orchestrator
+change-type: patch
+destination-branches: [master, iso6]
+
