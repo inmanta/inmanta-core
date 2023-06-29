@@ -380,6 +380,10 @@ In the ``project.yml`` (see: :ref:`project_yml`) file of your project, set the `
             - <url of the private repository>
 
 
+.. note::
+
+    Both methods can also be used together.
+
 By following these steps, you will be able to configure your project to install modules from a private Python package repository.
 
 
