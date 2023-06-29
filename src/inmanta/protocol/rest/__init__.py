@@ -123,15 +123,34 @@ class CallArguments(object):
         return self._metadata
 
     def _is_header_param(self, arg: str) -> bool:
+        """
+        Return True if the given call argument can be provided using a header parameter.
+        """
         if arg not in self._properties.arg_options:
             return False
 
         opts = self._properties.arg_options[arg]
+        return opts.header is not None
 
-        if opts.header is None:
-            return False
+    def _is_header_param_provided(self, arg: str) -> bool:
+        """
+        Return True iff a value for the given call argument was provided using a header parameter.
 
-        return True
+        :raise Exception: The given call argument is not a header parameter.
+        """
+        value = self._get_header_value_for(arg)
+        return value is not None
+
+    def _get_header_value_for(self, arg: str) -> Optional[str]:
+        """
+        Return the header value that belongs to the given call argument or None when the header was not set.
+
+        :raise Exception: The given call argument is not a header parameter.
+        """
+        if not self._is_header_param(arg):
+            raise Exception(f"Parameter {arg} is not a header parameter")
+        opts = self._properties.arg_options[arg]
+        return self._request_headers.get(opts.header)
 
     def _map_headers(self, arg: str) -> Optional[object]:
         if not self._is_header_param(arg):
@@ -183,52 +202,61 @@ class CallArguments(object):
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
 
+        # Make sure that an argument is not passed both using the header and a non-header value with a different value
+        for arg in args:
+            if arg in self._message and self._is_header_param(arg) and self._is_header_param_provided(arg):
+                message_value = self._message[arg]
+                header_value = self._get_header_value_for(arg)
+                if message_value != header_value:
+                    raise exceptions.BadRequest(
+                        f"Value for argument {arg} was provided via a header and a non-header argument, but both values"
+                        f" don't match (header={header_value}; non-header={message_value})"
+                    )
+
         call_args = {}
 
         for i, arg in enumerate(args):
-            # get value from headers, defaults or message
-            value = self._map_headers(arg)
-            if value is None:
-                if not self._is_header_param(arg):
-                    arg_type: Optional[Type[object]] = self._argspec.annotations.get(arg)
-                    if arg in self._message:
-                        if (
-                            arg_type
-                            and self._properties.operation == "GET"
-                            and typing_inspect.is_generic_type(arg_type)
-                            and issubclass(typing_inspect.get_origin(arg_type), list)
-                            and not isinstance(self._message[arg], list)
-                            and len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
-                            and isinstance(self._message[arg], typing_inspect.get_args(arg_type)[0])
-                        ):
-                            # If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
-                            # specific request provides a list with one element, urllib doesn't parse it as a list.
-                            # Map it here explicitly to a list.
-                            value = [self._message[arg]]
-                        else:
-                            value = self._message[arg]
-                        all_fields.remove(arg)
-                    # Pre-process dict params for GET
-                    elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
-                        dict_prefix = f"{arg}."
-                        dict_with_prefixed_names = {
-                            param_name: param_value
-                            for param_name, param_value in self._message.items()
-                            if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
-                        }
-                        value = (
-                            await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
-                            if dict_with_prefixed_names
-                            else None
-                        )
+            arg_type: Optional[Type[object]] = self._argspec.annotations.get(arg)
+            if arg in self._message:
+                # Argument is parameter in body of path of HTTP request
+                if (
+                    arg_type
+                    and self._properties.operation == "GET"
+                    and typing_inspect.is_generic_type(arg_type)
+                    and issubclass(typing_inspect.get_origin(arg_type), list)
+                    and not isinstance(self._message[arg], list)
+                    and len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+                    and isinstance(self._message[arg], typing_inspect.get_args(arg_type)[0])
+                ):
+                    # If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
+                    # specific request provides a list with one element, urllib doesn't parse it as a list.
+                    # Map it here explicitly to a list.
+                    value = [self._message[arg]]
+                else:
+                    value = self._message[arg]
+                all_fields.remove(arg)
+            elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
+                # Argument is dictionary-based expression in query parameters of GET operation
+                dict_prefix = f"{arg}."
+                dict_with_prefixed_names = {
+                    param_name: param_value
+                    for param_name, param_value in self._message.items()
+                    if param_name.startswith(dict_prefix) and len(param_name) > len(dict_prefix)
+                }
+                value = (
+                    await self._get_dict_value_from_message(arg, dict_prefix, dict_with_prefixed_names)
+                    if dict_with_prefixed_names
+                    else None
+                )
 
-                        for key in dict_with_prefixed_names.keys():
-                            all_fields.remove(key)
-
-                    else:  # get default value
-                        value = self.get_default_value(arg, i, defaults_start)
-                else:  # get default value
+                for key in dict_with_prefixed_names.keys():
+                    all_fields.remove(key)
+            elif self._is_header_param(arg):
+                value = self._map_headers(arg)
+                if value is None:
                     value = self.get_default_value(arg, i, defaults_start)
+            else:
+                value = self.get_default_value(arg, i, defaults_start)
 
             call_args[arg] = value
 
