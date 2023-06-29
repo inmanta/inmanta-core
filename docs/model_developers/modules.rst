@@ -333,9 +333,9 @@ from the Python package repository but instead contains all Python code as prese
 Configure a project to install modules form a private python package repository
 --------------------------------------------------------------------------------
 
-Modules v2 are Python packages that can be installed from private Python package repositories, which may require authentication. This section explains the steps to install such modules.
+Modules v2 are Python packages that can be installed from private Python package repositories, which may require authentication.This section explains the steps to install such modules.
 
-Create a file named ``.netrc`` in the orchestrator's file system, specifically in the "inmanta" directory. 
+Create a file named ``.netrc`` in the orchestrator's file system, specifically in the "inmanta" directory.
 Add the following content to the file:
 
 .. code-block:: text
@@ -344,9 +344,19 @@ Add the following content to the file:
   login token
   password <the token to access the private repository>
 
+Next choose one of the following to options to specify to the inmanta server where to get the modules:
+
+1. Use the pip config file
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 In the ``project.yml`` file of your project, ensure that the ``use_config_file`` option under the ``pip`` section is set to ``True``.
 
-Create a file named ``pip.conf`` and add the following content to it:
+.. code-block:: text
+
+    pip:
+        use_config_file: True
+
+Then add the following content the global pip config file:
 
 .. code-block:: text
 
@@ -354,16 +364,22 @@ Create a file named ``pip.conf`` and add the following content to it:
   timeout = 60
   index-url = <url of the repository >
 
-Set the ``PIP_CONFIG_FILE`` environment variable to the path of the ``pip.conf`` file. You can do this by running the following command:
+.. note::
 
-.. code-block:: bash
+    You can also create a new pip config file ``pip.conf``, add the content there and then set the ``PIP_CONFIG_FILE`` environment variable in the inmanta server to the path of the newly created ``pip.conf`` file (See: :ref:`env_vars`).
 
-  $ export PIP_CONFIG_FILE=<path/to/pip.conf>
+2. Set the index_urls in the project
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Run the following command to install the modules:
+In the ``project.yml`` file of your project, set the ``index_urls`` option under the ``pip`` section to the url of the private repository.
 
-.. code-block:: bash
+.. code-block:: text
 
-  $ inmanta project install
+    pip:
+        index_urls:
+            - <url of the private repository>
+
 
 By following these steps, you will be able to configure your project to install modules from a private Python package repository.
+
+
