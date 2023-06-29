@@ -35,8 +35,6 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     repo:
       - url: https://github.com/inmanta/
         type: git
-      - url: https://pypi.org/simple/
-        type: package
     requires:
       - apache ~= 0.5.2
       - drupal ~= 0.7.3
@@ -52,7 +50,9 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_recursive: true
     freeze_operator: ~=
     pip:
-       use_config_file: False
+      use_config_file: false
+      index_urls:
+        - https://pypi.org/simple/
 
 Module metadata files
 #####################
