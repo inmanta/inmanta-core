@@ -363,9 +363,7 @@ class Client(Endpoint):
         elif self._version_match is VersionMatch.highest:
             return max(methods, key=lambda x: x.api_version)
         elif self._version_match is VersionMatch.exact:
-            for method in methods:
-                if method.api_version == self._exact_version:
-                    return method
+            return next((m for m in methods if m.api_version == self._exact_version), None)
 
         return None
 
