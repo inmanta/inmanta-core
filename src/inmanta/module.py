@@ -1539,7 +1539,12 @@ class ProjectPipConfig(BaseModel):
     """
     :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
         Python packages.
-    :param index_urls: List of pip indexes to use project-wide.
+    :param index_urls: List of pip indexes to use project-wide. These repositories should be
+        `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
+        compliant. If more than one index url is configured, they will all be passed to pip. This is generally only
+        recommended if all configured indexes are under full control of the end user to protect against dependency
+        confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
+        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
     """
 
     use_config_file: bool = False
@@ -1567,12 +1572,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
-        * package: When the type is set to package, the URL field should contain the URL of the Python package repository.
-          The repository should be `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-          compliant. If more than one package url is configured, they will all be passed to pip. This is generally only
-          recommended if all configured indexes are under full control of the end user to protect against dependency
-          confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
-          `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
+        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. See
+          :py:class:`inmanta.module.ProjectPipConfig` for more details.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
