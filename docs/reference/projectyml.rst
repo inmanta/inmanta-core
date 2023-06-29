@@ -54,7 +54,6 @@ The code snippet below provides an example of a complete ``project.yml`` file:
       index_urls:
         - https://pypi.org/simple/
 
-
 Module metadata files
 #####################
 

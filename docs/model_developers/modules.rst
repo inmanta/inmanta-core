@@ -349,7 +349,7 @@ Next choose one of the following two options to specify to the inmanta server wh
 1. Use the pip config file
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In the ``project.yml`` file of your project, ensure that the ``use_config_file`` option under the ``pip`` section is set to ``True``.
+In the ``project.yml`` (see: :ref:`project_yml`) file of your project, ensure that the ``use_config_file`` option under the ``pip`` section is set to ``True``.
 
 .. code-block:: text
 
@@ -371,7 +371,7 @@ Then add the following content the global pip config file:
 2. Set the index_urls in the project
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In the ``project.yml`` file of your project, set the ``index_urls`` option under the ``pip`` section to the url of the private repository.
+In the ``project.yml`` (see: :ref:`project_yml`) file of your project, set the ``index_urls`` option under the ``pip`` section to the url of the private repository.
 
 .. code-block:: text
 
