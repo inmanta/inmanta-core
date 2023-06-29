@@ -330,12 +330,12 @@ The only exception to this rule is when using the ``inmanta export`` command. It
 ``inmanta_plugins`` packages to the orchestrator server. When this method is used, the orchestrator does not install any modules
 from the Python package repository but instead contains all Python code as present in the local Python environment.
 
-Configure a project to install modules form a private python package repository
+Configure a project to install modules from a private python package repository
 --------------------------------------------------------------------------------
 
-Modules v2 are Python packages that can be installed from private Python package repositories, which may require authentication.This section explains the steps to install such modules.
+V2 modules are Python packages that can be installed from private Python package repositories, which may require authentication.This section explains the steps to install such modules.
 
-Create a file named ``.netrc`` in the orchestrator's file system, specifically in the "inmanta" directory.
+Create a file named ``/var/lib/inmanta/.netrc`` in the orchestrator's file system.
 Add the following content to the file:
 
 .. code-block:: text
