@@ -124,7 +124,7 @@ class CallArguments(object):
 
     def _is_header_param(self, arg: str) -> bool:
         """
-        Return True of the given call argument can be provided using a header parameter.
+        Return True if the given call argument can be provided using a header parameter.
         """
         if arg not in self._properties.arg_options:
             return False
@@ -202,7 +202,7 @@ class CallArguments(object):
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
 
-        # Make sure that an arguments is not passed both using the header and a non-header value with a different value
+        # Make sure that an argument is not passed both using the header and a non-header value with a different value
         for arg in args:
             if arg in self._message and self._is_header_param(arg) and self._is_header_param_provided(arg):
                 message_value = self._message[arg]
