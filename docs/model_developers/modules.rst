@@ -344,7 +344,7 @@ Add the following content to the file:
   login token
   password <the token to access the private repository>
 
-Next choose one of the following to options to specify to the inmanta server where to get the modules:
+Next choose one of the following two options to specify to the inmanta server where to get the modules:
 
 1. Use the pip config file
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
