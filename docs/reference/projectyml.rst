@@ -18,7 +18,6 @@ The ``project.yml`` file defines the following settings:
 
 .. autoclass:: inmanta.module.ProjectPipConfig
 
-
 The code snippet below provides an example of a complete ``project.yml`` file:
 
 .. code-block:: yaml
@@ -53,6 +52,34 @@ The code snippet below provides an example of a complete ``project.yml`` file:
       use_config_file: false
       index_urls:
         - https://pypi.org/simple/
+
+
+.. _specify_location_pip:
+
+Specify locations from where V2 modules will be installed
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+By setting ``use_config_file`` option to ``True``, the project will use the global pip config file when installing V2 modules.
+To specify the url of a pip repository, add the following to the pip config file:
+
+.. code-block:: text
+
+  [global]
+  timeout = 60
+  index-url = <url of the repository >
+
+.. note::
+
+    You can also create a new pip config file ``pip.conf``, add the content there and then set the ``PIP_CONFIG_FILE`` environment variable to the path of the newly created ``pip.conf`` file (See: :ref:`env_vars`).
+
+Another option is to use the  ``index_urls`` option. There you can directly add the urls of repositories you are interested in.
+
+
+.. note::
+
+    Both methods can also be used together.
+
+
 
 Module metadata files
 #####################
