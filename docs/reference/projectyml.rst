@@ -18,6 +18,7 @@ The ``project.yml`` file defines the following settings:
 
 .. autoclass:: inmanta.module.ProjectPipConfig
 
+
 The code snippet below provides an example of a complete ``project.yml`` file:
 
 .. code-block:: yaml
