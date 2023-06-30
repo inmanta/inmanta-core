@@ -57,28 +57,60 @@ The code snippet below provides an example of a complete ``project.yml`` file:
 
 .. _specify_location_pip:
 
-Specify locations from where V2 modules will be installed
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-By setting ``use_config_file`` option to ``True``, the project will use the global pip config file when installing V2 modules.
+Specify location from where V2 modules will be installed
+--------------------------------------------------------
+This section explains how to configure your project in order to download v2 modules from any python package repository.
+By default, the project is configured to install packages from ``https://pypi.org/simple/``. There are multiple ways
+to change this behaviour.
+
+Using the global pip config file
+""""""""""""""""""""""""""""""""
+
+By setting ``use_config_file`` option in the pip section to ``True``, the project will use the global pip config file.
+
+.. code-block:: yaml
+
+    pip:
+      use_config_file: True
+
 To specify the url of a pip repository, add the following to the pip config file:
 
 .. code-block:: text
 
   [global]
   timeout = 60
-  index-url = <url of the repository >
+  index-url = <url of a python package repository>
+  extra-index-url = <url of a second python package repository>
+                    <url of a third python package repository>
+
+Creating a new pip config file
+""""""""""""""""""""""""""""""
+
+Alternatively, a new ``pip.conf`` can be created and the ``index-url`` can be specified there as explained in the previous section.
+To make this work, the ``PIP_CONFIG_FILE`` environment variable needs to be set to the path of the newly created ``pip.conf`` file (See: :ref:`env_vars`).
+
+Specify the locations in the project.yml file
+"""""""""""""""""""""""""""""""""""""""""""""
+
+Another option is to use the  ``index_urls`` option in the ``pip`` section of the ``project.yml`` file:
+
+.. code-block:: yaml
+
+    pip:
+      use_config_file: False
+      index_urls:
+        - <url of a python package repository>
+        - <url of a second python package repository>
+
 
 .. note::
+    The pip config file can also be used in combination with ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file:
 
-    You can also create a new pip config file ``pip.conf``, add the content there and then set the ``PIP_CONFIG_FILE`` environment variable to the path of the newly created ``pip.conf`` file (See: :ref:`env_vars`).
+    * If the pip config is used (by setting ``use_config_file`` to ``True``), the ``index-url`` specified in the pip config file will take precedence and the ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file will be used as ``extra-index-urls`` when installing with pip.
+    * If the pip config is not used (by setting ``use_config_file`` to False), then the first ``index_url`` specified in the project.yml will be used as an ``index_url`` and all the following ones will be used as ``extra-index-urls`` when installing with pip.
 
-Another option is to use the  ``index_urls`` option. There you can directly add the urls of repositories you are interested in.
 
-
-.. note::
-
-    Both methods can also be used together.
 
 
 
