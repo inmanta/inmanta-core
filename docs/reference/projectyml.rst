@@ -73,7 +73,7 @@ To specify the url of a pip repository, add the following to the pip config file
 
     You can also create a new pip config file ``pip.conf``, add the content there and then set the ``PIP_CONFIG_FILE`` environment variable to the path of the newly created ``pip.conf`` file (See: :ref:`env_vars`).
 
-Another option is to use the  ``index_urls`` option. There you can directly add the urls of repositories you are interested in.
+Another option is to set the urls of the repositories in the ``index_urls`` option of the ``pip`` section.
 
 
 .. note::
