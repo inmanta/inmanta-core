@@ -331,7 +331,7 @@ The only exception to this rule is when using the ``inmanta export`` command. It
 from the Python package repository but instead contains all Python code as present in the local Python environment.
 
 Configure a project to install modules from a private python package repository
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 V2 modules are Python packages that can be installed from private Python package repositories, which may require authentication.This section explains the steps to install such modules.
 
@@ -341,13 +341,13 @@ Add the following content to the file:
 .. code-block:: text
 
   machine <url of the private repository>
-  login token
+  login <username>
   password <the token to access the private repository>
 
 Next choose one of the following two options to specify to the inmanta server where to get the modules:
 
 1. Use the pip config file
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In the ``project.yml`` (see: :ref:`project_yml`) file of your project, ensure that the ``use_config_file`` option under the ``pip`` section is set to ``True``.
 
@@ -356,7 +356,7 @@ In the ``project.yml`` (see: :ref:`project_yml`) file of your project, ensure th
     pip:
         use_config_file: True
 
-Then add the following content the global pip config file:
+Then add the following content to the global pip config file:
 
 .. code-block:: text
 
@@ -369,7 +369,7 @@ Then add the following content the global pip config file:
     You can also create a new pip config file ``pip.conf``, add the content there and then set the ``PIP_CONFIG_FILE`` environment variable in the inmanta server to the path of the newly created ``pip.conf`` file (See: :ref:`env_vars`).
 
 2. Set the index_urls in the project
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In the ``project.yml`` (see: :ref:`project_yml`) file of your project, set the ``index_urls`` option under the ``pip`` section to the url of the private repository.
 
