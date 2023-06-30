@@ -810,10 +810,7 @@ class ActiveEnv(PythonEnvironment):
         for req in requirements_list:
             parsed_name, req_spec = cls._parse_line(req)
 
-            if parsed_name is None:
-                name = req
-            else:
-                name = parsed_name
+            name = req if parsed_name is None else parsed_name
 
             url = None
             version = None
