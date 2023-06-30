@@ -346,6 +346,6 @@ Add the following content to the file:
 
 You will also need to specify the url of the repository in the ``project.yml`` file of your project. (See: :ref:`specify_location_pip`)
 
-By following these steps, you will be able to install modules from a private Python package repository.
+By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
 
 
