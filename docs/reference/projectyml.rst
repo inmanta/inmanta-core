@@ -58,7 +58,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
 .. _specify_location_pip:
 
 Specify locations from where V2 modules will be installed
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 By setting ``use_config_file`` option to ``True``, the project will use the global pip config file when installing V2 modules.
 To specify the url of a pip repository, add the following to the pip config file:
