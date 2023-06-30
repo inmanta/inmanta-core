@@ -330,7 +330,7 @@ The only exception to this rule is when using the ``inmanta export`` command. It
 ``inmanta_plugins`` packages to the orchestrator server. When this method is used, the orchestrator does not install any modules
 from the Python package repository but instead contains all Python code as present in the local Python environment.
 
-Configure a project to install modules from a private python package repository
+Configure the Inmanta server to install modules from a private python package repository
 -------------------------------------------------------------------------------
 
 V2 modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta project and the Inmanta server should be configured to install v2 modules from such a Python package repository.
