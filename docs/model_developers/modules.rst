@@ -342,7 +342,7 @@ Add the following content to the file:
 
   machine <hostname of the private repository>
   login <username>
-  password <the token to access the private repository>
+  password <password>
 
 Next choose one of the following two options to specify to the inmanta server where to get the modules:
 
