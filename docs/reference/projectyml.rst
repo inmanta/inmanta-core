@@ -58,8 +58,8 @@ The code snippet below provides an example of a complete ``project.yml`` file:
 .. _specify_location_pip:
 
 
-Specify location from where V2 modules will be installed
---------------------------------------------------------
+Specify locations from where V2 modules will be installed
+---------------------------------------------------------
 This section explains how to configure your project in order to download v2 modules from any python package repository.
 By default, the project is configured to install packages from ``https://pypi.org/simple/``. There are multiple ways
 to change this behaviour.
@@ -67,7 +67,7 @@ to change this behaviour.
 Using the global pip config file
 """"""""""""""""""""""""""""""""
 
-By setting ``use_config_file`` option in the pip section to ``True``, the project will use the global pip config file.
+By setting the ``use_config_file`` option of the pip section to ``True``, the project will use the global pip config file.
 
 .. code-block:: yaml
 
