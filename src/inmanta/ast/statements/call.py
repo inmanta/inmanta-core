@@ -17,6 +17,7 @@
 """
 
 import logging
+from collections import abc
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
 
@@ -104,7 +105,7 @@ class FunctionCall(ReferenceStatement):
         super().execute(requires, resolver, queue)
         return requires[self]
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         arguments = [a.execute_direct(requires) for a in self.arguments]
         kwargs = {k: v.execute_direct(requires) for k, v in self.kwargs.items()}
         for wrapped_kwarg_expr in self.wrapped_kwargs:

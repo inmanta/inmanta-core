@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import inspect
 import os
 import subprocess
@@ -24,7 +25,7 @@ from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
-from inmanta import const, protocol
+from inmanta import const, protocol, util
 from inmanta.ast import (
     CompilerException,
     LocatableString,
@@ -125,20 +126,20 @@ class Context(object):
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
 
-    def run_sync(self, function: Callable[..., T], timeout: int = 5) -> T:
+    def run_sync(self, function: Callable[[], abc.Awaitable[T]], timeout: int = 5) -> T:
         """
-        Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
-        main use for this function is to use the inmanta internal rpc to communicate with the server.
+        Execute the async function and return its result. This method uses this thread's current (not running) event loop if
+        there is one, otherwise it creates a new one. The main use for this function is to use the inmanta internal rpc to
+        communicate with the server.
 
         :param function: The async function to execute. This function should return a yieldable object.
         :param timeout: A timeout for the async function.
         :return: The result of the async call.
         :raises ConnectionRefusedError: When the function timeouts this exception is raised.
         """
-        from tornado.ioloop import IOLoop, TimeoutError
-
+        with_timeout: abc.Awaitable[T] = asyncio.wait_for(function(), timeout)
         try:
-            return IOLoop.current().run_sync(function, timeout)
+            return util.ensure_event_loop().run_until_complete(with_timeout)
         except TimeoutError:
             raise ConnectionRefusedError()
 
@@ -190,6 +191,35 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
+class PluginArgument:
+    """
+    Represents the argument of an Inmanta plugin.
+    """
+
+    # Marker used to indicate that a plugin argument has no default value.
+    NO_DEFAULT_VALUE_SET = object()
+
+    def __init__(
+        self, arg_name: str, arg_type: object, is_kw_only_argument: bool, default_value: object = NO_DEFAULT_VALUE_SET
+    ) -> None:
+        self.arg_name = arg_name
+        self.arg_type = arg_type
+        self.is_kw_only_argument = is_kw_only_argument
+        self._default_value = default_value
+
+    @property
+    def default_value(self) -> Optional[object]:
+        if not self.has_default_value():
+            raise Exception("PluginArgument doesn't have a default value")
+        return self._default_value
+
+    def has_default_value(self) -> bool:
+        """
+        Return True iff this plugin argument has a default value set.
+        """
+        return self._default_value is not self.NO_DEFAULT_VALUE_SET
+
+
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     """
     This class models a plugin that can be called from the language.
@@ -202,10 +232,11 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.ns = namespace
         self.namespace = namespace
 
-        self._context = -1
+        # The index of the Context attribute.
+        self._context: int = -1
         self._return = None
 
-        self.arguments: List[Tuple]
+        self.arguments: List[PluginArgument]
         if hasattr(self.__class__, "__function__"):
             self.arguments = self._load_signature(self.__class__.__function__)
         else:
@@ -228,36 +259,57 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def normalize(self) -> None:
         self.resolver = self.namespace
-        self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
+        self.argtypes = [self.to_type(arg.arg_type, self.namespace) for arg in self.arguments]
         self.returntype = self.to_type(self._return, self.namespace)
 
-    def _load_signature(self, function: Callable[..., object]) -> List[Tuple]:
+    def _load_signature(self, function: Callable[..., object]) -> List[PluginArgument]:
         """
         Load the signature from the given python function
         """
         arg_spec = inspect.getfullargspec(function)
+
+        # Calculate at which index the default values start (for the non-keyword-only attributes)
+        default_start_for_args: Optional[int]
         if arg_spec.defaults is not None:
-            default_start = len(arg_spec.args) - len(arg_spec.defaults)
+            default_start_for_args = len(arg_spec.args) - len(arg_spec.defaults)
         else:
-            default_start = None
+            default_start_for_args = None
 
-        arguments = []
-        for i in range(len(arg_spec.args)):
-            arg = arg_spec.args[i]
+        arguments: List[PluginArgument] = []
 
-            if arg not in arg_spec.annotations:
-                raise Exception("All arguments of plugin '%s' should be annotated" % function.__name__)
-
-            spec_type = arg_spec.annotations[arg]
-            if spec_type == Context:
-                self._context = i
+        def process_kw_only_args(argument_name: str, annotation: object) -> PluginArgument:
+            if arg_spec.kwonlydefaults and argument_name in arg_spec.kwonlydefaults:
+                default_value = arg_spec.kwonlydefaults[argument_name]
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=True, default_value=default_value)
             else:
-                if default_start is not None and default_start <= i:
-                    default_value = arg_spec.defaults[default_start - i]
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=True)
 
-                    arguments.append((arg, spec_type, default_value))
+        def process_regular_args(index: int, argument_name: str, annotation: object) -> PluginArgument:
+            if default_start_for_args is not None and default_start_for_args <= index:
+                default_value = arg_spec.defaults[default_start_for_args - index]
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=False, default_value=default_value)
+            else:
+                return PluginArgument(argument_name, annotation, is_kw_only_argument=False)
+
+        def process_arg(index: int, argument_name: str, is_kwonly_arg: bool) -> None:
+            if argument_name not in arg_spec.annotations:
+                raise CompilerException(f"All arguments of plugin '{function.__name__}' should be annotated")
+            annotation = arg_spec.annotations[argument_name]
+            if annotation == Context:
+                self._context = index
+            else:
+                if is_kwonly_arg:
+                    plugin_argument = process_kw_only_args(argument_name, annotation)
                 else:
-                    arguments.append((arg, spec_type))
+                    plugin_argument = process_regular_args(index, argument_name, annotation)
+                arguments.append(plugin_argument)
+
+        # Process regular arguments
+        for i in range(len(arg_spec.args)):
+            process_arg(i, arg_spec.args[i], is_kwonly_arg=False)
+        # Process keyword-only arguments
+        for i in range(len(arg_spec.kwonlyargs)):
+            process_arg(i, arg_spec.kwonlyargs[i], is_kwonly_arg=True)
 
         if "return" in arg_spec.annotations:
             self._return = arg_spec.annotations["return"]
@@ -270,14 +322,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         arg_list = []
         for arg in self.arguments:
-            if len(arg) == 3:
-                arg_list.append("%s: %s=%s" % (arg[0], arg[1], str(arg[2])))
-
-            elif len(arg) == 2:
-                arg_list.append("%s: %s" % (arg[0], arg[1]))
-
+            if arg.has_default_value():
+                arg_list.append("%s: %s=%s" % (arg.arg_name, arg.arg_type, str(arg.default_value)))
             else:
-                arg_list.append(arg[0])
+                arg_list.append("%s: %s" % (arg.arg_name, arg.arg_type))
 
         args = ", ".join(arg_list)
 
@@ -345,50 +393,46 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         Check if the arguments of the call match the function signature
         """
         max_arg = len(self.arguments)
-        required_args = [x[0] for x in self.arguments if len(x) == 2]
-
         if len(args) + len(kwargs) > max_arg:
             raise Exception(
                 "Incorrect number of arguments for %s. Expected at most %d, got %d"
                 % (self.get_signature(), max_arg, len(args) + len(kwargs))
             )
-        present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
         # check for missing arguments
-        if len(args) < len(required_args):
-            required_kwargs: FrozenSet[str] = frozenset(arg[0] for arg in self.arguments[len(args) : len(required_args)])
-            if not required_kwargs.issubset(present_kwargs):
-                missing: FrozenSet[str] = required_kwargs.difference(present_kwargs)
-                raise RuntimeException(
-                    None,
-                    "Missing %d required arguments for %s(): %s"
-                    % (len(missing), self.__class__.__function_name__, ",".join(missing)),
-                )
-        present_positional_args: FrozenSet[str] = frozenset(arg[0] for arg in self.arguments[: len(args)])
-        # check for kwargs overlap with positional arguments
-        if not present_kwargs.isdisjoint(present_positional_args):
+        required_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments if not arg.has_default_value())
+        present_positional_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments[: len(args)])
+        present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
+        missing_args = required_args.difference({*present_positional_args, *present_kwargs})
+        if missing_args:
             raise RuntimeException(
                 None,
-                "Multiple values for %s in %s()"
-                % (",".join(present_kwargs.intersection(present_positional_args)), self.__class__.__function_name__),
+                "Missing %d required arguments for %s(): %s"
+                % (len(missing_args), self.__class__.__function_name__, ",".join(missing_args)),
+            )
+        # check for kwargs overlap with positional arguments
+        overlapping_args: FrozenSet[str] = present_kwargs.intersection(present_positional_args)
+        if overlapping_args:
+            raise RuntimeException(
+                None,
+                "Multiple values for %s in %s()" % (",".join(overlapping_args), self.__class__.__function_name__),
             )
 
-        def is_valid(expected_arg: Tuple[Optional[Type[object]], str], expected_type: Type[object], arg: object) -> bool:
+        def is_valid(expected_arg: PluginArgument, expected_type: Type[object], arg: object) -> bool:
             if isinstance(arg, Unknown):
                 return False
 
-            if expected_arg[0] is not None and not self._is_instance(arg, expected_type):
+            if not self._is_instance(arg, expected_type):
                 raise Exception(
-                    ("Invalid type for argument %d of '%s', it should be " "%s and %s given.")
-                    % (i + 1, self.__class__.__function_name__, expected_arg[1], arg.__class__.__name__)
+                    "Invalid type for argument %s of '%s', it should be %s and %s given."
+                    % (expected_arg.arg_name, self.__class__.__function_name__, expected_arg.arg_type, arg.__class__.__name__)
                 )
             return True
 
         for i in range(len(args)):
             if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
                 return False
-        Argument = Tuple[str, ...]
-        arg_types: Dict[str, Tuple[Argument, Optional[inmanta_type.Type]]] = {
-            arg[0]: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
+        arg_types: Dict[str, Tuple[PluginArgument, Optional[inmanta_type.Type]]] = {
+            arg.arg_name: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
         }
         for k, v in kwargs.items():
             try:

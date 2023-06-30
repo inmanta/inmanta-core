@@ -28,7 +28,6 @@ import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
 from collections.abc import Mapping
-from functools import partial
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
@@ -37,6 +36,7 @@ from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Seq
 import dateutil
 import dateutil.parser
 import pydantic
+from asyncpg import Connection
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
@@ -50,6 +50,7 @@ from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
 from inmanta.server import config as opt
 from inmanta.server.protocol import ServerSlice
+from inmanta.server.services import environmentservice
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, ArgumentTypes, JsonType, Warnings
 from inmanta.util import TaskMethod, ensure_directory_exist
@@ -224,8 +225,6 @@ class CompileRun(object):
         :return: Tuple of a boolean representing success and the compile data, if any.
         """
         success = False
-        now = datetime.datetime.now().astimezone()
-        await self.request.update_fields(started=now)
 
         compile_data_json_file = NamedTemporaryFile()
         try:
@@ -472,7 +471,7 @@ class CompileRun(object):
             return success, None
 
 
-class CompilerService(ServerSlice):
+class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     """
     Compiler services offers:
 
@@ -505,8 +504,10 @@ class CompilerService(ServerSlice):
         self._global_lock = asyncio.locks.Lock()
         self.listeners: List[CompileStateListener] = []
         self._scheduled_full_compiles: Dict[uuid.UUID, Tuple[TaskMethod, str]] = {}
-        # cache the queue count for DB-less and lock-less access to number of tasks
+        # In-memory cache to keep track of the total length of all the compile queues on this Inmanta server.
+        # This cache is used by the /serverstatus endpoint.
         self._queue_count_cache: int = 0
+        self._queue_count_cache_lock = asyncio.locks.Lock()
 
     async def get_status(self) -> Dict[str, ArgumentTypes]:
         return {"task_queue": self._queue_count_cache, "listeners": len(self.listeners)}
@@ -561,11 +562,27 @@ class CompilerService(ServerSlice):
                 "type": "schedule",
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
-            recompile: TaskMethod = partial(
-                self.request_recompile, env, force_update=False, do_export=True, remote_id=uuid.uuid4(), metadata=metadata
-            )
-            self.schedule_cron(recompile, schedule_cron, cancel_on_stop=False)
-            self._scheduled_full_compiles[env.id] = (recompile, schedule_cron)
+
+            async def _request_recompile_task() -> Tuple[Optional[uuid.UUID], Warnings]:
+                """
+                Creates a new task for the full compile schedule.
+                If the environment is halted, the task does nothing.
+                Otherwise, it requests a recompile.
+                """
+                latest_env = await data.Environment.get_by_id(env.id)
+                if not latest_env or latest_env.halted:
+                    return None, []
+
+                return await self.request_recompile(
+                    env,
+                    force_update=False,
+                    do_export=True,
+                    remote_id=uuid.uuid4(),
+                    metadata=metadata,
+                )
+
+            self.schedule_cron(_request_recompile_task, schedule_cron, cancel_on_stop=False)
+            self._scheduled_full_compiles[env.id] = (_request_recompile_task, schedule_cron)
 
     async def request_recompile(
         self,
@@ -580,18 +597,27 @@ class CompilerService(ServerSlice):
         exporter_plugin: Optional[str] = None,
         notify_failed_compile: Optional[bool] = None,
         failed_compile_message: Optional[str] = None,
+        in_db_transaction: bool = False,
+        connection: Optional[Connection] = None,
     ) -> Tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
         :param notify_failed_compile: if set to True, errors during compilation will be notified using the
-        "failed_compile_message".
-        if set to false, nothing will be notified. If not set then the default notifications are
-        sent (failed pull stage and errors during the do_export)
+                                      "failed_compile_message".
+                                      if set to false, nothing will be notified. If not set then the default notifications are
+                                      sent (failed pull stage and errors during the do_export)
         :param failed_compile_message: the message used in notifications if notify_failed_compile is set to True.
+        :param connection: Perform the database changes using this database connection.
+        :param in_db_transaction: If set to True, the connection must be provided and the connection must be part of an ongoing
+                                  database transaction. If this parameter is set to True, is required to call
+                                  `CompileService.notify_compile_request_committed()` right after the transaction commits.
         :return: the compile id of the requested compile and any warnings produced during the request
-
         """
+        if in_db_transaction and not connection:
+            raise Exception("A connection should be provided when in_db_transaction is True.")
+        if in_db_transaction and connection and not connection.is_in_transaction():
+            raise Exception("in_db_transaction is True, but the given connection is not executing a transaction.")
         if removed_resource_sets is None:
             removed_resource_sets = []
         if metadata is None:
@@ -620,9 +646,36 @@ class CompilerService(ServerSlice):
             notify_failed_compile=notify_failed_compile,
             failed_compile_message=failed_compile_message,
         )
-        await compile.insert()
-        await self._queue(compile)
+        if not in_db_transaction:
+            async with self._queue_count_cache_lock:
+                await compile.insert(connection)
+                self._queue_count_cache += 1
+            await self._queue(compile)
+        else:
+            # We are running inside a transaction. The changes will only be applied after the transaction commits.
+            # We cannot increment the queue count yet or schedule the requested compile for execution. This will be
+            # done when the notify_compile_request_committed() method is invoked.
+            await compile.insert(connection)
+
         return compile.id, None
+
+    async def notify_compile_request_committed(self, compile_id: uuid.UUID) -> None:
+        """
+        This method must be called when the `request_recompile()` method was called with in_db_transaction=True. It must be
+        called right after the transaction committed. If the transaction was aborted, this method most not be called.
+
+        This method is safe with respect to server restarts. If the server restarts after the transaction was committed,
+        but before this method was invoked, the server will automatically recover from this and run the requested compile
+        without any need to call this method.
+        """
+        compile_obj: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+        if not compile_obj:
+            raise Exception(f"Compile with id {compile_id} not found.")
+        async with self._queue_count_cache_lock:
+            self._queue_count_cache += 1
+        async with self._global_lock:
+            if compile_obj.environment not in self._recompiles:
+                await self.process_next_compile_in_queue(compile_obj.environment)
 
     @staticmethod
     def _compile_merge_key(c: data.Compile) -> Hashable:
@@ -645,24 +698,26 @@ class CompilerService(ServerSlice):
             # don't execute any compiles in a halted environment
             if env.halted:
                 return
-            self._queue_count_cache += 1
             if compile.environment not in self._recompiles or self._recompiles[compile.environment].done():
                 task = self.add_background_task(self._run(compile))
                 self._recompiles[compile.environment] = task
 
     async def _dequeue(self, environment: uuid.UUID) -> None:
         async with self._global_lock:
-            if self.is_stopping():
-                return
-            env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
-            if env is None:
-                raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
-            nextrun = await data.Compile.get_next_run(environment)
-            if nextrun and not env.halted:
-                task = self.add_background_task(self._run(nextrun))
-                self._recompiles[environment] = task
-            else:
-                del self._recompiles[environment]
+            await self.process_next_compile_in_queue(environment)
+
+    async def process_next_compile_in_queue(self, environment: uuid.UUID) -> None:
+        if self.is_stopping():
+            return
+        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+        if env is None:
+            raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
+        nextrun = await data.Compile.get_next_run(environment)
+        if nextrun and not env.halted:
+            task = self.add_background_task(self._run(nextrun))
+            self._recompiles[environment] = task
+        elif environment in self._recompiles:
+            del self._recompiles[environment]
 
     async def _notify_listeners(self, compile: data.Compile) -> None:
         async def notify(listener: CompileStateListener) -> None:
@@ -680,9 +735,10 @@ class CompilerService(ServerSlice):
 
     async def _recover(self) -> None:
         """Restart runs after server restart"""
+        async with self._queue_count_cache_lock:
+            self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues(exclude_started_compiles=False)
         # one run per env max to get started
         runs = await data.Compile.get_next_run_all()
-        self._queue_count_cache = await data.Compile.get_next_compiles_count() - len(runs)
         for run in runs:
             await self._queue(run)
         unhandled = await data.Compile.get_unhandled_compiles()
@@ -757,7 +813,6 @@ class CompilerService(ServerSlice):
         Runs a compile request. At completion, looks for similar compile requests based on _compile_merge_key and marks
         those as completed as well.
         """
-        self._queue_count_cache -= 1
         await self._auto_recompile_wait(compile)
 
         compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
@@ -768,6 +823,12 @@ class CompilerService(ServerSlice):
         ]
 
         runner = self._get_compile_runner(compile, project_dir=os.path.join(self._env_folder, str(compile.environment)))
+
+        started = datetime.datetime.now().astimezone()
+        async with self._queue_count_cache_lock:
+            await compile.update_fields(started=started)
+            self._queue_count_cache -= 1
+
         # set force_update == True iff any compile request has force_update == True
         compile_data: Optional[model.CompileData]
         success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
@@ -789,11 +850,12 @@ class CompilerService(ServerSlice):
             for merge_candidate in merge_candidates
         ]
 
-        await asyncio.gather(*awaitables)
+        async with self._queue_count_cache_lock:
+            await asyncio.gather(*awaitables)
+            self._queue_count_cache -= len(merge_candidates)
         if self.is_stopping():
             return
         self.add_background_task(self._notify_listeners(compile))
-        self._queue_count_cache -= len(merge_candidates)
         for merge_candidate in merge_candidates:
             self.add_background_task(self._notify_listeners(merge_candidate))
         await self._dequeue(compile.environment)
@@ -882,3 +944,23 @@ class CompilerService(ServerSlice):
         if not details:
             raise NotFound("The compile with the given id does not exist.")
         return details
+
+    async def environment_action_cleared(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is cleared
+
+        :param env: The environment that is cleared
+        """
+        await self.recalculate_queue_count_cache()
+
+    async def environment_action_deleted(self, env: model.Environment) -> None:
+        """
+        Will be called when the environment is deleted
+
+        :param env: The environment that is deleted
+        """
+        await self.recalculate_queue_count_cache()
+
+    async def recalculate_queue_count_cache(self) -> None:
+        async with self._queue_count_cache_lock:
+            self._queue_count_cache = await data.Compile.get_total_length_of_all_compile_queues()
