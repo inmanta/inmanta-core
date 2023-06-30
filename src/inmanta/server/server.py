@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import json
 import logging
 import os
@@ -128,15 +129,27 @@ class Server(protocol.ServerSlice):
                 "Is inmanta installed? Use setuptools install or setuptools dev to install."
             )
 
-        slices = []
-        for slice_name, slice in self._server.get_slices().items():
+        async def collect_for_slice(slice_name: str, slice: protocol.ServerSlice) -> SliceStatus:
             try:
-                slices.append(SliceStatus(name=slice_name, status=await slice.get_status()))
+                return SliceStatus(name=slice_name, status=await asyncio.wait_for(slice.get_status(), 0.1))
+            except asyncio.TimeoutError:
+                return SliceStatus(
+                    name=slice_name,
+                    status={
+                        "error": f"timeout on data collection for {slice_name}, "
+                        "consult the server log for additional information"
+                    },
+                )
             except Exception:
                 LOGGER.error(
                     f"The following error occured while trying to determine the status of slice {slice_name}",
                     exc_info=True,
                 )
+                return SliceStatus(name=slice_name, status={"error": "An unexpected error occurred, reported to server log"})
+
+        slices = await asyncio.gather(
+            *(collect_for_slice(slice_name, slice) for slice_name, slice in self._server.get_slices().items())
+        )
 
         response = StatusResponse(
             product=product_metadata.product,

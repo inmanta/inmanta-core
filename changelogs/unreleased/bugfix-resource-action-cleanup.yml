@@ -1,0 +1,6 @@
+---
+description: Fix bug where the cleanup job, that removes old resource actions, ignores the environment scope of the `resource_action_logs_retention` setting. This way the shortest interval used for the `resource_action_logs_retention` environment setting across all environments was applied on all environments.
+change-type: patch
+destination-branches: [master, iso6, iso5, iso4]
+sections:
+  bugfix: "{{description}}"

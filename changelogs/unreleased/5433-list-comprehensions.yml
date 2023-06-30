@@ -1,0 +1,8 @@
+description: "Added support for list comprehensions to the language, see the documentation for more details"
+issue-nr: 5433
+change-type: minor
+sections:
+  feature: "{{description}}"
+destination-branches:
+  - master
+  - iso6

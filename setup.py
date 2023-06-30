@@ -9,10 +9,10 @@ requires = [
     "colorlog~=6.4",
     "cookiecutter>=1,<3",
     "crontab>=0.23,<2.0",
-    "cryptography>=36,<41",
+    "cryptography>=36,<42",
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.16",
-    "email-validator~=1.0",
+    "email-validator>=1,<3",
     "execnet~=1.0",
     "importlib_metadata>=4,<7",
     "jinja2~=3.0",
@@ -23,8 +23,8 @@ requires = [
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    # Exclude pre-release due to https://github.com/samuelcolvin/pydantic/issues/3546
-    "pydantic~=1.0,!=1.9.0a1",
+    # lower bound because of pydantic/pydantic#5821
+    "pydantic>=1.10.8,<2",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",
@@ -32,7 +32,8 @@ requires = [
     "pyyaml~=6.0",
     "texttable~=1.0",
     "tornado~=6.0",
-    "typing_inspect~=0.7",
+    # lower bound because of ilevkivskyi/typing_inspect#100
+    "typing_inspect~=0.9",
     "build~=0.7",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
@@ -44,7 +45,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "8.3.0"
+version = "8.5.0"
 
 setup(
     version=version,

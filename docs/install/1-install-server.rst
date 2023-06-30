@@ -12,6 +12,9 @@ Install the software
 
 .. only:: oss
 
+    Step 1: Install the software
+    ----------------------------
+
     .. tab-set::
 
         .. tab-item:: RHEL 8 and 9
@@ -20,23 +23,23 @@ Install the software
 
             .. code-block:: sh
 
-            sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
-            [inmanta-oss-stable]
-            name=inmanta-oss-stable
-            baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
-            repo_gpgcheck=1
-            enabled=1
-            gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
-            gpgcheck=1
-            sslverify=1
-            sslcacert=/etc/pki/tls/certs/ca-bundle.crt
-            metadata_expire=300
-            pkg_gpgcheck=1
-            autorefresh=1
-            type=rpm-md
-            EOF
+                sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
+                [inmanta-oss-stable]
+                name=inmanta-oss-stable
+                baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
+                repo_gpgcheck=1
+                enabled=1
+                gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
+                gpgcheck=1
+                sslverify=1
+                sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+                metadata_expire=300
+                pkg_gpgcheck=1
+                autorefresh=1
+                type=rpm-md
+                EOF
 
-            sudo dnf install -y inmanta-oss inmanta-oss-server inmanta-oss-agent
+                sudo dnf install -y inmanta-oss inmanta-oss-server inmanta-oss-agent
 
             The first package (inmanta-oss) contains all the code and the commands. The server and the agent packages install config
             files and systemd unit files. The web-console is installed with the server package.
@@ -178,8 +181,8 @@ Install the software
 
 .. only:: iso
 
-    Step 1: Add the yum repository to the system
-    --------------------------------------------
+    Step 1: Install the software
+    ----------------------------
 
     Create a repositories file to point yum to the inmanta service orchestrator release repository. Create a file
     ``/etc/yum.repos.d/inmanta.repo`` with the following content:
@@ -202,10 +205,6 @@ Install the software
 
 
     Replace ``<token>`` with the token provided with your license.
-
-
-    Step 2: Install the software
-    ----------------------------
 
     Use yum to install the software:
 
@@ -239,7 +238,7 @@ Install the software
     Replace ``<license name>`` with the name of the license you received.
 
 
-Optional step 1: Setup SSL and authentication
+Optional step 2: Setup SSL and authentication
 ---------------------------------------------
 
 Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication.
@@ -247,7 +246,7 @@ While not mandatory, it is highly recommended you do so.
 
 .. _install-step-2:
 
-Step 2: Install PostgreSQL 13
+Step 3: Install PostgreSQL 13
 -----------------------------
 
 .. only:: oss
@@ -259,7 +258,7 @@ Step 2: Install PostgreSQL 13
 
     .. code-block:: sh
 
-    sudo dnf module install postgresql:13/server
+        sudo dnf module install postgresql:13/server
 
 .. only:: iso
 
@@ -284,7 +283,7 @@ Step 2: Install PostgreSQL 13
 
 .. _install-step-3:
 
-Step 3: Setup a PostgreSQL database for the Inmanta server
+Step 4: Setup a PostgreSQL database for the Inmanta server
 ----------------------------------------------------------
 
 Initialize the PostgreSQL server:
@@ -360,7 +359,7 @@ Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` f
 
 .. _install-step-4:
 
-Step 4: Set the database connection details
+Step 5: Set the database connection details
 -------------------------------------------
 
 Add a ``/etc/inmanta/inmanta.d/database.cfg`` file as such that it contains the correct database connection details.
@@ -380,7 +379,7 @@ configfile for other options.
 
 .. _configure_server_step_5:
 
-Step 5: Set the server address
+Step 6: Set the server address
 ------------------------------
 
 When virtual machines are started by this server that install the inmanta agent, the correct
@@ -401,7 +400,7 @@ in the configuration file stored at ``/etc/inmanta/inmanta.d/server.cfg``.
 
 .. _configure_server_step_6:
 
-Step 6: Configure ssh of the inmanta user
+Step 7: Configure ssh of the inmanta user
 -----------------------------------------
 
 The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over
@@ -439,7 +438,7 @@ ssh and if the remote agent is used.
 4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
    the host key.
 
-Step 7: Configure the server bind address
+Step 8: Configure the server bind address
 -----------------------------------------
 
 By default the server only listens on localhost, port 8888.
@@ -453,8 +452,30 @@ options in the ``/etc/inmanta/inmanta.d/server.cfg`` file.
   bind-address=<server-bind-address>
   bind-port=<server-bind-port>
 
-Step 8: Start the Inmanta server
---------------------------------
+Step 9: Enable the required Inmanta extensions
+----------------------------------------------
+
+Make sure that the required Inmanta extensions are enabled. This is done by adding a configuration file with the following content to ``/etc/inmanta/inmanta.d/extensions.cfg``.
+
+.. only:: oss
+
+    .. code-block:: text
+
+       [server]
+       enabled_extensions=ui
+
+.. only:: iso
+
+    .. code-block:: text
+
+        [server]
+        enabled_extensions=lsm,ui,support,license
+
+This file is also installed by the RPM.
+
+
+Step 10: Start the Inmanta server
+---------------------------------
 
 Start the Inmanta server and make sure it is started at boot.
 
@@ -465,13 +486,13 @@ Start the Inmanta server and make sure it is started at boot.
 
 The web-console is now available on the port and host configured in step 7.
 
-Optional Step 9: Setup influxdb for collection of performance metrics
----------------------------------------------------------------------
+Optional Step 11: Setup influxdb for collection of performance metrics
+----------------------------------------------------------------------
 
 Follow the instructions in :ref:`metering-setup` to send performance metrics to influxdb.
 This is only recommended for production deployments.
 
-Optional Step 10: Configure logging
+Optional Step 12: Configure logging
 -----------------------------------
 
 Logging can be configured by following the instructions in :ref:`administrators_doc_logging`.

@@ -28,8 +28,7 @@ from pydantic.fields import ModelField
 
 import inmanta
 import inmanta.ast.export as ast_export
-import inmanta.data
-from inmanta import const, protocol, resources
+from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -727,3 +726,28 @@ class LoginReturn(BaseModel):
 
     token: str
     user: User
+
+
+class DiscoveredResource(BaseModel):
+    """
+    :param discovered_resource_id: The name of the resource
+    :param values: The actual resource
+    """
+
+    discovered_resource_id: ResourceIdStr
+    values: JsonType
+
+    @validator("discovered_resource_id")
+    @classmethod
+    def discovered_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
+        if resources.Id.is_resource_id(v):
+            return v
+        raise ValueError(f"id {v} is not of type ResourceIdStr")
+
+    def to_dao(self, env: uuid) -> "data.DiscoveredResource":
+        return data.DiscoveredResource(
+            discovered_resource_id=self.discovered_resource_id,
+            values=self.values,
+            discovered_at=datetime.datetime.now(),
+            environment=env,
+        )
