@@ -333,7 +333,7 @@ from the Python package repository but instead contains all Python code as prese
 Configure a project to install modules from a private python package repository
 -------------------------------------------------------------------------------
 
-V2 modules are Python packages that can be installed from private Python package repositories, which may require authentication.This section explains the steps to install such modules.
+V2 modules can be installed from a Python package repository that requires authentication. This section explains how the Inmanta project and the Inmanta server should be configured to install v2 modules from such a Python package repository.
 
 Create a file named ``/var/lib/inmanta/.netrc`` in the orchestrator's file system.
 Add the following content to the file:
