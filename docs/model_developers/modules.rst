@@ -340,7 +340,7 @@ Add the following content to the file:
 
 .. code-block:: text
 
-  machine <url of the private repository>
+  machine <hostname of the private repository>
   login <username>
   password <the token to access the private repository>
 
