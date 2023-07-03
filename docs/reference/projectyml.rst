@@ -64,7 +64,7 @@ This section explains how to configure your project in order to download v2 modu
 By default, the project is configured to install packages from ``https://pypi.org/simple/``. There are multiple ways
 to change this behaviour.
 
-Using the global pip config file
+Using pip config file at a standard location
 """"""""""""""""""""""""""""""""
 
 By setting the ``use_config_file`` option of the pip section to ``True``, the project will use the global pip config file.
