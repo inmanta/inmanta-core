@@ -99,7 +99,6 @@ Another option is to use the  ``index_urls`` option in the ``pip`` section of th
       use_config_file: False
       index_urls:
         - <url of a python package repository>
-        - <url of a second python package repository>
 
 
 .. note::
