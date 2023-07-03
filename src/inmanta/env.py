@@ -851,7 +851,7 @@ class ActiveEnv(PythonEnvironment):
 
         requirements_file = ""
         for _, info in modules.items():
-            name = info["url"] if url in info else info["name"]
+            name = info["url"] if "url" in info else info["name"]
             version_spec = ""
             markers: str = ""
             extras_spec: str = ""
