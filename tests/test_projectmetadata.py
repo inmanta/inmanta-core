@@ -98,35 +98,3 @@ def test_no_module_path(tmp_path, caplog):
 
         Project(tmp_path, autostd=False)
     assert_no_warning(caplog)
-
-
-@pytest.mark.parametrize("use_pip_config_file, value", [(True, True), (True, False), (False, False)])
-def test_pip_config(tmp_path, caplog, use_pip_config_file, value):
-    """
-    Verify that "use_config_file" can be specified in a project.yml file but that it isn't mandatory
-    If it is not specified, verify that the default value "False" is used in the project.
-    """
-    pip_config_file = (
-        f"""
-    pip: {{
-        use_config_file: {value}
-        }}
-"""
-        if use_pip_config_file
-        else ""
-    )
-    with caplog.at_level(logging.WARNING):
-        with (tmp_path / "project.yml").open("w") as fh:
-            fh.write(
-                f"""
-    name: testproject
-    downloadpath: libs
-    repo:
-        - url: https://pypi.org/simple
-          type: package
-    {pip_config_file}
-    """
-            )
-    project = Project(tmp_path, autostd=False)
-    assert_no_warning(caplog)
-    assert project.metadata.pip.use_config_file == value

@@ -4,4 +4,3 @@ modulepath: libs
 downloadpath: libs
 version: 1.0
 repo: "."
-

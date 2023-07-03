@@ -1117,7 +1117,6 @@ class SnippetCompilationTest(KeepOnFail):
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
         strict_deps_check: Optional[bool] = None,
-        use_pip_config_file: Optional[bool] = False,
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1136,8 +1135,6 @@ class SnippetCompilationTest(KeepOnFail):
         :param relation_precedence_policy: The relation precedence policy that should be stored in the project.yml file of the
                                            Inmanta project.
         :param strict_deps_check: True iff the returned project should have strict dependency checking enabled.
-        :param use_pip_config_file: True iff the pip config file should be used and no source is required for v2 to work
-                                    False if a package source is needed for v2 modules to work
         """
         self.setup_for_snippet_external(
             snippet,
@@ -1147,7 +1144,6 @@ class SnippetCompilationTest(KeepOnFail):
             python_requires,
             install_mode,
             relation_precedence_rules,
-            use_pip_config_file,
         )
         return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
 
@@ -1203,7 +1199,6 @@ class SnippetCompilationTest(KeepOnFail):
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
-        use_pip_config_file: bool = False,
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1238,7 +1233,6 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
-            cfg.write(f"\n            pip: {{ use_config_file: {use_pip_config_file} }}")
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")

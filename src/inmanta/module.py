@@ -712,14 +712,13 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
-        if not self.urls and not project.metadata.pip.use_config_file:
+        if not self.urls:
             raise Exception(
                 f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
-                'repo of type "package" to the project config file.  e.g. to add PyPi as a module source, add the following to '
+                'repo of type "package" to the project config file. e.g. to add PyPi as a module source, add the following to '
                 "the `repo` section of the project's `project.yml`:"
                 "\n\t- type: package"
                 "\n\t  url: https://pypi.org/simple"
-                "\nAnother option is to set the use_config_file project option to true to use the pip config file."
             )
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
@@ -744,12 +743,8 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         try:
             self.log_pre_install_information(module_name, module_spec)
             modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
-            env.process_env.install_from_index(
-                requirements,
-                self.urls,
-                allow_pre_releases=allow_pre_releases,
-                use_pip_config=project.metadata.pip.use_config_file,
-            )
+            env.process_env.install_from_index(requirements, self.urls, allow_pre_releases=allow_pre_releases)
+
             self.log_post_install_information(module_name)
             self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
         except env.PackageNotFound:
@@ -1534,11 +1529,6 @@ class RelationPrecedenceRule:
 
 
 @stable_api
-class ProjectPipConfig(BaseModel):
-    use_config_file: bool = False
-
-
-@stable_api
 class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
     :param name: The name of the project.
@@ -1621,7 +1611,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
     strict_deps_check: bool = True
     agent_install_dependency_modules: bool = False
-    pip: ProjectPipConfig = ProjectPipConfig()
 
     @validator("modulepath", pre=True)
     @classmethod
@@ -2073,7 +2062,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 upgrade=update_dependencies,
                 index_urls=indexes_urls if indexes_urls else None,
                 upgrade_strategy=env.PipUpgradeStrategy.EAGER,
-                use_pip_config=self.metadata.pip.use_config_file,
             )
 
         self.verify()
@@ -2369,6 +2357,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         module_reqs: List[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
         )
+
         module: Optional[Union[ModuleV1, ModuleV2]]
         try:
             module = self.module_source.get_module(self, module_reqs, install=install_v2)
