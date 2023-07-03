@@ -2237,7 +2237,6 @@ async def test_s_repair_interrupted_by_deploy_request(
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Repair' for 'Deploy 2'")
 
-
     # counts:  read/write
     # key1: 2/1
     # key3: 2/2
@@ -2576,7 +2575,9 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Initial Deploy", is_repair=True, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Initial Deploy", is_repair=True, is_periodic=False)
+    )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
     timeout_time = time.time() + 10
@@ -2586,7 +2587,9 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Second Deploy", is_repair=False, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Second Deploy", is_repair=False, is_periodic=False)
+    )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
@@ -2611,7 +2614,6 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     assert resource_container.Provider.get("agent1", "key1") == "value2"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert resource_container.Provider.get("agent1", "key3") == "value3"
-
 
 
 @dataclasses.dataclass

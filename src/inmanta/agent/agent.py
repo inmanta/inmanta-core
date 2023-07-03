@@ -466,7 +466,7 @@ class ResourceScheduler(object):
             elif response == DeployRequestAction.interrupt:
                 self.logger.info("Interrupting run '%s' for '%s'", self.running.reason, new_request.reason)
                 # Can overwrite, acceptable
-                self.deferred = new_request.interrupt(self.running)
+                self.deferred = self.running.interrupt(new_request)
             else:
                 assert False, f"Unexpected DeployRequestAction {response}"
 
@@ -480,7 +480,7 @@ class ResourceScheduler(object):
         self.logger.info("Running %s for reason: %s" % (gid, self.running.reason))
 
         # re-generate generation
-        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid,  self.running.reason) for r in resources}
+        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, self.running.reason) for r in resources}
 
         # mark undeployable
         for key, res in self.generation.items():
@@ -491,12 +491,12 @@ class ResourceScheduler(object):
         # hook up Cross Agent Dependencies
         cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
-            ra = RemoteResourceAction(self, cad, gid,  self.running.reason)
+            ra = RemoteResourceAction(self, cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
             self.generation[cad.resource_str()] = ra
 
         # Create dummy to give start signal
-        dummy = DummyResourceAction(self, gid,  self.running.reason)
+        dummy = DummyResourceAction(self, gid, self.running.reason)
         # Dispatch all actions
         # Will block on dependencies and dummy
         for r in self.generation.values():
