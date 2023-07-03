@@ -489,7 +489,6 @@ compatible with the dependencies specified by the updated modules.
                     my_project.module_source.urls,
                     upgrade=True,
                     allow_pre_releases=my_project.install_mode != InstallMode.release,
-                    use_pip_config=my_project.metadata.pip.use_config_file,
                 )
 
             for v1_module in set(modules).difference(v2_modules):
