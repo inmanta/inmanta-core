@@ -1,4 +1,0 @@
----
-description: Document the `pip` configuration section in the project.yml file
-change-type: patch
-destination-branches: [master, iso6]

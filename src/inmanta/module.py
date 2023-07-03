@@ -1535,11 +1535,6 @@ class RelationPrecedenceRule:
 
 @stable_api
 class ProjectPipConfig(BaseModel):
-    """
-    :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
-                            Python packages.
-    """
-
     use_config_file: bool = False
 
 
@@ -1608,8 +1603,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         the load order the very first import may use the version installed by pip). If at some point this dependency module's
         handlers cease to be relevant for this agent, its code will remain stale. Therefore this feature should not be depended
         on in transient scenarios like this.
-    :param pip: A configuration section that holds information about the pip configuration that should be taken into account
-                when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
     """
 
     _raw_parser: Type[YamlParser] = YamlParser
