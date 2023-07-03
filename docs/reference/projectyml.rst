@@ -87,8 +87,9 @@ To specify the url of a pip repository, add the following to the pip config file
 Creating a new pip config file
 """"""""""""""""""""""""""""""
 
-Alternatively, a new ``pip.conf`` can be created and the ``index-url`` can be specified there as explained in the previous section.
-To make this work, the ``PIP_CONFIG_FILE`` environment variable needs to be set to the path of the newly created ``pip.conf`` file (See: :ref:`env_vars`).
+Alternatively, a pip config file can be used at a custom location.
+The ``index-url`` can be specified in this file as explained in the previous section.
+To make this work, the ``PIP_CONFIG_FILE`` environment variable needs to be set to the path of the newly created file (See: :ref:`env_vars`).
 
 Specify the locations in the project.yml file
 """""""""""""""""""""""""""""""""""""""""""""
