@@ -84,7 +84,7 @@ To specify the url of a pip repository, add the following to the pip config file
   extra-index-url = <url of a second python package repository>
                     <url of a third python package repository>
 
-Creating a new pip config file
+Creating a pip config file at a custom location
 """"""""""""""""""""""""""""""
 
 Alternatively, a pip config file can be used at a custom location.
