@@ -67,7 +67,7 @@ to change this behaviour.
 Using pip config file at a standard location
 """"""""""""""""""""""""""""""""
 
-By setting the ``use_config_file`` option of the pip section to ``True``, the project will use the global pip config file.
+By setting the ``use_config_file`` option of the pip section to ``True``, the project will use the pip config files.
 
 .. code-block:: yaml
 
