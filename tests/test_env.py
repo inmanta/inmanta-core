@@ -235,6 +235,15 @@ def test_gen_req_file_multiple_python_versions(tmpdir):
     assert 'lorem == 0.2 ; python_version == "3.9"' in req_lines
 
 
+def test_gen_req_file_multiple_extras(tmpdir):
+    e = env.VirtualEnv(tmpdir)
+    req = ["dep[opt]", "dep[otheropt]"]
+
+    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
+    assert len(req_lines) == 1
+    assert "dep[opt,otheropt]" in req_lines
+
+
 def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
     """
     Make sure the constructor for env.Environment can handle multi-digit minor versions of Python to ensure compatibility with

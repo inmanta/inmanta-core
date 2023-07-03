@@ -836,7 +836,7 @@ class ActiveEnv(PythonEnvironment):
 
             requirement_id: str = name + "_" + str(marker) if marker else name
             if requirement_id not in modules:
-                modules[requirement_id] = {"name": name, "version": [], "markers": []}
+                modules[requirement_id] = {"name": name, "version": [], "markers": [], "extras": []}
 
             if version is not None:
                 modules[requirement_id]["version"].extend(version)
@@ -847,7 +847,7 @@ class ActiveEnv(PythonEnvironment):
                 modules[requirement_id]["url"] = url
 
             if extras is not None:
-                modules[requirement_id]["extras"] = extras
+                modules[requirement_id]["extras"].extend(extras)
 
         requirements_file = ""
         for _, info in modules.items():
