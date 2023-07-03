@@ -9,6 +9,9 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+  ignore:
+    - dependency-name: "pydantic"
+      update-types: ["version-update:semver-major"]
 - target-branch: iso6
   package-ecosystem: pip
   directory: "/"
@@ -18,3 +21,6 @@ updates:
   allow:
     # Allow both direct and indirect updates for all packages
     - dependency-type: "all"
+  ignore:
+    - dependency-name: "pydantic"
+      update-types: ["version-update:semver-major"]
