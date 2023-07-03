@@ -64,8 +64,8 @@ This section explains how to configure your project in order to download v2 modu
 By default, a project created using the :ref:`project-creation-guide` is configured to install packages from ``https://pypi.org/simple/``. There are multiple ways
 to change this behaviour.
 
-Using pip config file at a standard location
-""""""""""""""""""""""""""""""""""""""""""""
+Using pip config file
+"""""""""""""""""""""
 
 By setting the ``use_config_file`` option of the pip section to ``True``, the project will use the pip config files.
 
@@ -81,15 +81,12 @@ To specify the url of a pip repository, add the following to the pip config file
   [global]
   timeout = 60
   index-url = <url of a python package repository>
-  extra-index-url = <url of a second python package repository>
-                    <url of a third python package repository>
 
-Creating a pip config file at a custom location
-"""""""""""""""""""""""""""""""""""""""""""""""
 
 Alternatively, a pip config file can be used at a custom location.
 The ``index-url`` can be specified in this file as explained in the previous section.
 To make this work, the ``PIP_CONFIG_FILE`` environment variable needs to be set to the path of the newly created file (See: :ref:`env_vars`).
+For more information see `Pip documentation <https://pip.pypa.io/en/stable/topics/configuration/>`_
 
 Specify the index-urls in the project.yml file
 """"""""""""""""""""""""""""""""""""""""""""""
