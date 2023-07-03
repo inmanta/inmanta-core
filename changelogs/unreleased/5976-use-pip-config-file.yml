@@ -1,7 +1,4 @@
-description: improved support for pip config files by adding the use_config_file option to project.yml. If set the pip config file will be used.
+description: Reverted on iso6
 issue-nr: 5976
-change-type: minor
-destination-branches: [master, iso6]
-sections:
-  minor-improvement: "{{description}}"
-
+change-type: patch
+destination-branches: [iso6]

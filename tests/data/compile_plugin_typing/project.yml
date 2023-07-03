@@ -3,4 +3,3 @@ description: test for plugin typing
 modulepath: libs
 downloadpath: libs
 repo: "."
-
