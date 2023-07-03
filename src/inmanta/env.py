@@ -834,20 +834,20 @@ class ActiveEnv(PythonEnvironment):
             except InvalidRequirement:
                 url = req_spec
 
-            id = name + "_" + str(marker) if marker else name
-            if id not in modules:
-                modules[id] = {"name": name, "version": [], "markers": []}
+            requirement_id: str = name + "_" + str(marker) if marker else name
+            if requirement_id not in modules:
+                modules[requirement_id] = {"name": name, "version": [], "markers": []}
 
             if version is not None:
-                modules[id]["version"].extend(version)
+                modules[requirement_id]["version"].extend(version)
 
             if marker is not None:
-                modules[id]["markers"].append(marker)
+                modules[requirement_id]["markers"].append(marker)
             if url is not None:
-                modules[id]["url"] = url
+                modules[requirement_id]["url"] = url
 
             if extras is not None:
-                modules[id]["extras"] = extras
+                modules[requirement_id]["extras"] = extras
 
         requirements_file = ""
         for _, info in modules.items():
