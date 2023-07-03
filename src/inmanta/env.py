@@ -834,23 +834,24 @@ class ActiveEnv(PythonEnvironment):
             except InvalidRequirement:
                 url = req_spec
 
-            if name not in modules:
-                modules[name] = {"name": name, "version": [], "markers": []}
+            id = name + "_" + str(marker) if marker else name
+            if id not in modules:
+                modules[id] = {"name": name, "version": [], "markers": []}
 
             if version is not None:
-                modules[name]["version"].extend(version)
+                modules[id]["version"].extend(version)
 
             if marker is not None:
-                modules[name]["markers"].append(marker)
-
+                modules[id]["markers"].append(marker)
             if url is not None:
-                modules[name]["url"] = url
+                modules[id]["url"] = url
 
             if extras is not None:
-                modules[name]["extras"] = extras
+                modules[id]["extras"] = extras
 
         requirements_file = ""
-        for module, info in modules.items():
+        for _, info in modules.items():
+            name = info["url"] if url in info else info["name"]
             version_spec = ""
             markers: str = ""
             extras_spec: str = ""
@@ -860,13 +861,10 @@ class ActiveEnv(PythonEnvironment):
             if len(info["markers"]) > 0:
                 markers = " ; " + (" and ".join(map(str, info["markers"])))
 
-            if "url" in info:
-                module = info["url"]
-
             if "extras" in info:
                 extras_spec = f"[{','.join(info['extras'])}]"
 
-            requirements_file += module + extras_spec + version_spec + markers + "\n"
+            requirements_file += name + extras_spec + version_spec + markers + "\n"
 
         return requirements_file
 

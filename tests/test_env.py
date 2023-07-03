@@ -212,9 +212,25 @@ def test_gen_req_file(tmpdir):
     ]
 
     req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
-    assert len(req_lines) == 3
+    assert len(req_lines) == 5
     assert (
-        'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
+        'lorem == 0.1.1, > 0.1'
+        in req_lines
+    )
+    assert (
+        'dummy-yummy'
+        in req_lines
+    )
+    assert (
+        'iplib'
+        in req_lines
+    )
+    assert (
+        'lorem ; python_version < "3.7"'
+        in req_lines
+    )
+    assert (
+        'lorem ; platform_machine == "x86_64" and platform_system == "Linux"'
         in req_lines
     )
 
