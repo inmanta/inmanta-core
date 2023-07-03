@@ -17,9 +17,9 @@
 """
 
 import configparser
+import enum
 import glob
 import importlib
-import itertools
 import logging
 import operator
 import os
@@ -35,7 +35,6 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import ConfigParser
 from dataclasses import dataclass
-from enum import Enum
 from functools import reduce
 from importlib.abc import Loader
 from io import BytesIO, TextIOBase
@@ -324,7 +323,7 @@ class PluginModuleLoadException(Exception):
         return exception
 
 
-class UntrackedFilesMode(Enum):
+class UntrackedFilesMode(enum.Enum):
     """
     The different options that can be passed to the --untracked-files option of the `git status` command.
     """
@@ -715,12 +714,12 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         module_name: str = self._get_module_name(module_spec)
         if not self.urls and not project.metadata.pip.use_config_file:
             raise Exception(
-                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add the relevant pip "
-                f"indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
-                "the `pip` section of the project's `project.yml`:"
-                "\n\t  index_urls:"
-                "\n\t\t  - https://pypi.org/simple"
-                "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
+                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add at least one "
+                'repo of type "package" to the project config file.  e.g. to add PyPi as a module source, add the following to '
+                "the `repo` section of the project's `project.yml`:"
+                "\n\t- type: package"
+                "\n\t  url: https://pypi.org/simple"
+                "\nAnother option is to set the use_config_file project option to true to use the pip config file."
             )
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
@@ -1067,7 +1066,7 @@ def merge_specs(mainspec: "Dict[str, List[InmantaModuleRequirement]]", new: "Lis
 
 
 @stable_api
-class InstallMode(str, Enum):
+class InstallMode(str, enum.Enum):
     """
     The module install mode determines what version of a module should be selected when a module is downloaded.
     """
@@ -1104,7 +1103,7 @@ List of possible module install modes, kept for backwards compatibility. New cod
 
 
 @stable_api
-class FreezeOperator(str, Enum):
+class FreezeOperator(str, enum.Enum):
     eq = "=="
     compatible = "~="
     ge = ">="
@@ -1487,7 +1486,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
 
 @stable_api
-class ModuleRepoType(Enum):
+class ModuleRepoType(enum.Enum):
     git = "git"
     package = "package"
 
@@ -1538,12 +1537,10 @@ class RelationPrecedenceRule:
 class ProjectPipConfig(BaseModel):
     """
     :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
-        Python packages.
-    :param index_urls: List of pip indexes to use project-wide.
+                            Python packages.
     """
 
     use_config_file: bool = False
-    index_urls: List[str] = []
 
 
 @stable_api
@@ -1648,11 +1645,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
                 result.append({"url": elem, "type": ModuleRepoType.git})
             elif isinstance(elem, dict):
-                if elem["type"] == ModuleRepoType.package.value:
-                    LOGGER.warning(
-                        "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file "
-                        "is deprecated. Please set the pip index url through the `pip -> index_urls` option instead."
-                    )
                 result.append(elem)
             else:
                 raise ValueError(f"Value should be either a string of a dict, got {elem}")
@@ -1665,12 +1657,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
     def get_index_urls(self) -> List[str]:
-        # Once setting repos with type package is no longer supported, this method can return self.pip.index_urls alone.
-        index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
-
-        # This ensures no duplicates are returned and insertion order is preserved.
-        # i.e. the left-most index will be passed to pip as --index-url and the others as --extra-index-url
-        return list({value: None for value in itertools.chain(self.pip.index_urls, index_urls_deprecated_option)})
+        return [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
 
 
 @stable_api
@@ -2706,7 +2693,7 @@ class DummyProject(Project):
 
 
 @stable_api
-class ModuleGeneration(Enum):
+class ModuleGeneration(enum.Enum):
     """
     The generation of a module. This might affect the on-disk structure of a module as well as how it's distributed.
     """
