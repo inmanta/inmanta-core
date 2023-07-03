@@ -108,7 +108,7 @@ Another option is to use the  ``index_urls`` option in the ``pip`` section of th
 .. note::
     The pip config file can also be used in combination with ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file:
 
-    * If the pip config is used (by setting ``use_config_file`` to ``True``), the ``index-url`` specified in the pip config file will take precedence and the ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file will be used as ``extra-index-urls`` when installing with pip.
+    * If the pip config is used (by setting ``use_config_file`` to ``true``), the ``index-url`` specified in the pip config file will take precedence and the ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file will be used as ``extra-index-urls`` when installing with pip.
     * If the pip config is not used (by setting ``use_config_file`` to ``False``), then the first ``index_url`` specified in the project.yml will be used as an ``index_url`` and all the following ones will be used as ``extra-index-urls`` when installing with pip.
 
 
