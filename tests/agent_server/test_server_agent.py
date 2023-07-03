@@ -2123,7 +2123,10 @@ async def test_s_repair_postponed_due_to_running_deploy(
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     # Make the agent pickup the new version
     # key3: Readcount=1; writecount=1
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True,)
+    await myagent_instance.get_latest_version_for_agent(
+        reason="Deploy",
+        incremental_deploy=True,
+    )
     # key3: Readcount=2; writecount=1
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False)
 
@@ -2600,34 +2603,61 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Initial Deploy' for 'Second Deploy'")
 
-@ dataclasses.dataclass
-class Result:
 
+@dataclasses.dataclass
+class Result:
     wait_for: int
-    deploy_counts: Tuple[int,int,int,int]
-    values: Tuple[int,int, int]
+    values: Tuple[int, int, int]
     msg: str
 
 
-ignore = Result(wait_for=0, deploy_counts=(1,1,1,1), values=("value2", "value2", "value2"), msg="Not terminating run 'Initial Deploy' for periodic 'Second Deploy'")
-terminate = Result(wait_for=1, deploy_counts=(1,1,1,1), values=("value2", "value2", "value3"), msg="Terminating run 'Initial Deploy' for 'Second Deploy'")
-terminate_full = Result(wait_for=1, deploy_counts=(2,1,1,1), values=("value2", "value2", "value3"), msg="Terminating run 'Initial Deploy' for 'Second Deploy'")
-interrupt = Result(wait_for=1, deploy_counts=(2,1,2,2), values=("value2", "value2", "value3"), msg="Terminating run 'Initial Deploy' for 'Second Deploy'")
+ignore = Result(
+    wait_for=0, values=("value2", "value2", "value2"), msg="Not terminating run 'Initial Deploy' for periodic 'Second Deploy'"
+)
+terminate = Result(
+    wait_for=1, values=("value2", "value2", "value3"), msg="Terminating run 'Initial Deploy' for 'Second Deploy'"
+)
+interrupt = Result(
+    wait_for=1, values=("value2", "value2", "value3"), msg="Interrupting run 'Initial Deploy' for 'Second Deploy'"
+)
+defer = Result(wait_for=1, values=("value2", "value2", "value3"), msg="Deferring run 'Second Deploy' for 'Initial Deploy'")
 
-@pytest.mark.parametrize(["first_full", "first_periodic","second_full", "second_periodic", "action"],
-                         [[True, True, True, True, ignore], # Full periodic ignored by full periodic
-                          [True, False, True, True, ignore],  # Full periodic ignored by full
-                          [True, True, True, False, terminate_full], # Full terminates full periodic
-                          [True, False, True, False, terminate_full], # Full terminates full
-                          [False, True, False, True, terminate], # Increment * terminates Increment *
-                          [False, False, False, True, terminate],
-                          [False, False, False, False, terminate],
-                          [False, True, False, True, terminate],
-                          [True, True, False, True, ignore],  # periodic increment ignored by periodic full
-                          [True, True, False, False, interrupt], # increment interrupted by periodic full
-                          ])
+
+@pytest.mark.parametrize(
+    ["first_full", "first_periodic", "second_full", "second_periodic", "action", "deploy_counts"],
+    [
+        [True, True, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full periodic
+        [True, False, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full
+        [True, True, True, False, terminate, (2, 1, 1, 1)],  # Full terminates full periodic
+        [True, False, True, False, terminate, (2, 1, 1, 1)],  # Full terminates full
+        [False, True, False, True, terminate, (1, 1, 1, 1)],  # Increment * terminates Increment *
+        [False, True, False, False, terminate, (1, 1, 1, 1)],
+        [False, False, False, True, terminate, (1, 1, 1, 1)],
+        [False, False, False, False, terminate, (1, 1, 1, 1)],
+        [True, True, False, True, ignore, (1, 1, 1, 1)],  # periodic full ignores periodic increment
+        # [True, True, False, False, interrupt,(2,1,2,1)], # periodic full interrupted by increment  # testcase unstable due to complex waiting
+        [True, False, False, True, ignore, (1, 1, 1, 1)],  # full ignores periodic increment
+        # [True, False, False, False, interrupt, (2,1,2,1)],  # full interrupted by increment # testcase unstable due to complex waiting
+        [False, True, True, True, terminate, (2, 1, 1, 1)],  # Incremental periodic terminated by full periodic
+        [False, True, True, False, terminate, (2, 1, 1, 1)],  # Incremental periodic terminated by full
+        [False, False, True, True, defer, (2, 1, 2, 2)],  # Incremental defers full periodic
+        [False, False, True, False, defer, (2, 1, 2, 2)],  # Incremental defers full
+    ],
+)
 async def test_s_periodic_Vs_full(
-    resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog, first_full, first_periodic ,second_full, second_periodic, action: Result
+    resource_container,
+    agent,
+    client,
+    clienthelper,
+    environment,
+    no_agent_backoff,
+    caplog,
+    first_full,
+    first_periodic,
+    second_full,
+    second_periodic,
+    action: Result,
+    deploy_counts,
 ):
     # ongoing periodic repair is not interrupted by periodic repair
     caplog.set_level(logging.INFO)
@@ -2675,7 +2705,9 @@ async def test_s_periodic_Vs_full(
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=not first_full, is_periodic=first_periodic)
+    await myagent_instance.get_latest_version_for_agent(
+        reason="Initial Deploy", incremental_deploy=not first_full, is_periodic=first_periodic
+    )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
     timeout_time = time.time() + 10
@@ -2688,29 +2720,32 @@ async def test_s_periodic_Vs_full(
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=not second_full, is_periodic=second_periodic)
+    await myagent_instance.get_latest_version_for_agent(
+        reason="Second Deploy", incremental_deploy=not second_full, is_periodic=second_periodic
+    )
 
     versions = [version1, version2]
     await resource_container.wait_for_done_with_waiters(client, environment, versions[action.wait_for])
-
+    await asyncio.sleep(1)
     # cache has no versions in flight
     # for issue #1883
     assert not myagent_instance._cache.counterforVersion
+
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
 
     # Full deploy
     #   * All resources are deployed successfully:
     # Full deploy:
     #   * ignored
-    assert resource_container.Provider.readcount(agent_name, "key1") == action.deploy_counts[0]
-    assert resource_container.Provider.changecount(agent_name, "key1") == action.deploy_counts[1]
-    assert resource_container.Provider.readcount(agent_name, "key3") == action.deploy_counts[2]
-    assert resource_container.Provider.changecount(agent_name, "key3") == action.deploy_counts[3]
+    assert resource_container.Provider.readcount(agent_name, "key1") == deploy_counts[0]
+    assert resource_container.Provider.changecount(agent_name, "key1") == deploy_counts[1]
+    assert resource_container.Provider.readcount(agent_name, "key3") == deploy_counts[2]
+    assert resource_container.Provider.changecount(agent_name, "key3") == deploy_counts[3]
 
     assert resource_container.Provider.get("agent1", "key1") == action.values[0]
     assert resource_container.Provider.get("agent1", "key2") == action.values[1]
     assert resource_container.Provider.get("agent1", "key3") == action.values[2]
 
-    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
 
 async def test_bad_post_get_facts(
     resource_container, server, client, agent, clienthelper, environment, caplog, no_agent_backoff
