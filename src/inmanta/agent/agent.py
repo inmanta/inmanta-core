@@ -389,6 +389,7 @@ class ResourceScheduler(object):
         undeployable: Dict[ResourceVersionIdStr, ResourceState] = {},
         reason: str = "RELOAD",
         is_repair: bool = False,
+        is_periodic: bool = True,
     ) -> None:
         """
         Schedule a new set of resources for execution.
@@ -404,11 +405,15 @@ class ResourceScheduler(object):
             # we are still running
             if self.is_repair:
                 # now running repair
+                if is_periodic:
+                    # timers doesn't restart repair to avoid loops
+                    self.logger.info("Not terminating run '%s' for periodic '%s'", self.reason, reason)
+                    return
                 if is_repair:
-                    # repair restarts repair
+                    # repair request does restart the repair
                     self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
                 else:
-                    # increment interrupts repair
+                    # increment request interrupts repair
                     self.logger.info("Interrupting run '%s' for '%s'", self.reason, reason)
                     self._resume_reason = "Restarting run '%s', interrupted for '%s'" % (self.reason, reason)
             else:
@@ -473,7 +478,7 @@ class ResourceScheduler(object):
                 self.logger.info("Resuming run '%s'", self._resume_reason)
                 self.agent.process.add_background_task(
                     self.agent.get_latest_version_for_agent(
-                        reason=self._resume_reason, incremental_deploy=False, is_repair_run=True
+                        reason=self._resume_reason, incremental_deploy=False
                     )
                 )
                 self._resume_reason = None
@@ -617,7 +622,7 @@ class AgentInstance(object):
             await self.get_latest_version_for_agent(
                 reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=True,
-                is_repair_run=False,
+                is_periodic=True,
             )
 
         async def repair_action() -> None:
@@ -625,7 +630,7 @@ class AgentInstance(object):
             await self.get_latest_version_for_agent(
                 reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
                 incremental_deploy=False,
-                is_repair_run=True,
+                is_periodic=True,
             )
 
         now = datetime.datetime.now().astimezone()
@@ -686,7 +691,7 @@ class AgentInstance(object):
         return provider
 
     async def get_latest_version_for_agent(
-        self, reason: str = "Unknown", incremental_deploy: bool = False, is_repair_run: bool = False
+        self, reason: str = "Unknown", incremental_deploy: bool = False, is_periodic: bool = False,
     ) -> None:
         """
         Get the latest version for the given agent (this is also how we are notified)
@@ -728,7 +733,7 @@ class AgentInstance(object):
                 self.logger.debug("Pulled %d resources because %s", len(resources), reason)
 
                 if len(resources) > 0:
-                    self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
+                    self._nq.reload(resources, undeployable, reason=reason, is_repair=not incremental_deploy, is_periodic=is_periodic)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
