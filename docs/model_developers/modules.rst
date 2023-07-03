@@ -344,7 +344,7 @@ Add the following content to the file:
   login <username>
   password <password>
 
-You will also need to specify the url of the repository in the ``project.yml`` file of your project. (See: :ref:`specify_location_pip`)
+You will also need to specify the url of the repository in the ``project.yml`` file of your project (See: :ref:`specify_location_pip`).
 
 By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
 
