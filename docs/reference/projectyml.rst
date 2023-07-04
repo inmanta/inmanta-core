@@ -74,7 +74,7 @@ By setting the ``use_config_file`` option of the pip section to ``True``, the pr
     pip:
       use_config_file: True
 
-To specify the url of a pip repository, add the following to the pip config file located at ``$HOME/.config/pip/pip.conf``:
+To specify the url of a pip repository, add the following to the pip config file of the ``inmanta`` user, located at ``/var/lib/inmanta/.config/pip/pip.conf``:
 
 .. code-block:: text
 
