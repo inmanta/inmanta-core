@@ -2125,12 +2125,12 @@ async def test_s_repair_postponed_due_to_running_deploy(
     await myagent_instance.get_latest_version_for_agent(
         DeployRequest(
             reason="Deploy",
-            is_repair=False,
+            is_full_deploy=False,
             is_periodic=False,
         )
     )
     # key3: Readcount=2; writecount=1
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(is_repair=True, reason="Repair", is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(DeployRequest(is_full_deploy=True, reason="Repair", is_periodic=False))
 
     def wait_condition():
         return not (
@@ -2200,7 +2200,9 @@ async def test_s_repair_interrupted_by_deploy_request(
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Deploy 1", is_repair=False, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 1", is_full_deploy=False, is_periodic=False)
+    )
     await resource_container.wait_for_done_with_waiters(client, environment, version1, timeout=debug_timeout)
 
     # counts:  read/write
@@ -2209,7 +2211,7 @@ async def test_s_repair_interrupted_by_deploy_request(
 
     # Interrupt repair with deploy
     # Repair
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Repair", is_repair=True, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Repair", is_full_deploy=True, is_periodic=False))
 
     # wait for key1 to be deployed
     async def condition_x():
@@ -2230,7 +2232,9 @@ async def test_s_repair_interrupted_by_deploy_request(
     await _deploy_resources(client, environment, resources_version_2, version2, False)
 
     print("Interrupt")
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Deploy 2", is_repair=False, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 2", is_full_deploy=False, is_periodic=False)
+    )
     print("Deploy")
     await resource_container.wait_for_done_with_waiters(client, environment, version2, timeout=debug_timeout)
 
@@ -2323,12 +2327,16 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
 
     # Initial deploy
     await _deploy_resources(client, environment, resources, version, False)
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Deploy", is_repair=False, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Deploy", is_full_deploy=False, is_periodic=False))
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
     # Interrupt repair with a repair
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Repair 1", is_repair=True, is_periodic=False))
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Repair 2", is_repair=True, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Repair 1", is_full_deploy=True, is_periodic=False)
+    )
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Repair 2", is_full_deploy=True, is_periodic=False)
+    )
 
     def wait_condition():
         return (
@@ -2404,7 +2412,9 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Deploy 1", is_repair=False, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 1", is_full_deploy=False, is_periodic=False)
+    )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
     timeout_time = time.time() + 10
@@ -2414,7 +2424,9 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Deploy 2", is_repair=False, is_periodic=False))
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 2", is_full_deploy=False, is_periodic=False)
+    )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
@@ -2485,7 +2497,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(
-        DeployRequest(reason="Initial Deploy", is_repair=False, is_periodic=False)
+        DeployRequest(reason="Initial Deploy", is_full_deploy=False, is_periodic=False)
     )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
@@ -2500,7 +2512,7 @@ async def test_s_full_deploy_waits_for_incremental_deploy(
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
     await myagent_instance.get_latest_version_for_agent(
-        DeployRequest(reason="Second Deploy", is_repair=True, is_periodic=False)
+        DeployRequest(reason="Second Deploy", is_full_deploy=True, is_periodic=False)
     )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
@@ -2575,7 +2587,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(
-        DeployRequest(reason="Initial Deploy", is_repair=True, is_periodic=False)
+        DeployRequest(reason="Initial Deploy", is_full_deploy=True, is_periodic=False)
     )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
@@ -2587,7 +2599,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
     await myagent_instance.get_latest_version_for_agent(
-        DeployRequest(reason="Second Deploy", is_repair=False, is_periodic=False)
+        DeployRequest(reason="Second Deploy", is_full_deploy=False, is_periodic=False)
     )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
@@ -2720,7 +2732,7 @@ async def test_s_periodic_Vs_full(
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(
-        DeployRequest(reason="Initial Deploy", is_repair=first_full, is_periodic=first_periodic)
+        DeployRequest(reason="Initial Deploy", is_full_deploy=first_full, is_periodic=first_periodic)
     )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
@@ -2735,7 +2747,7 @@ async def test_s_periodic_Vs_full(
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
     await myagent_instance.get_latest_version_for_agent(
-        DeployRequest(reason="Second Deploy", is_repair=second_full, is_periodic=second_periodic)
+        DeployRequest(reason="Second Deploy", is_full_deploy=second_full, is_periodic=second_periodic)
     )
 
     versions = [version1, version2]

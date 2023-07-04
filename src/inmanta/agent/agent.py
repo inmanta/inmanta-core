@@ -341,19 +341,19 @@ class DeployRequest:
     """
     A request to perform a deploy
 
-    :param is_repair: is this a full deploy/repair run or incremental?
+    :param is_full_deploy: is this a full deploy or incremental deploy?
     :param is_periodic: is this deploy triggered by a timer?
     :param reason: textual description of the deployment
     """
 
-    is_repair: bool
+    is_full_deploy: bool
     is_periodic: bool
     reason: str
 
     def interrupt(self, other: "DeployRequest") -> "DeployRequest":
         """Interrupt this deploy and for the other and produce a new request for future rescheduling of this deploy"""
         return DeployRequest(
-            self.is_repair, self.is_periodic, "Restarting run '%s', interrupted for '%s'" % (self.reason, other.reason)
+            self.is_full_deploy, self.is_periodic, "Restarting run '%s', interrupted for '%s'" % (self.reason, other.reason)
         )
 
 
@@ -472,7 +472,7 @@ class ResourceScheduler(object):
             assert self.running is not None
             # Get correct action
             response = deploy_response_matrix[
-                (self.running.is_repair, self.running.is_periodic, new_request.is_repair, new_request.is_periodic)
+                (self.running.is_full_deploy, self.running.is_periodic, new_request.is_full_deploy, new_request.is_periodic)
             ]
             # Execute action
             if response == DeployRequestAction.terminate:
@@ -682,7 +682,7 @@ class AgentInstance(object):
             await self.get_latest_version_for_agent(
                 DeployRequest(
                     reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
-                    is_repair=False,
+                    is_full_deploy=False,
                     is_periodic=True,
                 )
             )
@@ -692,7 +692,7 @@ class AgentInstance(object):
             await self.get_latest_version_for_agent(
                 DeployRequest(
                     reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
-                    is_repair=True,
+                    is_full_deploy=True,
                     is_periodic=True,
                 )
             )
@@ -777,7 +777,7 @@ class AgentInstance(object):
             start = time.time()
             try:
                 result = await self.get_client().get_resources_for_agent(
-                    tid=self._env_id, agent=self.name, incremental_deploy=not deploy_request.is_repair
+                    tid=self._env_id, agent=self.name, incremental_deploy=not deploy_request.is_full_deploy
                 )
             finally:
                 self._getting_resources = False
@@ -1325,7 +1325,7 @@ class Agent(SessionEndpoint):
         self.add_background_task(
             instance.get_latest_version_for_agent(
                 DeployRequest(
-                    is_repair=not incremental_deploy,
+                    is_full_deploy=not incremental_deploy,
                     is_periodic=False,
                     reason="call to trigger_update",
                 )
