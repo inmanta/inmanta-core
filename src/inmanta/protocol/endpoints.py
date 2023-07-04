@@ -198,6 +198,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.add_background_task(self.perform_heartbeat())
 
     async def stop(self) -> None:
+        self._heartbeat_client.close()
         await self._sched.stop()
         await super(SessionEndpoint, self).stop()
 
