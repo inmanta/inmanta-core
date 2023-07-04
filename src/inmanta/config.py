@@ -408,7 +408,11 @@ class TransportConfig(object):
             self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int
         )
         self.max_clients = Option(
-            self.prefix, "max_clients", 1000, "The maximum number of simultaneous connections that can be open in parallel"
+            self.prefix,
+            "max_clients",
+            1000,
+            "The maximum number of simultaneous connections that can be open in parallel",
+            is_int,
         )
 
 
