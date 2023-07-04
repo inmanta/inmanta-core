@@ -464,3 +464,7 @@ class SessionClient(Client):
 
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
+
+    def close(self):
+        if self._transport_instance and self._transport_instance.client:
+            self._transport_instance.client.close()
