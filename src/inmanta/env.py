@@ -861,7 +861,7 @@ class ActiveEnv(PythonEnvironment):
             if len(info["markers"]) > 0:
                 markers = " ; " + (" and ".join(map(str, info["markers"])))
 
-            if "extras" in info:
+            if "extras" in info and info["extras"]:
                 extras_spec = f"[{','.join(info['extras'])}]"
 
             requirements_file += name + extras_spec + version_spec + markers + "\n"
