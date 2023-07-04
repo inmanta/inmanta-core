@@ -48,7 +48,7 @@ class RESTClient(RESTBase):
         self.connection_timout: int = connection_timout
         self.headers: Set[str] = set()
         self.request_timeout: int = inmanta_config.Config.get(self.id, "request_timeout", 120)
-        self.client = AsyncHTTPClient(self.force_instance)
+        self.client = AsyncHTTPClient(force_instance)
 
     @property
     def endpoint(self) -> "Endpoint":
