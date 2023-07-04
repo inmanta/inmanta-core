@@ -372,6 +372,21 @@ class DeployRequestAction(str, enum.Enum):
     """ interrupt the current deploy: cancel it, start the new one and restart the current deploy when the new one is done"""
 
 
+# Two letter abbreviations to make table line up
+# N normal
+# P periodic
+# F full
+# I incremental
+NF = (True, False)
+NI = (False, False)
+PF = (True, True)
+PI = (False, True)
+# shorten table
+ignore = DeployRequestAction.ignore
+terminate = DeployRequestAction.terminate
+defer = DeployRequestAction.defer
+interrupt = DeployRequestAction.interrupt
+
 # This matrix describes what do when a new DeployRequest enters before the old one is done
 # Format is old_is_repair, old_is_periodic, new_is_repair, new_is_periodic
 # The underlying idea is that
@@ -380,32 +395,28 @@ class DeployRequestAction(str, enum.Enum):
 # 3. non-periodic incremental deploy take precedence over repairs (as they are smaller)
 # 4. periodic deploys should not interrupt each other to prevent restart loops
 deploy_response_matrix = {
-    # (old_is_repair, old_is_periodic, new_is_repair, new_is_periodic)
+    # ((old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic))
     # Periodic restart loops: Full periodic is never interrupted by periodic
-    (True, True, True, True): DeployRequestAction.ignore,  # Full periodic ignores full periodic to prevent restart loops
-    (True, True, False, True): DeployRequestAction.ignore,  # Full periodic ignores periodic increment to prevent restart loops
-    (
-        False,
-        True,
-        True,
-        True,
-    ): DeployRequestAction.terminate,  # Incremental periodic terminated by full periodic: upgrade to full
-    (False, True, True, False): DeployRequestAction.terminate,  # Incremental periodic terminated by full: upgrade to full
-    (True, False, True, True): DeployRequestAction.ignore,  # Full ignores full periodic to avoid restart loops
+    (PF, PF): ignore,  # Full periodic ignores full periodic to prevent restart loops
+    (NF, PF): ignore,  # Full ignores full periodic to avoid restart loops
+    (PF, PI): ignore,  # Full periodic ignores periodic increment to prevent restart loops
+    (PI, PF): terminate,  # Incremental periodic terminated by full periodic: upgrade to full
+    (PI, NF): terminate,  # Incremental periodic terminated by full: upgrade to full
     # Same terminates same: focus on the new one
-    (True, True, True, False): DeployRequestAction.terminate,  # Full periodic terminated by Full
-    (True, False, True, False): DeployRequestAction.terminate,  # Full terminated by Full
+    (PF, NF): terminate,  # Full periodic terminated by Full
+    (NF, NF): terminate,  # Full terminated by Full
     # Increment * terminates Increment *
-    (False, True, False, True): DeployRequestAction.terminate,
-    (False, True, False, False): DeployRequestAction.terminate,
-    (False, False, False, True): DeployRequestAction.terminate,
-    (False, False, False, False): DeployRequestAction.terminate,
-    (False, False, True, True): DeployRequestAction.defer,  # Incremental defers full periodic
-    (False, False, True, False): DeployRequestAction.defer,  # Incremental defers full
+    (PI, PI): terminate,
+    (PI, NI): terminate,
+    (NI, PI): terminate,
+    (NI, NI): terminate,
+    (NI, PF): defer,  # Incremental defers full periodic
+    (NI, NF): defer,  # Incremental defers full
     # Non-periodic is always executed asap
-    (True, True, False, False): DeployRequestAction.interrupt,  # periodic full interrupted by increment
-    (True, False, False, False): DeployRequestAction.interrupt,  # full interrupted by increment
-    (True, False, False, True): DeployRequestAction.ignore,  # full ignores periodic increment
+    (PF, NI): interrupt,  # periodic full interrupted by increment
+    (NF, NI): interrupt,  # full interrupted by increment
+    # Prefer the normal full over PI
+    (NF, PI): ignore,  # full ignores periodic increment
 }
 
 
@@ -472,7 +483,7 @@ class ResourceScheduler(object):
             assert self.running is not None
             # Get correct action
             response = deploy_response_matrix[
-                (self.running.is_full_deploy, self.running.is_periodic, new_request.is_full_deploy, new_request.is_periodic)
+                ((self.running.is_full_deploy, self.running.is_periodic), (new_request.is_full_deploy, new_request.is_periodic))
             ]
             # Execute action
             if response == DeployRequestAction.terminate:
