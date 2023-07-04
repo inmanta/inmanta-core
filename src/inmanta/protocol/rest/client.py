@@ -40,7 +40,7 @@ class RESTClient(RESTBase):
     HTTP verbs. For other methods the POST verb is used.
     """
 
-    def __init__(self, endpoint: "Endpoint", connection_timout: int = 120) -> None:
+    def __init__(self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False) -> None:
         super().__init__()
         self.__end_point: "Endpoint" = endpoint
         self.daemon: bool = True
@@ -48,6 +48,7 @@ class RESTClient(RESTBase):
         self.connection_timout: int = connection_timout
         self.headers: Set[str] = set()
         self.request_timeout: int = inmanta_config.Config.get(self.id, "request_timeout", 120)
+        self.force_instance: bool = force_instance
 
     @property
     def endpoint(self) -> "Endpoint":
@@ -126,7 +127,7 @@ class RESTClient(RESTBase):
                 ca_certs=ca_certs,
                 decompress_response=True,
             )
-            client = AsyncHTTPClient()
+            client = AsyncHTTPClient(self.force_instance)
             response = await client.fetch(request)
         except HTTPError as e:
             if e.response is not None and e.response.body is not None and len(e.response.body) > 0:

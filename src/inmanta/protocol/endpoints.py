@@ -149,6 +149,7 @@ class SessionEndpoint(Endpoint, CallTarget):
     """
 
     _client: "SessionClient"
+    _heartbeat_client: "SessionClient"
 
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
@@ -192,6 +193,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
+        self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
         await self.start_connected()
         self.add_background_task(self.perform_heartbeat())
 
@@ -332,12 +334,13 @@ class Client(Endpoint):
         version_match: VersionMatch = VersionMatch.lowest,
         exact_version: int = 0,
         with_rest_client: bool = True,
+        force_instance: bool = False,
     ) -> None:
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
         if with_rest_client:
-            self._transport_instance = client.RESTClient(self, connection_timout=timeout)
+            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
         else:
             self._transport_instance = None
         self._version_match = version_match
@@ -445,8 +448,8 @@ class SessionClient(Client):
     A client that communicates with server endpoints over a session.
     """
 
-    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
-        super().__init__(name, timeout)
+    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120, force_instance: bool = False) -> None:
+        super().__init__(name, timeout, force_instance=force_instance)
         self._sid = sid
 
     async def _call(
