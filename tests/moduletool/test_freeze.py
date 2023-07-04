@@ -16,12 +16,14 @@
     Contact: code@inmanta.com
 """
 import os
+import shutil
 import subprocess
 import sys
 
 import pytest
 
 from inmanta.ast import CompilerException
+from inmanta.command import CLIException
 from inmanta.moduletool import ModuleTool
 from moduletool.common import install_project
 from test_app_cli import app
@@ -271,3 +273,27 @@ requires:
     os.chdir(modp)
     app(["module", "freeze"])
     verify()
+
+
+@pytest.mark.parametrize("use_min_m_option", [True, False])
+def test_module_freeze_on_v2_module(tmpdir, monkeypatch, use_min_m_option: bool) -> None:
+    """
+    Verify that an appropriate error message is returned when the `inmanta module freeze` command is executed on a V2 module.
+    """
+    v2_mod_path_original = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "modules_v2", "minimalv2module")
+    v2_mod_path = os.path.join(tmpdir, "minimalv2module")
+    shutil.copytree(v2_mod_path_original, v2_mod_path)
+
+    if use_min_m_option:
+        cmd = ["module", "-m", v2_mod_path, "freeze"]
+    else:
+        cmd = ["module", "freeze"]
+        monkeypatch.chdir(v2_mod_path)
+
+    with pytest.raises(CLIException) as exc_info:
+        app(cmd)
+
+    assert "The `inmanta module freeze` command is not supported on V2 modules. Use the `pip freeze` command instead." in str(
+        exc_info.value
+    )
+    assert exc_info.value.exitcode == 1

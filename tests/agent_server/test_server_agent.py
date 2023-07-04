@@ -21,6 +21,7 @@ import time
 import uuid
 from functools import partial
 from itertools import groupby
+from logging import DEBUG
 from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
@@ -302,76 +303,86 @@ async def test_server_restart(
 
 
 async def test_spontaneous_deploy(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer
+    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer, caplog
 ):
     """
     dryrun and deploy a configuration model
     """
-    resource_container.Provider.reset()
+    start = time.time()
+    with caplog.at_level(DEBUG):
+        resource_container.Provider.reset()
 
-    env_id = environment
+        env_id = environment
 
-    Config.set("config", "agent-deploy-interval", "2")
-    Config.set("config", "agent-deploy-splay-time", "2")
-    Config.set("config", "agent-repair-interval", "0")
+        Config.set("config", "agent-deploy-interval", "2")
+        Config.set("config", "agent-deploy-splay-time", "2")
+        Config.set("config", "agent-repair-interval", "0")
 
-    agent = await get_agent(server, environment, "agent1", "node1")
-    async_finalizer(agent.stop)
+        agent = await get_agent(server, environment, "agent1", "node1")
+        async_finalizer(agent.stop)
 
-    resource_container.Provider.set("agent1", "key2", "incorrect_value")
-    resource_container.Provider.set("agent1", "key3", "value")
+        resource_container.Provider.set("agent1", "key2", "incorrect_value")
+        resource_container.Provider.set("agent1", "key3", "value")
 
-    version = await clienthelper.get_version()
+        version = await clienthelper.get_version()
 
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Resource[agent1,key=key1],v=%d" % version,
-            "purged": False,
-            "send_event": False,
-            "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Resource[agent1,key=key2],v=%d" % version,
-            "requires": [],
-            "purged": False,
-            "send_event": False,
-        },
-        {
-            "key": "key3",
-            "value": None,
-            "id": "test::Resource[agent1,key=key3],v=%d" % version,
-            "requires": [],
-            "purged": True,
-            "send_event": False,
-        },
-    ]
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "purged": False,
+                "send_event": False,
+                "requires": ["test::Resource[agent1,key=key2],v=%d" % version],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key2],v=%d" % version,
+                "requires": [],
+                "purged": False,
+                "send_event": False,
+            },
+            {
+                "key": "key3",
+                "value": None,
+                "id": "test::Resource[agent1,key=key3],v=%d" % version,
+                "requires": [],
+                "purged": True,
+                "send_event": False,
+            },
+        ]
 
-    await clienthelper.put_version_simple(resources, version)
+        await clienthelper.put_version_simple(resources, version)
 
-    # do a deploy
-    result = await client.release_version(env_id, version, False)
-    assert result.code == 200
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 3
-    assert result.result["model"]["result"] == "deploying"
+        # do a deploy
+        result = await client.release_version(env_id, version, False)
+        assert result.code == 200
+        assert not result.result["model"]["deployed"]
+        assert result.result["model"]["released"]
+        assert result.result["model"]["total"] == 3
+        assert result.result["model"]["result"] == "deploying"
 
-    result = await client.get_version(env_id, version)
-    assert result.code == 200
+        result = await client.get_version(env_id, version)
+        assert result.code == 200
 
-    await _wait_until_deployment_finishes(client, env_id, version)
+        await _wait_until_deployment_finishes(client, env_id, version)
 
-    result = await client.get_version(env_id, version)
-    assert result.result["model"]["done"] == len(resources)
+        result = await client.get_version(env_id, version)
+        assert result.result["model"]["done"] == len(resources)
 
-    assert resource_container.Provider.isset("agent1", "key1")
-    assert resource_container.Provider.get("agent1", "key1") == "value1"
-    assert resource_container.Provider.get("agent1", "key2") == "value2"
-    assert not resource_container.Provider.isset("agent1", "key3")
+        assert resource_container.Provider.isset("agent1", "key1")
+        assert resource_container.Provider.get("agent1", "key1") == "value1"
+        assert resource_container.Provider.get("agent1", "key2") == "value2"
+        assert not resource_container.Provider.isset("agent1", "key3")
+
+    duration = time.time() - start
+
+    # approximate check, the number of heartbeats can vary, but not by a factor of 10
+    beats = [message for logger_name, log_level, message in caplog.record_tuples if "Received heartbeat from" in message]
+    assert (
+        len(beats) < duration * 10
+    ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
 async def test_spontaneous_repair(
@@ -759,10 +770,15 @@ async def test_register_setting(environment, client, server, caplog):
     assert result.result["value"] is False
 
 
-async def test_unkown_parameters(resource_container, environment, client, server, clienthelper, agent, no_agent_backoff):
+@pytest.mark.parametrize("halted", [True, False])
+async def test_unknown_parameters(
+    resource_container, environment, client, server, clienthelper, agent, no_agent_backoff, halted, caplog
+):
     """
     Test retrieving facts from the agent
     """
+
+    caplog.set_level(logging.DEBUG)
     resource_container.Provider.reset()
     await client.set_setting(environment, data.SERVER_COMPILE, False)
 
@@ -776,6 +792,11 @@ async def test_unkown_parameters(resource_container, environment, client, server
     resources = [{"key": "key", "value": "value", "id": resource_id, "requires": [], "purged": False, "send_event": False}]
 
     unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
+
+    if halted:
+        result = await client.halt_environment(environment)
+        assert result.code == 200
+
     result = await client.put_version(
         tid=environment,
         version=version,
@@ -792,13 +813,23 @@ async def test_unkown_parameters(resource_container, environment, client, server
     await server.get_slice(SLICE_PARAM).renew_facts()
 
     env_id = uuid.UUID(environment)
-    params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-    while len(params) < 3:
+    if not halted:
         params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        while len(params) < 3:
+            params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
+            await asyncio.sleep(0.1)
 
-    result = await client.get_param(env_id, "length", resource_id_wov)
-    assert result.code == 200
+        result = await client.get_param(env_id, "length", resource_id_wov)
+        assert result.code == 200
+        msg = f"Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] in env {environment}"
+        log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
+
+    else:
+        msg = (
+            "Not Requesting value for unknown parameter length of resource test::Resource[agent1,key=key] "
+            f"in env {environment} as the env is halted"
+        )
+        log_contains(caplog, "inmanta.server.services.paramservice", logging.DEBUG, msg)
 
 
 async def test_fail(resource_container, client, agent, environment, clienthelper, async_finalizer, no_agent_backoff):
@@ -1235,8 +1266,13 @@ async def test_cross_agent_deps(
 
     result = await resource_container.wait_for_done_with_waiters(client, env_id, version)
 
+    async def is_success() -> bool:
+        result = await client.get_version(env_id, version)
+        assert result.code == 200
+        return result.result["model"]["result"] == const.VersionState.success.name
+
     assert result.result["model"]["done"] == len(resources)
-    assert result.result["model"]["result"] == const.VersionState.success.name
+    await retry_limited(is_success, timeout=1)
 
     assert resource_container.Provider.isset("agent 1", "key1")
     assert resource_container.Provider.get("agent 1", "key1") == "value1"

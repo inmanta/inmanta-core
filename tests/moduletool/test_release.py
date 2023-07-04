@@ -511,6 +511,26 @@ def test_too_many_version_bump_arguments() -> None:
     assert "Only one of --revision, --patch, --minor and --major can be set at the same time." in exc_info.value.message
 
 
+def test_output_tag(tmpdir, modules_dir: str, monkeypatch, capsys) -> None:
+    """
+    test that the `inmanta module release` will also output the created tag to stdout
+    """
+    path_module = os.path.join(tmpdir, "mod")
+    v1_module_from_template(
+        source_dir=os.path.join(modules_dir, "minimalv1module"),
+        dest_dir=path_module,
+        new_version=Version("1.2.3"),
+        new_name="mod",
+    )
+    gitprovider.git_init(repo=path_module)
+    gitprovider.commit(repo=path_module, message="Initial commit", add=["*"], commit_all=True)
+    monkeypatch.chdir(path_module)
+    module_tool = ModuleTool()
+    module_tool.release(dev=False, minor=False, major=True, message="Commit changes")
+    (stdout, _) = capsys.readouterr()
+    assert "Tag created successfully: 1.2.4" in stdout
+
+
 def test_epoch_value_larger_than_zero(tmpdir, modules_dir: str, monkeypatch) -> None:
     """
     Ensure that an exception is raised when the epoch value of the module is larger than zero.

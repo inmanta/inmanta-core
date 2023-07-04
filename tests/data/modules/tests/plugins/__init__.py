@@ -64,3 +64,8 @@ class TestPluginException(PluginException):
 @plugin
 def raise_exception(message: "string") -> None:
     raise TestPluginException(message)
+
+
+@plugin
+def sum(x: "int", y: "int") -> "int":
+    return x + y

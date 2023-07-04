@@ -1,0 +1,2 @@
+include inmanta_plugins/cross_module_dependency/setup.cfg
+recursive-include inmanta_plugins/cross_module_dependency/model *.cf

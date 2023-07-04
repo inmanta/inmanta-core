@@ -1,0 +1,5 @@
+description: No longer depend on implicit event loop creation on any thread.
+change-type: patch
+destination-branches:
+  - master
+  - iso6

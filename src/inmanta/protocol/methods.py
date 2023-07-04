@@ -416,7 +416,7 @@ def get_resource(
     Return a resource with the given id.
 
     :param tid: The id of the environment this resource belongs to
-    :param id: Get the resource with the given id
+    :param id: Get the resource with the given resource version id
     :param logs: Include the logs in the response
     :param status: Only return the status of the resource
     :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of

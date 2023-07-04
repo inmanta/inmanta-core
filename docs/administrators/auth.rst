@@ -172,7 +172,7 @@ Keycloak configuration
 The web-console has out of the box support for authentication with `Keycloak <http://www.keycloak.org>`_. Install keycloak and
 create an initial login as described in the Keycloak documentation and login with admin credentials.
 
-This guide was made based on Keycloak 3.3
+This guide was made based on Keycloak 20.0
 
 If inmanta is configured to use SSL, the authentication provider should also use SSL. Otherwise, the web-console will not be
 able to fetch user information from the authentication provider.
@@ -203,16 +203,15 @@ For example call the realm inmanta
 Step 2: Add a new client to keycloak
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Make sure the correct realm is active (the name is shown in the title of the left sidebar) to which you want to add a new client.
+Make sure the correct realm is active (the name is shown in the realm selection dropdown) to which you want to add a new client.
 
 .. figure:: /administrators/images/kc_start.png
    :width: 100%
    :align: center
 
-   The start page of a realm. Here you can edit names, policies, ... of the realm. The defaults are sufficient for inmanta
-   authentication. This shows the inmanta realm.
+   The start page of your newly created realm.
 
-Go to client and click create on the right hand side of the screen.
+Go to clients and click create on the right hand side of the screen.
 
 .. figure:: /administrators/images/kc_clients.png
    :width: 100%
@@ -228,17 +227,28 @@ Provide an id for the client and make sure that the client protocol is ``openid-
 
    Create client screen
 
-After clicking save, keycloak opens the configuration of the client. Modify the client to allow implicit flows and add
-vallid callback URLs. As a best practice, also add the allowed origins. See the screenshot below as an example.
+After clicking save, keycloak opens the configuration of the client. Modify the client to allow implicit flows and add valid redirect URIs and valid post logout redirect URIs. As a best practice, also add the allowed web origins. See the screenshot below as an example.
 
 .. figure:: /administrators/images/kc_client_details.png
    :width: 100%
    :align: center
 
+
+.. figure:: /administrators/images/kc_client_details2.png
+   :width: 100%
+   :align: center
+
    Allow implicit flows (others may be disabled) and configure allowed callback urls of the web-console.
 
-Add a mapper to add custom claims to the issued tokens for the API client type. Open de mappers tab of your new client and click
-`add`.
+Go to the client scopes in your Client details.
+
+.. figure:: /administrators/images/kc_client_scopes.png
+   :width: 100%
+   :align: center
+
+   Click on inmantaso-dedicated to edit the dedicated scope and mappers.
+
+Add a mapper to add custom claims to the issued tokens for the API client type. Click on adding a new mapper and select By Configuration.
 
 .. figure:: /administrators/images/kc_mappers.png
    :width: 100%
@@ -255,28 +265,33 @@ added to the access token.
 
    Add the ct claim to all access tokens for this client.
 
-Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the
-previous step. Fill in the following values:
+Add a second mapper to add inmanta to the audience (only required for Keycloak 4.6 and higher). Click `add` again as in the previous step. 
 
-* Name: inmanta-audience
-* Mapper type: Audience
-* Included Client Audience: inmanta
-* Add to access token: on
+.. figure:: /administrators/images/kc_audience_mapper.png
+   :width: 100%
+   :align: center
+      
+   Fill in the following values:
+
+   * Name: inmanta-audience
+   * Mapper type: Audience
+   * Included Client Audience: inmanta
+   * Add to access token: on
 
 Click save.
 
 Step 3: Configure inmanta server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Go to the installation tab and select JSON format in the select box. This JSON string provides you with the details to
-configure the server correctly to redirect web-console users to this keycloak instance and to validate the tokens
-issued by keycloak.
-
 .. figure:: /administrators/images/kc_install.png
    :width: 100%
    :align: center
 
-   Show the correct configuration parameters in JSON format.
+   Show the correct configuration parameters in JSON format. (Click on the top right dropdown 'Action' and pick 'Download adapter config'.)
+
+Select JSON format in the select box. This JSON string provides you with the details to
+configure the server correctly to redirect web-console users to this keycloak instance and to validate the tokens
+issued by keycloak.
 
 Add the keycloak configuration parameters to the web-ui section of the server configuration file. Add a configuration
 file called `/etc/inmanta/inmanta.d/keycloak.cfg`. Add the oidc_realm, oidc_auth_url and oidc_client_id to the web-ui section. Use
@@ -284,11 +299,11 @@ the parameters from the installation json file created by keycloak.
 
 .. code-block:: ini
 
-    [web-ui]
-    # generic OpenID connect configuration
-    oidc_realm=master
-    oidc_auth_url=http://localhost:8080/auth
-    oidc_client_id=inmanta
+   [web-ui]
+   # generic OpenID connect configuration
+   oidc_realm=inmanta
+   oidc_auth_url=http://localhost:8080
+   oidc_client_id=inmantaso
 
 .. warning:: In a real setup, the url should contain public names instead of localhost, otherwise logins will only work
    on the machine that hosts inmanta server.
@@ -297,13 +312,18 @@ Configure a ``auth_jwt_`` block (for example ``auth_jwt_keycloak``) and configur
 
 .. code-block:: ini
 
-    [auth_jwt_keycloak]
-    algorithm=RS256
-    sign=false
-    client_types=api
-    issuer=http://localhost:8080/auth/realms/master
-    audience=inmanta
-    jwks_uri=http://localhost:8080/auth/realms/master/protocol/openid-connect/certs
+   [server]
+   auth=true
+
+   [auth_jwt_keycloak]
+   algorithm=RS256
+   sign=false
+   client_types=api
+   issuer=http://localhost:8080/realms/inmanta
+   audience=inmantaso
+   jwks_uri=http://keycloak:8080/realms/inmanta/protocol/openid-connect/certs
+   validate_cert=false
+
 
 Set the algorithm to RS256, sign should be false and client_types should be limited to api only. Next set the issuer to the
 correct value (watch out for the realm). Set the audience to the value of the resource key in the json file. Finally, set the
@@ -311,7 +331,7 @@ jwks_uri so the server knows how to fetch the public keys to verify the signatur
 able to access this url).
 
 Both the correct url for the issuer and the jwks_uri is also defined in the openid-configuration endpoint of keycloack. For
-the examples above this url is http://localhost:8080/auth/realms/master/.well-known/openid-configuration
+the examples above this url is http://localhost:8080/realms/inmanta/.well-known/openid-configuration
 (https://www.keycloak.org/docs/latest/securing_apps/index.html#endpoints)
 
 .. warning:: When the certificate of keycloak is not trusted by the system on which inmanta is installed, set ``validate_cert``

@@ -16,7 +16,7 @@ Glossary
         one or more :term:`environment` such as development, integration and production.
 
     environment
-        Each environment represents a target infrastructure that inmanta manages. At least
+        Each environment represents a target infrastructure that inmanta manages. At least one
         environment is required, but often multiple environments of the same infrastructure are
         available such as development, integration and testing.
 

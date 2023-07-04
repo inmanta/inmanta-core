@@ -632,6 +632,11 @@ class RuntimeException(CompilerException):
         return super(RuntimeException, self).format()
 
 
+class InvalidCompilerState(RuntimeException):
+    def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
+        super().__init__(stmt, "Invalid compiler state, this likely indicates a bug in the compiler. Details: %s" % msg)
+
+
 class HyphenException(RuntimeException):
     def __init__(self, stmt: LocatableString) -> None:
         msg: str = "The use of '-' in identifiers is not allowed. please rename %s." % stmt.value

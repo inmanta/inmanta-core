@@ -30,6 +30,7 @@ from uuid import UUID
 import asyncpg.connection
 
 from inmanta import const, data, util
+from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.data import APILIMIT, InvalidSort, model
@@ -410,10 +411,10 @@ class AgentManager(ServerSlice, SessionListener):
         now = datetime.now().astimezone()
         async with data.AgentProcess.get_connection() as connection:
             async with connection.transaction():
+                await data.AgentProcess.update_last_seen(session.id, now, connection)
                 await data.AgentInstance.log_instance_creation(session.tid, session.id, endpoints_to_add, connection)
                 await data.AgentInstance.log_instance_expiry(session.id, endpoints_to_remove, now, connection)
                 await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now, connection)
-                await data.AgentProcess.update_last_seen(session.id, now, connection)
 
     # Session registration
     async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
@@ -1195,6 +1196,8 @@ agent-deploy-interval=%(agent_deploy_interval)d
 agent-repair-splay-time=%(agent_repair_splay)d
 agent-repair-interval=%(agent_repair_interval)d
 
+agent-get-resource-backoff=%(agent_get_resource_backoff)f
+
 [agent_rest_transport]
 port=%(port)s
 host=%(serveradress)s
@@ -1208,6 +1211,7 @@ host=%(serveradress)s
             "agent_repair_splay": agent_repair_splay,
             "agent_repair_interval": agent_repair_interval,
             "serveradress": server_config.server_address.get(),
+            "agent_get_resource_backoff": agent_cfg.agent_get_resource_backoff.get(),
         }
 
         if server_config.server_enable_auth.get():

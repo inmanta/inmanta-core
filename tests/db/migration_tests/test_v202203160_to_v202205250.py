@@ -23,6 +23,7 @@ import pytest
 from inmanta.data import Resource
 
 
+@pytest.mark.slowtest
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202203160.sql"))
 async def test_added_resource_set_column(
     migrate_db_from: Callable[[], Awaitable[None]],

@@ -613,6 +613,49 @@ The syntax is:
 The :ref:`lang-conditions` section describes allowed forms for the condition.
 
 
+List comprehensions
+===================
+
+A list comprehension constructs a list (either a primitive list or a relation) by mapping over another list, optionally
+filtering some values.
+
+.. code-block:: inmanta
+
+    myfiles = ["/a/b/c", "/c/d/e", "x/y/z/u/v/w"]
+    # create File instance for each file in myfiles shorter than 10 characters
+    host.files = [File(path=path) for path in myfiles if std::length(path) < 10]
+
+The syntax is the following.
+
+.. code-block:: antlr
+
+    list_comprehension : '[' expression ('for' ID 'in' expression)+ ('if' expression)* ']'
+
+It shows that the list comprehension allows for multiple ``for`` expressions and multiple ``if`` guards. The top ``for``
+is always executed first, as if it were the outer ``for`` in a conventional for loop. Here's an example:
+
+.. code-block:: inmanta
+
+    all_short_files = [
+        file
+        for host in all_hosts
+        for file in host.files  # we can refer to the upper loop variable `host`
+        if host.name != "exclude_this_host"
+        if std::length(file.path) < 10
+    ]
+
+While the inmanta language does not make any guarantees about statement execution order, it does provide some guarantees
+regarding data ordering for list comprehensions. In the context of relations even data order doesn't matter, but in the context
+of a literal list it might. In such a context the list comprehension promises to keep the order of the list in the ``for``
+expression.
+
+.. code-block:: inmanta
+
+    my_ordered_numbers = std::sequence(10)
+    my_ordered_pairs = ["{{i}}-{{i}}" for i in my_ordered_numbers]
+    # order is kept => ["0-0", "1-1", "2-2", ...]
+
+
 Transformations
 ==============================================================
 
@@ -621,7 +664,7 @@ configuration files. To construct configuration files, templates and string inte
 
 
 String interpolation
---------------------
+++++++++++++++++++++
 
 String interpolation allows variables to be included as parameters inside a string.
 
@@ -643,8 +686,38 @@ To prevent string interpolation, use raw strings
     motd = r"Welcome to {{hostname}}\n"
 
 
+String formatting
++++++++++++++++++
+
+An alternative syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
+
+Formatting strings
+
+.. code-block:: inmanta
+
+    hostname = "serv1.example.org"
+    motd = f"Welcome to {hostname}\n"
+
+Python's format specification `mini-language <https://docs.python.org/3.9/library/string.html#format-specification-mini-language>`_
+can be used for fine-grained formatting:
+
+.. code-block:: inmanta
+
+    width = 10
+    precision = 2
+    arg = 12.34567
+
+    std::print(f"result: {arg:{width}.{precision}f}")
+
+    # Expected output:
+    # "result:      12.35"
+
+.. note::
+    The \'=\' character specifier added in `python 3.8 <https://docs.python.org/3/whatsnew/3.8.html#f-strings-support-for-self-documenting-expressions-and-debugging>`_ is not supported yet in the Inmanta language.
+
 Templates
----------
++++++++++
+
 
 Inmanta integrates the Jinja2 template engine. A template is evaluated in the lexical
 scope where the ``std::template`` function is called. This function accepts as an argument the

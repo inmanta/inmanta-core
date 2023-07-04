@@ -1,0 +1,6 @@
+---
+description: Fix bug in `notify_compile_request_committed()` that occurs when the compile with the given id cannot be found.
+issue-nr: 1249
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso6]

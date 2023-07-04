@@ -39,12 +39,6 @@ def check_result(result):
 
 
 async def test_dump_db(server, client, postgres_db, database_name):
-    """
-    Note: remove following line from the dump: SELECT pg_catalog.set_config('search_path', '', false);
-    The line 'SET default_table_access_method = heap;' should also be removed
-    Also be careful that the IDE doesn't remove trailing whitespace from the dump file.
-    """
-
     if False:
         # trick autocomplete to have autocomplete on client
         client = methods
@@ -99,3 +93,16 @@ async def test_dump_db(server, client, postgres_db, database_name):
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
     )
     await proc.wait()
+
+    # Remove undesired lines in the database dump
+    lines_to_remove = [
+        "SELECT pg_catalog.set_config('search_path', '', false);\n",
+        "SET default_table_access_method = heap;\n",
+    ]
+    with open(outfile, "r+") as fh:
+        all_lines = fh.readlines()
+        assert all(to_remove in all_lines for to_remove in lines_to_remove)
+        fh.seek(0)
+        for line in all_lines:
+            fh.write(f"--{line}" if line in lines_to_remove else line)
+        fh.truncate()

@@ -19,6 +19,7 @@ import warnings
 
 import toml
 from inmanta.config import AuthJWTConfig
+from inmanta.logging import InmantaLoggerConfig
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -95,7 +96,6 @@ from click import testing
 from pkg_resources import Requirement
 from pyformance.registry import MetricsRegistry
 from tornado import netutil
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 import build.env
 import inmanta
@@ -106,6 +106,7 @@ import inmanta.compiler.config
 import inmanta.main
 import inmanta.user_setup
 from inmanta import config, const, data, env, loader, protocol, resources
+from inmanta.agent import config as agent_cfg
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
@@ -126,6 +127,7 @@ from inmanta.types import JsonType
 from inmanta.warnings import WarningsManager
 from libpip2pi.commands import dir2pi
 from packaging.version import Version
+from pytest_postgresql import factories
 
 # Import test modules differently when conftest is put into the inmanta_tests packages
 PYTEST_PLUGIN_MODE: bool = __file__ and os.path.dirname(__file__).split("/")[-1] == "inmanta_tests"
@@ -147,6 +149,8 @@ TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_reso
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
 initial_cwd = os.getcwd()
+
+pg_logfile = os.path.join(initial_cwd, "pg.log")
 
 
 def _pytest_configure_plugin_mode(config: "pytest.Config") -> None:
@@ -224,20 +228,53 @@ def pytest_runtest_setup(item: "pytest.Item"):
             pytest.skip("Skipping old migration test")
 
 
+# adds a custom log location for postgres
+postgresql_proc_with_log = factories.postgresql_proc(startparams=f"--log='{pg_logfile}'")
+
+
 @pytest.fixture(scope="session")
 def postgres_db(request: pytest.FixtureRequest):
     """This fixture loads the pytest-postgresql fixture. When --postgresql-host is set, it will use the noproc
     fixture to use an external database. Without this option, an "embedded" postgres is started.
     """
+
     option_name = "postgresql_host"
     conf = request.config.getoption(option_name)
     if conf:
         fixture = "postgresql_noproc"
     else:
-        fixture = "postgresql_proc"
+        fixture = "postgresql_proc_with_log"
 
     logger.info("Using database fixture %s", fixture)
-    yield request.getfixturevalue(fixture)
+    pg = request.getfixturevalue(fixture)
+    yield pg
+
+    if os.path.exists(pg_logfile):
+        has_deadlock = False
+        with open(pg_logfile, "r") as fh:
+            for line in fh:
+                if "deadlock" in line:
+                    has_deadlock = True
+                    break
+            sublogger = logging.getLogger("pytest.postgresql.deadlock")
+            for line in fh:
+                sublogger.warning("%s", line)
+        os.remove(pg_logfile)
+        assert not has_deadlock
+
+
+@pytest.fixture
+async def run_without_keeping_psql_logs(postgres_db):
+    if os.path.exists(pg_logfile):
+        # Store the original content of the logfile
+        with open(pg_logfile, "r") as file:
+            original_content = file.read()
+    yield
+
+    if os.path.exists(pg_logfile):
+        # Restore the original content of the logfile
+        with open(pg_logfile, "w") as file:
+            file.write(original_content)
 
 
 @pytest.fixture
@@ -515,6 +552,7 @@ def reset_all_objects():
     V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
+    InmantaLoggerConfig.clean_instance()
 
 
 @pytest.fixture()
@@ -532,11 +570,11 @@ def restore_cwd():
 
 
 @pytest.fixture(scope="function")
-def no_agent_backoff():
-    backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
+def no_agent_backoff(inmanta_config: ConfigParser) -> None:
+    old_backoff = agent_cfg.agent_get_resource_backoff.get()
+    inmanta_config.set(section="config", option="agent-get-resource-backoff", value="0")
     yield
-    inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
+    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=str(old_backoff))
 
 
 @pytest.fixture()
@@ -633,16 +671,21 @@ async def agent_factory(server):
 
 
 @pytest.fixture(scope="function")
-async def autostarted_agent(server, environment):
+async def autostarted_agent(server, client, environment):
     """Configure agent1 as an autostarted agent."""
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
-    await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
-    await env.set(data.AUTO_DEPLOY, True)
-    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
+    assert result.code == 200
     # disable deploy and repair intervals
-    await env.set(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
-    await env.set(data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
-    await env.set(data.AUTOSTART_ON_START, True)
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 0)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
+    assert result.code == 200
+    result = await client.set_setting(environment, data.AUTOSTART_ON_START, True)
+    assert result.code == 200
 
 
 @pytest.fixture(scope="function")
@@ -990,12 +1033,6 @@ def pytest_runtest_makereport(item, call):
             )
 
 
-async def off_main_thread(func):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-    return await asyncio.get_event_loop().run_in_executor(None, func)
-
-
 class ReentrantVirtualEnv(VirtualEnv):
     """
     A virtual env that can be de-activated and re-activated
@@ -1282,14 +1319,15 @@ class SnippetCompilationTest(KeepOnFail):
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[List[str]] = None,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
-        return await off_main_thread(
+        return await asyncio.get_running_loop().run_in_executor(
+            None,
             lambda: self._do_export(
                 deploy=True,
                 include_status=include_status,
                 do_raise=do_raise,
                 partial_compile=partial_compile,
                 resource_sets_to_remove=resource_sets_to_remove,
-            )
+            ),
         )
 
     def setup_for_error(self, snippet, shouldbe, indent_offset=0):
@@ -1398,10 +1436,7 @@ def cli(caplog):
     # due to mysterious interference when juggling with sys.stdout
     # https://github.com/pytest-dev/pytest/issues/10553
     with caplog.at_level(logging.FATAL):
-        # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-        asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-        o = CLI()
-        yield o
+        yield CLI()
 
 
 class AsyncCleaner(object):

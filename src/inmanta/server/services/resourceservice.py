@@ -25,14 +25,22 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
+from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
-from inmanta.data.dataview import ResourceHistoryView, ResourceLogsView, ResourcesInVersionView, ResourceView
+from inmanta.data.dataview import (
+    DiscoveredResourceView,
+    ResourceHistoryView,
+    ResourceLogsView,
+    ResourcesInVersionView,
+    ResourceView,
+)
 from inmanta.data.model import (
     AttributeStateChange,
+    DiscoveredResource,
     LatestReleasedResource,
     LogLine,
     ReleasedResourceDetails,
@@ -56,7 +64,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -213,6 +221,12 @@ class ResourceService(protocol.ServerSlice):
         log_action: const.ResourceAction,
         log_limit: int,
     ) -> Apireturn:
+        # Validate resource version id
+        try:
+            Id.parse_resource_version_id(resource_id)
+        except ValueError:
+            return 400, {"message": f"{resource_id} is not a valid resource version id"}
+
         resv = await data.Resource.get(env.id, resource_id)
         if resv is None:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
@@ -232,7 +246,7 @@ class ResourceService(protocol.ServerSlice):
 
         return 200, {"resource": resv, "logs": actions}
 
-    # This endpoint does't have a method associated yet.
+    # This endpoint doesn't have a method associated yet.
     # Intended for use by other slices
     async def get_resources_in_latest_version(
         self,
@@ -1038,3 +1052,55 @@ class ResourceService(protocol.ServerSlice):
         if not resource:
             raise NotFound("The resource with the given id does not exist")
         return resource
+
+    @handle(methods_v2.discovered_resource_create, env="tid")
+    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
+        try:
+            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
+        except ValidationError as e:
+            # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
+            error_msg = f"Failed to validate argument\n{str(e)}"
+            LOGGER.exception(error_msg)
+            raise BadRequest(error_msg, {"validation_errors": e.errors()})
+
+        dao = discovered_resource.to_dao(env.id)
+        await dao.insert_with_overwrite()
+
+    @handle(methods_v2.discovered_resource_create_batch, env="tid")
+    async def discovered_resources_create_batch(
+        self, env: data.Environment, discovered_resources: List[DiscoveredResource]
+    ) -> None:
+        dao_list = [res.to_dao(env.id) for res in discovered_resources]
+        await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
+
+    @handle(methods_v2.discovered_resources_get, env="tid")
+    async def discovered_resources_get(
+        self, env: data.Environment, discovered_resource_id: ResourceIdStr
+    ) -> DiscoveredResource:
+        result = await data.DiscoveredResource.get_one(environment=env.id, discovered_resource_id=discovered_resource_id)
+        if not result:
+            raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env.id}")
+        dto = result.to_dto()
+        return dto
+
+    @protocol.handle(methods_v2.discovered_resources_get_batch, env="tid")
+    async def discovered_resources_get_batch(
+        self,
+        env: data.Environment,
+        limit: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        sort: str = "discovered_resource_id.asc",
+    ) -> ReturnValue[Sequence[DiscoveredResource]]:
+        try:
+            handler = DiscoveredResourceView(
+                environment=env,
+                limit=limit,
+                sort=sort,
+                start=start,
+                end=end,
+            )
+            out = await handler.execute()
+            return out
+        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
+            raise BadRequest(e.message) from e

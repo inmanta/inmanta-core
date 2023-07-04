@@ -18,10 +18,11 @@
 
 
 import argparse
+from collections import abc
 from typing import Callable, Dict, List, Optional
 
 FunctionType = Callable[[argparse.Namespace], None]
-ParserConfigType = Callable[[argparse.ArgumentParser], None]
+ParserConfigType = Callable[[argparse.ArgumentParser, abc.Sequence[argparse.ArgumentParser]], None]
 
 
 class CLIException(Exception):
@@ -52,6 +53,7 @@ class Commander(object):
         parser_config: Optional[ParserConfigType],
         require_project: bool = False,
         aliases: List[str] = [],
+        add_verbose_flag: bool = True,
     ) -> None:
         """
         Add a new export function
@@ -65,6 +67,7 @@ class Commander(object):
             "parser_config": parser_config,
             "require_project": require_project,
             "aliases": aliases,
+            "add_verbose_flag": add_verbose_flag,
         }
 
     config = None
@@ -87,6 +90,8 @@ class Commander(object):
 class command(object):  # noqa: N801
     """
     A decorator that registers an export function
+
+    :param add_verbose_flag: Set this to false to prevent automatically adding the verbose option to the registered command.
     """
 
     def __init__(
@@ -96,16 +101,20 @@ class command(object):  # noqa: N801
         parser_config: Optional[ParserConfigType] = None,
         require_project: bool = False,
         aliases: List[str] = [],
+        add_verbose_flag: bool = True,
     ) -> None:
         self.name = name
         self.help = help_msg
         self.require_project = require_project
         self.parser_config = parser_config
         self.aliases = aliases
+        self.add_verbose_flag = add_verbose_flag
 
     def __call__(self, function: FunctionType) -> FunctionType:
         """
         The wrapping
         """
-        Commander.add(self.name, function, self.help, self.parser_config, self.require_project, self.aliases)
+        Commander.add(
+            self.name, function, self.help, self.parser_config, self.require_project, self.aliases, self.add_verbose_flag
+        )
         return function

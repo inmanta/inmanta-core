@@ -21,7 +21,6 @@ import datetime
 import json
 import os
 import random
-import threading
 import time
 import urllib.parse
 import uuid
@@ -33,10 +32,9 @@ import pydantic
 import pytest
 import tornado
 from pydantic.types import StrictBool
-from tornado import gen, web
+from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 from inmanta import config, const, protocol
 from inmanta.const import ClientType
@@ -111,12 +109,7 @@ async def test_client_files_lost(client):
 
 
 async def test_sync_client_files(client):
-    # work around for https://github.com/pytest-dev/pytest-asyncio/issues/168
-    asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
-
     done = []
-    limit = 100
-    sleep = 0.01
 
     def do_test():
         sync_client = protocol.SyncClient("client")
@@ -139,14 +132,7 @@ async def test_sync_client_files(client):
 
         done.append(True)
 
-    thread = threading.Thread(target=do_test)
-    thread.start()
-
-    while len(done) == 0 and limit > 0:
-        await gen.sleep(sleep)
-        limit -= 1
-
-    thread.join()
+    await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, do_test), timeout=1)
     assert len(done) > 0
 
 
@@ -1571,25 +1557,52 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
     async_finalizer.add(server.stop)
 
     client = tornado.httpclient.AsyncHTTPClient()
+    param_value = "header_param_value"
 
-    # valid request should succeed
+    # Only parameter as header: should succeed
     request = tornado.httpclient.HTTPRequest(
         url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
         method="POST",
         body=json_encode({"body_param": "body_param_value"}),
-        headers={"X-Inmanta-Header-Param": "header_param_value"},
+        headers={"X-Inmanta-Header-Param": param_value},
     )
     response: tornado.httpclient.HTTPResponse = await client.fetch(request)
     assert response.code == 200
 
-    # invalid request should fail
+    # Only provide parameter in body: should succeed
     request = tornado.httpclient.HTTPRequest(
         url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
         method="POST",
-        body=json_encode({"header_param": "header_param_value", "body_param": "body_param_value"}),
+        body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
     )
-    with pytest.raises(tornado.httpclient.HTTPClientError):
-        await client.fetch(request)
+    response: tornado.httpclient.HTTPResponse = await client.fetch(request)
+    assert response.code == 200
+
+    # Body and header contain the same value for parameter: should succeed
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
+        headers={"X-Inmanta-Header-Param": param_value},
+    )
+    response: tornado.httpclient.HTTPResponse = await client.fetch(request)
+    assert response.code == 200
+
+    # Body and header contain different value for parameter: should fail
+    param_different_value = "different_value"
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
+        headers={"X-Inmanta-Header-Param": param_different_value},
+    )
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 400
+    body = json.loads(response.body)
+    assert (
+        "Value for argument header_param was provided via a header and a non-header argument, but both"
+        f" values don't match (header={param_different_value}; non-header={param_value})" in body["message"]
+    )
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])

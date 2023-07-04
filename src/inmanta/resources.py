@@ -74,6 +74,8 @@ class resource(object):  # noqa: N801
                   ``host.name``
     """
 
+    # The _resources dict is accessed by the compile function in pytest-inmanta.
+    # see https://github.com/inmanta/pytest-inmanta/pull/381
     _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
@@ -378,7 +380,6 @@ class Resource(metaclass=ResourceMeta):
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id
-        self.version = 0
         self.requires: Set[Id] = set()
         self.resource_requires: Set[Resource] = set()
         self.unknowns: Set[str] = set()
@@ -388,6 +389,8 @@ class Resource(metaclass=ResourceMeta):
 
         for field in self.__class__.fields:
             setattr(self, field, None)
+
+        self.version = _id.version
 
     def populate(self, fields: Dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
@@ -627,6 +630,14 @@ class Id(object):
         Check whether the given value is a resource version id
         """
         result = PARSE_RVID_REGEX.search(value)
+        return result is not None
+
+    @classmethod
+    def is_resource_id(cls, value: str) -> bool:
+        """
+        Check whether the given value is a resource id
+        """
+        result = PARSE_ID_REGEX.search(value)
         return result is not None
 
     def is_resource_version_id_obj(self) -> bool:

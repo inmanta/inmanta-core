@@ -15,8 +15,10 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 
 from inmanta import data
+from inmanta.server.services.compilerservice import CompilerService
 
 
 async def test_server_status(server, client):
@@ -48,3 +50,20 @@ async def test_server_status_database_unreachable(server, client):
             database_slice = slice
     assert database_slice
     assert not database_slice["status"]["connected"]
+
+
+async def test_server_status_timeout(server, client, monkeypatch):
+    async def hang(self):
+        await asyncio.sleep(0.2)
+        return {}
+
+    monkeypatch.setattr(CompilerService, "get_status", hang)
+
+    result = await client.get_server_status()
+    assert result.code == 200
+    compiler_slice = None
+    for slice in result.result["data"]["slices"]:
+        if slice["name"] == "core.compiler":
+            compiler_slice = slice
+    assert compiler_slice
+    assert "error" in compiler_slice["status"]

@@ -1,0 +1,9 @@
+---
+description: "The CRUDHandlerGeneric class was added. This class contains the same implementation as the CRUDHandler class, but is generic with respect to the specific PurgeableResource it acts on."
+issue-nr: 5555
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+  deprecation-note: "The CRUDHandler class is deprecated in favor of the CRUDHandlerGeneric class. In a future major release CRUDHandlerGeneric will be renamed to CRUDHandler. As such, it's recommended to import CRUDHandlerGeneric using the alias CRUDHandler."

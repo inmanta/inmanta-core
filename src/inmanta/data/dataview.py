@@ -37,6 +37,7 @@ from inmanta.data import (
     ConfigurationModel,
     DatabaseOrderV2,
     DesiredStateVersionOrder,
+    DiscoveredResourceOrder,
     FactOrder,
     InvalidQueryParameter,
     InvalidSort,
@@ -46,6 +47,7 @@ from inmanta.data import (
     Parameter,
     ParameterOrder,
     QueryFilter,
+    Resource,
     ResourceAction,
     ResourceHistoryOrder,
     ResourceLogOrder,
@@ -202,7 +204,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         sql_query, values = query_builder.build()
 
         records = await data.Resource.select_query(sql_query, values, no_obj=True)
-
         dtos = self.construct_dtos(records)
 
         paging_boundaries = None
@@ -882,21 +883,36 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         return f"/api/v2/resource/{parse.quote(self.rid, safe='')}/logs"
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        # The query uses a like query to match resource id with a resource_version_id. This means we need to escape the % and _
-        # characters in the query
-        resource_id = self.rid.replace("#", "##").replace("%", "#%").replace("_", "#_") + "%"
         query_builder = SimpleQueryBuilder(
-            select_clause="SELECT action_id, action, timestamp, unnested_message",
-            from_clause=f"""
-            FROM
-                    (SELECT action_id, action, (unnested_message ->> 'timestamp')::timestamptz as timestamp,
-                    unnested_message ->> 'level' as level,
-                    unnested_message ->> 'msg' as msg,
-                    unnested_message
-                    FROM {ResourceAction.table_name()}, unnest(resource_version_ids) rvid, unnest(messages) unnested_message
-                    WHERE environment = $1 AND rvid LIKE $2 ESCAPE '#') unnested
+            prelude=f"""
+                -- Get all resource action in the given environment for the given resource_id
+                WITH actions AS (
+                    SELECT  ra.*
+                    FROM {Resource.table_name()} AS r INNER JOIN resourceaction_resource AS rr ON (
+                                                          r.environment=rr.environment
+                                                          AND r.resource_id=rr.resource_id
+                                                          AND r.model=rr.resource_version
+                                                      )
+                                                      INNER JOIN {ResourceAction.table_name()} AS ra ON (
+                                                          rr.resource_action_id=ra.action_id
+                                                      )
+                    WHERE r.environment=$1 AND r.resource_id=$2
+                )
             """,
-            values=[self.environment.id, resource_id],
+            select_clause="SELECT action_id, action, timestamp, unnested_message",
+            from_clause="""
+            FROM
+                (
+                    SELECT action_id,
+                           action,
+                           (unnested_message ->> 'timestamp')::timestamptz AS timestamp,
+                           unnested_message ->> 'level' AS level,
+                           unnested_message ->> 'msg' AS msg,
+                           unnested_message
+                    FROM actions, unnest(messages) AS unnested_message
+                ) AS unnested
+            """,
+            values=[self.environment.id, self.rid],
         )
         return query_builder
 
@@ -1173,4 +1189,53 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                 status=agent["status"],
             )
             for agent in records
+        ]
+
+
+class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredResource]):
+    def __init__(
+        self,
+        environment: data.Environment,
+        limit: Optional[int] = None,
+        sort: str = "discovered_resource_id.asc",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> None:
+        super().__init__(
+            order=DiscoveredResourceOrder.parse_from_string(sort),
+            limit=limit,
+            first_id=None,
+            last_id=None,
+            start=start,
+            end=end,
+            filter=None,
+        )
+        self.environment = environment
+
+    @property
+    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+        """
+        Return the specification of the allowed filters, see FilterValidator
+        """
+        return {}
+
+    def get_base_url(self) -> str:
+        return "/api/v2/discovered"
+
+    def get_base_query(self) -> SimpleQueryBuilder:
+        query_builder = SimpleQueryBuilder(
+            select_clause="SELECT environment, discovered_resource_id, values",
+            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
+            filter_statements=["environment = $1"],
+            values=[self.environment.id],
+        )
+        return query_builder
+
+    def construct_dtos(self, records: Sequence[Record]) -> Sequence[dict[str, str]]:
+        return [
+            model.DiscoveredResource(
+                discovered_resource_id=res["discovered_resource_id"],
+                values=json.loads(res["values"]),
+            ).dict()
+            for res in records
         ]

@@ -1208,7 +1208,6 @@ async def test_are_agents_active(server, client, environment, agent_factory) -> 
     Ensure that the `AgentManager.are_agents_active()` method returns True when an agent
     is in the up or the paused state.
     """
-    agent_config.use_autostart_agent_map.set("True")
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     agent_name = "agent1"
     env_id = UUID(environment)

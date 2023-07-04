@@ -22,7 +22,7 @@ import re
 import pytest
 
 import inmanta.compiler as compiler
-from inmanta.ast import CompilerException, ExplicitPluginException, Namespace
+from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
 from utils import log_contains
 
 
@@ -90,6 +90,16 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
 std::equals(42, 42, arg1=42)
         """,
         "Multiple values for arg1 in equals() (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+    )
+
+
+def test_plugin_has_no_type_annotation(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import plugin_missing_type_annotation
+plugin_missing_type_annotation::no_type_annotation(42)
+        """,
+        "All arguments of plugin 'no_type_annotation' should be annotated",
     )
 
 
@@ -278,3 +288,33 @@ a.other = A()
         "Unset value in python code in plugin at call: std::attr " f"({dir}/main.cf:7) (Will be rescheduled by compiler)"
     )
     log_contains(caplog, "inmanta.ast.statements.call", logging.DEBUG, message)
+
+
+def test_plugin_with_keyword_only_arguments(snippetcompiler) -> None:
+    """
+    Verify that keyword-only arguments in plugins are handled correctly by the compiler.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import keyword_only_arguments
+
+# Test regular case. All arguments are provided
+std::equals(keyword_only_arguments::sum_all(1, 2, c=3, d=4), 10)
+
+# Test handling of default values
+std::equals(keyword_only_arguments::sum_all(1, c=3), 7)
+        """,
+    )
+    compiler.do_compile()
+
+    # Test required keyword-only argument is missing
+    snippetcompiler.setup_for_snippet(
+        """
+import keyword_only_arguments
+
+keyword_only_arguments::sum_all(1, 2)
+        """,
+    )
+    with pytest.raises(RuntimeException) as exc_info:
+        compiler.do_compile()
+    assert "Missing 1 required arguments for sum_all(): c" in exc_info.value.msg

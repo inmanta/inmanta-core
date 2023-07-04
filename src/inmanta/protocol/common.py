@@ -358,12 +358,15 @@ class MethodProperties(object):
 
     @classmethod
     def register_method(cls, properties: "MethodProperties") -> None:
-        """Register new method properties. Multiple properties on a method is supported but versions have to be unique."""
-        current_list = [x.api_version for x in cls.methods[properties.function.__name__]]
-        if properties.api_version in current_list:
+        """
+        Register new method properties. Multiple properties on a method is supported but the (URL, API version) combination has
+        to be unique.
+        """
+        current_list = [(x.path, x.api_version) for x in cls.methods[properties.function.__name__]]
+        if (properties.path, properties.api_version) in current_list:
             raise Exception(
                 f"Method {properties.function.__name__} already has a "
-                f"method definition for api version {properties.api_version}"
+                f"method definition for api path {properties.path} and API version {properties.api_version}"
             )
 
         cls.methods[properties.function.__name__].append(properties)
@@ -422,6 +425,7 @@ class MethodProperties(object):
             validate_sid = agent_server and not api
 
         self._path = UrlPath(path)
+        self.path = path
         self._operation = operation
         self._reply = reply
         self._arg_options = arg_options

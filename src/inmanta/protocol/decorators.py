@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import inspect
-from typing import Callable, Dict, List, Optional, TypeVar
+from typing import Callable, Dict, List, Optional, TypeVar, Union
 
 from inmanta import const
 from inmanta.types import Apireturn, HandlerType, MethodType
@@ -31,7 +31,7 @@ class handle(object):  # noqa: N801
     Decorator for subclasses of an endpoint to handle protocol methods
 
     :param method: A subclass of method that defines the method
-    :param api_version: When specific this handler is only associated with a method of the specific api verision. If the
+    :param api_version: When specific this handler is only associated with a method of the specific api version. If the
                         version is not defined, the handler is not associated with a rest endpoint.
     :param kwargs: Map arguments in the message from one name to an other
     """
@@ -128,7 +128,7 @@ def method(
 
 
 def typedmethod(
-    path: str,
+    path: Union[str, list[str]],
     operation: str = "POST",
     reply: bool = True,
     arg_options: Dict[str, common.ArgOption] = {},
@@ -149,7 +149,7 @@ def typedmethod(
     Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
     and model the protocol.
 
-    :param path: The url path to use for this call. This path can contain parameter names of the function. These names
+    :param path: The url path(s) to use for this call. This path can contain parameter names of the function. These names
                  should be enclosed in < > brackets.
     :param operation: The type of HTTP operation (verb)
     :param timeout: nr of seconds before request it terminated
@@ -178,28 +178,30 @@ def typedmethod(
     """
 
     def wrapper(func: MethodT) -> MethodT:
-        properties = common.MethodProperties(
-            func,
-            path,
-            operation,
-            reply,
-            arg_options,
-            timeout,
-            server_agent,
-            api,
-            agent_server,
-            validate_sid,
-            client_types,
-            api_version,
-            api_prefix,
-            True,
-            True,
-            envelope_key,
-            strict_typing=strict_typing,
-            enforce_auth=enforce_auth,
-            varkw=varkw,
-        )
-        common.MethodProperties.register_method(properties)
+        paths = path if isinstance(path, list) else [path]
+        for current_path in paths:
+            properties = common.MethodProperties(
+                func,
+                current_path,
+                operation,
+                reply,
+                arg_options,
+                timeout,
+                server_agent,
+                api,
+                agent_server,
+                validate_sid,
+                client_types,
+                api_version,
+                api_prefix,
+                True,
+                True,
+                envelope_key,
+                strict_typing=strict_typing,
+                enforce_auth=enforce_auth,
+                varkw=varkw,
+            )
+            common.MethodProperties.register_method(properties)
         return func
 
     return wrapper

@@ -43,6 +43,7 @@ async def migrate_v202111260_to_v202203140(
     await ibl.stop(timeout=15)
 
 
+@pytest.mark.slowtest
 async def test_added_notification_table(
     migrate_v202111260_to_v202203140: Callable[[], Awaitable[None]],
     get_tables_in_db: Callable[[], Awaitable[List[str]]],

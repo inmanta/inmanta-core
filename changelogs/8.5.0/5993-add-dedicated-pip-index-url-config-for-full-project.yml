@@ -1,0 +1,4 @@
+description: reverted on iso6
+issue-nr: 5993
+change-type: patch
+destination-branches: [iso6]

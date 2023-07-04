@@ -500,7 +500,11 @@ async def test_agent_process(init_dataclasses_and_load_schema):
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
 
 
-async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql_client):
+@pytest.mark.parametrize("env1_halted", [True, False])
+@pytest.mark.parametrize("env2_halted", [True, False])
+async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql_client, env1_halted, env2_halted):
+    # tests the agent process cleanup function with different combinations of halted environments
+
     project = data.Project(name="test")
     await project.insert()
 
@@ -545,14 +549,23 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
     await insert_agent_proc_and_instances(env2.id, "proc2", datetime.datetime(2020, 1, 1, 2, 0), [now, now])
     await insert_agent_proc_and_instances(env2.id, "proc2", datetime.datetime(2020, 1, 1, 3, 0), [now])
 
+    if env1_halted:
+        await env1.update_fields(halted=True)
+    if env2_halted:
+        await env2.update_fields(halted=True)
+
     # Run cleanup twice to verify stability
     for i in range(2):
         # Perform cleanup
         await data.AgentProcess.cleanup(nr_expired_records_to_keep=1)
         # Assert outcome
+        # Halting env1 has no impact on the cleanup: an expired instance will be kept in both cases
+        # Halting env2 has an impact on the cleanup: if it's halted 5 expired instances in 2 processes will not be removed.
         await verify_nr_of_records(env1.id, hostname="proc1", expected_nr_procs=2, expected_nr_instances=2)
         await verify_nr_of_records(env1.id, hostname="proc2", expected_nr_procs=1, expected_nr_instances=1)
-        await verify_nr_of_records(env2.id, hostname="proc2", expected_nr_procs=2, expected_nr_instances=3)
+        await verify_nr_of_records(
+            env2.id, hostname="proc2", expected_nr_procs=4 if env2_halted else 2, expected_nr_instances=8 if env2_halted else 3
+        )
         # Assert records are deleted in the correct order
         query = """
             SELECT expired
@@ -560,8 +573,10 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
             WHERE environment=$1 AND hostname=$2 AND expired IS NOT NULL
         """
         result = await postgresql_client.fetch(query, env2.id, "proc2")
-        assert len(result) == 1
-        assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0).astimezone()
+        assert len(result) == 3 if env2_halted else 1
+        if len(result) == 1:
+            # if the cleanup was done (env2 not halted), verify the expired record that was kept is the right one.
+            assert result[0]["expired"] == datetime.datetime(2020, 1, 1, 3, 0).astimezone()
 
 
 async def test_delete_agentinstance_which_is_primary(init_dataclasses_and_load_schema):
@@ -1795,6 +1810,92 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     assert res1.attribute_hash != res3.attribute_hash
 
 
+async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_load_schema):
+    """
+    Test for the get_resource_type_count_for_latest_version query
+    """
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    async def assert_expected_count(expected_report: Dict[str, int]):
+        # Checks the expected_report against the actual one
+        report = await data.Resource.get_resource_type_count_for_latest_version(env.id)
+        assert report == expected_report
+
+    # model 1
+    version = 1
+    cm1 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        deployed=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm1.insert()
+
+    res1_1 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file1"},
+    )
+    await res1_1.insert()
+
+    await assert_expected_count({"std::File": 1})  # 1 File resource in model v1
+
+    res2_1 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2_1.insert()
+
+    await assert_expected_count({"std::File": 2})  # 2 File resources in model v1
+
+    version += 1
+    cm2 = data.ConfigurationModel(
+        environment=env.id,
+        version=version,
+        date=datetime.datetime.now(),
+        total=1,
+        version_info={},
+        released=True,
+        deployed=True,
+        is_suitable_for_partial_compiles=False,
+    )
+    await cm2.insert()
+
+    res2_2 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+        attributes={"path": "/etc/file2"},
+    )
+    await res2_2.insert()
+
+    await assert_expected_count({"std::File": 1})  # 1 File resource in model v2
+
+    res3_2 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::Dummy[agent1,path=/etc/file3],v=%s" % version,
+        status=const.ResourceState.deployed,
+        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+    )
+    await res3_2.insert()
+
+    await assert_expected_count({"std::File": 1, "std::Dummy": 1})  # 1 File resource and 1 Dummy resource in model v2
+
+
 async def test_resources_report(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -2235,12 +2336,17 @@ async def test_code(init_dataclasses_and_load_schema):
     assert len(await data.Code.get_versions(env.id, code3.version + 1)) == 1
 
 
-async def test_parameter(init_dataclasses_and_load_schema):
+@pytest.mark.parametrize("halted", [True, False])
+async def test_parameter(init_dataclasses_and_load_schema, halted):
+    # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
     project = data.Project(name="test")
     await project.insert()
 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
+
+    if halted:
+        await env.update_fields(halted=True)
 
     time1 = datetime.datetime(2018, 7, 14, 12, 30)
     time2 = datetime.datetime(2018, 7, 16, 12, 30)
@@ -2255,16 +2361,18 @@ async def test_parameter(init_dataclasses_and_load_schema):
         parameters.append(parameter)
         await parameter.insert()
 
-    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 12, 12, 30))
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 12, 12, 30))
     assert len(updated_before) == 0
-    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 14, 12, 30))
-    assert len(updated_before) == 1
-    assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
-    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 15, 12, 30))
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 14, 12, 30))
+    assert len(updated_before) == (0 if halted else 1)
+    if not halted:
+        assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 15, 12, 30))
     list_of_ids = [(x.environment, x.name) for x in updated_before]
-    assert len(updated_before) == 2
-    assert (parameters[0].environment, parameters[0].name) in list_of_ids
-    assert (parameters[2].environment, parameters[2].name) in list_of_ids
+    assert len(updated_before) == (0 if halted else 2)
+    if not halted:
+        assert (parameters[0].environment, parameters[0].name) in list_of_ids
+        assert (parameters[2].environment, parameters[2].name) in list_of_ids
 
 
 async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
@@ -2518,81 +2626,103 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         assert item in table_names_in_database
 
 
-async def test_purgelog_test(init_dataclasses_and_load_schema):
+@pytest.mark.parametrize("env1_halted", [True, False])
+@pytest.mark.parametrize("env2_halted", [True, False])
+async def test_purgelog_test(init_dataclasses_and_load_schema, env1_halted, env2_halted):
     project = data.Project(name="test")
     await project.insert()
 
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
+    envs = []
 
-    version = 1
-    cm = data.ConfigurationModel(
-        environment=env.id,
-        version=version,
-        date=datetime.datetime.now(),
-        total=1,
-        version_info={},
-        released=True,
-        deployed=True,
-        is_suitable_for_partial_compiles=False,
-    )
-    await cm.insert()
+    timestamp_eight_days_ago = datetime.datetime.now().astimezone() - datetime.timedelta(days=8)
+    timestamp_six_days_ago = datetime.datetime.now().astimezone() - datetime.timedelta(days=6)
 
-    res1 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file1],v=1",
-        status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
-        attributes={"path": "/etc/file2"},
-    )
-    await res1.insert()
+    for i in range(2):
+        env = data.Environment(name=f"dev-{i}", project=project.id, repo_url="", repo_branch="")
+        await env.insert()
+        envs.append(env)
 
-    # ResourceAction 1
-    timestamp_ra1 = datetime.datetime.now() - datetime.timedelta(days=8)
-    log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
-    action_id = uuid.uuid4()
-    ra1 = data.ResourceAction(
-        environment=env.id,
-        version=version,
-        resource_version_ids=[res1.resource_version_id],
-        action_id=action_id,
-        action=const.ResourceAction.store,
-        started=timestamp_ra1,
-        finished=datetime.datetime.now(),
-        messages=[log_line_ra1],
-    )
-    await ra1.insert()
+        version = 1
+        cm = data.ConfigurationModel(
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=1,
+            version_info={},
+            released=True,
+            deployed=True,
+            is_suitable_for_partial_compiles=False,
+        )
+        await cm.insert()
 
-    res2 = data.Resource.new(
-        environment=env.id,
-        resource_version_id="std::File[agent1,path=/etc/file2],v=1",
-        status=const.ResourceState.deployed,
-        last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
-        attributes={"path": "/etc/file2"},
-    )
-    await res2.insert()
+        res1 = data.Resource.new(
+            environment=env.id,
+            resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+            attributes={"path": "/etc/file2"},
+        )
+        await res1.insert()
 
-    # ResourceAction 2
-    timestamp_ra2 = datetime.datetime.now() - datetime.timedelta(days=6)
-    log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
-    action_id = uuid.uuid4()
-    ra2 = data.ResourceAction(
-        environment=env.id,
-        version=version,
-        resource_version_ids=[res2.resource_version_id],
-        action_id=action_id,
-        action=const.ResourceAction.store,
-        started=timestamp_ra2,
-        finished=datetime.datetime.now(),
-        messages=[log_line_ra2],
-    )
-    await ra2.insert()
+        # ResourceAction 1
 
-    assert len(await data.ResourceAction.get_list()) == 2
+        log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
+        action_id = uuid.uuid4()
+        ra1 = data.ResourceAction(
+            environment=env.id,
+            version=version,
+            resource_version_ids=[res1.resource_version_id],
+            action_id=action_id,
+            action=const.ResourceAction.store,
+            started=timestamp_eight_days_ago,
+            finished=datetime.datetime.now(),
+            messages=[log_line_ra1],
+        )
+        await ra1.insert()
+
+        res2 = data.Resource.new(
+            environment=env.id,
+            resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+            status=const.ResourceState.deployed,
+            last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+            attributes={"path": "/etc/file2"},
+        )
+        await res2.insert()
+
+        # ResourceAction 2
+        log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
+        action_id = uuid.uuid4()
+        ra2 = data.ResourceAction(
+            environment=env.id,
+            version=version,
+            resource_version_ids=[res2.resource_version_id],
+            action_id=action_id,
+            action=const.ResourceAction.store,
+            started=timestamp_six_days_ago,
+            finished=datetime.datetime.now(),
+            messages=[log_line_ra2],
+        )
+        await ra2.insert()
+
+    if env1_halted:
+        await envs[0].update_fields(halted=True)
+    if env2_halted:
+        await envs[1].update_fields(halted=True)
+
+    # Make the retention time for the second environment shorter than the default 7 days
+    await envs[1].set(data.RESOURCE_ACTION_LOGS_RETENTION, value=2)
+
+    assert len(await data.ResourceAction.get_list()) == 4  # Two ra's in each environment
     await data.ResourceAction.purge_logs()
-    assert len(await data.ResourceAction.get_list()) == 1
+    number_ra_env1 = 2 if env1_halted else 1  # if not halted one is cleaned up
+    number_ra_env2 = 2 if env2_halted else 0  # if not halted both are cleaned up
+    assert len(await data.ResourceAction.get_list()) == number_ra_env1 + number_ra_env2
     remaining_resource_action = (await data.ResourceAction.get_list())[0]
-    assert remaining_resource_action.action_id == ra2.action_id
+
+    # verify that after a cleanup (without halted envs) the remaining record is the right one.
+    if not (env1_halted or env2_halted):
+        assert remaining_resource_action.environment == envs[0].id
+        assert remaining_resource_action.started == timestamp_six_days_ago
 
 
 async def test_insert_many(init_dataclasses_and_load_schema, postgresql_client):

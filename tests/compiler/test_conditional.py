@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import textwrap
+
 import pytest
 
 import inmanta.compiler as compiler
@@ -595,5 +597,32 @@ end
 
 A(y = A())
         """
+    )
+    compiler.do_compile()
+
+
+def test_conditional_expression_gradual(snippetcompiler) -> None:
+    """
+    Verify that conditional expressions are executed gradually.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            # gradual execution of iterable
+            a = A()
+            b = A(others=true ? a.others : "unreachable")
+            a.others += A()
+            if b.others is defined:
+                # this seems like bad practice, but it should work as long as the list comprehension is executed gradually.
+                a.others += A()
+            end
+            """.strip(
+                "\n"
+            )
+        )
     )
     compiler.do_compile()

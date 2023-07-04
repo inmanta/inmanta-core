@@ -40,8 +40,8 @@ from logging import Logger
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
 
+import asyncpg
 from tornado import gen
-from tornado.ioloop import IOLoop
 
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
@@ -241,11 +241,12 @@ class Scheduler(object):
     An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
     same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
     `call` functions.
+    Assumes an event loop is already running on this thread.
     """
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[ScheduledTask, object] = {}
+        self._scheduled: Dict[ScheduledTask, asyncio.TimerHandle] = {}
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
@@ -284,6 +285,7 @@ class Scheduler(object):
         action: TaskMethod,
         schedule: Union[TaskSchedule, int],  # int for backward compatibility,
         cancel_on_stop: bool = True,
+        quiet_mode: bool = False,
     ) -> ScheduledTask:
         """
         Add a new action
@@ -291,6 +293,8 @@ class Scheduler(object):
         :param action: A function to call periodically
         :param schedule: The schedule for this action
         :param cancel_on_stop: Cancel the task when the scheduler is stopped. If false, the coroutine will be awaited.
+        :param quiet_mode: Set to true to disable logging the recurring  notification that the action is being called.
+        Use this to avoid polluting the server log for very frequent actions.
         """
         assert is_coroutine(action)
 
@@ -312,7 +316,8 @@ class Scheduler(object):
             self.remove(task_spec)
 
         def action_function() -> None:
-            LOGGER.info("Calling %s" % action)
+            if not quiet_mode:
+                LOGGER.info("Calling %s", action)
             if task_spec in self._scheduled:
                 try:
                     task = ensure_future_and_handle_exception(
@@ -326,10 +331,10 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
                     # next iteration
-                    ihandle = IOLoop.current().call_later(schedule_typed.get_next_delay(), action_function)
+                    ihandle = asyncio.get_running_loop().call_later(schedule_typed.get_next_delay(), action_function)
                     self._scheduled[task_spec] = ihandle
 
-        handle = IOLoop.current().call_later(schedule_typed.get_initial_delay(), action_function)
+        handle: asyncio.TimerHandle = asyncio.get_running_loop().call_later(schedule_typed.get_initial_delay(), action_function)
         self._scheduled[task_spec] = handle
         return task_spec
 
@@ -339,7 +344,7 @@ class Scheduler(object):
         Remove a scheduled action
         """
         if task in self._scheduled:
-            IOLoop.current().remove_timeout(self._scheduled[task])
+            self._scheduled[task].cancel()
             del self._scheduled[task]
 
     @stable_api
@@ -352,7 +357,7 @@ class Scheduler(object):
             # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
             while True:
                 _, handle = self._scheduled.popitem()
-                IOLoop.current().remove_timeout(handle)
+                handle.cancel()
         except KeyError:
             pass
 
@@ -716,7 +721,7 @@ async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
     2.The python sdk has no support for async awaiting threadpool shutdown (except for the default pool)
     """
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     future = loop.create_future()
 
     def join() -> None:
@@ -733,3 +738,49 @@ async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
         await future
     finally:
         thread.join()
+
+
+def ensure_event_loop() -> asyncio.AbstractEventLoop:
+    """
+    Returns the event loop for this thread. Creates a new one if none exists yet and registers it with asyncio's active event
+    loop policy. Does not ensure that the event loop is running.
+    """
+    try:
+        # nothing needs to be done if this thread already has an event loop
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        # asyncio.set_event_loop sets the event loop for this thread only
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        return new_loop
+
+
+class ExhaustedPoolWatcher:
+    """
+    This class keeps track of database pool exhaustion events and offers reporting capabilities.
+
+    """
+
+    def __init__(self, pool: asyncpg.pool.Pool) -> None:
+        self._exhausted_pool_events_count: int = 0
+        self._pool: asyncpg.pool.Pool = pool
+
+    def report_and_reset(self, logger: logging.Logger) -> None:
+        """
+        Log how many exhausted pool events were recorded since the last time the counter
+        was reset, if any, and reset the counter.
+        """
+        if self._exhausted_pool_events_count > 0:
+            logger.warning("Database pool was exhausted %d times in the past 24h.", self._exhausted_pool_events_count)
+            self._reset_counter()
+
+    def check_for_pool_exhaustion(self) -> None:
+        """
+        Checks if the database pool is exhausted
+        """
+        pool_exhausted: bool = self._pool.get_size() == self._pool.get_max_size() and self._pool.get_idle_size() == 0
+        if pool_exhausted:
+            self._exhausted_pool_events_count += 1
+
+    def _reset_counter(self) -> None:
+        self._exhausted_pool_events_count = 0

@@ -1,0 +1,6 @@
+---
+description: The hardcoded agent backoff time is now configurable using the `config.agent_get_resource_backoff` config option.
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
