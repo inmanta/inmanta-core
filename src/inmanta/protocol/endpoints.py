@@ -225,7 +225,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         try:
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
-                result = await self._client.heartbeat(
+                result = await self._heartbeat_client.heartbeat(
                     sid=str(self.sessionid),
                     tid=str(self._env_id),
                     endpoint_names=list(self.end_point_names),
