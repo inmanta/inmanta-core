@@ -2624,7 +2624,9 @@ class Result:
 
 
 ignore = Result(
-    wait_for=0, values=("value2", "value2", "value2"), msg="Not terminating run 'Initial Deploy' for periodic 'Second Deploy'"
+    wait_for=0,
+    values=("value2", "value2", "value2"),
+    msg="Ignoring new run 'Second Deploy' in favor of current 'Initial Deploy'",
 )
 terminate = Result(
     wait_for=1, values=("value2", "value2", "value3"), msg="Terminating run 'Initial Deploy' for 'Second Deploy'"
@@ -2638,22 +2640,23 @@ defer = Result(wait_for=1, values=("value2", "value2", "value3"), msg="Deferring
 @pytest.mark.parametrize(
     ["first_full", "first_periodic", "second_full", "second_periodic", "action", "deploy_counts"],
     [
-        [True, True, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full periodic
-        [True, False, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full
+        [True, True, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full periodic #6202
+        [True, False, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full #6202
         [True, True, True, False, terminate, (2, 1, 1, 1)],  # Full terminates full periodic
         [True, False, True, False, terminate, (2, 1, 1, 1)],  # Full terminates full
         [False, True, False, True, terminate, (1, 1, 1, 1)],  # Increment * terminates Increment *
         [False, True, False, False, terminate, (1, 1, 1, 1)],
         [False, False, False, True, terminate, (1, 1, 1, 1)],
         [False, False, False, False, terminate, (1, 1, 1, 1)],
-        [True, True, False, True, ignore, (1, 1, 1, 1)],  # periodic full ignores periodic increment
-        # [True, True, False, False, interrupt,(2,1,2,1)], # periodic full interrupted by increment  # testcase unstable due to complex waiting
-        [True, False, False, True, ignore, (1, 1, 1, 1)],  # full ignores periodic increment
-        # [True, False, False, False, interrupt, (2,1,2,1)],  # full interrupted by increment # testcase unstable due to complex waiting
+        [True, True, False, True, ignore, (1, 1, 1, 1)],  # periodic increment ignored by periodic full  #6202
+        [True, False, False, True, ignore, (1, 1, 1, 1)],  # periodic increment ignored by full #6202
         [False, True, True, True, terminate, (2, 1, 1, 1)],  # Incremental periodic terminated by full periodic
         [False, True, True, False, terminate, (2, 1, 1, 1)],  # Incremental periodic terminated by full
         [False, False, True, True, defer, (2, 1, 2, 2)],  # Incremental defers full periodic
         [False, False, True, False, defer, (2, 1, 2, 2)],  # Incremental defers full
+        # requires more complex waiting see test_s_repair_interrupted_by_deploy_request
+        # [True, False, False, False, interrupt, (2,1,2,1)],  # full interrupted by increment
+        # [True, True, False, False, interrupt,(2,1,2,1)], # periodic full interrupted by increment
     ],
 )
 async def test_s_periodic_Vs_full(

@@ -338,29 +338,47 @@ class RemoteResourceAction(ResourceActionBase):
 
 @dataclasses.dataclass
 class DeployRequest:
+    """
+    A request to perform a deploy
+
+    :param is_repair: is this a full deploy/repair run or incremental?
+    :param is_periodic: is this deploy triggered by a timer?
+    :param reason: textual description of the deployment
+    """
+
     is_repair: bool
     is_periodic: bool
     reason: str
 
     def interrupt(self, other: "DeployRequest") -> "DeployRequest":
+        """Interrupt this deploy and for the other and produce a new request"""
         return DeployRequest(
             self.is_repair, self.is_periodic, "Restarting run '%s', interrupted for '%s'" % (self.reason, other.reason)
         )
 
 
 class DeployRequestAction(str, enum.Enum):
+    """
+    When a deploy is running and a new request arrives, we can take the following actions
+    """
+
     ignore = "ignore"
-    defer = "defer"
+    """ ignore the new request, continue with the exiting deploy """
     terminate = "terminate"
+    """ terminate the current deploy, start the new one """
+    defer = "defer"
+    """ defer the new request,  continue with the exiting deploy, start the new one when the current deploy is done"""
     interrupt = "interrupt"
+    """ interrupt the current deploy: cancel it, start the new one and restart the current deploy when the new one is done"""
 
 
 # This matrix describes what do when a new DeployRequest enters before the old one is done
 # Format is old_is_repair, old_is_periodic, new_is_repair, new_is_periodic
 # The underlying idea is that
 # 1. periodic deploys have no time pressure, they can be delayed
-# 2. periodic deploys should not interrupt each other to prevent restart loops
-# 3. on non-period deploys increments take precedence
+# 2. non-periodic deploy should run as soon as possible
+# 3. non-periodic incremental deploy take precedence over repairs (as they are smaller)
+# 4. periodic deploys should not interrupt each other to prevent restart loops
 deploy_response_matrix = {
     # Periodic restart loops: Full periodic is never interrupted by periodic
     (True, True, True, True): DeployRequestAction.ignore,  # Full periodic ignores full periodic to prevent restart loops
@@ -451,9 +469,11 @@ class ResourceScheduler(object):
         if not self.finished():
             # we are still running
             assert self.running is not None
+            # Get correct action
             response = deploy_response_matrix[
                 (self.running.is_repair, self.running.is_periodic, new_request.is_repair, new_request.is_periodic)
             ]
+            # Execute action
             if response == DeployRequestAction.terminate:
                 self.logger.info("Terminating run '%s' for '%s'", self.running.reason, new_request.reason)
             elif response == DeployRequestAction.defer:
@@ -461,7 +481,7 @@ class ResourceScheduler(object):
                 self.deferred = new_request
                 return
             elif response == DeployRequestAction.ignore:
-                self.logger.info("Not terminating run '%s' for periodic '%s'", self.running.reason, new_request.reason)
+                self.logger.info("Ignoring new run '%s' in favor of current '%s'", new_request.reason, self.running.reason)
                 return
             elif response == DeployRequestAction.interrupt:
                 self.logger.info("Interrupting run '%s' for '%s'", self.running.reason, new_request.reason)
