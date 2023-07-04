@@ -17,7 +17,6 @@
 """
 import asyncio
 import dataclasses
-import enum
 import logging
 import time
 import uuid

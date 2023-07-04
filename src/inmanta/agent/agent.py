@@ -391,7 +391,7 @@ deploy_response_matrix = {
     ): DeployRequestAction.terminate,  # Incremental periodic terminated by full periodic: upgrade to full
     (False, True, True, False): DeployRequestAction.terminate,  # Incremental periodic terminated by full: upgrade to full
     (True, False, True, True): DeployRequestAction.ignore,  # Full ignores full periodic to avoid restart loops
-    ## Same terminates same: focus on the new one
+    # Same terminates same: focus on the new one
     (True, True, True, False): DeployRequestAction.terminate,  # Full periodic terminated by Full
     (True, False, True, False): DeployRequestAction.terminate,  # Full terminated by Full
     # Increment * terminates Increment *
