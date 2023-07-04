@@ -1254,13 +1254,6 @@ class Agent(SessionEndpoint):
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
-    async def get_latest_version(self) -> None:
-        """
-        Get the latest version of managed resources for all agents
-        """
-        for agent in self._instances.values():
-            await agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
-
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> Set[str]:
         """Ensure that the code for the given environment and version is loaded"""
         failed_to_load: Set[str] = set()
