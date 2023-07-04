@@ -84,12 +84,19 @@ def test_phase_1(caplog):
 
         config.server_enabled_extensions.set("testplugin,noext")
 
-        all = ibl._load_extensions()
+        with caplog.at_level(logging.INFO):
+            all = ibl._load_extensions()
 
-        assert "testplugin" in all
-        assert all["testplugin"] == inmanta_ext.testplugin.extension
+            assert "testplugin" in all
+            assert all["testplugin"] == inmanta_ext.testplugin.extension
 
-        log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
+            log_contains(
+                caplog,
+                "inmanta.server.bootloader",
+                logging.INFO,
+                "Enabled extensions: inmanta_ext.testplugin, inmanta_ext.noext, inmanta_ext.core",
+            )
+            log_contains(caplog, "inmanta.server.bootloader", logging.WARNING, "Could not load extension inmanta_ext.noext")
 
 
 def test_phase_2():

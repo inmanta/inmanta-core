@@ -82,7 +82,6 @@ LOGGER = logging.getLogger(__name__)
 DBLIMIT = 100000
 APILIMIT = 1000
 
-
 # TODO: disconnect
 # TODO: difference between None and not set
 
@@ -905,6 +904,17 @@ class NotificationOrder(AbstractDatabaseOrderV2):
         return (ColumnNameStr("id"), UUIDColumn)
 
 
+class DiscoveredResourceOrder(SingleDatabaseOrder):
+    """Represents the ordering by which discovered resources should be sorted"""
+
+    @classmethod
+    def get_valid_sort_columns(cls) -> Dict[ColumnNameStr, ColumnType]:
+        """Describes the names and types of the columns that are valid for this DatabaseOrder"""
+        return {
+            ColumnNameStr("discovered_resource_id"): StringColumn,
+        }
+
+
 class BaseQueryBuilder(ABC):
     """Provides a way to build up a sql query from its parts.
     Each method returns a new query builder instance, with the additional parameters processed"""
@@ -1553,13 +1563,19 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         (column_names, values) = self._get_column_names_and_values()
         column_names_as_sql_string = ",".join(column_names)
-        values_as_parameterize_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = (
             f"INSERT INTO {self.table_name()} "
             f"({column_names_as_sql_string}) "
-            f"VALUES ({values_as_parameterize_sql_string})"
+            f"VALUES ({values_as_parameterized_sql_string})"
         )
         await self._execute_query(query, *values, connection=connection)
+
+    async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Insert a new document based on the instance passed. If the document already exists, overwrite it.
+        """
+        return await self.insert_many_with_overwrite([self], connection=connection)
 
     @classmethod
     async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
@@ -1624,6 +1640,43 @@ class BaseDocument(object, metaclass=DocumentMeta):
         async with cls.get_connection(connection) as con:
             await con.copy_records_to_table(table_name=cls.table_name(), columns=columns, records=records, schema_name="public")
 
+    @classmethod
+    async def insert_many_with_overwrite(
+        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        Insert new documents. If the document already exists, overwrite it.
+        """
+        if not documents:
+            return
+        column_names = cls.get_field_names()
+        primary_key_fields = cls._get_names_of_primary_key_fields()
+        primary_key_string = ",".join(primary_key_fields)
+        update_set = set(column_names) - set(cls._get_names_of_primary_key_fields())
+        update_set_string = ",\n".join([f"{item} = EXCLUDED.{item}" for item in update_set])
+
+        values: List[List[object]] = [document._get_column_names_and_values()[1] for document in documents]
+
+        column_names_as_sql_string = ", ".join(column_names)
+
+        number_of_columns = len(values[0])
+        placeholders = ", ".join(
+            [
+                "(" + ", ".join([f"${doc * number_of_columns + col}" for col in range(1, number_of_columns + 1)]) + ")"
+                for doc in range(len(values))
+            ]
+        )
+
+        query = f"""INSERT INTO {cls.table_name()}
+                    ({column_names_as_sql_string})
+                    VALUES {placeholders}
+                    ON CONFLICT ({primary_key_string})
+                    DO UPDATE SET
+                    {update_set_string};"""
+
+        flattened_values = [item for sublist in values for item in sublist]
+        await cls._execute_query(query, *flattened_values)
+
     def add_default_values_when_undefined(self, **kwargs: object) -> Dict[str, object]:
         result = dict(kwargs)
         for name, field in self._fields.items():
@@ -1641,10 +1694,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
         (column_names, values) = self._get_column_names_and_values()
-        values_as_parameterize_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
+        values_as_parameterized_sql_string = ",".join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
         (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
-        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
+        query = "UPDATE " + self.table_name() + " SET " + values_as_parameterized_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values, connection=connection)
 
     def _get_set_statement(self, **kwargs: object) -> Tuple[str, List[object]]:
@@ -2334,7 +2387,6 @@ AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 AUTO_FULL_COMPILE = "auto_full_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
-PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
@@ -2596,20 +2648,12 @@ class Environment(BaseDocument):
             validator=convert_int,
             doc="The number of versions to keep stored in the database",
         ),
-        PURGE_ON_DELETE: Setting(
-            name=PURGE_ON_DELETE,
-            default=False,
-            typ="bool",
-            validator=convert_boolean,
-            doc="Enable purge on delete. When set to true, the server will detect the absence of resources with purge_on_delete"
-            " set to true and automatically purges them.",
-        ),
         PROTECTED_ENVIRONMENT: Setting(
             name=PROTECTED_ENVIRONMENT,
             default=False,
             typ="bool",
             validator=convert_boolean,
-            doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
+            doc="When set to true, this environment cannot be cleared or deleted.",
         ),
         NOTIFICATION_RETENTION: Setting(
             name=NOTIFICATION_RETENTION,
@@ -2904,8 +2948,19 @@ class Parameter(BaseDocument):
     metadata: Optional[JsonType] = None
 
     @classmethod
-    async def get_updated_before(cls, updated_before: datetime.datetime) -> List["Parameter"]:
-        query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
+    async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> List["Parameter"]:
+        """
+        Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
+        """
+        query = f"""
+         WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        SELECT * FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) and updated < $1;
+        """
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result
@@ -3104,8 +3159,12 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def cleanup(cls, nr_expired_records_to_keep: int) -> None:
         query = f"""
-            DELETE FROM {cls.table_name()} as a1
+            WITH halted_env AS (
+                SELECT id FROM environment WHERE halted = true
+            )
+            DELETE FROM {cls.table_name()} AS a1
             WHERE a1.expired IS NOT NULL AND
+                  a1.environment NOT IN (SELECT id FROM halted_env) AND
                   (
                     -- Take nr_expired_records_to_keep into account
                     SELECT count(*)
@@ -3119,10 +3178,11 @@ class AgentProcess(BaseDocument):
                   -- Agent process only has expired agent instances
                   NOT EXISTS(
                     SELECT 1
-                    FROM {cls.table_name()} as agentprocess INNER JOIN {AgentInstance.table_name()} as agentinstance
-                         ON agentinstance.process = agentprocess.sid
-                    WHERE agentprocess.sid = a1.sid and agentinstance.expired IS NULL
-                  )
+                    FROM {cls.table_name()} AS agentprocess
+                    INNER JOIN {AgentInstance.table_name()} AS agentinstance
+                    ON agentinstance.process = agentprocess.sid
+                    WHERE agentprocess.sid = a1.sid AND agentinstance.expired IS NULL
+                  );
         """
         await cls._execute_query(query, cls._get_value(nr_expired_records_to_keep))
 
@@ -3451,6 +3511,11 @@ AND NOT EXISTS (
     FROM public.resource AS re
     WHERE a.environment=re.environment
     AND a.name=re.agent
+)
+AND a.environment IN (
+    SELECT id
+    FROM public.environment
+    WHERE NOT halted
 );
 """
         await cls._execute_query(query, connection=connection)
@@ -3635,10 +3700,16 @@ class Compile(BaseDocument):
         return results
 
     @classmethod
-    async def get_next_compiles_count(cls) -> int:
-        """Get the number of compiles in the queue for ALL environments"""
-        result = await cls._fetch_int(f"SELECT count(*) FROM {cls.table_name()} WHERE NOT handled AND completed IS NULL")
-        return result
+    async def get_total_length_of_all_compile_queues(cls, exclude_started_compiles: bool = True) -> int:
+        """
+        Return the total length of all the compile queues on the Inmanta server.
+
+        :param exclude_started_compiles: True iff don't count compiles that started running, but are not finished yet.
+        """
+        query = f"SELECT count(*) FROM {cls.table_name()} WHERE completed IS NULL"
+        if exclude_started_compiles:
+            query += " AND started IS NULL"
+        return await cls._fetch_int(query)
 
     @classmethod
     async def get_by_remote_id(cls, environment_id: uuid.UUID, remote_id: uuid.UUID) -> "Sequence[Compile]":
@@ -3652,7 +3723,15 @@ class Compile(BaseDocument):
     async def delete_older_than(
         cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
     ) -> None:
-        query = "DELETE FROM " + cls.table_name() + " WHERE completed <= $1::timestamp with time zone"
+        query = f"""
+        WITH non_halted_envs AS (
+          SELECT id FROM public.environment WHERE NOT halted
+        )
+        DELETE FROM {cls.table_name()}
+        WHERE environment IN (
+          SELECT id FROM non_halted_envs
+        ) AND completed <= $1::timestamp with time zone;
+        """
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     @classmethod
@@ -4042,13 +4121,20 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def purge_logs(cls) -> None:
-        environments = await Environment.get_list()
-        for env in environments:
-            time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
-            keep_logs_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
-            value = cls._get_value(keep_logs_until)
-            await cls._execute_query(query, value)
+        default_retention_time = Environment._settings[RESOURCE_ACTION_LOGS_RETENTION].default
+
+        query = f"""
+            WITH non_halted_envs AS (
+                SELECT id, (COALESCE((settings->>'resource_action_logs_retention')::int, $1)) AS retention_days
+                FROM {Environment.table_name()}
+                WHERE NOT halted
+            )
+            DELETE FROM {cls.table_name()}
+            USING non_halted_envs
+            WHERE environment = non_halted_envs.id
+                AND started < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+        """
+        await cls._execute_query(query, default_retention_time)
 
     @classmethod
     async def query_resource_actions(
@@ -4338,8 +4424,7 @@ class Resource(BaseDocument):
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
-        if "version" not in record["attributes"]:
-            record["attributes"]["version"] = version
+        record["attributes"]["version"] = version
         record["provides"] = [resources.Id.set_version_in_id(id, version) for id in record["provides"]]
 
     @classmethod
@@ -4475,6 +4560,31 @@ class Resource(BaseDocument):
                     # This prevents injection attacks.
                     if util.is_sub_dict(attributes, resource.attributes):
                         result.append(resource)
+        return result
+
+    @classmethod
+    async def get_resource_type_count_for_latest_version(cls, environment: uuid.UUID) -> dict[str, int]:
+        """
+        Returns the count for each resource_type over all resources in the model's latest version
+        """
+        query_latest_model = f"""
+            SELECT max(version)
+            FROM {ConfigurationModel.table_name()}
+            WHERE environment=$1
+        """
+        query = f"""
+            SELECT resource_type, count(*) as count
+            FROM {Resource.table_name()}
+            WHERE environment=$1 AND model=({query_latest_model})
+            GROUP BY resource_type;
+        """
+        values = [cls._get_value(environment)]
+        result: dict[str, int] = {}
+        async with cls.get_connection() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    assert isinstance(record["count"], int)
+                    result[str(record["resource_type"])] = record["count"]
         return result
 
     @classmethod
@@ -4652,102 +4762,6 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    async def get_deleted_resources(
-        cls,
-        environment: uuid.UUID,
-        current_version: int,
-        current_resources: Sequence[m.ResourceIdStr],
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> List["Resource"]:
-        """
-        This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
-        the latest version of the resource from a released model.
-
-        :param environment:
-        :param current_version:
-        :param current_resources: A Sequence of all resource ids in the current version.
-        """
-        LOGGER.debug("Starting purge_on_delete queries")
-
-        # get all models that have been released
-        query = (
-            "SELECT version FROM "
-            + ConfigurationModel.table_name()
-            + " WHERE environment=$1 AND released=TRUE ORDER BY version DESC LIMIT "
-            + str(DBLIMIT)
-        )
-        versions = set()
-        latest_version = None
-        async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                async for record in con.cursor(query, cls._get_value(environment)):
-                    version = record["version"]
-                    versions.add(version)
-                    if latest_version is None:
-                        latest_version = version
-
-        LOGGER.debug("  All released versions: %s", versions)
-        LOGGER.debug("  Latest released version: %s", latest_version)
-
-        # find all resources in previous versions that have "purge_on_delete" set
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=latest_version)
-        query = (
-            "SELECT DISTINCT resource_id FROM "
-            + cls.table_name()
-            + " WHERE "
-            + filter_statement
-            + " AND attributes @> $"
-            + str(len(values) + 1)
-        )
-        values.append(cls._get_value({"purge_on_delete": True}))
-        resources_records = await cls._fetch_query(query, *values, connection=connection)
-        resources = [r["resource_id"] for r in resources_records]
-
-        LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
-
-        # all resources on current model
-        LOGGER.debug("  All resource in current version (%s): %s", current_version, current_resources)
-
-        # determined deleted resources
-
-        deleted = set(resources) - set(current_resources)
-        LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
-
-        # filter out resources that should not be purged:
-        # 1- resources from versions that have not been deployed
-        # 2- resources that are already recorded as purged (purged and deployed)
-        should_purge = []
-        for deleted_resource in deleted:
-            # get the full resource history, and determine the purge status of this resource
-            (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=deleted_resource)
-            query = (
-                "SELECT *"
-                + " FROM "
-                + cls.table_name()
-                + " WHERE "
-                + filter_statement
-                + " AND model < $"
-                + str(len(values) + 1)
-                + " ORDER BY model DESC"
-            )
-            values.append(cls._get_value(current_version))
-
-            async with cls.get_connection(connection) as con:
-                async with con.transaction():
-                    async for obj in con.cursor(query, *values):
-                        # if a resource is part of a released version and it is deployed (this last condition is actually enough
-                        # at the moment), we have found the last status of the resource. If it was not purged in that version,
-                        # add it to the should purge list.
-                        if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
-                            attributes = json.loads(str(obj["attributes"]))
-                            if not attributes["purged"]:
-                                should_purge.append(cls(from_postgres=True, **obj))
-                            break
-
-        return should_purge
-
-    @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
         status_subquery = """
         (CASE WHEN
@@ -4868,7 +4882,7 @@ class Resource(BaseDocument):
         deleted_resource_sets: abc.Set[str],
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> abc.Set[m.ResourceIdStr]:
+    ) -> dict[m.ResourceIdStr, str]:
         """
         Copy the resources that belong to an unchanged resource set of a partial compile,
         from source_version to destination_version. This method doesn't copy shared resources.
@@ -4907,7 +4921,7 @@ class Resource(BaseDocument):
                 FROM {cls.table_name()} AS r
                 WHERE r.environment=$1 AND r.model=$2 AND r.resource_set IS NOT NULL AND NOT r.resource_set=ANY($4)
             )
-            RETURNING resource_id
+            RETURNING resource_id, resource_set
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetch(
@@ -4917,7 +4931,7 @@ class Resource(BaseDocument):
                 destination_version,
                 updated_resource_sets | deleted_resource_sets,
             )
-            return {record["resource_id"] for record in result}
+            return {str(record["resource_id"]): str(record["resource_set"]) for record in result}
 
     @classmethod
     async def get_resources_in_resource_sets(
@@ -4991,8 +5005,7 @@ class Resource(BaseDocument):
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
-        if "version" not in self.attributes:
-            attributes["version"] = self.model
+        attributes["version"] = self.model
 
         return m.Resource(
             environment=self.environment,
@@ -5820,15 +5833,20 @@ class Notification(BaseDocument):
 
     @classmethod
     async def clean_up_notifications(cls) -> None:
-        environments = await Environment.get_list()
-        for env in environments:
-            time_to_retain_logs = await env.get(NOTIFICATION_RETENTION)
-            keep_notifications_until = datetime.datetime.now().astimezone() - datetime.timedelta(days=time_to_retain_logs)
-            LOGGER.info(
-                "Cleaning up notifications in environment %s that are older than %s", env.name, keep_notifications_until
-            )
-            query = f"DELETE FROM {cls.table_name()} WHERE created < $1 AND environment = $2"
-            await cls._execute_query(query, cls._get_value(keep_notifications_until), cls._get_value(env.id))
+        default_retention_time = Environment._settings[NOTIFICATION_RETENTION].default
+        LOGGER.info("Cleaning up notifications")
+        query = f"""
+                   WITH non_halted_envs AS (
+                       SELECT id, (COALESCE((settings->>'notification_retention')::int, $1)) AS retention_days
+                       FROM {Environment.table_name()}
+                       WHERE NOT halted
+                   )
+                   DELETE FROM {cls.table_name()}
+                   USING non_halted_envs
+                   WHERE environment = non_halted_envs.id
+                       AND created < now() AT TIME ZONE 'UTC' - make_interval(days => non_halted_envs.retention_days)
+               """
+        await cls._execute_query(query, default_retention_time)
 
     def to_dto(self) -> m.Notification:
         return m.Notification(
@@ -5909,6 +5927,24 @@ class User(BaseDocument):
         return m.User(username=self.username, auth_method=self.auth_method)
 
 
+class DiscoveredResource(BaseDocument):
+    """
+    :param environment: the environment of the resource
+    :param discovered_resource_id: The id of the resource
+    :param values: The values associated with the discovered_resource
+    """
+
+    environment: uuid.UUID
+    discovered_at: datetime.datetime
+    discovered_resource_id: m.ResourceIdStr
+    values: dict[str, str]
+
+    __primary_key__ = ("environment", "discovered_resource_id")
+
+    def to_dto(self) -> m.DiscoveredResource:
+        return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
+
+
 _classes = [
     Project,
     Environment,
@@ -5928,6 +5964,7 @@ _classes = [
     EnvironmentMetricsGauge,
     EnvironmentMetricsTimer,
     User,
+    DiscoveredResource,
 ]
 
 

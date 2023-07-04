@@ -28,7 +28,7 @@ import pydantic
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE, InvalidSort
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, InvalidSort
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -394,7 +394,7 @@ class OrchestrationService(protocol.ServerSlice):
         Purge versions from the database
         """
         # TODO: move to data and use queries for delete
-        envs = await data.Environment.get_list()
+        envs = await data.Environment.get_list(halted=False)
         for env_item in envs:
             # get available versions
             n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
@@ -630,8 +630,7 @@ class OrchestrationService(protocol.ServerSlice):
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
                                 When a partial compile is done, it should contain all the resources that belong to the
-                                updated resource sets or the shared resource sets. This method updates this object with
-                                purge-on-delete resources.
+                                updated resource sets or the shared resource sets.
         :param unknowns: This parameter should contain all the unknowns for all the resources in the new version of the model.
                          Also the unknowns for resources that are not present in rid_to_resource.
         :param partial_base_version: When a partial compile is done, this parameter contains the version of the
@@ -648,13 +647,6 @@ class OrchestrationService(protocol.ServerSlice):
             * When a partial compile was done, all resources in rid_to_resource must meet the constraints of a partial compile.
             * The resource sets defined in the removed_resource_sets argument must not overlap with the resource sets present
               in the resource_sets argument.
-
-        This method adds resources to the model that are no longer present in the new version of the model and had the
-        purge_on_delete flag set to true. This method makes sure that the requires and provides relationships of these
-        additional resources are set correctly. This dependency wiring is also safe for a partial compile because
-        a partial compile cannot delete shared resources and because resources that belong to a non-shared resource set cannot
-        reference resources in another non-shared resource set. That way all dependencies of the deleted resources are present
-        in the rid_to_resource parameter.
 
         When a partial compile is done, the undeployable and skipped_for_undeployable resources of a configurationmodel are
         copied from the old version to the new version. This operation is safe because the only resources missing from
@@ -744,8 +736,9 @@ class OrchestrationService(protocol.ServerSlice):
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
-                rids_unchanged_resource_sets: abc.Set[
-                    ResourceIdStr
+                # This dict maps a resource id to its resource set for unchanged resource sets.
+                rids_unchanged_resource_sets: dict[
+                    ResourceIdStr, str
                 ] = await data.Resource.copy_resources_from_unchanged_resource_set(
                     environment=env.id,
                     source_version=partial_base_version,
@@ -754,24 +747,19 @@ class OrchestrationService(protocol.ServerSlice):
                     deleted_resource_sets=set(removed_resource_sets),
                     connection=connection,
                 )
-                resources_that_moved_resource_sets = rids_unchanged_resource_sets & set(rid_to_resource.keys())
+                resources_that_moved_resource_sets = rids_unchanged_resource_sets.keys() & rid_to_resource.keys()
                 if resources_that_moved_resource_sets:
-                    raise BadRequest(
-                        f"A partial compile cannot migrate resources {list(resources_that_moved_resource_sets)} to another"
-                        " resource set"
+                    msg = (
+                        "The following Resource(s) cannot be migrated to a different resource set using a partial compile, "
+                        "a full compile is necessary for this process:\n"
                     )
-                all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets}
+                    msg += "\n".join(
+                        f"    {rid} moved from {rids_unchanged_resource_sets[rid]} to {resource_sets[rid]}"
+                        for rid in resources_that_moved_resource_sets
+                    )
 
-            purge_on_delete_resources: Dict[ResourceIdStr, data.Resource] = await self._get_resources_for_purge_on_delete(
-                env=env,
-                version=version,
-                rid_to_resource=rid_to_resource,
-                all_resource_ids=[i.resource_str() for i in all_ids],
-                version_info=version_info,
-                connection=connection,
-            )
-            rid_to_resource.update(purge_on_delete_resources)
-            all_ids |= {Id.parse_id(rid, version) for rid in purge_on_delete_resources.keys()}
+                    raise BadRequest(msg)
+                all_ids |= {Id.parse_id(rid, version) for rid in rids_unchanged_resource_sets.keys()}
 
             await data.Resource.insert_many(list(rid_to_resource.values()), connection=connection)
             await cm.recalculate_total(connection=connection)
@@ -802,83 +790,6 @@ class OrchestrationService(protocol.ServerSlice):
                 await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
-
-    async def _get_resources_for_purge_on_delete(
-        self,
-        env: data.Environment,
-        version: int,
-        rid_to_resource: abc.Mapping[ResourceIdStr, data.Resource],
-        all_resource_ids: abc.Sequence[ResourceIdStr],
-        version_info: Optional[JsonType] = None,
-        *,
-        connection: asyncpg.connection.Connection,
-    ) -> dict[ResourceIdStr, data.Resource]:
-        """
-        Return a dictionary of resources that were present in the old version of the model but that no longer exist in this
-        version (in rid_to_resource) and had the purge_on_delete flag set to true. The returned resources will have the purged
-        attribute set to True and their requires/provides relationships inverted.
-
-        :param env: The environment we are discovering purged resources for.
-        :param version: The new version of the configuration model in which the purge_on_delete resources should be added.
-        :param rid_to_resource: When a full compile is done, this dictionary contains an entry for all resources that are
-                                part of the full compile. When a partial compile is done, this dictionary contains an entry
-                                for each resource in the new version of the model that belongs to an updated or shared
-                                resource set.
-        :param all_resource_ids: All the resource ids of all the resources present in the new version of the model. When
-                                 a partial compile is done, this sequence also includes the resource ids of resources that were
-                                 not updated by the partial compile.
-        """
-
-        def safe_get(input: object, key: str, default: object) -> object:
-            if not isinstance(input, dict):
-                return default
-            if key not in input:
-                return default
-            return input[key]
-
-        rid_to_resource = dict(rid_to_resource)
-
-        # detect failed compiles
-        metadata: object = safe_get(version_info, const.EXPORT_META_DATA, {})
-        compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
-        failed = compile_state == const.Compilestate.failed
-
-        result = {}
-        if not failed and (await env.get(PURGE_ON_DELETE)):
-            # search for deleted resources (purge_on_delete)
-            resources_to_purge: List[data.Resource] = await data.Resource.get_deleted_resources(
-                env.id, version, all_resource_ids, connection=connection
-            )
-
-            previous_requires = {}
-            for res in resources_to_purge:
-                LOGGER.warning("Purging %s, purged resource based on %s", res.resource_id, res.resource_version_id)
-
-                attributes = res.attributes.copy()
-                attributes["purged"] = True
-                attributes["requires"] = []
-                res_obj = data.Resource.new(
-                    env.id,
-                    resource_version_id=ResourceVersionIdStr("%s,v=%s" % (res.resource_id, version)),
-                    attributes=attributes,
-                )
-
-                previous_requires[res_obj.resource_id] = res.attributes["requires"]
-                rid_to_resource[res_obj.resource_id] = res_obj
-                result[res_obj.resource_id] = res_obj
-
-            # invert dependencies on purges
-            for res_id, requires in previous_requires.items():
-                res_obj = rid_to_resource[res_id]
-                for require in requires:
-                    req_id = Id.parse_id(require)
-
-                    if req_id.resource_str() in rid_to_resource:
-                        req_res = rid_to_resource[req_id.resource_str()]
-                        req_res.attributes["requires"].append(res_obj.resource_id)
-                        if res_obj.agent != req_res.agent:
-                            res_obj.provides.append(req_res.resource_id)
-        return result
 
     async def _trigger_auto_deploy(
         self,
