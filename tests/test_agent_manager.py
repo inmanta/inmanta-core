@@ -1296,3 +1296,45 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
         return "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
 
     await retry_limited(log_contains_debug_line, 10)
+
+
+async def test_heartbeat_different_session(server, environment, async_finalizer, caplog):
+    """
+    Verify that if the max_clients is reached, the heartbeat will still work as it is in a different pool
+    """
+    caplog.set_level(logging.INFO)
+    env_id = UUID(environment)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    Config.set("config", "max_clients", "1")
+
+    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    b = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
+    c = Agent(hostname="node3", environment=environment, agent_map={"agent3": "localhost"}, code_loader=False)
+    await a.add_end_point_name("agent1")
+    await b.add_end_point_name("agent2")
+    await c.add_end_point_name("agent3")
+    async_finalizer.add(a.stop)
+    async_finalizer.add(b.stop)
+    async_finalizer.add(c.stop)
+    await a.start()
+    await b.start()
+    await c.start()
+
+    # Wait until session is created
+    await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
+    await retry_limited(lambda: (env_id, "agent2") in agentmanager.tid_endpoint_to_session, 10)
+    await retry_limited(lambda: (env_id, "agent3") in agentmanager.tid_endpoint_to_session, 10)
+    session1 = agentmanager.tid_endpoint_to_session[(env_id, "agent1")]
+    session2 = agentmanager.tid_endpoint_to_session[(env_id, "agent2")]
+    session3 = agentmanager.tid_endpoint_to_session[(env_id, "agent3")]
+    assert len(agentmanager.sessions) == 3
+    assert session1 in agentmanager.sessions.values()
+    assert session2 in agentmanager.sessions.values()
+    assert session3 in agentmanager.sessions.values()
+
+    def test():
+        # todo: verify here that there are still heartbeats
+        return "heartbeat" in caplog.text
+
+    await retry_limited(test, 10)
