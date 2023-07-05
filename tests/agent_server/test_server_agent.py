@@ -2752,7 +2752,6 @@ async def test_s_periodic_Vs_full(
 
     versions = [version1, version2]
     await resource_container.wait_for_done_with_waiters(client, environment, versions[action.wait_for])
-    await asyncio.sleep(1)
     # cache has no versions in flight
     # for issue #1883
     assert not myagent_instance._cache.counterforVersion
