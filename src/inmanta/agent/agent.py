@@ -351,7 +351,7 @@ class DeployRequest:
     reason: str
 
     def interrupt(self, other: "DeployRequest") -> "DeployRequest":
-        """Interrupt this deploy and for the other and produce a new request for future rescheduling of this deploy"""
+        """Interrupt this deploy for the other and produce a new request for future rescheduling of this deploy"""
         return DeployRequest(
             self.is_full_deploy, self.is_periodic, "Restarting run '%s', interrupted for '%s'" % (self.reason, other.reason)
         )
@@ -394,6 +394,7 @@ interrupt = DeployRequestAction.interrupt
 # 2. non-periodic deploy should run as soon as possible
 # 3. non-periodic incremental deploy take precedence over repairs (as they are smaller)
 # 4. periodic deploys should not interrupt each other to prevent restart loops
+# 5. Periodic repairs take precedence over periodic incremental deploys.
 deploy_response_matrix = {
     # ((old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic))
     # Periodic restart loops: Full periodic is never interrupted by periodic

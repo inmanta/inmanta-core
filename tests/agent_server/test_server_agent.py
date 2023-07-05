@@ -2695,8 +2695,8 @@ async def test_s_periodic_Vs_full(
     myagent_instance = agent._instances[agent_name]
 
     resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key2", "value1")
+    resource_container.Provider.set("agent1", "key3", "value1")
 
     def get_resources(version, value_resource_three):
         return [
@@ -2730,7 +2730,7 @@ async def test_s_periodic_Vs_full(
     resources_version_1 = get_resources(version1, "value2")
 
     # Initial deploy
-    await _deploy_resources(client, environment, resources_version_1, version1, False)
+    await _deploy_resources(client, environment, resources_version_1, version1, push=False)
     await myagent_instance.get_latest_version_for_agent(
         DeployRequest(reason="Initial Deploy", is_full_deploy=first_full, is_periodic=first_periodic)
     )
@@ -2745,7 +2745,7 @@ async def test_s_periodic_Vs_full(
 
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
-    await _deploy_resources(client, environment, resources_version_2, version2, False)
+    await _deploy_resources(client, environment, resources_version_2, version2, push=False)
     await myagent_instance.get_latest_version_for_agent(
         DeployRequest(reason="Second Deploy", is_full_deploy=second_full, is_periodic=second_periodic)
     )
