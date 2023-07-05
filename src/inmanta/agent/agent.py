@@ -388,13 +388,19 @@ defer = DeployRequestAction.defer
 interrupt = DeployRequestAction.interrupt
 
 # This matrix describes what do when a new DeployRequest enters before the old one is done
-# Format is old_is_repair, old_is_periodic, new_is_repair, new_is_periodic
+# Format is (old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic)
 # The underlying idea is that
 # 1. periodic deploys have no time pressure, they can be delayed
 # 2. non-periodic deploy should run as soon as possible
 # 3. non-periodic incremental deploy take precedence over repairs (as they are smaller)
 # 4. periodic deploys should not interrupt each other to prevent restart loops
 # 5. Periodic repairs take precedence over periodic incremental deploys.
+# A subtle detail is that when we do defer or interrupt, we only over keep one.
+# So if a previous deferred run exists, it will be silently dropped
+# But, we only defer or interrupt full deploys
+# As such, we will always execute a full deploy
+# (it may oscillate between periodic and not, but it will execute)
+
 deploy_response_matrix = {
     # ((old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic))
     # Periodic restart loops: Full periodic is never interrupted by periodic
