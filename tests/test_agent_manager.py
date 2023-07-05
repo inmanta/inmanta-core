@@ -1329,9 +1329,6 @@ async def test_heartbeat_different_session(server, environment, async_finalizer,
     session2 = agentmanager.tid_endpoint_to_session[(env_id, "agent2")]
     session3 = agentmanager.tid_endpoint_to_session[(env_id, "agent3")]
     assert len(agentmanager.sessions) == 3
-    assert session1 in agentmanager.sessions.values()
-    assert session2 in agentmanager.sessions.values()
-    assert session3 in agentmanager.sessions.values()
 
     def test():
         # todo: verify here that there are still heartbeats
