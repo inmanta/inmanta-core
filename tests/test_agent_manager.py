@@ -32,11 +32,13 @@ from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
-from inmanta.protocol import Result
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.protocol import Result, handle, typedmethod
+from inmanta.protocol.common import ReturnValue
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_SESSION_MANAGER, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
-from inmanta.server.protocol import Session
-from utils import UNKWN, assert_equal_ish, retry_limited
+from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.protocol import Server, ServerSlice, Session
+from utils import UNKWN, assert_equal_ish, configure, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1298,13 +1300,52 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
     await retry_limited(log_contains_debug_line, 10)
 
 
-async def test_heartbeat_different_session(server, environment, async_finalizer, caplog):
+async def test_heartbeat_different_session(server_pre_start, async_finalizer, caplog):
     """
     Verify that if the max_clients is reached, the heartbeat will still work as it is in a different pool
     """
+
+    class TestSlice(ServerSlice):
+        @typedmethod(path="/test", operation="GET", client_types=["agent"])
+        def test_method(number: int) -> ReturnValue[int]:  # NOQA
+            """
+            api endpoint that never returns
+            """
+
+        @handle(test_method)
+        async def test_method_implementation(self, number: int) -> ReturnValue[int]:  # NOQA
+            while True:
+                pass
+            return ReturnValue(response=number)
+
+    server = TestSlice(name="test_slice")
+
+    ibl = InmantaBootloader()
+    ctx = ibl.load_slices()
+
+    for mypart in ctx.get_slices():
+        ibl.restserver.add_slice(mypart)
+
+    ibl.restserver.add_slice(server)
+
+    await ibl.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(ibl.stop)
+
+    client = protocol.Client("client")
+
     caplog.set_level(logging.INFO)
-    env_id = UUID(environment)
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    result = await client.create_project("project-test")
+    assert result.code == 200
+    proj_id = result.result["project"]["id"]
+
+    result = await client.create_environment(proj_id, "test", None, None)
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+    environment = await data.Environment.get_by_id(uuid.UUID(env_id))
+
+    agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
 
     Config.set("config", "max_clients", "1")
 
@@ -1322,13 +1363,10 @@ async def test_heartbeat_different_session(server, environment, async_finalizer,
     await c.start()
 
     # Wait until session is created
-    await retry_limited(lambda: (env_id, "agent1") in agentmanager.tid_endpoint_to_session, 10)
-    await retry_limited(lambda: (env_id, "agent2") in agentmanager.tid_endpoint_to_session, 10)
-    await retry_limited(lambda: (env_id, "agent3") in agentmanager.tid_endpoint_to_session, 10)
-    session1 = agentmanager.tid_endpoint_to_session[(env_id, "agent1")]
-    session2 = agentmanager.tid_endpoint_to_session[(env_id, "agent2")]
-    session3 = agentmanager.tid_endpoint_to_session[(env_id, "agent3")]
-    assert len(agentmanager.sessions) == 3
+    await retry_limited(lambda: (env_id, "agent1") in agent_manager.tid_endpoint_to_session, 10)
+    await retry_limited(lambda: (env_id, "agent2") in agent_manager.tid_endpoint_to_session, 10)
+    await retry_limited(lambda: (env_id, "agent3") in agent_manager.tid_endpoint_to_session, 10)
+    assert len(agent_manager.sessions) == 3
 
     def test():
         # todo: verify here that there are still heartbeats
