@@ -264,6 +264,20 @@ def postgres_db(request: pytest.FixtureRequest):
 
 
 @pytest.fixture
+async def run_without_keeping_psql_logs(postgres_db):
+    if os.path.exists(pg_logfile):
+        # Store the original content of the logfile
+        with open(pg_logfile, "r") as file:
+            original_content = file.read()
+    yield
+
+    if os.path.exists(pg_logfile):
+        # Restore the original content of the logfile
+        with open(pg_logfile, "w") as file:
+            file.write(original_content)
+
+
+@pytest.fixture
 async def postgres_db_debug(postgres_db, database_name) -> abc.AsyncIterator[None]:
     """
     Fixture meant for debugging through manual interaction with the database. Run pytest with `-s/--capture=no`.
@@ -1059,7 +1073,7 @@ class ReentrantVirtualEnv(VirtualEnv):
 class SnippetCompilationTest(KeepOnFail):
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
-        self.repo = "https://github.com/inmanta/"
+        self.repo: str = "https://github.com/inmanta/"
         self.env = tempfile.mkdtemp()
         self.venv = ReentrantVirtualEnv(env_path=self.env)
         config.Config.load_config()
@@ -1207,15 +1221,7 @@ class SnippetCompilationTest(KeepOnFail):
                 - {{type: git, url: {self.repo} }}
             """.rstrip()
             )
-            if python_package_sources:
-                cfg.write(
-                    "".join(
-                        f"""
-                - {{type: package, url: {source} }}
-                        """.rstrip()
-                        for source in python_package_sources
-                    )
-                )
+
             if relation_precedence_rules:
                 cfg.write("\n            relation_precedence_policy:\n")
                 cfg.write("\n".join(f"                - {rule}" for rule in relation_precedence_rules))
@@ -1224,7 +1230,13 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
-            cfg.write(f"\n            pip: {{ use_config_file: {use_pip_config_file} }}")
+            cfg.write(
+                f"""
+            pip:
+                use_config_file: {use_pip_config_file}
+                index_urls: [{", ".join(url for url in python_package_sources)}]
+            """
+            )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")

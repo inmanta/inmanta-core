@@ -533,7 +533,11 @@ class Exporter(object):
         if LOGGER.isEnabledFor(logging.DEBUG):
             for res in resources:
                 rid = res["id"]
-                LOGGER.debug("  %s in resource set %s", rid, self._resource_sets.get(Id.parse_id(rid).resource_str(), ""))
+                resource_set: Optional[str] = self._resource_sets.get(Id.parse_id(rid).resource_str(), None)
+                if resource_set is not None:
+                    LOGGER.debug("  %s in resource set %s", rid, resource_set)
+                else:
+                    LOGGER.debug("  %s not in any resource set", rid)
 
         if partial_compile:
             result = conn.put_partial(

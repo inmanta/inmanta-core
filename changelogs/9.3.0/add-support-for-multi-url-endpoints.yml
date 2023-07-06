@@ -1,0 +1,8 @@
+---
+description: Add support to expose the same method via the API using different URLs.
+issue-nr: 1274
+issue-repo: inmanta-lsm
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

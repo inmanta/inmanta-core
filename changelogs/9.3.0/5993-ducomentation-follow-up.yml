@@ -1,0 +1,5 @@
+description: >
+  Mention that setting a pip index through the `repo -> url` with type `package` is deprecated in favour
+  of the `pip -> index_urls` option in the documentation
+change-type: patch
+destination-branches: [master, iso6]

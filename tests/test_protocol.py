@@ -1557,25 +1557,52 @@ async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_
     async_finalizer.add(server.stop)
 
     client = tornado.httpclient.AsyncHTTPClient()
+    param_value = "header_param_value"
 
-    # valid request should succeed
+    # Only parameter as header: should succeed
     request = tornado.httpclient.HTTPRequest(
         url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
         method="POST",
         body=json_encode({"body_param": "body_param_value"}),
-        headers={"X-Inmanta-Header-Param": "header_param_value"},
+        headers={"X-Inmanta-Header-Param": param_value},
     )
     response: tornado.httpclient.HTTPResponse = await client.fetch(request)
     assert response.code == 200
 
-    # invalid request should fail
+    # Only provide parameter in body: should succeed
     request = tornado.httpclient.HTTPRequest(
         url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
         method="POST",
-        body=json_encode({"header_param": "header_param_value", "body_param": "body_param_value"}),
+        body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
     )
-    with pytest.raises(tornado.httpclient.HTTPClientError):
-        await client.fetch(request)
+    response: tornado.httpclient.HTTPResponse = await client.fetch(request)
+    assert response.code == 200
+
+    # Body and header contain the same value for parameter: should succeed
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
+        headers={"X-Inmanta-Header-Param": param_value},
+    )
+    response: tornado.httpclient.HTTPResponse = await client.fetch(request)
+    assert response.code == 200
+
+    # Body and header contain different value for parameter: should fail
+    param_different_value = "different_value"
+    request = tornado.httpclient.HTTPRequest(
+        url=f"http://localhost:{opt.get_bind_port()}/api/v1/testmethod",
+        method="POST",
+        body=json_encode({"header_param": param_value, "body_param": "body_param_value"}),
+        headers={"X-Inmanta-Header-Param": param_different_value},
+    )
+    response = await client.fetch(request, raise_error=False)
+    assert response.code == 400
+    body = json.loads(response.body)
+    assert (
+        "Value for argument header_param was provided via a header and a non-header argument, but both"
+        f" values don't match (header={param_different_value}; non-header={param_value})" in body["message"]
+    )
 
 
 @pytest.mark.parametrize("return_value,valid", [(1, True), (None, True), ("Hello World!", False)])
