@@ -392,9 +392,10 @@ interrupt = DeployRequestAction.interrupt
 # The underlying idea is that
 # 1. periodic deploys have no time pressure, they can be delayed
 # 2. non-periodic deploy should run as soon as possible
-# 3. non-periodic incremental deploy take precedence over repairs (as they are smaller)
-# 4. periodic deploys should not interrupt each other to prevent restart loops
+# 3. non-periodic incremental deploys take precedence over repairs (as they are smaller)
+# 4. Periodic repairs should not interrupt each other to prevent restart loops
 # 5. Periodic repairs take precedence over periodic incremental deploys.
+# These rules do not full specify the matrix! They are the rules we have to follow.
 # A subtle detail is that when we do defer or interrupt, we only over keep one.
 # So if a previous deferred run exists, it will be silently dropped
 # But, we only defer or interrupt full deploys
