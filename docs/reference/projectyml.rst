@@ -67,6 +67,7 @@ By default, a project created using the :ref:`project-creation-guide` is configu
 by changing the  ``url`` option of type ``package`` in the ``repo`` section of the ``project.yml`` file, the python package will be downloaded from the specified index_url:
 
 .. code-block:: yaml
+
     repo:
       - url: https://github.com/inmanta/
         type: git
