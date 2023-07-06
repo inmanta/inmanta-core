@@ -1335,7 +1335,6 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     client = protocol.Client("client")
 
     caplog.set_level(logging.INFO)
-
     result = await client.create_project("project-test")
     assert result.code == 200
     proj_id = result.result["project"]["id"]
