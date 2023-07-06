@@ -1304,18 +1304,21 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     """
     Verify that if the max_clients is reached, the heartbeat will still work as it is in a different pool
     """
+    caplog.set_level(logging.DEBUG, "tornado.general")
+    caplog.set_level(logging.DEBUG)
+    hanglock = asyncio.Event()
+
+    @typedmethod(path="/test", operation="GET", client_types=["agent"], agent_server=True,)
+    def test_method(number: int) -> ReturnValue[int]:  # NOQA
+        """
+        api endpoint that never returns
+        """
 
     class TestSlice(ServerSlice):
-        @typedmethod(path="/test", operation="GET", client_types=["agent"])
-        def test_method(number: int) -> ReturnValue[int]:  # NOQA
-            """
-            api endpoint that never returns
-            """
-
         @handle(test_method)
         async def test_method_implementation(self, number: int) -> ReturnValue[int]:  # NOQA
-            while True:
-                pass
+            LOGGER.info(f"HANG {number}")
+            await hanglock.wait()
             return ReturnValue(response=number)
 
     server = TestSlice(name="test_slice")
@@ -1347,29 +1350,27 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
 
-    Config.set("config", "max_clients", "1")
+    Config.set("agent_rest_transport", "max_clients", "1")
 
-    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    b = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
-    c = Agent(hostname="node3", environment=environment, agent_map={"agent3": "localhost"}, code_loader=False)
+    a = Agent(hostname="node1", environment=environment.id, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
-    await b.add_end_point_name("agent2")
-    await c.add_end_point_name("agent3")
     async_finalizer.add(a.stop)
-    async_finalizer.add(b.stop)
-    async_finalizer.add(c.stop)
     await a.start()
-    await b.start()
-    await c.start()
 
     # Wait until session is created
-    await retry_limited(lambda: (env_id, "agent1") in agent_manager.tid_endpoint_to_session, 10)
-    await retry_limited(lambda: (env_id, "agent2") in agent_manager.tid_endpoint_to_session, 10)
-    await retry_limited(lambda: (env_id, "agent3") in agent_manager.tid_endpoint_to_session, 10)
-    assert len(agent_manager.sessions) == 3
+    await retry_limited(lambda: len(agent_manager.sessions) == 1, 10)
 
+    # Have many connections in flight
+    hangers = asyncio.gather(*(a._client.test_method(i) for i in range(5)))
+    logging.info("WAITING!")
+    await asyncio.sleep(1)
+    assert not hangers.done()
+    caplog.clear()
     def test():
         # todo: verify here that there are still heartbeats
         return "heartbeat" in caplog.text
-
     await retry_limited(test, 10)
+    # we did exceed capacity?
+    assert "DEBUG max_clients limit reached, request queued. 1 active, 1 queued requests" in caplog.text
+    hanglock.set()
+    await hangers

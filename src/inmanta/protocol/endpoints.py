@@ -192,7 +192,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
-        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
+        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
         self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
         await self.start_connected()
         self.add_background_task(self.perform_heartbeat())
