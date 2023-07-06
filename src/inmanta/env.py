@@ -810,10 +810,7 @@ class ActiveEnv(PythonEnvironment):
         for req in requirements_list:
             parsed_name, req_spec = cls._parse_line(req)
 
-            if parsed_name is None:
-                name = req
-            else:
-                name = parsed_name
+            name = req if parsed_name is None else parsed_name
 
             url = None
             version = None
@@ -837,23 +834,24 @@ class ActiveEnv(PythonEnvironment):
             except InvalidRequirement:
                 url = req_spec
 
-            if name not in modules:
-                modules[name] = {"name": name, "version": [], "markers": []}
+            requirement_id: str = name + "_" + str(marker) if marker else name
+            if requirement_id not in modules:
+                modules[requirement_id] = {"name": name, "version": [], "markers": [], "extras": []}
 
             if version is not None:
-                modules[name]["version"].extend(version)
+                modules[requirement_id]["version"].extend(version)
 
             if marker is not None:
-                modules[name]["markers"].append(marker)
-
+                modules[requirement_id]["markers"].append(marker)
             if url is not None:
-                modules[name]["url"] = url
+                modules[requirement_id]["url"] = url
 
             if extras is not None:
-                modules[name]["extras"] = extras
+                modules[requirement_id]["extras"].extend(extras)
 
         requirements_file = ""
-        for module, info in modules.items():
+        for _, info in modules.items():
+            name = info["url"] if "url" in info else info["name"]
             version_spec = ""
             markers: str = ""
             extras_spec: str = ""
@@ -863,13 +861,10 @@ class ActiveEnv(PythonEnvironment):
             if len(info["markers"]) > 0:
                 markers = " ; " + (" and ".join(map(str, info["markers"])))
 
-            if "url" in info:
-                module = info["url"]
-
-            if "extras" in info:
+            if "extras" in info and info["extras"]:
                 extras_spec = f"[{','.join(info['extras'])}]"
 
-            requirements_file += module + extras_spec + version_spec + markers + "\n"
+            requirements_file += name + extras_spec + version_spec + markers + "\n"
 
         return requirements_file
 

@@ -1,0 +1,7 @@
+description: Added breaking change note for v1 index url
+issue-nr: 5993
+change-type: patch
+sections:
+  deprecation-note: "For consistency, V1 modules' dependencies will now be installed using the configured pip index url (or v2 package repo) if it is set"
+destination-branches:
+  - master
