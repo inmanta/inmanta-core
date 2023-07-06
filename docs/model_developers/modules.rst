@@ -344,7 +344,7 @@ Add the following content to the file:
   login <username>
   password <password>
 
-for more information see the  doc about`pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
+For more information see the doc about`pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
 
 You will also need to specify the url of the repository in the ``project.yml`` file of your project (See: :ref:`specify_location_pip`).
 
