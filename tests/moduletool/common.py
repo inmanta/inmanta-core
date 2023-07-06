@@ -63,7 +63,7 @@ repo: %s"""
             for req in deps:
                 if req[1] is not None:
                     projectfile.write("\n    - {} {}".format(req[0], req[1]))
-                else:
+                elif "::" not in req[0]:
                     projectfile.write("\n    - {}".format(req[0]))
 
         projectfile.write("\n")
