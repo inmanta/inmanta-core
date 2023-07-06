@@ -56,6 +56,22 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_recursive: true
     freeze_operator: ~=
 
+.. _specify_location_pip:
+
+
+Specify locations from where V2 modules will be installed
+---------------------------------------------------------
+This section explains how to configure your project in order to download v2 modules from any python package repository.
+By default, a project created using the :ref:`project-creation-guide` is configured to install packages from ``https://pypi.org/simple/``.
+
+by changing the  ``url`` option of type ``package`` in the ``repo`` section of the ``project.yml`` file, the python package will be downloaded from the specified index_url:
+
+.. code-block:: yaml
+    repo:
+      - url: https://github.com/inmanta/
+        type: git
+      - url: <url of a python package repository>
+        type: package
 
 Module metadata files
 #####################
