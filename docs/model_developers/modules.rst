@@ -339,9 +339,11 @@ Create a file named ``/var/lib/inmanta/.netrc`` in the orchestrator's file syste
 Add the following content to the file:
 
 .. code-block:: text
+
   machine <hostname of the private repository>
   login <username>
   password <password>
+  
 for more information see the  doc about`pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
 
 You will also need to specify the url of the repository in the ``project.yml`` file of your project (See: :ref:`specify_location_pip`).
