@@ -13,7 +13,7 @@ requires = [
     # docstring-parser has been known to publish non-backwards compatible minors in the past
     "docstring-parser>=0.10,<0.16",
     "email-validator>=1,<3",
-    "execnet~=1.0",
+    "execnet>=1,<3",
     "importlib_metadata>=4,<7",
     "jinja2~=3.0",
     "more-itertools>=8,<10",
