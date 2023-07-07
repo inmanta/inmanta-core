@@ -1302,13 +1302,20 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
 
 async def test_heartbeat_different_session(server_pre_start, async_finalizer, caplog):
     """
-    Verify that if the max_clients is reached, the heartbeat will still work as it is in a different pool
+    Verify that:
+      - if the max_clients is reached, the heartbeat will still work as it is in a different pool
+      - the max_clients option in the config changes the number of max_clients in a pool
+      - debug logs concerning 'max_clients limit reached' logged by Tornado, are logged as inmanta warnings.
     """
-    caplog.set_level(logging.DEBUG, "tornado.general")
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logging.WARNING)
     hanglock = asyncio.Event()
 
-    @typedmethod(path="/test", operation="GET", client_types=["agent"], agent_server=True,)
+    @typedmethod(
+        path="/test",
+        operation="GET",
+        client_types=["agent"],
+        agent_server=True,
+    )
     def test_method(number: int) -> ReturnValue[int]:  # NOQA
         """
         api endpoint that never returns
@@ -1317,9 +1324,11 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     class TestSlice(ServerSlice):
         @handle(test_method)
         async def test_method_implementation(self, number: int) -> ReturnValue[int]:  # NOQA
-            LOGGER.info(f"HANG {number}")
+            LOGGER.warning(f"HANG {number}")
             await hanglock.wait()
             return ReturnValue(response=number)
+
+    Config.set("agent_rest_transport", "max_clients", "1")
 
     server = TestSlice(name="test_slice")
 
@@ -1337,7 +1346,6 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     client = protocol.Client("client")
 
-    caplog.set_level(logging.INFO)
     result = await client.create_project("project-test")
     assert result.code == 200
     proj_id = result.result["project"]["id"]
@@ -1349,8 +1357,6 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
 
-    Config.set("agent_rest_transport", "max_clients", "1")
-
     a = Agent(hostname="node1", environment=environment.id, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
     async_finalizer.add(a.stop)
@@ -1361,15 +1367,23 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     # Have many connections in flight
     hangers = asyncio.gather(*(a._client.test_method(i) for i in range(5)))
-    logging.info("WAITING!")
+    logging.warning("WAITING!")
     await asyncio.sleep(1)
     assert not hangers.done()
+
+    def did_exceed_capacity():
+        return "WARNING max_clients limit reached, request queued. 1 active, 4 queued requests." in caplog.text
+
+    await retry_limited(did_exceed_capacity, 10)
+
+    caplog.set_level(logging.NOTSET)
     caplog.clear()
-    def test():
-        # todo: verify here that there are still heartbeats
-        return "heartbeat" in caplog.text
-    await retry_limited(test, 10)
-    # we did exceed capacity?
-    assert "DEBUG max_clients limit reached, request queued. 1 active, 1 queued requests" in caplog.text
+
+    def still_sending_heartbeats():
+        count = caplog.text.count("Level 3 sending heartbeat for")
+        return count > 2
+
+    await retry_limited(still_sending_heartbeats, 10)
+
     hanglock.set()
     await hangers

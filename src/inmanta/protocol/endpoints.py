@@ -35,6 +35,24 @@ from . import common
 from .rest import client
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+TORNADO_LOGGER: logging.Logger = logging.getLogger("tornado.general")
+TORNADO_LOGGER.setLevel(logging.DEBUG)
+
+
+# Create a custom log handler for Tornado max_clients limit reached debug logs
+class TornadoDebugLogHandler(logging.Handler):
+    def emit(self, record):
+        if (
+            record.levelno == logging.DEBUG
+            and record.name.startswith("tornado.general")
+            and record.msg.startswith("max_clients limit reached")
+        ):
+            LOGGER.warning(record.msg)  # Log Tornado log as inmanta warnings
+
+
+tornado_logger = TornadoDebugLogHandler()
+TORNADO_LOGGER.addHandler(tornado_logger)
+TORNADO_LOGGER.setLevel(logging.DEBUG)
 
 
 class CallTarget(object):
@@ -219,7 +237,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         Start a continuous heartbeat call
         """
-        if self._client is None:
+        if self._heartbeat_client is None or self._client is None:
             raise Exception("AgentEndpoint not started")
 
         connected: bool = False

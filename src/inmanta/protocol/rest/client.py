@@ -48,7 +48,9 @@ class RESTClient(RESTBase):
         self.connection_timout: int = connection_timout
         self.headers: Set[str] = set()
         self.request_timeout: int = inmanta_config.Config.get(self.id, "request_timeout", 120)
-        max_clients: int = inmanta_config.Config.get(self.id, "max_clients", 1000)  # todo what should be the default here?
+        max_clients: int = inmanta_config.Config.get(
+            "agent_rest_transport", "max_clients", 1000
+        )  # todo what should be the default here?
         self.client = AsyncHTTPClient(force_instance=force_instance, max_clients=max_clients)
 
     @property
