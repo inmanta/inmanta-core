@@ -55,7 +55,7 @@ class provider(object):  # noqa: N801
     """
     A decorator that registers a new handler.
 
-    :param resource_type: The type of the resource this handler provides an implementation for.
+    :param resource_type: The type of the resource this handler provides an implementation for. # TODO rephrase 'provides an implementation for'
                           For example, :inmanta:entity:`std::File`
     :param name: A name to reference this provider.
     """
@@ -418,8 +418,14 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
+@stable_api # ??
+class HandlerABC(ABC):
+    """
+
+    """
+
 @stable_api
-class ResourceHandler(object):
+class ResourceHandler(HandlerABC):
     """
     A baseclass for classes that handle resources. New handler are registered with the
     :func:`~inmanta.agent.handler.provider` decorator.
