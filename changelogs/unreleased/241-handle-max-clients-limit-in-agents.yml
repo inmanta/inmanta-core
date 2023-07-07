@@ -1,5 +1,5 @@
 ---
-description: Handle max-clients limit in agents better by adding a config parameter to set the limit, raising a warning if the pool gets exhausted and putting the heartbeat in a different pool
+description: Handle max-clients limit in agents better by adding a config parameter to set the limit, raising a warning if the pool gets exhausted and putting the heartbeat in a different pool.
 issue-nr: 241
 change-type: minor
 destination-branches: [master]
