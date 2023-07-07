@@ -421,7 +421,8 @@ class HandlerContext(LoggerABC):
 @stable_api # ??
 class HandlerABC(ABC):
     """
-
+        TODO better docstring
+        parent of Handler, CRUDHandler and new DiscoveryHandler
     """
 
 @stable_api
