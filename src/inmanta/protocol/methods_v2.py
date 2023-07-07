@@ -1373,6 +1373,7 @@ def discovered_resource_create(
 ) -> None:
     """
     create a discovered resource.
+
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_id: The id of the discovered_resource
     :param **kwargs: The following arguments are supported:
