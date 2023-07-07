@@ -2,7 +2,7 @@ from setuptools import setup, find_namespace_packages
 from os import path
 
 requires = [
-    "asyncpg~=0.25,<0.28",
+    "asyncpg~=0.25,<0.29",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
     "click>=8.0,<8.2",
