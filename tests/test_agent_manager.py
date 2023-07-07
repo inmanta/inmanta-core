@@ -34,11 +34,11 @@ from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
 from inmanta.protocol import Result, handle, typedmethod
 from inmanta.protocol.common import ReturnValue
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, SLICE_SESSION_MANAGER, protocol
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server.protocol import Server, ServerSlice, Session
-from utils import UNKWN, assert_equal_ish, configure, retry_limited
+from inmanta.server.protocol import ServerSlice, Session
+from utils import UNKWN, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
 

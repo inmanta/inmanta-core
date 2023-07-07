@@ -39,7 +39,7 @@ TORNADO_LOGGER: logging.Logger = logging.getLogger("tornado.general")
 TORNADO_LOGGER.setLevel(logging.DEBUG)
 
 
-# Create a custom log handler for Tornado max_clients limit reached debug logs
+# Create a custom log handler for Tornados 'max_clients limit reached' debug logs
 class TornadoDebugLogHandler(logging.Handler):
     def emit(self, record):
         if (

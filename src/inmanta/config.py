@@ -410,7 +410,7 @@ class TransportConfig(object):
         self.max_clients = Option(
             self.prefix,
             "max_clients",
-            1000,
+            1000,  # todo what should be the default here?
             "The maximum number of simultaneous connections that can be open in parallel",
             is_int,
         )
