@@ -52,7 +52,6 @@ class TornadoDebugLogHandler(logging.Handler):
 
 tornado_logger = TornadoDebugLogHandler()
 TORNADO_LOGGER.addHandler(tornado_logger)
-TORNADO_LOGGER.setLevel(logging.DEBUG)
 
 
 class CallTarget(object):
