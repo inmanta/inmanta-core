@@ -418,12 +418,50 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
-@stable_api # ??
+@stable_api
 class HandlerABC(ABC):
     """
-        TODO better docstring
-        parent of Handler, CRUDHandler and new DiscoveryHandler
+        Top-level abstract base class all handlers should inherit from.
     """
+
+    @abstractmethod
+    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
+    @abstractmethod
+    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed after an operation. Override this method to run after an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
+    @abstractmethod
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: Dict[ResourceIdStr, ResourceState],
+    ) -> None:
+        """
+        This method is always called by the agent
+        """
+        pass
+
+    @abstractmethod
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
+        """
+        Update the given resource. This method is called by the agent.
+        """
+        pass
+
 
 @stable_api
 class ResourceHandler(HandlerABC):
@@ -506,22 +544,7 @@ class ResourceHandler(HandlerABC):
         :param resource: The resource to reload.
         """
 
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-        to run before an operation.
 
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed after an operation. Override this method to run after an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
 
     def close(self) -> None:
         pass
@@ -589,7 +612,7 @@ class ResourceHandler(HandlerABC):
         requires: Dict[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        This method is always be called by the agent, even when one of the requires of the given resource
+        This method is always called by the agent, even when one of the requires of the given resource
         failed to deploy. The default implementation of this method will deploy the given resource when all its
         requires were deployed successfully. Override this method if a different condition determines whether the
         resource should deploy.
@@ -800,7 +823,7 @@ class ResourceHandler(HandlerABC):
 
 
 @stable_api
-class CRUDHandler(ResourceHandler):
+class CRUDHandler(ResourceHandler, HandlerABC):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
