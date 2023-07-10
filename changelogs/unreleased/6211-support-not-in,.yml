@@ -1,4 +1,4 @@
-description: Add the "not in" operator
+description: Add the "not in" operator.
 issue-nr: 6211
 change-type: minor
 destination-branches: [master, iso6]
