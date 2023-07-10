@@ -683,6 +683,12 @@ def p_boolean_expression(p: YaccProduction) -> None:
     attach_lnr(p, 2)
 
 
+def p_boolean_expression_not_in(p: YaccProduction) -> None:
+    """boolean_expression : expression NOT IN expression"""
+    p[0] = Not(In(p[1], p[4]))
+    attach_lnr(p, 2)
+
+
 def p_boolean_expression_not(p: YaccProduction) -> None:
     """boolean_expression : NOT expression"""
     p[0] = Not(p[2])
@@ -831,7 +837,8 @@ def p_string_dict_key(p: YaccProduction) -> None:
         raise ParserException(
             p[1].location,
             str(p[1]),
-            "String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets",  # NOQA E501
+            "String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets",
+            # NOQA E501
         )
     p[0] = p[1]
 
