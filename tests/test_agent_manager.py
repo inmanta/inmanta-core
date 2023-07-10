@@ -1368,11 +1368,15 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     # Have many connections in flight
     hangers = asyncio.gather(*(a._client.test_method(i) for i in range(5)))
     logging.warning("WAITING!")
-    await asyncio.sleep(1)
     assert not hangers.done()
 
     def did_exceed_capacity():
-        return "WARNING max_clients limit reached, request queued. 1 active, 4 queued requests." in caplog.text
+        msg = "max_clients limit reached, request queued. 1 active, 4 queued requests."
+        for record in caplog.records:
+            if msg in record.message:
+                if record.name == "inmanta.protocol.endpoints" and record.levelno == logging.WARNING:
+                    return True
+        return False
 
     await retry_limited(did_exceed_capacity, 10)
 
