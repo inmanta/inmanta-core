@@ -217,7 +217,7 @@ _______________________________
 
 There are a bunch of examples present inside the `SR Linux` folder of the `examples` repository that you have cloned in the previous step, setting up the lab_.
 
-In this guide, we will showcase two examples on a small **CLOS** `topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#sr-linux-topology>`_ to get you started:
+In this guide, we will showcase two examples on a small **CLOS** `topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology>`_ to get you started:
 
 1. `interface <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/interfaces.cf>`_ configuration.
 2. `OSPF <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/ospf.cf>`_ configuration.
@@ -232,7 +232,7 @@ It could be useful to know that Inmanta uses the ``gNMI`` protocol to interface 
 SR Linux interface configuration
 __________________________________
 
-The `interfaces.cf <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/interfaces.cf>`_ file contains the required configuration model to set IP addresses on point-to-point interfaces between the ``spine``, ``leaf1`` and ``leaf2`` devices according to the `aforementioned topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#sr-linux-topology>`_.
+The `interfaces.cf <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/interfaces.cf>`_ file contains the required configuration model to set IP addresses on point-to-point interfaces between the ``spine``, ``leaf1`` and ``leaf2`` devices according to the `aforementioned topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology>`_.
 
 Let's have a look at the partial configuration model:
 
@@ -298,7 +298,7 @@ Now, we can deploy the model by referring to `Deploy the configuration model`_ s
 SR Linux OSPF configuration
 __________________________________
 
-The `ospf.cf <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/ospf.cf>`_ file contains the required configuration model to first set IP addresses on point-to-point interfaces between the ``spine``, ``leaf1`` and ``leaf2`` devices according to the `aforementioned topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#sr-linux-topology>`_ and then configure ``OSPF`` between them.
+The `ospf.cf <https://github.com/inmanta/examples/blob/master/Networking/SR%20Linux/ospf.cf>`_ file contains the required configuration model to first set IP addresses on point-to-point interfaces between the ``spine``, ``leaf1`` and ``leaf2`` devices according to the `aforementioned topology <https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology>`_ and then configure ``OSPF`` between them.
 
 This model build on top of the ``interfaces`` model that was discussed in `SR Linux interface configuration`_. It first `imports` the required packages, then configures ``interfaces`` on all the devices and after that, adds the required configuration model for ``OSPF``.
 
