@@ -22,7 +22,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, abc
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
@@ -47,6 +47,10 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+# Unmanaged Resource Type
+URT = TypeVar("URT")
+# Discovery Resource Type
+DRT = TypeVar("DRT", bound=resources.Resource) # bound=... to force it to be serializable ?
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
@@ -989,6 +993,35 @@ class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
 
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         super().execute(ctx, resource, dry_run)
+
+
+@stable_api
+class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
+    # The DiscoveryHandler is generic in both the handler's Discovery Resource type (DRT)
+    # and the Unmanaged Resource type (URT) it reports to the server. The second has to be serializable.
+
+    # This class deploys instances of DRT and reports URT to the server.
+
+    @abstractmethod
+    def discover_resources(self, ctx: HandlerContext, discovery_resource: DRT) -> abc.Mapping[ResourceIdStr, URT]:
+        raise NotImplementedError
+
+    def pre(self, ctx: HandlerContext, resource: DRT) -> None:
+        """
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
+    def post(self, ctx: HandlerContext, resource: DRT) -> None:
+        """
+        Method executed after an operation. Override this method to run after an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
 
 
 class Commander(object):
