@@ -837,8 +837,8 @@ def p_string_dict_key(p: YaccProduction) -> None:
         raise ParserException(
             p[1].location,
             str(p[1]),
-            "String interpolation is not supported in dictionary keys. Use raw string to use a key containing double curly brackets",
-            # NOQA E501
+            "String interpolation is not supported in dictionary keys. "
+            "Use raw string to use a key containing double curly brackets",
         )
     p[0] = p[1]
 
