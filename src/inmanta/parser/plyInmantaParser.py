@@ -74,6 +74,7 @@ precedence = (
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
+    ("left", "EXPRESSION"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
     ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
@@ -196,7 +197,7 @@ def p_stmt(p: YaccProduction) -> None:
     """statement : assign
     | for
     | if
-    | expression"""
+    | expression %prec EXPRESSION"""
     p[0] = p[1]
 
 
@@ -627,7 +628,7 @@ def p_typedef_outer_comment(p: YaccProduction) -> None:
 
 
 def p_typedef_1(p: YaccProduction) -> None:
-    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
+    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression %prec EXPRESSION"""
     assert namespace
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p, 2)
@@ -728,7 +729,7 @@ def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
 
 
 def p_operand(p: YaccProduction) -> None:
-    """operand : expression"""
+    """operand : expression %prec EXPRESSION"""
     p[0] = p[1]
 
 
