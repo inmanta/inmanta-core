@@ -28,6 +28,7 @@ def test_list_not_in(snippetcompiler, capsys) -> None:
         textwrap.dedent(
             """
             test_list = [1, 2, 3, 4, 5]
+            assert = true
             assert = not (6 in test_list)
             assert = 6 not in test_list
             assert = 5 in test_list
