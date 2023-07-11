@@ -421,7 +421,7 @@ class HandlerContext(LoggerABC):
 @stable_api
 class HandlerABC(ABC):
     """
-        Top-level abstract base class all handlers should inherit from.
+    Top-level abstract base class all handlers should inherit from.
     """
 
     @abstractmethod
@@ -543,8 +543,6 @@ class ResourceHandler(HandlerABC):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to reload.
         """
-
-
 
     def close(self) -> None:
         pass
@@ -823,7 +821,7 @@ class ResourceHandler(HandlerABC):
 
 
 @stable_api
-class CRUDHandler(ResourceHandler, HandlerABC):
+class CRUDHandler(ResourceHandler):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
