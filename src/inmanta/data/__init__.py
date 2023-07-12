@@ -125,6 +125,7 @@ class InvalidQueryType(Exception):
 class TableLockMode(enum.Enum):
     """
     Table level locks as defined in the PostgreSQL docs:
+
     https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
     locking order accross transactions (as described at the top of this module) to prevent deadlocks and to otherwise respect
     the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
@@ -2474,15 +2475,20 @@ class Environment(BaseDocument):
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
     :param project: The project this environment belongs to.
-    :param repo_url: The repository url that contains the configuration model code for this environment
-    :param repo_branch: The repository branch that contains the configuration model code for this environment
-    :param settings: Key/value settings for this environment. This dictionary does not necessarily contain a key
-                     for every environment setting known by the server. This is done for backwards compatibility reasons.
-                     When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
-                     account. The logic to decide that is the following:
-                        * When the name of the new setting is present in this settings dictionary or when the name of the old
-                          setting is not present in the settings dictionary, use the new setting.
-                        * Otherwise, use the setting with the old name.
+    :param repo_url: The repository url that contains the configuration model code for this environment.
+    :param repo_branch: The repository branch that contains the configuration model code for this environment.
+    :param settings:
+
+        Key/value settings for this environment. This dictionary does not necessarily contain a key
+        for every environment setting known by the server. This is done for backwards compatibility reasons.
+        When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
+        account. The logic to decide that is the following:
+
+        * When the name of the new setting is present in this settings dictionary or when the name of the old
+          setting is not present in the settings dictionary, use the new setting.
+
+        * Otherwise, use the setting with the old name.
+
     :param last_version: The last version number that was reserved for this environment
     :param description: The description of the environment
     :param icon: An icon for the environment
