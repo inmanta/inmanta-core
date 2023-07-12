@@ -135,7 +135,7 @@ def p_main(p: YaccProduction) -> None:
 
 
 # low-precedence production that consumes no tokens, has two use cases:
-# - use its low preference compared to other tokens to prefer one production over another (especially relevant for recursion)
+# - use its low precedence compared to other tokens to prefer one production over another (especially relevant for recursion)
 # - simple placeholder to unify multiple similar rules with optional tokens under one production
 def p_empty(p: YaccProduction) -> None:
     "empty : %prec LOW"
