@@ -68,16 +68,18 @@ file = "NOFILE"
 namespace: Optional[Namespace] = None
 
 precedence = (
+    # precedence rule for productions that should eagerly shift new tokens as long as they remain feasible
+    # e.g. prefer one statement `x = 1 not in []` over two statements `x = 1` and `not in []`
+    ("nonassoc", "LOW"),
+    ("nonassoc", "MATCHING"),
     ("right", ","),
     ("nonassoc", ":"),
     ("nonassoc", "?"),
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
-    ("left", "EXPRESSION"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
-    ("left", "RELATION_DEF", "TYPEDEF_INNER", "OPERAND_LIST", "EMPTY", "NS_REF", "VAR_REF", "MAP_LOOKUP"),
     ("left", "CID", "ID"),
     ("left", "(", "["),
     ("left", "MLS"),
@@ -132,8 +134,16 @@ def p_main(p: YaccProduction) -> None:
     p[0] = v
 
 
+# low-precedence production that consumes no tokens, has two use cases:
+# - use its low precedence compared to other tokens to prefer one production over another (especially relevant for recursion)
+# - simple placeholder to unify multiple similar rules with optional tokens under one production
+def p_empty(p: YaccProduction) -> None:
+    "empty : %prec LOW"
+    pass
+
+
 def p_main_head(p: YaccProduction) -> None:
-    "head : %prec EMPTY"
+    "head : empty"
     p[0] = None
 
 
@@ -166,11 +176,6 @@ def p_top_stmt(p: YaccProduction) -> None:
     p[0] = p[1]
 
 
-def p_empty(p: YaccProduction) -> None:
-    "empty : %prec EMPTY"
-    pass
-
-
 #######################
 # IMPORT
 #######################
@@ -197,7 +202,7 @@ def p_stmt(p: YaccProduction) -> None:
     """statement : assign
     | for
     | if
-    | expression %prec EXPRESSION"""
+    | expression empty"""
     p[0] = p[1]
 
 
@@ -564,7 +569,7 @@ def p_relation_outer_comment(p: YaccProduction) -> None:
 
 
 def p_relation_outer(p: YaccProduction) -> None:
-    "relation : relation_def %prec RELATION_DEF"
+    "relation : relation_def empty"
     p[0] = p[1]
 
 
@@ -616,7 +621,7 @@ def p_multi_4(p: YaccProduction) -> None:
 
 
 def p_typedef_outer(p: YaccProduction) -> None:
-    """typedef : typedef_inner %prec TYPEDEF_INNER"""
+    """typedef : typedef_inner empty"""
     p[0] = p[1]
 
 
@@ -628,7 +633,7 @@ def p_typedef_outer_comment(p: YaccProduction) -> None:
 
 
 def p_typedef_1(p: YaccProduction) -> None:
-    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression %prec EXPRESSION"""
+    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
     assert namespace
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p, 2)
@@ -656,12 +661,12 @@ def p_expression(p: YaccProduction) -> None:
     """expression : boolean_expression
     | constant
     | function_call
-    | var_ref %prec VAR_REF
+    | var_ref empty
     | constructor
     | list_def
     | list_comprehension
     | map_def
-    | map_lookup %prec MAP_LOOKUP
+    | map_lookup empty
     | index_lookup
     | conditional_expression"""
     p[0] = p[1]
@@ -729,7 +734,7 @@ def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
 
 
 def p_operand(p: YaccProduction) -> None:
-    """operand : expression %prec EXPRESSION"""
+    """operand : expression empty"""
     p[0] = p[1]
 
 
@@ -1193,12 +1198,12 @@ def p_operand_list_term(p: YaccProduction) -> None:
 
 
 def p_operand_list_term_2(p: YaccProduction) -> None:
-    "operand_list : %prec OPERAND_LIST"
+    "operand_list : empty"
     p[0] = []
 
 
 def p_var_ref(p: YaccProduction) -> None:
-    "var_ref : attr_ref %prec VAR_REF"
+    "var_ref : attr_ref empty"
     p[0] = p[1]
 
 
@@ -1209,7 +1214,7 @@ def p_attr_ref(p: YaccProduction) -> None:
 
 
 def p_var_ref_2(p: YaccProduction) -> None:
-    "var_ref : ns_ref %prec NS_REF"
+    "var_ref : ns_ref empty"
     p[0] = Reference(p[1])
     attach_from_string(p, 1)
 
