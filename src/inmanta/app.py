@@ -49,11 +49,13 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 from tornado import gen
+from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol, util
+from inmanta.agent import Agent
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -112,15 +114,20 @@ def start_server(options: argparse.Namespace) -> None:
 
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
-    from inmanta.agent import agent
-
-    util.ensure_event_loop()
-
-    a = agent.Agent()
+    a = start_agent_with_max_clients()
     setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
     LOGGER.info("Agent Shutdown complete")
+
+
+def start_agent_with_max_clients() -> Agent:
+    from inmanta.agent import agent
+
+    max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
+    AsyncHTTPClient.configure(None, max_clients=max_clients)
+    util.ensure_event_loop()
+    return agent.Agent()
 
 
 def dump_threads() -> None:
