@@ -1,0 +1,4 @@
+description: Increase higher bound on asyncpg constraint from 0.27 to 0.28.
+issue-nr: 6232
+change-type: patch
+destination-branches: [master, iso6]
