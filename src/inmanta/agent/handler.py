@@ -1004,22 +1004,22 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
     def discover_resources(self, ctx: HandlerContext, discovery_resource: DRT) -> abc.Mapping[ResourceIdStr, URT]:
         raise NotImplementedError
 
-    def pre(self, ctx: HandlerContext, resource: DRT) -> None:
-        """
-        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-        to run before an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def post(self, ctx: HandlerContext, resource: DRT) -> None:
-        """
-        Method executed after an operation. Override this method to run after an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
+    # def pre(self, ctx: HandlerContext, resource: DRT) -> None:
+    #     """
+    #     Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+    #     to run before an operation.
+    #
+    #     :param ctx: Context object to report changes and logs to the agent and server.
+    #     :param resource: The resource to query facts for.
+    #     """
+    #
+    # def post(self, ctx: HandlerContext, resource: DRT) -> None:
+    #     """
+    #     Method executed after an operation. Override this method to run after an operation.
+    #
+    #     :param ctx: Context object to report changes and logs to the agent and server.
+    #     :param resource: The resource to query facts for.
+    #     """
 
 
 class Commander(object):
