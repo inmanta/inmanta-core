@@ -55,7 +55,7 @@ class provider(object):  # noqa: N801
     """
     A decorator that registers a new handler.
 
-    :param resource_type: The type of the resource this handler provides an implementation for. # TODO rephrase 'provides an implementation for'
+    :param resource_type: The type of the resource this handler is responsible for.
                           For example, :inmanta:entity:`std::File`
     :param name: A name to reference this provider.
     """
