@@ -42,7 +42,7 @@ class MyHelper:
         return 2 * x
 
 
-@provider("test_model::MyResource", name="my_resource")
+@provider("test_model::MyResource", name="my_resource_handler")
 class MyHandler(MyHelper, CRUDHandler[MyResource]):
     """
     Normal CRUD handler for the already managed MyResource instances.
@@ -52,9 +52,7 @@ class MyHandler(MyHelper, CRUDHandler[MyResource]):
 
     def read_resource(self, ctx: HandlerContext, resource: MyResource) -> None:
         # in practice this would likely be called in `pre`
-        self.authenticate(
-            resource
-        )  # doesn't type check now but #5555 should resolve that
+        self.authenticate(resource)
         resource.value = self.complex_transformation(
             self._read_value_for_id(resource.my_id)
         )
@@ -76,10 +74,10 @@ class MyUnmanagedResource(pydantic.BaseModel):
     value: int
 
 
-@provider("test_model::MyDiscoveryResource", name="my_discovery_resource")
+@provider("test_model::MyDiscoveryResource", name="my_discoveryresource_handler")
 class MyDiscoveryHandler(MyHelper, DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
     """
-    Discovery handler: deploys instances of MyDiscoveryResource by reporting MyUnmanagedResource to the server.
+    DiscoveryHandler: deploys instances of MyDiscoveryResource and reports found MyUnmanagedResource to the server.
 
     The DiscoveryHandler ABC is generic in both the handler's resource type and the type it reports to the server.
     The second has to be serializable.

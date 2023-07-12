@@ -33,7 +33,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, DiscoveredResource
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -466,6 +466,16 @@ class HandlerABC(ABC):
         """
         pass
 
+    def get_client(self) -> protocol.SessionClient:
+        """
+        Get the client instance that identifies itself with the agent session.
+
+        :return: A client that is associated with the session of the agent that executes this handler.
+        """
+        if self._client is None:
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+        return self._client
+
 
 @stable_api
 class ResourceHandler(HandlerABC):
@@ -495,7 +505,7 @@ class ResourceHandler(HandlerABC):
 
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
-        Run a the given async function on the ioloop of the agent. It will block the current thread until the future
+        Run the given async function on the ioloop of the agent. It will block the current thread until the future
         resolves.
 
         :param func: A function that returns a yieldable future.
@@ -522,15 +532,7 @@ class ResourceHandler(HandlerABC):
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
 
-    def get_client(self) -> protocol.SessionClient:
-        """
-        Get the client instance that identifies itself with the agent session.
 
-        :return: A client that is associated with the session of the agent that executes this handler.
-        """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
 
     def can_reload(self) -> bool:
         """
@@ -1000,26 +1002,42 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
 
     # This class deploys instances of DRT and reports URT to the server.
 
+
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
+        self._agent = agent
+
     @abstractmethod
     def discover_resources(self, ctx: HandlerContext, discovery_resource: DRT) -> abc.Mapping[ResourceIdStr, URT]:
         raise NotImplementedError
 
-    # def pre(self, ctx: HandlerContext, resource: DRT) -> None:
-    #     """
-    #     Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-    #     to run before an operation.
-    #
-    #     :param ctx: Context object to report changes and logs to the agent and server.
-    #     :param resource: The resource to query facts for.
-    #     """
-    #
-    # def post(self, ctx: HandlerContext, resource: DRT) -> None:
-    #     """
-    #     Method executed after an operation. Override this method to run after an operation.
-    #
-    #     :param ctx: Context object to report changes and logs to the agent and server.
-    #     :param resource: The resource to query facts for.
-    #     """
+
+    def execute(self, ctx: HandlerContext, resource: DRT, dry_run: bool = False) -> None:
+        """
+        """
+        try:
+            self.pre(ctx, resource)
+            # report to the server
+            discovered_resources: List[DiscoveredResource] = [DiscoveredResource(discovered_resource_id=resource_id, values=values) for resource_id, values in self.discover_resources(ctx, resource)]
+            self.get_client().discovered_resources_create_batch(env=self._agent.environment, discovered_resources=discovered_resources)
+
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during resource discovery of type %(urt)s, triggered by %(resource_id)s (exception: %(exception)s",
+                urt=URT,
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after resource discovery of type %(urt)s triggered by %(resource_id)s (exception: %(exception)s",
+                    urt=URT,
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
 
 class Commander(object):
