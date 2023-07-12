@@ -68,7 +68,7 @@ file = "NOFILE"
 namespace: Optional[Namespace] = None
 
 precedence = (
-    # prededence rule for productions that should eagerly shift new tokens as long as they remain feasible
+    # precedence rule for productions that should eagerly shift new tokens as long as they remain feasible
     # e.g. prefer one statement `x = 1 not in []` over two statements `x = 1` and `not in []`
     ("nonassoc", "LOW"),
     ("nonassoc", "MATCHING"),
