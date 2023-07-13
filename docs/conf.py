@@ -11,7 +11,7 @@
 #
 # All configuration values have a default; values that are commented out
 # serve to show the default.
-
+import shutil
 import sys, os, pkg_resources, datetime
 from sphinx.errors import ConfigError
 
@@ -40,6 +40,12 @@ def setup(app):
     # cut off license headers
     from sphinx.ext.autodoc import cut_lines
     app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
+def check_dot_command():
+    if shutil.which("dot") is None:
+        raise Exception("The 'dot' command is not available. Please install Graphviz (https://graphviz.org) and ensure that the 'dot' command is in the PATH.")
+
+# Check for dot command availability during documentation build
+check_dot_command()
 
 try:
     # noinspection PyUnresolvedReferences
