@@ -49,9 +49,9 @@ LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 # Discovery Resource Type
-DRT = TypeVar("DRT", bound=resources.Resource)  # bound=... to force it to be serializable ?
+DRT = TypeVar("DRT", bound=resources.Resource)
 # Unmanaged Resource Type
-URT = TypeVar("URT", bound=pydantic.BaseModel)  # bound=... to force it to be serializable ?
+URT = TypeVar("URT", bound=pydantic.BaseModel)  # bound=... enough to enforce the fact it needs to be serializable ?
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 

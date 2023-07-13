@@ -69,6 +69,9 @@ class Mock_DiscoveryHandler(DiscoveryHandler[MyDiscoveryResource, MyUnmanagedRes
 async def test_discovery_resource_handler(
     resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer, tmpdir
 ):
+    """
+    This test creates sub-directories and checks that they are onboarded as resources of type std::Directory
+    """
     def populate_tmp_dir():
         for i in range(6):
             tmpdir.mkdir(f"sub_dir_{i}")
@@ -92,3 +95,13 @@ async def test_discovery_resource_handler(
     )
     assert result.code == 200
     assert len(result.result["data"]) == 6
+    expected = [
+        {
+            'discovered_resource_id': f'std::Directory[internal,path={tmpdir}/sub_dir_{i}]',
+             'values': {
+                 'path': f'{tmpdir}/sub_dir_{i}'
+             }
+        }
+        for i in range(6)
+    ]
+    assert result.result["data"] == expected
