@@ -26,7 +26,6 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
-from tornado import concurrent
 from tornado.httpclient import AsyncHTTPClient
 
 from inmanta import config, data
