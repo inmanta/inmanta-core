@@ -42,7 +42,8 @@ def setup(app):
     app.connect('autodoc-process-docstring', cut_lines(15, what=['module']))
 def check_dot_command():
     if shutil.which("dot") is None:
-        raise Exception("The 'dot' command is not available. Please install Graphviz (https://graphviz.org) and ensure that the 'dot' command is in the PATH.")
+        raise Exception("The 'dot' command is not available. Please install Graphviz (https://graphviz.org) "
+                        "and ensure that the 'dot' command is in the PATH.")
 
 # Check for dot command availability during documentation build
 check_dot_command()
