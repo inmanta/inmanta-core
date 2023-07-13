@@ -28,11 +28,7 @@ from inmanta.data import ResourceIdStr
 from inmanta.resources import DiscoveryResource, Id, resource
 
 
-class MyDR:
-    pass
-
-
-class MyUR(pydantic.BaseModel):
+class MyUnmanagedResource(pydantic.BaseModel):
     path: str
 
 
@@ -42,13 +38,13 @@ class MyDiscoveryResource(DiscoveryResource):
 
 
 @provider("test_model::MyDiscoveryResource", name="my_discoveryresource_handler")
-class Mock_DiscoveryHandler(DiscoveryHandler[MyDR, MyUR]):
+class Mock_DiscoveryHandler(DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
     def __init__(self, agent: inmanta.agent.agent.AgentInstance, path):
         super().__init__(agent)
         self._path = path
         self._client = None
 
-    def discover_resources(self, ctx: HandlerContext, discovery_resource: MyDR) -> abc.Mapping[ResourceIdStr, MyUR]:
+    def discover_resources(self, ctx: HandlerContext, discovery_resource: MyDiscoveryResource) -> abc.Mapping[ResourceIdStr, MyUnmanagedResource]:
         dirs = os.listdir(self._path)
 
         resources = {
@@ -57,7 +53,7 @@ class Mock_DiscoveryHandler(DiscoveryHandler[MyDR, MyUR]):
                 agent_name="internal",
                 attribute="path",
                 attribute_value=os.path.join(self._path, dir),
-            ).resource_str(): MyUR(path=os.path.join(self._path, dir))
+            ).resource_str(): MyUnmanagedResource(path=os.path.join(self._path, dir))
             for dir in dirs
         }
 
@@ -88,7 +84,7 @@ async def test_discovery_resource_handler(
     discovery_resource = MyDiscoveryResource(discovery_resource_id)
     ctx = HandlerContext(discovery_resource)
 
-    # resource_handler.report_discovered_resources(ctx, res)
+    # resource_handler.report_discovered_resources(ctx, discovery_resource)
     await resource_handler.async_report_discovered_resources(ctx, discovery_resource)
 
     result = await client.discovered_resources_get_batch(

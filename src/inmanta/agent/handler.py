@@ -429,6 +429,10 @@ class HandlerABC(ABC):
     Top-level abstract base class all handlers should inherit from.
     """
 
+    # _client: Optional[protocol.SessionClient] = None
+    # _agent: Optional[inmanta.agent.agent.AgentInstance] = None
+    # _io_loop = None
+
     @abstractmethod
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
@@ -1047,13 +1051,10 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
             result = await self.get_client().discovered_resource_create_batch(
                 tid=self._agent.environment, discovered_resources=discovered_resources
             )
-            # if not result.result:
-            #     raise Exception("Failed to report discovered resources to the server")
 
             if result.code != 200:
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                 raise Exception(f"Failed to report discovered resources to the server{error_msg_from_server}")
-            # return result.result["data"]
 
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
