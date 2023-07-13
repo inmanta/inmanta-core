@@ -22,11 +22,10 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import abc, defaultdict
+from collections import defaultdict
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
-import pydantic
 from tornado import concurrent
 
 import inmanta
@@ -34,7 +33,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -48,10 +47,6 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-# Discovery Resource Type
-DRT = TypeVar("DRT", bound=resources.Resource)
-# Unmanaged Resource Type
-URT = TypeVar("URT", bound=pydantic.BaseModel)  # bound=... enough to enforce the fact it needs to be serializable ?
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
@@ -60,7 +55,7 @@ class provider(object):  # noqa: N801
     """
     A decorator that registers a new handler.
 
-    :param resource_type: The type of the resource this handler is responsible for.
+    :param resource_type: The type of the resource this handler provides an implementation for.
                           For example, :inmanta:entity:`std::File`
     :param name: A name to reference this provider.
     """
@@ -424,71 +419,7 @@ class HandlerContext(LoggerABC):
 
 
 @stable_api
-class HandlerABC(ABC):
-    """
-    Top-level abstract base class all handlers should inherit from.
-    """
-
-    # _client: Optional[protocol.SessionClient] = None
-    # _agent: Optional[inmanta.agent.agent.AgentInstance] = None
-    # _io_loop = None
-
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-        to run before an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed after an operation. Override this method to run after an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def get_client(self) -> protocol.SessionClient:
-        """
-        Get the client instance that identifies itself with the agent session.
-
-        :return: A client that is associated with the session of the agent that executes this handler.
-        """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
-
-    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
-        """
-        Run the given async function on the ioloop of the agent. It will block the current thread until the future
-        resolves.
-
-        :param func: A function that returns a yieldable future.
-        :return: The result of the async function.
-        """
-        f: Future[T] = Future()
-
-        # This function is not typed because of generics, the used methods and currying
-        def run() -> None:
-            try:
-                result = func()
-                if result is not None:
-                    from tornado.gen import convert_yielded
-
-                    result = convert_yielded(result)
-                    concurrent.chain_future(result, f)
-            except Exception as e:
-                f.set_exception(e)
-
-        self._ioloop.call_soon_threadsafe(run)
-
-        return f.result()
-
-
-@stable_api
-class ResourceHandler(HandlerABC):
+class ResourceHandler(object):
     """
     A baseclass for classes that handle resources. New handler are registered with the
     :func:`~inmanta.agent.handler.provider` decorator.
@@ -513,8 +444,44 @@ class ResourceHandler(HandlerABC):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
+    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
+        """
+        Run a the given async function on the ioloop of the agent. It will block the current thread until the future
+        resolves.
+
+        :param func: A function that returns a yieldable future.
+        :return: The result of the async function.
+        """
+        f: Future[T] = Future()
+
+        # This function is not typed because of generics, the used methods and currying
+        def run() -> None:
+            try:
+                result = func()
+                if result is not None:
+                    from tornado.gen import convert_yielded
+
+                    result = convert_yielded(result)
+                    concurrent.chain_future(result, f)
+            except Exception as e:
+                f.set_exception(e)
+
+        self._ioloop.call_soon_threadsafe(run)
+
+        return f.result()
+
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
+
+    def get_client(self) -> protocol.SessionClient:
+        """
+        Get the client instance that identifies itself with the agent session.
+
+        :return: A client that is associated with the session of the agent that executes this handler.
+        """
+        if self._client is None:
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+        return self._client
 
     def can_reload(self) -> bool:
         """
@@ -530,6 +497,23 @@ class ResourceHandler(HandlerABC):
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to reload.
+        """
+
+    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
+    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed after an operation. Override this method to run after an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
         """
 
     def close(self) -> None:
@@ -598,7 +582,7 @@ class ResourceHandler(HandlerABC):
         requires: Dict[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        This method is always called by the agent, even when one of the requires of the given resource
+        This method is always be called by the agent, even when one of the requires of the given resource
         failed to deploy. The default implementation of this method will deploy the given resource when all its
         requires were deployed successfully. Override this method if a different condition determines whether the
         resource should deploy.
@@ -975,109 +959,6 @@ class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
 
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         super().execute(ctx, resource, dry_run)
-
-
-@stable_api
-class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
-    # The DiscoveryHandler is generic in both the handler's Discovery Resource type (DRT)
-    # and the Unmanaged Resource type (URT) it reports to the server. The second has to be serializable.
-
-    # This class deploys instances of DRT and reports URT to the server.
-
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
-        self._agent = agent
-        self._ioloop = agent._io_loop
-
-    @abstractmethod
-    def discover_resources(self, ctx: HandlerContext, discovery_resource: DRT) -> abc.Mapping[ResourceIdStr, URT]:
-        raise NotImplementedError
-
-    def report_discovered_resources(self, ctx: HandlerContext, resource: DRT) -> None:
-        """ """
-
-        def _call_discovered_resource_create_batch() -> typing.Awaitable[Result]:
-            return self.get_client().discovered_resource_create_batch(
-                tid=self._agent.environment, discovered_resources=discovered_resources
-            )
-
-        try:
-            self.pre(ctx, resource)
-            # report to the server
-            discovered_resources: List[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values)
-                for resource_id, values in self.discover_resources(ctx, resource).items()
-            ]
-            result = self.run_sync(_call_discovered_resource_create_batch)
-
-            if result.code != 200:
-                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-                raise Exception(f"Failed to report discovered resources to the server{error_msg_from_server}")
-
-        except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                (
-                    "An error occurred during resource discovery of type %(urt)s, "
-                    "triggered by %(resource_id)s (exception: %(exception)s"
-                ),
-                urt=str(URT),
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
-            )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    (
-                        "An error occurred after resource discovery of type %(urt)s, "
-                        "triggered by %(resource_id)s (exception: %(exception)s"
-                    ),
-                    urt=str(URT),
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
-
-    async def async_report_discovered_resources(self, ctx: HandlerContext, resource: DRT) -> None:
-        try:
-            self.pre(ctx, resource)
-            # report to the server
-            discovered_resources: List[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values)
-                for resource_id, values in self.discover_resources(ctx, resource).items()
-            ]
-            result = await self.get_client().discovered_resource_create_batch(
-                tid=self._agent.environment, discovered_resources=discovered_resources
-            )
-
-            if result.code != 200:
-                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-                raise Exception(f"Failed to report discovered resources to the server{error_msg_from_server}")
-
-        except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                (
-                    "An error occurred during resource discovery of type %(urt)s, "
-                    "triggered by %(resource_id)s (exception: %(exception)s"
-                ),
-                urt=str(URT),
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
-            )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    (
-                        "An error occurred after resource discovery of type %(urt)s, "
-                        "triggered by %(resource_id)s (exception: %(exception)s"
-                    ),
-                    urt=str(URT),
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
 
 
 class Commander(object):
