@@ -36,7 +36,7 @@ These ``ResourceSet`` instances are found by the default exporter to ascertain w
 
 In the example below, 1000 networks of 5 hosts each are created. Each host is part of its network's resource set.
 
-.. literalinclude:: resource_sets/src/inmanta/parser/plyInmantaParser.py_example_full.cf
+.. literalinclude:: resource_sets/basic_example_full.cf
     :language: inmanta
     :caption: main.cf
 

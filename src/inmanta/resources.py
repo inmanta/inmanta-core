@@ -463,6 +463,14 @@ class PurgeableResource(Resource):
     purged: bool
     purge_on_delete: bool
 
+@stable_api
+class DiscoveryResource(Resource):
+    """
+    See :inmanta:entity:`std::DiscoveryResource` for more information.
+    """
+
+    fields = ()
+
 
 @stable_api
 class ManagedResource(Resource):
