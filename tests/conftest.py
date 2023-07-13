@@ -17,6 +17,8 @@
 """
 import warnings
 
+from tornado.httpclient import AsyncHTTPClient
+
 import toml
 from inmanta.config import AuthJWTConfig
 from inmanta.logging import InmantaLoggerConfig
@@ -518,12 +520,14 @@ def reset_metrics():
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
+    AsyncHTTPClient.configure(None, max_clients=10)
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
     loader.unload_inmanta_plugins()
     default_settings = dict(data.Environment._settings)
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
+    AsyncHTTPClient.configure(None, max_clients=10)
     reset_all_objects()
     loader.unload_inmanta_plugins()
     cache_manager.detach_from_project()
@@ -1459,6 +1463,7 @@ async def async_finalizer():
     cleaner = AsyncCleaner()
     yield cleaner
     await asyncio.gather(*[item() for item in cleaner.register])
+    print("done")
 
 
 class CompileRunnerMock(object):

@@ -26,6 +26,7 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
+from tornado import concurrent
 from tornado.httpclient import AsyncHTTPClient
 
 from inmanta import config, data
@@ -1377,7 +1378,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     assert not hangers.done()
 
     def did_exceed_capacity():
-        msg = "max_clients limit reached, request queued. 1 active, 4 queued requests."
+        msg = "max_clients limit reached, request queued. 1 active, 2 queued requests."
         for record in caplog.records:
             if msg in record.message:
                 if record.name == "inmanta.protocol.endpoints" and record.levelno == logging.WARNING:
