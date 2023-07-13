@@ -128,7 +128,7 @@ def start_agent_with_max_clients() -> Agent:
     AsyncHTTPClient.configure(None, max_clients=max_clients)
 
     util.ensure_event_loop()
-    return agent.Agent()
+    return agent.Agent(hostname="node1", agent_map={"agent1": "localhost"}, code_loader=False)
 
 
 def dump_threads() -> None:

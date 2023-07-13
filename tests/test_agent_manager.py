@@ -26,6 +26,7 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
+from tornado.httpclient import AsyncHTTPClient
 
 from inmanta import config, data
 from inmanta.agent import Agent, agent
@@ -1362,6 +1363,7 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
 
     a = start_agent_with_max_clients()
+    await a.add_end_point_name("agent1")
 
     async_finalizer.add(a.stop)
     await a.start()
