@@ -1,0 +1,6 @@
+description: Add the "not in" operator.
+issue-nr: 6211
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
