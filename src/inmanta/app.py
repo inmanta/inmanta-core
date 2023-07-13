@@ -55,7 +55,6 @@ from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
 from inmanta import const, module, moduletool, protocol, util
-from inmanta.agent import Agent
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
