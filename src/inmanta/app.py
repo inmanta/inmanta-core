@@ -114,21 +114,21 @@ def start_server(options: argparse.Namespace) -> None:
 
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
-    a = start_agent_with_max_clients()
-    setup_signal_handlers(a.stop)
-    IOLoop.current().add_callback(a.start)
-    IOLoop.current().start()
-    LOGGER.info("Agent Shutdown complete")
-
-
-def start_agent_with_max_clients() -> Agent:
     from inmanta.agent import agent
 
+    # The call to configure() should be done as soon as possible.
+    # If an AsyncHTTPClient is started before this call, the max_client
+    # will not be taken into account.
     max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
     AsyncHTTPClient.configure(None, max_clients=max_clients)
 
     util.ensure_event_loop()
-    return agent.Agent(hostname="node1", agent_map={"agent1": "localhost"}, code_loader=False)
+    a = agent.Agent()
+
+    setup_signal_handlers(a.stop)
+    IOLoop.current().add_callback(a.start)
+    IOLoop.current().start()
+    LOGGER.info("Agent Shutdown complete")
 
 
 def dump_threads() -> None:

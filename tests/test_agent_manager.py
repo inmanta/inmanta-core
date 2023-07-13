@@ -31,10 +31,8 @@ from tornado.httpclient import AsyncHTTPClient
 from inmanta import config, data
 from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
-from inmanta.app import start_agent_with_max_clients
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
-from inmanta.export import cfg_env
 from inmanta.protocol import Result, handle, typedmethod
 from inmanta.protocol.common import ReturnValue
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, protocol
@@ -1333,6 +1331,9 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     Config.set("agent_rest_transport", "max_clients", "1")
 
+    max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
+    AsyncHTTPClient.configure(None, max_clients=max_clients)
+
     server = TestSlice(name="test_slice")
 
     ibl = InmantaBootloader()
@@ -1356,13 +1357,12 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
     result = await client.create_environment(proj_id, "test", None, None)
     assert result.code == 200
     env_id = result.result["environment"]["id"]
-    # environment = await data.Environment.get_by_id(uuid.UUID(env_id))
-
-    cfg_env.set(env_id)
+    environment = await data.Environment.get_by_id(uuid.UUID(env_id))
 
     agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
 
-    a = start_agent_with_max_clients()
+    a = Agent(hostname="node1", environment=environment.id, agent_map={"agent1": "localhost"}, code_loader=False)
+    await a.add_end_point_name("agent1")
     await a.add_end_point_name("agent1")
 
     async_finalizer.add(a.stop)
