@@ -126,6 +126,7 @@ def start_agent_with_max_clients() -> Agent:
 
     max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
     AsyncHTTPClient.configure(None, max_clients=max_clients)
+
     util.ensure_event_loop()
     return agent.Agent()
 

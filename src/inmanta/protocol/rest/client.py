@@ -40,9 +40,7 @@ class RESTClient(RESTBase):
     HTTP verbs. For other methods the POST verb is used.
     """
 
-    def __init__(
-        self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False, max_clients: int = 10
-    ) -> None:
+    def __init__(self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False) -> None:
         super().__init__()
         self.__end_point: "Endpoint" = endpoint
         self.daemon: bool = True
