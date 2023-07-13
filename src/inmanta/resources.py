@@ -463,6 +463,7 @@ class PurgeableResource(Resource):
     purged: bool
     purge_on_delete: bool
 
+
 @stable_api
 class DiscoveryResource(Resource):
     """
@@ -508,11 +509,11 @@ class Id(object):
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
         """
-            :attr entity_type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
-            :attr agent_name: The agent responsible for this resource.
-            :attr attribute: The key attribute that uniquely identifies this resource on the agent
-            :attr attribute_value: The corresponding value for this key attribute.
-            :attr version: The version number for this resource.
+        :attr entity_type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+        :attr agent_name: The agent responsible for this resource.
+        :attr attribute: The key attribute that uniquely identifies this resource on the agent
+        :attr attribute_value: The corresponding value for this key attribute.
+        :attr version: The version number for this resource.
         """
         self._entity_type = entity_type
         self._agent_name = agent_name

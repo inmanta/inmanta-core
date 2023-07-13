@@ -15,151 +15,84 @@
 
     Contact: code@inmanta.com
 """
-import base64
-import logging
 import os
-import typing
 from collections import abc
-from typing import TypeVar, Dict
 
-import pytest
+import pydantic
 
-from inmanta import const, agent, data, resources
-from inmanta.agent import Agent
-from inmanta.agent.handler import ResourceHandler, DiscoveryHandler, HandlerContext
-from inmanta.const import ResourceState
+import inmanta
+from agent_server.conftest import get_agent
+from inmanta import resources
+from inmanta.agent.handler import DiscoveryHandler, HandlerContext, provider
 from inmanta.data import ResourceIdStr
-from inmanta.protocol import SessionClient, VersionMatch, common
-from inmanta.resources import resource, DiscoveryResource
-from inmanta.server import SLICE_SESSION_MANAGER
-from test_protocol import make_random_file
-from utils import _wait_until_deployment_finishes, log_contains, retry_limited
+from inmanta.resources import DiscoveryResource, Id, resource
 
-T = TypeVar("T")
-
-
-class MockSessionClient(SessionClient):
-    def __init__(self):
-        self._version_match = VersionMatch.highest
-        pass
-
-    # def get_file(self, hash_id):
-    #     content = b""
-    #     if self.return_code != 404:
-    #         content = base64.b64encode(self.content)
-    #     return common.Result(self.return_code, result={"content": content})
 
 class MyDR:
     pass
 
-class MyUR:
-    pass
+
+class MyUR(pydantic.BaseModel):
+    path: str
+
 
 @resource("test_model::MyDiscoveryResource", agent="agent", id_attribute="path")
 class MyDiscoveryResource(DiscoveryResource):
     fields = ("path",)
 
-class Mock_DiscoveryHandler(DiscoveryHandler[MyDR, MyUR]):
-    def __init__(self, client, path):
-        self._client = client
-        self._path = path
 
+@provider("test_model::MyDiscoveryResource", name="my_discoveryresource_handler")
+class Mock_DiscoveryHandler(DiscoveryHandler[MyDR, MyUR]):
+    def __init__(self, agent: inmanta.agent.agent.AgentInstance, path):
+        super().__init__(agent)
+        self._path = path
+        self._client = None
 
     def discover_resources(self, ctx: HandlerContext, discovery_resource: MyDR) -> abc.Mapping[ResourceIdStr, MyUR]:
-        out = os.listdir(self._path)
-        print(out)
-        pass
+        dirs = os.listdir(self._path)
 
-    def deploy(
-        self,
-        ctx: HandlerContext,
-        resource: resources.Resource,
-        requires: Dict[ResourceIdStr, ResourceState],
-    ) -> None:
-        pass
+        resources = {
+            Id(
+                entity_type="std::Directory",
+                agent_name="internal",
+                attribute="path",
+                attribute_value=os.path.join(self._path, dir),
+            ).resource_str(): MyUR(path=os.path.join(self._path, dir))
+            for dir in dirs
+        }
+
+        return resources
 
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         pass
+
     def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         pass
+
 
 async def test_discovery_resource_handler(
     resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer, tmpdir
 ):
-    pass
+    def populate_tmp_dir():
+        for i in range(6):
+            tmpdir.mkdir(f"sub_dir_{i}")
 
+    populate_tmp_dir()
 
-    client = MockSessionClient()
-    resource_handler = Mock_DiscoveryHandler(client, tmpdir)
-    res = MyDiscoveryResource()
-    ctx = HandlerContext(res)
+    agent = await get_agent(server, environment, "agent")
+    resource_handler = Mock_DiscoveryHandler(agent, tmpdir)
 
-    resource_handler.execute(ctx, res)
+    discovery_resource_id = Id(
+        entity_type="test_model::MyDiscoveryResource", agent_name="agent", attribute="path", attribute_value=tmpdir
+    )
+    discovery_resource = MyDiscoveryResource(discovery_resource_id)
+    ctx = HandlerContext(discovery_resource)
+
+    # resource_handler.report_discovered_resources(ctx, res)
+    await resource_handler.async_report_discovered_resources(ctx, discovery_resource)
+
     result = await client.discovered_resources_get_batch(
         environment,
     )
     assert result.code == 200
     assert len(result.result["data"]) == 6
-
-async def test_discovery_resource(
-    resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer
-):
-    resource_container.Provider.reset()
-    myagent = agent.Agent(
-        hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"}, code_loader=False
-    )
-    await myagent.add_end_point_name("agent1")
-    await myagent.add_end_point_name("agent2")
-    await myagent.start()
-    async_finalizer(myagent.stop)
-    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 10)
-
-    version = await clienthelper.get_version()
-
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": "test::Discover1[agent1,key=key1],v=%d" % version,
-            "requires": [],
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": False,
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": "test::Discover2[agent1,key=key2],v=%d" % version,
-            "requires": [],
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": False,
-        },
-        {
-            "key": "key3",
-            "value": "value3",
-            "id": "test::Discover3[agent2,key=key3],v=%d" % version,
-            "requires": [],
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": False,
-        },
-    ]
-
-    await clienthelper.put_version_simple(resources, version)
-
-    # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 3
-
-    # call the API endpoint
-    await client.discover_facts(tid=environment)
-
-    discovered_resources = await data.DiscoveredResource.get_list(environment=environment)
-    assert len(discovered_resources) == 3
-
-    await myagent.stop()
