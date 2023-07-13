@@ -59,12 +59,6 @@ class Mock_DiscoveryHandler(DiscoveryHandler[MyDiscoveryResource, MyUnmanagedRes
 
         return resources
 
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        pass
-
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        pass
-
 
 async def test_discovery_resource_handler(
     resource_container, server, client, clienthelper, environment, no_agent_backoff, async_finalizer, tmpdir

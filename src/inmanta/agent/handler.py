@@ -433,7 +433,6 @@ class HandlerABC(ABC):
     # _agent: Optional[inmanta.agent.agent.AgentInstance] = None
     # _io_loop = None
 
-    @abstractmethod
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
@@ -443,7 +442,6 @@ class HandlerABC(ABC):
         :param resource: The resource to query facts for.
         """
 
-    @abstractmethod
     def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
         Method executed after an operation. Override this method to run after an operation.
