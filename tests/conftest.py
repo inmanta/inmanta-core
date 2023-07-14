@@ -555,7 +555,6 @@ def reset_all_objects():
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
-    AsyncHTTPClient.configure(None)
 
 
 @pytest.fixture()
@@ -1462,8 +1461,6 @@ async def async_finalizer():
     cleaner = AsyncCleaner()
     yield cleaner
     await asyncio.gather(*[item() for item in cleaner.register])
-    print("done")
-
 
 class CompileRunnerMock(object):
     def __init__(
