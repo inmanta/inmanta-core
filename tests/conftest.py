@@ -1463,7 +1463,6 @@ async def async_finalizer():
     cleaner = AsyncCleaner()
     yield cleaner
     await asyncio.gather(*[item() for item in cleaner.register])
-    print("done")
 
 
 class CompileRunnerMock(object):
