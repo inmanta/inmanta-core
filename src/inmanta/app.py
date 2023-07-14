@@ -118,8 +118,9 @@ def start_agent(options: argparse.Namespace) -> None:
     # The call to configure() should be done as soon as possible.
     # If an AsyncHTTPClient is started before this call, the max_client
     # will not be taken into account.
-    max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
-    AsyncHTTPClient.configure(None, max_clients=max_clients)
+    max_clients: Optional[int] = Config.get("agent_rest_transport", "max_clients", None)
+    if max_clients:
+        AsyncHTTPClient.configure(None, max_clients=max_clients)
 
     util.ensure_event_loop()
     a = agent.Agent()

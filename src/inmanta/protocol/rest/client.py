@@ -48,6 +48,7 @@ class RESTClient(RESTBase):
         self.connection_timout: int = connection_timout
         self.headers: Set[str] = set()
         self.request_timeout: int = inmanta_config.Config.get(self.id, "request_timeout", 120)
+        self.force_instance = force_instance
         self.client = AsyncHTTPClient(force_instance=force_instance)
 
     @property
@@ -144,6 +145,10 @@ class RESTClient(RESTBase):
             return common.Result(code=500, result={"message": str(e)})
 
         return self._decode_response(response)
+
+    def close(self):
+        if self.force_instance:
+            self.client.close()
 
     def _decode_response(self, response: HTTPResponse):
         content_type = response.headers.get(common.CONTENT_TYPE, None)

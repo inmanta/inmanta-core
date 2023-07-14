@@ -520,14 +520,12 @@ def reset_metrics():
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
-    AsyncHTTPClient.configure(None, max_clients=10)
     methods = inmanta.protocol.common.MethodProperties.methods.copy()
     loader.unload_inmanta_plugins()
     default_settings = dict(data.Environment._settings)
     yield
     inmanta.protocol.common.MethodProperties.methods = methods
     config.Config._reset()
-    AsyncHTTPClient.configure(None, max_clients=10)
     reset_all_objects()
     loader.unload_inmanta_plugins()
     cache_manager.detach_from_project()
@@ -557,6 +555,7 @@ def reset_all_objects():
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
+    AsyncHTTPClient.configure(None)
 
 
 @pytest.fixture()

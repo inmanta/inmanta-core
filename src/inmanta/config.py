@@ -251,11 +251,18 @@ def is_str_opt(value: str) -> Optional[str]:
     return str(value)
 
 
-def is_uuid_opt(value: str) -> uuid.UUID:
+def is_uuid_opt(value: str) -> Optional[uuid.UUID]:
     """optional uuid"""
     if value is None:
         return None
     return uuid.UUID(value)
+
+
+def is_int_opt(value: str) -> Optional[int]:
+    """optional int"""
+    if value is None:
+        return None
+    return int(value)
 
 
 T = TypeVar("T")
@@ -410,9 +417,9 @@ class TransportConfig(object):
         self.max_clients = Option(
             self.prefix,
             "max_clients",
-            "10",
+            None,
             "The maximum number of simultaneous connections that can be open in parallel",
-            is_int,
+            is_int_opt,
         )
 
 

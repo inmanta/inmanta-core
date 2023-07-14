@@ -364,6 +364,10 @@ class Client(Endpoint):
         self._version_match = version_match
         self._exact_version = exact_version
 
+    def close(self):
+        if self.force_instance:
+            self._transport_instance.close()
+
     async def _call(
         self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
     ) -> common.Result:
@@ -481,7 +485,3 @@ class SessionClient(Client):
 
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
-
-    def close(self) -> None:
-        if self._transport_instance and self._transport_instance.client:
-            self._transport_instance.client.close()
