@@ -9,7 +9,8 @@ from inmanta.resources import PurgeableResource, resource
 
 class MyResourceBase:
     """
-    Helper base class for common abstractions between managed resource and discovery resource.
+    Helper base class for common abstractions between managed resource
+    and discovery resource.
     """
 
     fields = ("username", "password")
@@ -33,9 +34,9 @@ class MyDiscoveryResource(MyResourceBase):
 
 class MyHandlerBase:
     """
-    Helper base class for shared behavior between managed resource handler and discovery handler.
-    Since this is a shared class, it doesn't operate on `MyResource` or `MyDiscoveryResource`
-    but on their shared parent `MyResourceBase`.
+    Helper base class for shared behavior between managed resource handler
+    and discovery handler. Since this is a shared class, it doesn't operate
+    on `MyResource` or `MyDiscoveryResource` but on their shared parent `MyResourceBase`.
     """
     def authenticate(self, resource: MyResourceBase) -> None:
         if resource.password == "4dm1n":
@@ -80,10 +81,11 @@ class MyUnmanagedResource(pydantic.BaseModel):
 @provider("test_model::MyDiscoveryResource", name="my_discoveryresource_handler")
 class MyDiscoveryHandler(MyHandlerBase, DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
     """
-    MyDiscoveryHandler: deploys instances of MyDiscoveryResource and reports found MyUnmanagedResource to the server.
+    MyDiscoveryHandler: deploys instances of MyDiscoveryResource and reports
+    found MyUnmanagedResource to the server.
 
-    The DiscoveryHandler ABC is generic in both the handler's resource type and the type it reports to the server.
-    The second has to be serializable.
+    The DiscoveryHandler ABC is generic in both the handler's resource type
+    and the type it reports to the server. The second has to be serializable.
     """
     def _list_resources(self) -> list[tuple[int, int]]:
         ...

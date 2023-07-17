@@ -40,7 +40,7 @@ Handler implementation
 ======================
 
 The snippet below shows an example implementation of a handler responsible for
-a discovery resource.
+a discovery resource:
 
 .. literalinclude:: unmanaged_resources/handler_implementation.py
     :language: python
