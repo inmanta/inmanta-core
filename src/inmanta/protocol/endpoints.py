@@ -369,8 +369,7 @@ class Client(Endpoint):
         """
         Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
         """
-        if self.forced_instance:
-            self._transport_instance.close()
+        self._transport_instance.close()
 
     async def _call(
         self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
