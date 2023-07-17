@@ -22,7 +22,6 @@ import pydantic
 
 import inmanta
 from agent_server.conftest import get_agent
-from inmanta import resources
 from inmanta.agent.handler import DiscoveryHandler, HandlerContext, provider
 from inmanta.data import ResourceIdStr
 from inmanta.resources import DiscoveryResource, Id, resource
