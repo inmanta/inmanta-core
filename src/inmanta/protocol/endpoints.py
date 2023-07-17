@@ -365,6 +365,9 @@ class Client(Endpoint):
         self._exact_version = exact_version
 
     def close(self):
+        """
+        Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
+        """
         if self.force_instance:
             self._transport_instance.close()
 

@@ -147,6 +147,9 @@ class RESTClient(RESTBase):
         return self._decode_response(response)
 
     def close(self):
+        """
+        Closes the client manually. This is only needed when it is started with force_instance set to true
+        """
         if self.force_instance:
             self.client.close()
 

@@ -1331,6 +1331,8 @@ async def test_heartbeat_different_session(server_pre_start, async_finalizer, ca
 
     Config.set("agent_rest_transport", "max_clients", "1")
 
+    # This part is copied from the app.start_agent function. It needs to be called before the server starts.
+    # We need to be able to create an environment before we can create an agent which we can't do using the start_agent function
     max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
     AsyncHTTPClient.configure(None, max_clients=max_clients)
 
