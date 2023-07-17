@@ -17,6 +17,8 @@
 """
 import warnings
 
+from tornado.httpclient import AsyncHTTPClient
+
 import toml
 from inmanta.config import AuthJWTConfig
 from inmanta.logging import InmantaLoggerConfig
@@ -553,6 +555,7 @@ def reset_all_objects():
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
+    AsyncHTTPClient.configure(None)
 
 
 @pytest.fixture()
