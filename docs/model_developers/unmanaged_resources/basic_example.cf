@@ -1,6 +1,6 @@
 entity MyResourceProvider:
     """
-    ABC for common parts between actual resource and discovery resource.
+    Base class for common parts between actual resource and discovery resource.
     Concretely this means all attributes and relations that are part of
     the resource's environment rather than the resource itself.
     """

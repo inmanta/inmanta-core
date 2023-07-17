@@ -7,7 +7,11 @@ from inmanta.agent.handler import provider, DiscoveryHandler, HandlerContext, CR
 from inmanta.resources import PurgeableResource, resource
 
 
-class MyResourceProvider:
+class MyResourceBase:
+    """
+    Helper base class for common abstractions between managed resource and discovery resource.
+    """
+
     fields = ("username", "password")
 
     username: str
@@ -15,35 +19,34 @@ class MyResourceProvider:
 
 
 @resource("test_model::MyResource", agent="host.name", id_attribute="my_id")
-class MyResource(MyResourceProvider, PurgeableResource):
+class MyResource(MyResourceBase, PurgeableResource):
     fields = ("my_id", "value")
 
     my_id: int
     value: int
 
 
-# PoC: in practice this id_attribute would require a custom mapping or attribute
 @resource("test_model::MyDiscoveryResource", agent="host.name", id_attribute="host.name")
-class MyDiscoveryResource(MyResourceProvider):
+class MyDiscoveryResource(MyResourceBase):
     fields = ()
 
 
-class MyHelper:
+class MyHandlerBase:
     """
-    Helper class for shared behavior between managed resource handler and discovery handler.
+    Helper base class for shared behavior between managed resource handler and discovery handler.
     Since this is a shared class, it doesn't operate on `MyResource` or `MyDiscoveryResource`
-    but on their shared parent `MyResourceProvider`.
+    but on their shared parent `MyResourceBase`.
     """
-    def authenticate(self, provider: MyResourceProvider) -> None:
-        if provider.password == "4dm1n":
-            print(f"hello {provider.username}")
+    def authenticate(self, resource: MyResourceBase) -> None:
+        if resource.password == "4dm1n":
+            print(f"hello {resource.username}")
 
     def complex_transformation(self, x: int) -> int:
         return 2 * x
 
 
 @provider("test_model::MyResource", name="my_resource_handler")
-class MyHandler(MyHelper, CRUDHandler[MyResource]):
+class MyHandler(MyHandlerBase, CRUDHandler[MyResource]):
     """
     Normal CRUD handler for the already managed MyResource instances.
     """
@@ -75,9 +78,9 @@ class MyUnmanagedResource(pydantic.BaseModel):
 
 
 @provider("test_model::MyDiscoveryResource", name="my_discoveryresource_handler")
-class MyDiscoveryHandler(MyHelper, DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
+class MyDiscoveryHandler(MyHandlerBase, DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
     """
-    DiscoveryHandler: deploys instances of MyDiscoveryResource and reports found MyUnmanagedResource to the server.
+    MyDiscoveryHandler: deploys instances of MyDiscoveryResource and reports found MyUnmanagedResource to the server.
 
     The DiscoveryHandler ABC is generic in both the handler's resource type and the type it reports to the server.
     The second has to be serializable.
