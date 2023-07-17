@@ -82,7 +82,13 @@ build-result
 _build
 logs
 
+# Documentation artifacts
 docs/reference/openapi.json
+docs/lsm/*.pdf
+docs/lsm/*.png
+docs/model_developers/images/*.pdf
+docs/model_developers/images/*.png
+
 
 # Ignore modules_v2 python package repo cache
 tests/data/modules_v2.cache
