@@ -357,6 +357,7 @@ class Client(Endpoint):
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
+        self.forced_instance = force_instance
         if with_rest_client:
             self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
         else:
@@ -368,7 +369,7 @@ class Client(Endpoint):
         """
         Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
         """
-        if self.force_instance:
+        if self.forced_instance:
             self._transport_instance.close()
 
     async def _call(
