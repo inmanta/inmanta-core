@@ -357,7 +357,6 @@ class Client(Endpoint):
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
-        self.forced_instance = force_instance
         if with_rest_client:
             self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
         else:
