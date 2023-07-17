@@ -198,9 +198,9 @@ class Resource(metaclass=ResourceMeta):
     """
     Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
 
-    Such as class is registered when the :func:`~inmanta.resources.resource` decorator is used. Each class needs to indicate
+    Such a class is registered when the :func:`~inmanta.resources.resource` decorator is used. Each class needs to indicate
     the fields the resource will have with a class field named "fields". A metaclass merges all fields lists from the class
-    itself and all superclasses. If a field it not available directly in the model object the serializer will look for
+    itself and all superclasses. If a field is not available directly in the model object the serializer will look for
     static methods in the class with the name "get_$fieldname".
     """
 
