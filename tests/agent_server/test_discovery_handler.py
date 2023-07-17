@@ -44,7 +44,9 @@ class Mock_DiscoveryHandler(DiscoveryHandler[MyDiscoveryResource, MyUnmanagedRes
         self._path = path
         self._client = None
 
-    def discover_resources(self, ctx: HandlerContext, discovery_resource: MyDiscoveryResource) -> abc.Mapping[ResourceIdStr, MyUnmanagedResource]:
+    def discover_resources(
+        self, ctx: HandlerContext, discovery_resource: MyDiscoveryResource
+    ) -> abc.Mapping[ResourceIdStr, MyUnmanagedResource]:
         dirs = os.listdir(self._path)
 
         resources = {
@@ -66,6 +68,7 @@ async def test_discovery_resource_handler(
     """
     This test creates sub-directories and checks that they are onboarded as resources of type std::Directory
     """
+
     def populate_tmp_dir():
         for i in range(6):
             tmpdir.mkdir(f"sub_dir_{i}")
@@ -91,10 +94,8 @@ async def test_discovery_resource_handler(
     assert len(result.result["data"]) == 6
     expected = [
         {
-            'discovered_resource_id': f'std::Directory[internal,path={tmpdir}/sub_dir_{i}]',
-             'values': {
-                 'path': f'{tmpdir}/sub_dir_{i}'
-             }
+            "discovered_resource_id": f"std::Directory[internal,path={tmpdir}/sub_dir_{i}]",
+            "values": {"path": f"{tmpdir}/sub_dir_{i}"},
         }
         for i in range(6)
     ]
