@@ -40,7 +40,7 @@ class RESTClient(RESTBase):
     HTTP verbs. For other methods the POST verb is used.
     """
 
-    def __init__(self, endpoint: "Endpoint", connection_timout: int = 120) -> None:
+    def __init__(self, endpoint: "Endpoint", connection_timout: int = 120, force_instance: bool = False) -> None:
         super().__init__()
         self.__end_point: "Endpoint" = endpoint
         self.daemon: bool = True
@@ -48,6 +48,8 @@ class RESTClient(RESTBase):
         self.connection_timout: int = connection_timout
         self.headers: set[str] = set()
         self.request_timeout: int = inmanta_config.Config.get(self.id, "request_timeout", 120)
+        self.forced_instance = force_instance
+        self.client = AsyncHTTPClient(force_instance=force_instance)
 
     @property
     def endpoint(self) -> "Endpoint":
@@ -126,8 +128,7 @@ class RESTClient(RESTBase):
                 ca_certs=ca_certs,
                 decompress_response=True,
             )
-            client = AsyncHTTPClient()
-            response = await client.fetch(request)
+            response = await self.client.fetch(request)
         except HTTPError as e:
             if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                 try:
@@ -144,6 +145,13 @@ class RESTClient(RESTBase):
             return common.Result(code=500, result={"message": str(e)})
 
         return self._decode_response(response)
+
+    def close(self):
+        """
+        Closes the client manually. This is only needed when it is started with force_instance set to true
+        """
+        if self.forced_instance:
+            self.client.close()
 
     def _decode_response(self, response: HTTPResponse):
         content_type = response.headers.get(common.CONTENT_TYPE, None)

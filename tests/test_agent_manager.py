@@ -26,16 +26,19 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
+from tornado.httpclient import AsyncHTTPClient
 
 from inmanta import config, data
 from inmanta.agent import Agent, agent
 from inmanta.agent import config as agent_config
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
-from inmanta.protocol import Result
-from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER
+from inmanta.protocol import Result, handle, typedmethod
+from inmanta.protocol.common import ReturnValue
+from inmanta.server import SLICE_AGENT_MANAGER, SLICE_AUTOSTARTED_AGENT_MANAGER, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager, SessionAction, SessionManager
-from inmanta.server.protocol import Session
+from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server.protocol import ServerSlice, Session
 from utils import UNKWN, assert_equal_ish, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -1296,3 +1299,103 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
         return "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
 
     await retry_limited(log_contains_debug_line, 10)
+
+
+async def test_heartbeat_different_session(server_pre_start, async_finalizer, caplog):
+    """
+    Verify that:
+      - if the max_clients is reached, the heartbeat will still work as it is in a different pool
+      - the max_clients option in the config changes the number of max_clients in a pool
+      - debug logs concerning 'max_clients limit reached' logged by Tornado, are logged as inmanta warnings.
+    """
+    caplog.set_level(logging.WARNING)
+    hanglock = asyncio.Event()
+
+    @typedmethod(
+        path="/test",
+        operation="GET",
+        client_types=["agent"],
+        agent_server=True,
+    )
+    def test_method(number: int) -> ReturnValue[int]:  # NOQA
+        """
+        api endpoint that never returns
+        """
+
+    class TestSlice(ServerSlice):
+        @handle(test_method)
+        async def test_method_implementation(self, number: int) -> ReturnValue[int]:  # NOQA
+            LOGGER.warning(f"HANG {number}")
+            await hanglock.wait()
+            return ReturnValue(response=number)
+
+    Config.set("agent_rest_transport", "max_clients", "1")
+
+    # This part is copied from the app.start_agent function. It needs to be called before the server starts.
+    # We need to be able to create an environment before we can create an agent which we can't do using the start_agent function
+    max_clients: int = Config.get("agent_rest_transport", "max_clients", "10")
+    AsyncHTTPClient.configure(None, max_clients=max_clients)
+
+    server = TestSlice(name="test_slice")
+
+    ibl = InmantaBootloader()
+    ctx = ibl.load_slices()
+
+    for mypart in ctx.get_slices():
+        ibl.restserver.add_slice(mypart)
+
+    ibl.restserver.add_slice(server)
+
+    await ibl.start()
+    async_finalizer.add(server.stop)
+    async_finalizer.add(ibl.stop)
+
+    client = protocol.Client("client")
+
+    result = await client.create_project("project-test")
+    assert result.code == 200
+    proj_id = result.result["project"]["id"]
+
+    result = await client.create_environment(proj_id, "test", None, None)
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+    environment = await data.Environment.get_by_id(uuid.UUID(env_id))
+
+    agent_manager = ibl.restserver.get_slice(SLICE_AGENT_MANAGER)
+
+    a = Agent(hostname="node1", environment=environment.id, agent_map={"agent1": "localhost"}, code_loader=False)
+    await a.add_end_point_name("agent1")
+    await a.add_end_point_name("agent1")
+
+    async_finalizer.add(a.stop)
+    await a.start()
+
+    # Wait until session is created
+    await retry_limited(lambda: len(agent_manager.sessions) == 1, 10)
+
+    # Have many connections in flight
+    hangers = asyncio.gather(*(a._client.test_method(i) for i in range(5)))
+    logging.warning("WAITING!")
+    assert not hangers.done()
+
+    def did_exceed_capacity():
+        msg = "max_clients limit reached, request queued. 1 active, 2 queued requests."
+        for record in caplog.records:
+            if msg in record.message:
+                if record.name == "inmanta.protocol.endpoints" and record.levelno == logging.WARNING:
+                    return True
+        return False
+
+    await retry_limited(did_exceed_capacity, 10)
+
+    caplog.set_level(logging.NOTSET)
+    caplog.clear()
+
+    def still_sending_heartbeats():
+        count = caplog.text.count("Level 3 sending heartbeat for")
+        return count > 2
+
+    await retry_limited(still_sending_heartbeats, 10)
+
+    hanglock.set()
+    await hangers
