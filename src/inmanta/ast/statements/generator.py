@@ -186,9 +186,19 @@ class GradualFor(ResultCollector[object]):
         self.stmt = stmt
         self.seen: set[int] = set()
 
+    def complete(self, all_values: abc.Sequence[object]):
+        """
+        Indicate that all results have been received. No further calls to `receive_result` should be done after this.
+        Mutually exclusive with `set_unknown`.
+        """
+        if self.seen:
+            if len(self.seen) != len(all_values):
+                raise InvalidCompilerState(self, "for loop helper received some but not all values gradually")
+        else:
+            for value in all_values:
+                self.receive_result(value, location=self.stmt.location)
+
     def receive_result(self, value: object, location: Location) -> bool:
-        if id(value) in self.seen:
-            return False
         self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
@@ -257,9 +267,7 @@ class For(RequiresEmitStatement):
         helper = requires[self]
         assert isinstance(helper, GradualFor)
 
-        for loop_var in var:
-            # generate a subscope/namespace for each loop
-            helper.receive_result(loop_var, self.location)
+        helper.complete(var)
 
         return None
 
@@ -547,6 +555,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Mutually exclusive with `set_unknown`.
         """
         if self._results:
+            # TODO: this message is incomplete
             # We should only have received previous results in gradual mode, if the
             if self.lhs is None:
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
