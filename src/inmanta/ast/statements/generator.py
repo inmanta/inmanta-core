@@ -184,7 +184,7 @@ class GradualFor(ResultCollector[object]):
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen: set[int] = set()
+        self.seen: set[int] = list()
 
     def complete(self, all_values: abc.Sequence[object]):
         """
@@ -193,13 +193,13 @@ class GradualFor(ResultCollector[object]):
         """
         if self.seen:
             if len(self.seen) != len(all_values):
-                raise InvalidCompilerState(self, "for loop helper received some but not all values gradually")
+                raise Exception("for loop helper received some but not all values gradually %s vs %s" % (self.seen, all_values))
         else:
             for value in all_values:
                 self.receive_result(value, location=self.stmt.location)
 
     def receive_result(self, value: object, location: Location) -> bool:
-        self.seen.add(id(value))
+        self.seen.append(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)

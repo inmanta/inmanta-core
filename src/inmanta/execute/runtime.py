@@ -686,6 +686,34 @@ class ListLiteral(BaseListVariable):
         if self.get_waiting_providers() == 0:
             self.freeze()
 
+    def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
+        """
+        First half of set_value, returns True if second half should run
+        """
+        if self.hasValue:
+            raise ModifiedAfterFreezeException(
+                self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
+            )
+
+        if isinstance(value, list):
+            if len(value) == 0:
+                # the values of empty lists need no processing,
+                # but a set_value from an empty list may fulfill a promise, allowing this object to be queued
+                if self.can_get():
+                    self.queue()
+            else:
+                for v in value:
+                    self.set_value(v, location, recur)
+            return False
+
+        if self.type is not None:
+            self.type.validate(value)
+
+        self.value.append(value)
+        self._notify_listeners(value, location)
+
+        return True
+
     def __str__(self) -> str:
         return "TempListVariable %s" % (self.value)
 
