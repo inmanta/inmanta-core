@@ -690,10 +690,8 @@ class ListLiteral(BaseListVariable):
         """
         First half of set_value, returns True if second half should run
         """
-        if self.hasValue:
-            raise ModifiedAfterFreezeException(
-                self, instance=self.myself, attribute=self.attribute, value=value, location=location, reverse=not recur
-            )
+        if value and self.hasValue:
+            raise Exception("already frozen: %s, %s" % (self.value, value))
 
         if isinstance(value, list):
             if len(value) == 0:
@@ -715,7 +713,7 @@ class ListLiteral(BaseListVariable):
         return True
 
     def __str__(self) -> str:
-        return "TempListVariable %s" % (self.value)
+        return "ListLiteral %s" % (self.value)
 
 
 class ListVariable(BaseListVariable, RelationAttributeVariable):
