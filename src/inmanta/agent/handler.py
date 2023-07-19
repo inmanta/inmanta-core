@@ -429,11 +429,6 @@ class HandlerABC(ABC):
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
         self._agent = agent
 
-        if io is None:
-            raise Exception("Unsupported: no resource mgmt in RH")
-        else:
-            self._io = io
-
         self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
