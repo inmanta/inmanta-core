@@ -424,7 +424,6 @@ class HandlerABC(ABC):
     Top-level abstract base class all handlers should inherit from.
     """
 
-    @abstractmethod
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
@@ -434,7 +433,6 @@ class HandlerABC(ABC):
         :param resource: The resource to query facts for.
         """
 
-    @abstractmethod
     def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
         Method executed after an operation. Override this method to run after an operation.
@@ -451,14 +449,7 @@ class HandlerABC(ABC):
         requires: Dict[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        This method is always called by the agent
-        """
-        pass
-
-    @abstractmethod
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
-        """
-        Update the given resource. This method is called by the agent.
+        Main entrypoint of the handler that will be called by the agent.
         """
         pass
 
