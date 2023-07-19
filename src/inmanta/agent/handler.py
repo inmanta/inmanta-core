@@ -24,6 +24,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from concurrent.futures import Future
+from functools import partial
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 import pydantic
@@ -51,7 +52,7 @@ T = TypeVar("T")
 # Discovery Resource Type
 DRT = TypeVar("DRT", bound=resources.Resource)
 # Unmanaged Resource Type
-URT = TypeVar("URT", bound=pydantic.BaseModel)  # bound=... enough to enforce the fact it needs to be serializable ?
+URT = TypeVar("URT")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
@@ -694,7 +695,7 @@ class ResourceHandler(HandlerABC):
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                 resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
+                exception=repr(e),
             )
         finally:
             try:
@@ -703,7 +704,7 @@ class ResourceHandler(HandlerABC):
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
+                    exception=repr(e),
                 )
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
@@ -995,7 +996,7 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
     def report_discovered_resources(self, ctx: HandlerContext, resource: DRT) -> None:
         """ """
 
-        def _call_discovered_resource_create_batch() -> typing.Awaitable[Result]:
+        def _call_discovered_resource_create_batch(discovered_resources: abc.Sequence[DiscoveredResource]) -> typing.Awaitable[Result]:
             return self.get_client().discovered_resource_create_batch(
                 tid=self._agent.environment, discovered_resources=discovered_resources
             )
@@ -1003,11 +1004,11 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
         try:
             self.pre(ctx, resource)
             # report to the server
-            discovered_resources: List[DiscoveredResource] = [
+            discovered_resources: abc.Sequence[DiscoveredResource] = [
                 DiscoveredResource(discovered_resource_id=resource_id, values=values)
                 for resource_id, values in self.discover_resources(ctx, resource).items()
             ]
-            result = self.run_sync(_call_discovered_resource_create_batch)
+            result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
 
             if result.code != 200:
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
@@ -1017,12 +1018,11 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
                 (
-                    "An error occurred during resource discovery of type %(urt)s, "
+                    "An error occurred during resource discovery "
                     "triggered by %(resource_id)s (exception: %(exception)s"
                 ),
-                urt=str(URT),
                 resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
+                exception=repr(e),
             )
         finally:
             try:
@@ -1033,9 +1033,8 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
                         "An error occurred during post stage for resource discovery of type %(urt)s, "
                         "triggered by %(resource_id)s (exception: %(exception)s"
                     ),
-                    urt=str(URT),
                     resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
+                    exception=repr(e),
                 )
 
     async def async_report_discovered_resources(self, ctx: HandlerContext, resource: DRT) -> None:
