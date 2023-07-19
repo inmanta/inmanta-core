@@ -1030,7 +1030,7 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
             except Exception as e:
                 ctx.exception(
                     (
-                        "An error occurred after resource discovery of type %(urt)s, "
+                        "An error occurred during post stage for resource discovery of type %(urt)s, "
                         "triggered by %(resource_id)s (exception: %(exception)s"
                     ),
                     urt=str(URT),
