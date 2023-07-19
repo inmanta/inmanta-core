@@ -83,8 +83,7 @@ async def test_discovery_resource_handler(
     discovery_resource = MyDiscoveryResource(discovery_resource_id)
     ctx = HandlerContext(discovery_resource)
 
-    # resource_handler.report_discovered_resources(ctx, discovery_resource)
-    await resource_handler.async_report_discovered_resources(ctx, discovery_resource)
+    resource_handler.deploy(ctx, discovery_resource)
 
     result = await client.discovered_resources_get_batch(
         environment,

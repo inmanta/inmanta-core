@@ -17,6 +17,7 @@
 """
 import base64
 import inspect
+import json
 import logging
 import traceback
 import typing
@@ -49,10 +50,10 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-# Discovery Resource Type
-DRT = TypeVar("DRT", bound=resources.Resource)
-# Unmanaged Resource Type
-URT = TypeVar("URT")
+# Discovery Resource Type, used by DiscoveryHandler to drive resource discovery (not an actually deployed resource on a network)
+R = TypeVar("R", bound=resources.Resource)
+# Unmanaged Resource Type, these are the resources discovered by the DiscoveryHandler and reported to the server
+D = TypeVar("D")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
@@ -430,10 +431,6 @@ class HandlerABC(ABC):
     Top-level abstract base class all handlers should inherit from.
     """
 
-    # _client: Optional[protocol.SessionClient] = None
-    # _agent: Optional[inmanta.agent.agent.AgentInstance] = None
-    # _io_loop = None
-
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
@@ -491,7 +488,7 @@ class HandlerABC(ABC):
 @stable_api
 class ResourceHandler(HandlerABC):
     """
-    A baseclass for classes that handle resources. New handler are registered with the
+    Classes that handle resources and deploy them should inherit from this class. New handler are registered with the
     :func:`~inmanta.agent.handler.provider` decorator.
 
     The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
@@ -979,21 +976,26 @@ class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
 
 
 @stable_api
-class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
-    # The DiscoveryHandler is generic in both the handler's Discovery Resource type (DRT)
-    # and the Unmanaged Resource type (URT) it reports to the server. The second has to be serializable.
-
-    # This class deploys instances of DRT and reports URT to the server.
+class DiscoveryHandler(HandlerABC, Generic[R, D]):
+    """
+    The DiscoveryHandler is generic with regard to two resource types:
+        - R denotes the handler's Discovery Resource type, used to drive resource discovery. This is not a
+          conventional resource type expected to be deployed on a network, but rather a way to express
+          the intent to discover resources of the second type D already present on the network.
+        - D denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
+          discovered and reported to the server. Objects of this type must be serializable.
+    """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
         self._agent = agent
-        self._ioloop = agent._io_loop
+        self._ioloop = agent.process._io_loop
 
     @abstractmethod
-    def discover_resources(self, ctx: HandlerContext, discovery_resource: DRT) -> abc.Mapping[ResourceIdStr, URT]:
+    def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
         raise NotImplementedError
 
-    def report_discovered_resources(self, ctx: HandlerContext, resource: DRT) -> None:
+
+    def deploy(self, ctx: HandlerContext, resource: R) -> None:
         """ """
 
         def _call_discovered_resource_create_batch(discovered_resources: abc.Sequence[DiscoveredResource]) -> typing.Awaitable[Result]:
@@ -1005,7 +1007,7 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
             self.pre(ctx, resource)
             # report to the server
             discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values)
+                DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
                 for resource_id, values in self.discover_resources(ctx, resource).items()
             ]
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
@@ -1030,52 +1032,11 @@ class DiscoveryHandler(HandlerABC, Generic[DRT, URT]):
             except Exception as e:
                 ctx.exception(
                     (
-                        "An error occurred during post stage for resource discovery of type %(urt)s, "
+                        "An error occurred during post stage of resource discovery "
                         "triggered by %(resource_id)s (exception: %(exception)s"
                     ),
                     resource_id=resource.id,
                     exception=repr(e),
-                )
-
-    async def async_report_discovered_resources(self, ctx: HandlerContext, resource: DRT) -> None:
-        try:
-            self.pre(ctx, resource)
-            # report to the server
-            discovered_resources: List[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values)
-                for resource_id, values in self.discover_resources(ctx, resource).items()
-            ]
-            result = await self.get_client().discovered_resource_create_batch(
-                tid=self._agent.environment, discovered_resources=discovered_resources
-            )
-
-            if result.code != 200:
-                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-                raise Exception(f"Failed to report discovered resources to the server{error_msg_from_server}")
-
-        except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                (
-                    "An error occurred during resource discovery of type %(urt)s, "
-                    "triggered by %(resource_id)s (exception: %(exception)s"
-                ),
-                urt=str(URT),
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
-            )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    (
-                        "An error occurred after resource discovery of type %(urt)s, "
-                        "triggered by %(resource_id)s (exception: %(exception)s"
-                    ),
-                    urt=str(URT),
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
 
