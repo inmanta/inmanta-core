@@ -430,6 +430,12 @@ class HandlerABC(ABC):
     Top-level abstract base class all handlers should inherit from.
     """
 
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
+        self._agent = agent
+        self._client: Optional[protocol.SessionClient] = None
+        # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
+        self._ioloop = agent.process._io_loop
+
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
@@ -457,35 +463,6 @@ class HandlerABC(ABC):
         """
 
 
-@stable_api
-class ResourceHandler(HandlerABC):
-    """
-    Classes that handle resources and deploy them should inherit from this class. New handler are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator.
-
-    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-    operations.
-
-    :param agent: The agent that is executing this handler.
-    :param io: The io object to use.
-    """
-
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
-        self._agent = agent
-
-        if io is None:
-            raise Exception("Unsupported: no resource mgmt in RH")
-        else:
-            self._io = io
-
-        self._client: Optional[protocol.SessionClient] = None
-        # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
-        self._ioloop = agent.process._io_loop
-
-    def set_cache(self, cache: AgentCache) -> None:
-        self.cache = cache
-
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
         Run the given async function on the ioloop of the agent. It will block the current thread until the future
@@ -511,6 +488,41 @@ class ResourceHandler(HandlerABC):
         self._ioloop.call_soon_threadsafe(run)
 
         return f.result()
+
+@stable_api
+class ResourceHandler(HandlerABC):
+    """
+    Classes that handle resources and deploy them should inherit from this class. New handler are registered with the
+    :func:`~inmanta.agent.handler.provider` decorator.
+
+    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
+    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
+    operations.
+
+    :param agent: The agent that is executing this handler.
+    :param io: The io object to use.
+    """
+
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
+        super().__init__(agent)
+
+        if io is None:
+            raise Exception("Unsupported: no resource mgmt in RH")
+        else:
+            self._io = io
+
+
+    def set_cache(self, cache: AgentCache) -> None:
+        self.cache = cache
+
+    def get_client(self) -> protocol.SessionClient:
+        """
+        Get the client instance that identifies itself with the agent session.
+        :return: A client that is associated with the session of the agent that executes this handler.
+        """
+        if self._client is None:
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+        return self._client
 
     def can_reload(self) -> bool:
         """
@@ -985,8 +997,8 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
-        self._agent = agent
-        self._ioloop = agent.process._io_loop
+        super().__init__(agent)
+
 
     @abstractmethod
     def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
