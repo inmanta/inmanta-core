@@ -435,7 +435,6 @@ class HandlerABC(ABC):
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
         to run before an operation.
-
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to query facts for.
         """
@@ -443,46 +442,20 @@ class HandlerABC(ABC):
     def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
         Method executed after an operation. Override this method to run after an operation.
-
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to query facts for.
         """
 
-    def get_client(self) -> protocol.SessionClient:
+    @abstractmethod
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: Dict[ResourceIdStr, ResourceState],
+    ) -> None:
         """
-        Get the client instance that identifies itself with the agent session.
-
-        :return: A client that is associated with the session of the agent that executes this handler.
+        Main entrypoint of the handler that will be called by the agent.
         """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
-
-    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
-        """
-        Run the given async function on the ioloop of the agent. It will block the current thread until the future
-        resolves.
-
-        :param func: A function that returns a yieldable future.
-        :return: The result of the async function.
-        """
-        f: Future[T] = Future()
-
-        # This function is not typed because of generics, the used methods and currying
-        def run() -> None:
-            try:
-                result = func()
-                if result is not None:
-                    from tornado.gen import convert_yielded
-
-                    result = convert_yielded(result)
-                    concurrent.chain_future(result, f)
-            except Exception as e:
-                f.set_exception(e)
-
-        self._ioloop.call_soon_threadsafe(run)
-
-        return f.result()
 
 
 @stable_api
@@ -514,6 +487,31 @@ class ResourceHandler(HandlerABC):
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
 
+    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
+        """
+        Run the given async function on the ioloop of the agent. It will block the current thread until the future
+        resolves.
+
+        :param func: A function that returns a yieldable future.
+        :return: The result of the async function.
+        """
+        f: Future[T] = Future()
+
+        # This function is not typed because of generics, the used methods and currying
+        def run() -> None:
+            try:
+                result = func()
+                if result is not None:
+                    from tornado.gen import convert_yielded
+
+                    result = convert_yielded(result)
+                    concurrent.chain_future(result, f)
+            except Exception as e:
+                f.set_exception(e)
+
+        self._ioloop.call_soon_threadsafe(run)
+
+        return f.result()
     def can_reload(self) -> bool:
         """
         Can this handler reload?
