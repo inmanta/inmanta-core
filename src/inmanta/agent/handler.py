@@ -28,7 +28,6 @@ from concurrent.futures import Future
 from functools import partial
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
-import pydantic
 from tornado import concurrent
 
 import inmanta
@@ -512,6 +511,7 @@ class ResourceHandler(HandlerABC):
         self._ioloop.call_soon_threadsafe(run)
 
         return f.result()
+
     def can_reload(self) -> bool:
         """
         Can this handler reload?
@@ -992,11 +992,12 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
     def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
         raise NotImplementedError
 
-
     def deploy(self, ctx: HandlerContext, resource: R) -> None:
         """ """
 
-        def _call_discovered_resource_create_batch(discovered_resources: abc.Sequence[DiscoveredResource]) -> typing.Awaitable[Result]:
+        def _call_discovered_resource_create_batch(
+            discovered_resources: abc.Sequence[DiscoveredResource],
+        ) -> typing.Awaitable[Result]:
             return self.get_client().discovered_resource_create_batch(
                 tid=self._agent.environment, discovered_resources=discovered_resources
             )
@@ -1017,10 +1018,7 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
-                (
-                    "An error occurred during resource discovery "
-                    "triggered by %(resource_id)s (exception: %(exception)s"
-                ),
+                ("An error occurred during resource discovery " "triggered by %(resource_id)s (exception: %(exception)s"),
                 resource_id=resource.id,
                 exception=repr(e),
             )
