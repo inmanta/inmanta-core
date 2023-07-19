@@ -467,7 +467,6 @@ class HandlerABC(ABC):
         """
         pass
 
-
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
         Run a the given async function on the ioloop of the agent. It will block the current thread until the future
@@ -503,6 +502,7 @@ class HandlerABC(ABC):
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
 
+
 @stable_api
 class ResourceHandler(HandlerABC):
     """
@@ -529,11 +529,8 @@ class ResourceHandler(HandlerABC):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-
-
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
-
 
     def can_reload(self) -> bool:
         """
