@@ -49,9 +49,7 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-# Discovery Resource Type, used by DiscoveryHandler to drive resource discovery (not an actually deployed resource on a network)
 R = TypeVar("R", bound=resources.Resource)
-# Unmanaged Resource Type, these are the resources discovered by the DiscoveryHandler and reported to the server
 D = TypeVar("D")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
@@ -462,7 +460,6 @@ class HandlerABC(ABC):
         Main entrypoint of the handler that will be called by the agent.
         """
 
-
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
         Run the given async function on the ioloop of the agent. It will block the current thread until the future
@@ -489,6 +486,7 @@ class HandlerABC(ABC):
 
         return f.result()
 
+
 @stable_api
 class ResourceHandler(HandlerABC):
     """
@@ -510,7 +508,6 @@ class ResourceHandler(HandlerABC):
             raise Exception("Unsupported: no resource mgmt in RH")
         else:
             self._io = io
-
 
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
@@ -998,7 +995,6 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
         super().__init__(agent)
-
 
     @abstractmethod
     def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
