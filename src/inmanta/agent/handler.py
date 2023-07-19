@@ -47,6 +47,7 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+R = TypeVar("R", bound=resources.Resource)
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
@@ -419,9 +420,10 @@ class HandlerContext(LoggerABC):
 
 
 @stable_api
-class HandlerABC(ABC):
+class HandlerABC(ABC, Generic[R]):
     """
-    Top-level abstract base class all handlers should inherit from.
+    Top-level abstract base class all handlers should inherit from. This class
+    is generic with regard to the resource type this handler is responsible for.
 
     :param agent: The agent responsible for this handler
     """
@@ -433,7 +435,7 @@ class HandlerABC(ABC):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+    def pre(self, ctx: HandlerContext, resource: R) -> None:
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
         to run before an operation.
@@ -442,7 +444,7 @@ class HandlerABC(ABC):
         :param resource: The resource to query facts for.
         """
 
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+    def post(self, ctx: HandlerContext, resource: R) -> None:
         """
         Method executed after an operation. Override this method to run after an operation.
 
@@ -454,7 +456,7 @@ class HandlerABC(ABC):
     def deploy(
         self,
         ctx: HandlerContext,
-        resource: resources.Resource,
+        resource: R,
         requires: Dict[ResourceIdStr, ResourceState],
     ) -> None:
         """
