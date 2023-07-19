@@ -1,0 +1,6 @@
+change-type: patch
+description: bump the version of pyyml to constraint cython
+destination-branches:
+- iso4
+- iso5
+sections: {}
