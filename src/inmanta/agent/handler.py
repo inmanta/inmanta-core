@@ -449,6 +449,10 @@ class HandlerABC(ABC):
         :param resource: The resource to query facts for.
         """
 
+    def close(self) -> None:
+        """
+        """
+
     @abstractmethod
     def deploy(
         self,
@@ -1037,6 +1041,7 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
 
             if result.code != 200:
+                assert result.result is not None  # Make mypy happy
                 error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
                 raise Exception(f"Failed to report discovered resources to the server{error_msg_from_server}")
 
@@ -1066,10 +1071,10 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Type[Union[ResourceHandler, DiscoveryHandler]]]] = defaultdict(dict)
+    __command_functions: Dict[str, Dict[str, Type[HandlerABC]]] = defaultdict(dict)
 
     @classmethod
-    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
+    def get_handlers(cls) -> Dict[str, Dict[str, Type[HandlerABC]]]:
         return cls.__command_functions
 
     @classmethod
@@ -1083,17 +1088,17 @@ class Commander(object):
     @classmethod
     def _get_instance(
         cls,
-        handler_class: Type[Union[ResourceHandler, DiscoveryHandler]],
+        handler_class: Type[HandlerABC],
         agent: "inmanta.agent.agent.AgentInstance",
         io: "IOBase",
-    ) -> Union[ResourceHandler, DiscoveryHandler]:
+    ) -> Union[HandlerABC]:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
     def get_provider(
         cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
-    ) -> Union[ResourceHandler, DiscoveryHandler]:
+    ) -> Union[HandlerABC]:
         """
         Return a provider to handle the given resource
         """
@@ -1131,7 +1136,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: Type["ResourceHandler"]) -> None:
+    def add_provider(cls, resource: str, name: str, provider: Type[HandlerABC]) -> None:
         """
         Register a new provider
 
@@ -1145,14 +1150,14 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
+    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type[HandlerABC]]]:
         """Return an iterator over resource type, handler definition"""
         for resource_type, handler_map in cls.__command_functions.items():
             for handle_name, handler_class in handler_map.items():
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["ResourceHandler"]]:
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type[HandlerABC]]:
         """
         Return the class of the handler for the given type and with the given name
         """
