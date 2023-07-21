@@ -22,7 +22,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import defaultdict, abc
+from collections import abc, defaultdict
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
@@ -422,8 +422,9 @@ class HandlerContext(LoggerABC):
 @stable_api
 class HandlerABC(ABC, Generic[R]):
     """
-    Top-level abstract base class all handlers should inherit from. This class
-    is generic with regard to the resource type this handler is responsible for.
+    Top-level abstract base class all handlers should inherit from. New handlers are registered with the
+    :func:`~inmanta.agent.handler.provider` decorator. This class is generic with regard to the resource
+    type this handler is responsible for.
 
     :param agent: The agent responsible for this handler
     """
@@ -507,8 +508,7 @@ class HandlerABC(ABC, Generic[R]):
 @stable_api
 class ResourceHandler(HandlerABC):
     """
-    A baseclass for classes that handle resources. New handlers are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator.
+    A baseclass for classes that handle resources.
 
     The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
     makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
