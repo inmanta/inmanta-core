@@ -503,7 +503,7 @@ class HandlerABC(ABC, Generic[R]):
 @stable_api
 class ResourceHandler(HandlerABC):
     """
-    A baseclass for classes that handle resources. New handler are registered with the
+    A baseclass for classes that handle resources. New handlers are registered with the
     :func:`~inmanta.agent.handler.provider` decorator.
 
     The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
