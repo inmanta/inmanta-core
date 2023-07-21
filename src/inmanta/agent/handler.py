@@ -22,7 +22,7 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, abc
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
@@ -457,10 +457,14 @@ class HandlerABC(ABC, Generic[R]):
         self,
         ctx: HandlerContext,
         resource: R,
-        requires: Dict[ResourceIdStr, ResourceState],
+        requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        Main entrypoint of the handler that will be called by the agent.
+        Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to deploy
+        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
         """
         pass
 
@@ -515,16 +519,12 @@ class ResourceHandler(HandlerABC):
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
-        self._agent = agent
+        super().__init__(agent)
 
         if io is None:
             raise Exception("Unsupported: no resource mgmt in RH")
         else:
             self._io = io
-
-        self._client: Optional[protocol.SessionClient] = None
-        # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
-        self._ioloop = agent.process._io_loop
 
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
@@ -608,7 +608,7 @@ class ResourceHandler(HandlerABC):
         self,
         ctx: HandlerContext,
         resource: resources.Resource,
-        requires: Dict[ResourceIdStr, ResourceState],
+        requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
         This method is always called by the agent, even when one of the requires of the given resource
