@@ -38,7 +38,7 @@ from utils import retry_limited
 logger = logging.getLogger("inmanta.test.server_agent")
 
 
-async def get_agent(server, environment, *endpoints, hostname="nodes1"):
+async def get_agent(server, environment, *endpoints, hostname="nodes1") -> Agent:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     prelen = len(agentmanager.sessions)
     agent = Agent(

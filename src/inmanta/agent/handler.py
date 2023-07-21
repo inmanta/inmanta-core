@@ -486,6 +486,27 @@ class HandlerABC(ABC):
 
         return f.result()
 
+    def available(self, resource: resources.Resource) -> bool:
+        """
+        Returns true if this handler is available for the given resource
+
+        :param resource: Is this handler available for the given resource?
+        :return: Available or not?
+        """
+        return True
+
+    def set_cache(self, cache: AgentCache) -> None:
+        self.cache = cache
+
+    def get_client(self) -> protocol.SessionClient:
+        """
+        Get the client instance that identifies itself with the agent session.
+        :return: A client that is associated with the session of the agent that executes this handler.
+        """
+        if self._client is None:
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+        return self._client
+
 
 @stable_api
 class ResourceHandler(HandlerABC):
@@ -749,15 +770,6 @@ class ResourceHandler(HandlerABC):
 
         return facts
 
-    def available(self, resource: resources.Resource) -> bool:
-        """
-        Returns true if this handler is available for the given resource
-
-        :param resource: Is this handler available for the given resource?
-        :return: Available or not?
-        """
-        return True
-
     def get_file(self, hash_id: str) -> Optional[bytes]:
         """
         Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
@@ -1000,7 +1012,12 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
     def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
         raise NotImplementedError
 
-    def deploy(self, ctx: HandlerContext, resource: R) -> None:
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: R,
+        requires: Dict[ResourceIdStr, ResourceState],
+    ) -> None:
         """ """
 
         def _call_discovered_resource_create_batch(
@@ -1012,7 +1029,7 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
 
         try:
             self.pre(ctx, resource)
-            # report to the server
+            # serialize resources and report to the server
             discovered_resources: abc.Sequence[DiscoveredResource] = [
                 DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
                 for resource_id, values in self.discover_resources(ctx, resource).items()
@@ -1049,7 +1066,7 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
+    __command_functions: Dict[str, Dict[str, Type[Union[ResourceHandler, DiscoveryHandler]]]] = defaultdict(dict)
 
     @classmethod
     def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
@@ -1065,15 +1082,15 @@ class Commander(object):
 
     @classmethod
     def _get_instance(
-        cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
-    ) -> ResourceHandler:
+        cls, handler_class: Type[Union[ResourceHandler, DiscoveryHandler]], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+    ) -> Union[ResourceHandler, DiscoveryHandler]:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
     def get_provider(
         cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
-    ) -> ResourceHandler:
+    ) -> Union[ResourceHandler, DiscoveryHandler]:
         """
         Return a provider to handle the given resource
         """
