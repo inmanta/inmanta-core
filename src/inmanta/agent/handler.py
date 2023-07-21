@@ -428,7 +428,7 @@ class HandlerABC(ABC):
     Top-level abstract base class all handlers should inherit from.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
         self._agent = agent
         self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
@@ -1005,7 +1005,7 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
           discovered and reported to the server. Objects of this type must be serializable.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
         super().__init__(agent)
 
     @abstractmethod
@@ -1082,7 +1082,10 @@ class Commander(object):
 
     @classmethod
     def _get_instance(
-        cls, handler_class: Type[Union[ResourceHandler, DiscoveryHandler]], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+        cls,
+        handler_class: Type[Union[ResourceHandler, DiscoveryHandler]],
+        agent: "inmanta.agent.agent.AgentInstance",
+        io: "IOBase",
     ) -> Union[ResourceHandler, DiscoveryHandler]:
         new_instance = handler_class(agent, io)
         return new_instance
