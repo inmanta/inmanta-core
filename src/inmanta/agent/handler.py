@@ -720,7 +720,7 @@ class ResourceHandler(HandlerABC):
             ctx.exception(
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                 resource_id=resource.id,
-                exception=repr(e),
+                exception=f"{e.__class__.__name__}('{e}')",
             )
         finally:
             try:
@@ -729,7 +729,7 @@ class ResourceHandler(HandlerABC):
                 ctx.exception(
                     "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
@@ -1045,7 +1045,7 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
             ctx.exception(
                 ("An error occurred during resource discovery " "triggered by %(resource_id)s (exception: %(exception)s"),
                 resource_id=resource.id,
-                exception=repr(e),
+                exception=f"{e.__class__.__name__}('{e}')",
             )
         finally:
             try:
@@ -1057,7 +1057,7 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
                         "triggered by %(resource_id)s (exception: %(exception)s"
                     ),
                     resource_id=resource.id,
-                    exception=repr(e),
+                    exception=f"{e.__class__.__name__}('{e}')",
                 )
 
 
