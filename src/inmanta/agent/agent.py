@@ -35,7 +35,7 @@ from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
-from inmanta.agent.handler import ResourceHandler, SkipResource, HandlerABC
+from inmanta.agent.handler import HandlerABC, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState

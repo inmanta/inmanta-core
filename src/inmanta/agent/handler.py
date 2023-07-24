@@ -450,8 +450,7 @@ class HandlerABC(ABC):
         """
 
     def close(self) -> None:
-        """
-        """
+        """ """
 
     @abstractmethod
     def deploy(
