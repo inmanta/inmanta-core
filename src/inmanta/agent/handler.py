@@ -423,9 +423,13 @@ class HandlerContext(LoggerABC):
 
 
 @stable_api
-class HandlerABC(ABC):
+class HandlerABC(ABC, Generic[R]):
     """
-    Top-level abstract base class all handlers should inherit from.
+    Top-level abstract base class all handlers should inherit from. New handlers are registered with the
+    :func:`~inmanta.agent.handler.provider` decorator. This class is generic with regard to the resource
+    type this handler is responsible for.
+
+    :param agent: The agent responsible for this handler
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
@@ -434,7 +438,83 @@ class HandlerABC(ABC):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: abc.Mapping[ResourceIdStr, ResourceState],
+    ) -> None:
+        """
+        Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
+        This method is always called by the agent, even when one of the requires of the given resource
+        failed to deploy. The default implementation of this method will deploy the given resource when all its
+        requires were deployed successfully. Override this method if a different condition determines whether the
+        resource should deploy.
+
+        The actual logic to deploy the resource should be defined in the `execute` method.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to deploy
+        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
+        """
+
+        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
+            return self.get_client().resource_did_dependency_change(
+                tid=self._agent.environment, rvid=resource.id.resource_version_str()
+            )
+
+        def _should_reload() -> bool:
+            if not self.can_reload():
+                return False
+            result = self.run_sync(_call_resource_did_dependency_change)
+            if not result.result:
+                raise Exception("Failed to determine whether resource should reload")
+
+            if result.code != 200:
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
+            return result.result["data"]
+
+        def filter_resources_in_unexpected_state(
+            reqs: Dict[ResourceIdStr, ResourceState]
+        ) -> Dict[ResourceIdStr, ResourceState]:
+            """
+            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
+            """
+            unexpected_states = {
+                const.ResourceState.available,
+                const.ResourceState.dry,
+                const.ResourceState.undefined,
+                const.ResourceState.skipped_for_undefined,
+                const.ResourceState.deploying,
+            }
+            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
+
+        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
+        if resources_in_unexpected_state:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(
+                "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
+                resource=resource.id.resource_version_str(),
+                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
+            )
+            return
+
+        failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
+        if not any(failed_dependencies):
+            self.execute(ctx, resource)
+            if _should_reload():
+                self.do_reload(ctx, resource)
+        else:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.info(
+                "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
+                resource=resource.id.resource_version_str(),
+                failed=str(failed_dependencies),
+            )
+
+    def pre(self, ctx: HandlerContext, resource: R) -> None:
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
         to run before an operation.
@@ -442,7 +522,7 @@ class HandlerABC(ABC):
         :param resource: The resource to query facts for.
         """
 
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+    def post(self, ctx: HandlerContext, resource: R) -> None:
         """
         Method executed after an operation. Override this method to run after an operation.
         :param ctx: Context object to report changes and logs to the agent and server.
@@ -453,14 +533,13 @@ class HandlerABC(ABC):
         """ """
 
     @abstractmethod
-    def deploy(
-        self,
-        ctx: HandlerContext,
-        resource: resources.Resource,
-        requires: Dict[ResourceIdStr, ResourceState],
-    ) -> None:
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
-        Main entrypoint of the handler that will be called by the agent.
+        Implements the actual logic to deploy a resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param dry_run: True will only determine the required changes but will not execute them.
         """
 
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
@@ -539,11 +618,94 @@ class ResourceHandler(HandlerABC):
     def get_client(self) -> protocol.SessionClient:
         """
         Get the client instance that identifies itself with the agent session.
+
         :return: A client that is associated with the session of the agent that executes this handler.
         """
         if self._client is None:
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
+
+    @abstractmethod
+    def can_reload(self) -> bool:
+        """
+        Can this handler reload?
+
+        :return: Return true if this handler needs to reload on requires changes.
+        """
+        pass
+
+    @abstractmethod
+    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Perform a reload of this resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to reload.
+        """
+        pass
+
+    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        """
+        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
+        either via the return value of this method or by adding the fact to the HandlerContext via the
+        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
+
+        :param ctx: Context object to report changes, logs and facts to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        return {}
+
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        """
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
+        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        try:
+            self.pre(ctx, resource)
+            facts = self.facts(ctx, resource)
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
+
+        return facts
+
+
+@stable_api
+class ResourceHandler(HandlerABC):
+    """
+    A baseclass for classes that handle resources.
+
+    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
+    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
+    operations.
+
+    :param agent: The agent that is executing this handler.
+    :param io: The io object to use.
+    """
+
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
+        super().__init__(agent)
+
+        if io is None:
+            raise Exception("Unsupported: no resource mgmt in RH")
+        else:
+            self._io = io
+
+    def set_cache(self, cache: AgentCache) -> None:
+        self.cache = cache
 
     def can_reload(self) -> bool:
         """
@@ -620,78 +782,6 @@ class ResourceHandler(HandlerABC):
         """
         raise NotImplementedError()
 
-    def deploy(
-        self,
-        ctx: HandlerContext,
-        resource: resources.Resource,
-        requires: Dict[ResourceIdStr, ResourceState],
-    ) -> None:
-        """
-        This method is always called by the agent, even when one of the requires of the given resource
-        failed to deploy. The default implementation of this method will deploy the given resource when all its
-        requires were deployed successfully. Override this method if a different condition determines whether the
-        resource should deploy.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to deploy
-        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
-        """
-
-        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
-            return self.get_client().resource_did_dependency_change(
-                tid=self._agent.environment, rvid=resource.id.resource_version_str()
-            )
-
-        def _should_reload() -> bool:
-            if not self.can_reload():
-                return False
-            result = self.run_sync(_call_resource_did_dependency_change)
-            if not result.result:
-                raise Exception("Failed to determine whether resource should reload")
-
-            if result.code != 200:
-                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
-            return result.result["data"]
-
-        def filter_resources_in_unexpected_state(
-            reqs: Dict[ResourceIdStr, ResourceState]
-        ) -> Dict[ResourceIdStr, ResourceState]:
-            """
-            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
-            """
-            unexpected_states = {
-                const.ResourceState.available,
-                const.ResourceState.dry,
-                const.ResourceState.undefined,
-                const.ResourceState.skipped_for_undefined,
-                const.ResourceState.deploying,
-            }
-            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
-
-        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
-        if resources_in_unexpected_state:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(
-                "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
-                resource=resource.id.resource_version_str(),
-                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
-            )
-            return
-
-        failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
-        if not any(failed_dependencies):
-            self.execute(ctx, resource)
-            if _should_reload():
-                self.do_reload(ctx, resource)
-        else:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.info(
-                "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
-                resource=resource.id.resource_version_str(),
-                failed=str(failed_dependencies),
-            )
-
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
         Update the given resource. This method is called by the agent. Most handlers will not override this method
@@ -735,43 +825,15 @@ class ResourceHandler(HandlerABC):
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
-        """
-        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
-        either via the return value of this method or by adding the fact to the HandlerContext via the
-        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
 
-        :param ctx: Context object to report changes, logs and facts to the agent and server.
-        :param resource: The resource to query facts for.
-        :return: A dict with fact names as keys and facts values.
+    def available(self, resource: resources.Resource) -> bool:
         """
-        return {}
+        Returns true if this handler is available for the given resource
 
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        :param resource: Is this handler available for the given resource?
+        :return: Available or not?
         """
-        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
-        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        :return: A dict with fact names as keys and facts values.
-        """
-        try:
-            self.pre(ctx, resource)
-            facts = self.facts(ctx, resource)
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
-
-        return facts
+        return True
 
     def get_file(self, hash_id: str) -> Optional[bytes]:
         """
