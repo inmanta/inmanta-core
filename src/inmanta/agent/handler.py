@@ -597,6 +597,23 @@ class HandlerABC(ABC, Generic[R]):
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
 
+    def can_reload(self) -> bool:
+        """
+        Can this handler reload?
+
+        :return: Return true if this handler needs to reload on requires changes.
+        """
+        return False
+
+    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Perform a reload of this resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to reload.
+        """
+        pass
+
 
 @stable_api
 class ResourceHandler(HandlerABC):
@@ -619,25 +636,6 @@ class ResourceHandler(HandlerABC):
         if self._client is None:
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
-
-    @abstractmethod
-    def can_reload(self) -> bool:
-        """
-        Can this handler reload?
-
-        :return: Return true if this handler needs to reload on requires changes.
-        """
-        pass
-
-    @abstractmethod
-    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Perform a reload of this resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to reload.
-        """
-        pass
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
