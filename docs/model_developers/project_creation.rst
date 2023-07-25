@@ -51,6 +51,10 @@ An example ``project.yml`` could be:
       index_urls:
           - https://pypi.org/simple
 
+.. warning::
+    Using more than one Python package index in the project config is generally discouraged.
+    It is a security risk and using more than one should be done with extreme care.
+    Only proceed if you are aware of dependency confusion attacks.
 
 The main file
 -------------
