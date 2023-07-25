@@ -107,6 +107,7 @@ if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
     #    of the inmanta-core documentation. During the ISO docs build,
     #    this value will be overwritten with the ISO product version.
     version = "1.0.0"
+    iso_major = int(version.split(".")[0])
 
 else:
     try:
@@ -123,7 +124,6 @@ solution will set the version number to 1.0.0.
 
 # The full version, including alpha/beta/rc tags.
 release = version
-iso_major = int(version.split(".")[0])
 
 rst_prolog = ".. |iso_major| replace:: %d" % iso_major
 

@@ -3,7 +3,7 @@
 Install Inmanta with Docker
 ***************************
 
-This page explains how to setup an orchestration server using docker. |iso_major|
+This page explains how to setup an orchestration server using docker.
 This guide assumes you already have `docker <https://docs.docker.com/get-docker/>`_ and `docker-compose <https://docs.docker.com/compose/install/>`_ installed on your machine.
 
 Pull the image
@@ -175,6 +175,7 @@ If you use docker-compose, you can simply update this section of the example abo
 .. only:: iso
 
     .. code-block:: yaml
+        :substitutions:
 
         inmanta-server:
             container_name: inmanta_orchestrator
@@ -282,10 +283,11 @@ There are two ways you can achieve this:
 .. only:: iso
 
     .. code-block:: yaml
+        :substitutions:
 
         inmanta-server:
             container_name: inmanta_orchestrator
-            image: containers.inmanta.com/containers/service-orchestrator:7
+            image: containers.inmanta.com/containers/service-orchestrator:|iso_major|
             ports:
                 - 8888:8888
             volumes:
