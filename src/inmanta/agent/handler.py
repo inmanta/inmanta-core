@@ -429,12 +429,21 @@ class HandlerABC(ABC, Generic[R]):
     :func:`~inmanta.agent.handler.provider` decorator. This class is generic with regard to the resource
     type this handler is responsible for.
 
-    :param agent: The agent responsible for this handler
+    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
+    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
+    operations.
+
+    :param agent: The agent that is executing this handler.
+    :param io: The io object to use.
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
         self._agent = agent
         self._client: Optional[protocol.SessionClient] = None
+        if io is None:
+            raise Exception("Unsupported: no resource mgmt in RH")
+        else:
+            self._io = io
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
@@ -595,21 +604,8 @@ class ResourceHandler(HandlerABC):
     Classes that handle resources and deploy them should inherit from this class. New handler are registered with the
     :func:`~inmanta.agent.handler.provider` decorator.
 
-    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-    operations.
 
-    :param agent: The agent that is executing this handler.
-    :param io: The io object to use.
     """
-
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
-        super().__init__(agent)
-
-        if io is None:
-            raise Exception("Unsupported: no resource mgmt in RH")
-        else:
-            self._io = io
 
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
@@ -1017,9 +1013,6 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
         - D denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
           discovered and reported to the server. Objects of this type must be serializable.
     """
-
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
-        super().__init__(agent)
 
     @abstractmethod
     def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
