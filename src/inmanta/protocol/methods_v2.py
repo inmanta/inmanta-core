@@ -129,7 +129,7 @@ def environment_create(
     Create a new environment
 
     :param project_id: The id of the project this environment belongs to
-    :param name: The name of the environment
+    :param name: The name of the environment. The name should be unique for each project.
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
     :param environment_id: A unique environment id, if none an id is allocated by the server
