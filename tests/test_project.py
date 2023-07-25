@@ -186,7 +186,7 @@ async def test_project_api_v2(client_v2):
 
     # Create a duplicate environment
     result = await client_v2.environment_create(project_id=project_id, name="dev")
-    assert result.code == 500
+    assert result.code == 400
 
     # Modify a non existing environment
     result = await client_v2.environment_modify(id=uuid.uuid4(), name="dev")
