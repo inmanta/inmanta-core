@@ -614,29 +614,6 @@ class HandlerABC(ABC, Generic[R]):
         """
         pass
 
-
-@stable_api
-class ResourceHandler(HandlerABC):
-    """
-    Classes that handle resources and deploy them should inherit from this class. New handler are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator.
-
-
-    """
-
-    def set_cache(self, cache: AgentCache) -> None:
-        self.cache = cache
-
-    def get_client(self) -> protocol.SessionClient:
-        """
-        Get the client instance that identifies itself with the agent session.
-
-        :return: A client that is associated with the session of the agent that executes this handler.
-        """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
-
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
@@ -649,6 +626,7 @@ class ResourceHandler(HandlerABC):
         :return: A dict with fact names as keys and facts values.
         """
         return {}
+
 
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
@@ -674,6 +652,30 @@ class ResourceHandler(HandlerABC):
                 )
 
         return facts
+@stable_api
+class ResourceHandler(HandlerABC):
+    """
+    Classes that handle resources and deploy them should inherit from this class. New handler are registered with the
+    :func:`~inmanta.agent.handler.provider` decorator.
+
+
+    """
+
+    def set_cache(self, cache: AgentCache) -> None:
+        self.cache = cache
+
+    def get_client(self) -> protocol.SessionClient:
+        """
+        Get the client instance that identifies itself with the agent session.
+
+        :return: A client that is associated with the session of the agent that executes this handler.
+        """
+        if self._client is None:
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+        return self._client
+
+
+
 
     def close(self) -> None:
         pass
