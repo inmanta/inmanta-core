@@ -188,13 +188,14 @@ Install the software
     ``/etc/yum.repos.d/inmanta.repo`` with the following content:
 
     .. code-block:: sh
+       :substitutions:
 
-        [inmanta-service-orchestrator-6-stable]
-        name=inmanta-service-orchestrator-6-stable
-        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-6-stable/rpm/el/8/$basearch
+        [inmanta-service-orchestrator-|iso_major|-stable]
+        name=inmanta-service-orchestrator-|iso_major|-stable
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/rpm/el/8/$basearch
         repo_gpgcheck=1
         enabled=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-6-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
         gpgcheck=1
         sslverify=1
         sslcacert=/etc/pki/tls/certs/ca-bundle.crt

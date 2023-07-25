@@ -114,10 +114,11 @@ Step 1: Installing the required Inmanta packages
     machine that will run the agent.
 
     .. code-block:: sh
+       :substitutions:
 
         sudo tee /etc/yum.repos.d/inmanta.repo <<EOF
-        [inmanta-service-orchestrator-6-stable]
-        name=inmanta-service-orchestrator-6-stable
+        [inmanta-service-orchestrator-|iso_major|-stable]
+        name=inmanta-service-orchestrator-|iso_major|-stable
         baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/rpm/el/8/$basearch
         gpgcheck=1
         gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
