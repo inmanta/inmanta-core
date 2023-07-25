@@ -538,7 +538,9 @@ class HandlerABC(ABC, Generic[R]):
         """
 
     def close(self) -> None:
-        """ """
+        """
+        Custom logic to perform when the handler is being closed
+        """
 
     @abstractmethod
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
@@ -627,7 +629,6 @@ class HandlerABC(ABC, Generic[R]):
         """
         return {}
 
-
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
@@ -652,6 +653,8 @@ class HandlerABC(ABC, Generic[R]):
                 )
 
         return facts
+
+
 @stable_api
 class ResourceHandler(HandlerABC):
     """
@@ -673,9 +676,6 @@ class ResourceHandler(HandlerABC):
         if self._client is None:
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
-
-
-
 
     def close(self) -> None:
         pass
