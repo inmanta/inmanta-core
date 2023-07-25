@@ -55,6 +55,10 @@ docs/moduleguides
 docs/inmanta.pdf
 docs/_static/*.pdf
 docs/_static/*.png
+docs/lsm/*.png
+docs/lsm/*.pdf
+docs/model_developers/images/*.png
+docs/model_developers/images/*.pdf
 
 # Mypy
 .mypy
