@@ -268,7 +268,7 @@ def environment(ctx: click.Context) -> None:
 
 
 @environment.command(name="create", help="Create a new environment")
-@click.option("--name", "-n", help="The name of the new environment", required=True)
+@click.option("--name", "-n", help="The name of the new environment. The name should be unique.", required=True)
 @click.option("--project", "-p", help="The id of the project this environment belongs to", required=True)
 @click.option(
     "--repo-url", "-r", required=False, default="", help="The url of the repository that contains the configuration model"

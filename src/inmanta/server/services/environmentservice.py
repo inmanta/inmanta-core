@@ -345,6 +345,11 @@ class EnvironmentService(protocol.ServerSlice):
         description: str = "",
         icon: str = "",
     ) -> model.Environment:
+        # check if an environment with this name is already defined in this project
+        envs = await data.Environment.get_list(project=project_id, name=name)
+        if len(envs) > 0 and envs[0].id != environment_id:
+            raise BadRequest(f"Project with id={project_id} already has an environment with name {name}")
+
         if environment_id is None:
             environment_id = uuid.uuid4()
 

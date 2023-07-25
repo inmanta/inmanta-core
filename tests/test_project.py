@@ -306,6 +306,31 @@ async def test_env_api(client):
     assert len(result.result["environments"]) == 0
 
 
+async def test_create_env_same_name(client):
+    result = await client.create_project("env-test")
+    assert result.code == 200
+    assert "project" in result.result
+    assert "id" in result.result["project"]
+    project_id = result.result["project"]["id"]
+
+    result = await client.create_environment(project_id=project_id, name="dev1")
+    assert result.code == 200
+
+    result = await client.create_environment(project_id=project_id, name="dev2")
+    assert result.code == 200
+    env_id = result.result["environment"]["id"]
+
+    # try to create a new env with the same name as an existing one
+    result = await client.create_environment(project_id=project_id, name="dev1")
+    assert result.code == 400
+    assert f"Project with id={project_id} already has an environment with name dev1" in result.result["message"]
+
+    # try to rename an existing env using a name that is already used.
+    result = await client.modify_environment(id=env_id, name="dev1")
+    assert result.code == 400
+    assert f"Project with id={project_id} already has an environment with name dev1" in result.result["message"]
+
+
 async def test_project_cascade(client):
     result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
