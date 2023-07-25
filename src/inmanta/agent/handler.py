@@ -438,7 +438,6 @@ class HandlerABC(ABC, Generic[R]):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-
     def deploy(
         self,
         ctx: HandlerContext,
@@ -682,47 +681,6 @@ class ResourceHandler(HandlerABC):
 
         return facts
 
-
-@stable_api
-class ResourceHandler(HandlerABC):
-    """
-    A baseclass for classes that handle resources.
-
-    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-    operations.
-
-    :param agent: The agent that is executing this handler.
-    :param io: The io object to use.
-    """
-
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
-        super().__init__(agent)
-
-        if io is None:
-            raise Exception("Unsupported: no resource mgmt in RH")
-        else:
-            self._io = io
-
-    def set_cache(self, cache: AgentCache) -> None:
-        self.cache = cache
-
-    def can_reload(self) -> bool:
-        """
-        Can this handler reload?
-
-        :return: Return true if this handler needs to reload on requires changes.
-        """
-        return False
-
-    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Perform a reload of this resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to reload.
-        """
-
     def close(self) -> None:
         pass
 
@@ -824,16 +782,6 @@ class ResourceHandler(HandlerABC):
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
-
-
-    def available(self, resource: resources.Resource) -> bool:
-        """
-        Returns true if this handler is available for the given resource
-
-        :param resource: Is this handler available for the given resource?
-        :return: Available or not?
-        """
-        return True
 
     def get_file(self, hash_id: str) -> Optional[bytes]:
         """
@@ -1075,15 +1023,19 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
 
     @abstractmethod
     def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
+        """
+        Implement this method to define specific resource discovery logic. This method will be called
+        by the handler's `execute` method during deployment of the corresponding discovery resource
+        by the agent.
+        """
         raise NotImplementedError
 
-    def deploy(
-        self,
-        ctx: HandlerContext,
-        resource: R,
-        requires: Dict[ResourceIdStr, ResourceState],
-    ) -> None:
-        """ """
+    def execute(self, ctx: HandlerContext, resource: R, dry_run: bool = False) -> None:
+        """
+        Generic logic to perform during resource discovery. This method is called when the agent wants
+        to deploy the corresponding discovery resource. The default behaviour of this method is to call
+        the `discover_resources` method, serialize the returned values and report them to the server.
+        """
 
         def _call_discovered_resource_create_batch(
             discovered_resources: abc.Sequence[DiscoveredResource],
@@ -1109,7 +1061,7 @@ class DiscoveryHandler(HandlerABC, Generic[R, D]):
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
-                ("An error occurred during resource discovery " "triggered by %(resource_id)s (exception: %(exception)s"),
+                "An error occurred during resource discovery triggered by %(resource_id)s (exception: %(exception)s",
                 resource_id=resource.id,
                 exception=f"{e.__class__.__name__}('{e}')",
             )
