@@ -53,6 +53,9 @@ class AsyncSingleton(collections.abc.AsyncIterable[bytes]):
 class PGRestore:
     """
     Class that offers support to restore a database dump.
+
+    This class assumes that the names of schemas, tables and columns in the dump don't contain a dot, double quote or
+    whitespace character.
     """
 
     PARSE_EXT_BUFFER_REGEX = re.compile(r"COPY (?P<fq_table_name>[^ ]+)[ ]+\((?P<columns>[^)]+)\)[ ]+FROM stdin")
@@ -105,10 +108,7 @@ class PGRestore:
                  If the provided fq_table_name doesn't contain a schema, the first element in the tuple
                  will be None.
         """
-        nr_dot_characters_in_table_name = fq_table_name.count(".")
-        if nr_dot_characters_in_table_name > 1:
-            raise Exception(f"Table name contains more than one dot character: {fq_table_name}")
-        if nr_dot_characters_in_table_name > 0:
+        if "." in fq_table_name:
             schema, table_name = fq_table_name.split(".", maxsplit=1)
         else:
             schema = None
