@@ -126,7 +126,7 @@ class PGRestore:
         match = self.PARSE_EXT_BUFFER_REGEX.match(self.extbuffer)
         if match is None:
             raise Exception(f"Invalid COPY command: {self.extbuffer}")
-        schema, table_name = self._parse_fq_table_name(match.group("fq_table_name"))
+        schema, table_name = await self._parse_fq_table_name(match.group("fq_table_name"))
         # A column name might be surrounded in quotes when the name conflicts with a keyword.
         columns = [elem.strip(' "') for elem in match.group("columns").split(",")]
         return schema, table_name, columns
