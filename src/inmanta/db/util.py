@@ -20,7 +20,7 @@ import logging
 import re
 from collections import abc
 from dataclasses import dataclass
-from typing import List, NamedTuple, Optional, Union
+from typing import List, NamedTuple, Optional
 
 from asyncpg import Connection
 
@@ -54,6 +54,7 @@ class PGRestore:
     """
     Class that offers support to restore a database dump.
     """
+
     PARSE_EXT_BUFFER_REGEX = re.compile(r"COPY (?P<fq_table_name>[^ ]+)[ ]+\((?P<columns>[^)]+)\)[ ]+FROM stdin")
 
     # asyncpg execute method can not read in COPY IN
