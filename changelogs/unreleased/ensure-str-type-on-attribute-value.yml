@@ -1,5 +1,5 @@
 ---
-description: Ensure that the `id.attribute_value` field of resource emitted by the exporter have type string, even when a different type is used in the model.
+description: Fix bug where the `id.attribute_value` field of resources emitted by the exporter have a non-string type, when the type in the model is not a string.
 change-type: patch
 destination-branches: [master, iso6]
 sections:
