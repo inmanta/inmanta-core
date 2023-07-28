@@ -119,9 +119,9 @@ Step 1: Installing the required Inmanta packages
         sudo tee /etc/yum.repos.d/inmanta.repo <<EOF
         [inmanta-service-orchestrator-|iso_major|-stable]
         name=inmanta-service-orchestrator-|iso_major|-stable
-        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/rpm/el/8/$basearch
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/rpm/el/8/$basearch
         gpgcheck=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-7-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
         repo_gpgcheck=1
         enabled=1
         enabled_metadata=1

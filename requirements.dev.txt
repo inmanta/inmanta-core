@@ -2,7 +2,6 @@ inmanta-dev-dependencies[pytest,async,core,sphinx]==2.76.0
 bumpversion==0.6.0
 openapi_spec_validator==0.6.0
 pip2pi==0.8.2
-sphinxcontrib-contentui==0.2.5
 types-PyYAML==6.0.12.11
 types-python-dateutil==2.8.19.14
 types-setuptools==68.0.0.3
@@ -12,3 +11,7 @@ flake8-junit-report==2.1.0
 # documentation theme
 furo==2023.5.20
 sphinx-design==0.4.1
+
+# documentation extensions
+sphinxcontrib-contentui==0.2.5
+Sphinx-Substitution-Extensions==2022.2.16
