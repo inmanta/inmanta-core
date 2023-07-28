@@ -1,0 +1,6 @@
+---
+description: Ensure that the `id.attribute_value` field of resource emitted by the exporter have type string, even when a different type is used in the model.
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"
