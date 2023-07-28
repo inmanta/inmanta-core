@@ -10,5 +10,5 @@ types-toml==0.10.8.7
 flake8-junit-report==2.1.0
 
 # documentation theme
-furo==2023.5.20
-sphinx-design==0.4.1
+furo==2023.7.26
+sphinx-design==0.5.0
