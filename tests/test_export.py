@@ -759,4 +759,3 @@ def test_attribute_value_of_id_has_str_type(snippetcompiler):
     id_attribute_value = resources[0].id.attribute_value
     assert isinstance(id_attribute_value, str)
     assert id_attribute_value == "123"
-

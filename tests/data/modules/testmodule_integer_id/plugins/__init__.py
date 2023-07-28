@@ -30,7 +30,5 @@ class TestHandler(CRUDHandler):
     def delete_resource(self, ctx: HandlerContext, resource: PurgeableResource) -> None:
         ctx.set_purged()
 
-    def update_resource(
-        self, ctx: HandlerContext, changes: dict, resource: PurgeableResource
-    ) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: PurgeableResource) -> None:
         ctx.set_updated()
