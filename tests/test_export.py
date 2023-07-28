@@ -736,3 +736,25 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
+
+
+def test_attribute_value_of_id_has_str_type(snippetcompiler):
+    """
+    Verify that the id.attribute_value field of resources emitted by the exporter have the type str.
+    Even if the type in the model is different.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        import testmodule_integer_id
+
+        testmodule_integer_id::Test(
+            id_attr=123,
+            agent="internal",
+        )
+        """
+    )
+    version, resource_dct = snippetcompiler.do_export()
+    resources = list(resource_dct.values())
+    assert len(resources) == 1
+    id_attribute_value = resources[0].id.attribute_value
+    assert isinstance(id_attribute_value, str)
