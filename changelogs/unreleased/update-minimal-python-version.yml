@@ -1,0 +1,4 @@
+---
+description: Update the minimal required Python version in the install documentation to python3.9
+change-type: patch
+destination-branches: [master, iso6, iso5]
