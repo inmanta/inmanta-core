@@ -121,7 +121,7 @@ Step 1: Installing the required Inmanta packages
         name=inmanta-service-orchestrator-|iso_major|-stable
         baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/rpm/el/8/$basearch
         gpgcheck=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/cfg/gpg/gpg.|gpg_key|.key
         repo_gpgcheck=1
         enabled=1
         enabled_metadata=1

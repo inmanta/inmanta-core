@@ -129,7 +129,11 @@ try:
     # iso_flavour = pkg_resources.get_distribution("inmanta-service-orchestrator").version
     iso_flavour = meta_version("inmanta-service-orchestrator")
     version_major = int(version.split(".")[0])
-    rst_prolog = ".. |iso_major| replace:: %d" % version_major
+    gpg_key="1544C2C1F409E6E1"
+    rst_prolog = (
+        f".. |iso_major| replace:: {version_major}\n"
+        f".. |gpg_key| replace:: {gpg_key}"
+    )
 except PackageNotFoundError:
     pass
 

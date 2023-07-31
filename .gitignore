@@ -61,6 +61,7 @@ docs/lsm/*.png
 docs/lsm/*.pdf
 docs/model_developers/images/*.png
 docs/model_developers/images/*.pdf
+!docs/model_developers/images/dataflow_graphic_service.png
 
 # Mypy
 .mypy
