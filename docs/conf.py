@@ -11,6 +11,7 @@
 #
 # All configuration values have a default; values that are commented out
 # serve to show the default.
+from importlib.metadata import version as meta_version, PackageNotFoundError
 import logging
 import shutil
 import sys, os, pkg_resources, datetime
@@ -125,10 +126,11 @@ solution will set the version number to 1.0.0.
 release = version
 
 try:
-    iso_flavour = pkg_resources.get_distribution("inmanta-service-orchestrator").version
+    # iso_flavour = pkg_resources.get_distribution("inmanta-service-orchestrator").version
+    iso_flavour = meta_version("inmanta-service-orchestrator")
     version_major = int(version.split(".")[0])
     rst_prolog = ".. |iso_major| replace:: %d" % version_major
-except pkg_resources.DistributionNotFound:
+except PackageNotFoundError:
     pass
 
 

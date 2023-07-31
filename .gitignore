@@ -55,6 +55,8 @@ docs/moduleguides
 docs/inmanta.pdf
 docs/_static/*.pdf
 docs/_static/*.png
+!docs/_static/architecture.png
+!docs/_static/inmanta-logo.png
 docs/lsm/*.png
 docs/lsm/*.pdf
 docs/model_developers/images/*.png
