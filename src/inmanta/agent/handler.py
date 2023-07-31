@@ -418,18 +418,12 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
-@stable_api
-class ResourceHandler(object):
+class HandlerAPI(ABC):
     """
-    A baseclass for classes that handle resources. New handler are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator.
+    Base class descibing the interface between the agent and the handler
 
-    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-    operations.
-
-    :param agent: The agent that is executing this handler.
-    :param io: The io object to use.
+    This class first defines the interface
+    At the end, it also defined a number of utility methods
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
@@ -444,6 +438,67 @@ class ResourceHandler(object):
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
+        # Interface
+
+    def close(self) -> None:
+        pass
+
+    @abstractmethod
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: Dict[ResourceIdStr, ResourceState],
+    ) -> None:
+        """
+        This method is always be called by the agent, even when one of the requires of the given resource
+        failed to deploy. The default implementation of this method will deploy the given resource when all its
+        requires were deployed successfully. Override this method if a different condition determines whether the
+        resource should deploy.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to deploy
+        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
+        """
+        pass
+
+    @abstractmethod
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
+        """
+        Update the given resource. This method is called by the agent. Most handlers will not override this method
+        and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
+        :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
+        :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param dry_run: True will only determine the required changes but will not execute them.
+        """
+        pass
+
+    @abstractmethod
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        """
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
+        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        pass
+
+    def available(self, resource: resources.Resource) -> bool:
+        """
+        Returns true if this handler is available for the given resource
+
+        :param resource: Is this handler available for the given resource?
+        :return: Available or not?
+        """
+        return True
+
+    # Utility methods
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
         Run a the given async function on the ioloop of the agent. It will block the current thread until the future
@@ -483,6 +538,75 @@ class ResourceHandler(object):
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
 
+    def get_file(self, hash_id: str) -> Optional[bytes]:
+        """
+        Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
+        content to identify it.
+
+        :param hash_id: The id of the content/file to retrieve from the server.
+        :return: The content in the form of a bytestring or none is the content does not exist.
+        """
+
+        def call() -> typing.Awaitable[Result]:
+            return self.get_client().get_file(hash_id)
+
+        result = self.run_sync(call)
+        if result.code == 404:
+            return None
+        elif result.result and result.code == 200:
+            file_contents = base64.b64decode(result.result["content"])
+            actual_hash_of_file = hash_file(file_contents)
+            if hash_id != actual_hash_of_file:
+                raise Exception(f"File hash verification failed, expected: {hash_id} but got {actual_hash_of_file}")
+            return file_contents
+        else:
+            raise Exception("An error occurred while retrieving file %s" % hash_id)
+
+    def stat_file(self, hash_id: str) -> bool:
+        """
+        Check if a file exists on the server. This method does and async call to the server and blocks on the result.
+
+        :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
+        :return: True if the file is available on the server.
+        """
+
+        def call() -> typing.Awaitable[Result]:
+            return self.get_client().stat_file(hash_id)
+
+        result = self.run_sync(call)
+        return result.code == 200
+
+    def upload_file(self, hash_id: str, content: bytes) -> None:
+        """
+        Upload a file to the server
+
+        :param hash_id: The id to identify the content. The convention is to use the sha1sum of the content to identify it.
+        :param content: A byte string with the content
+        """
+
+        def call() -> typing.Awaitable[Result]:
+            return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+
+        try:
+            self.run_sync(call)
+        except Exception:
+            raise Exception("Unable to upload file to the server.")
+
+
+@stable_api
+class ResourceHandler(HandlerAPI):
+    """
+    A baseclass for classes that handle resources. New handler are registered with the
+    :func:`~inmanta.agent.handler.provider` decorator.
+
+    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
+    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
+    operations.
+
+    :param agent: The agent that is executing this handler.
+    :param io: The io object to use.
+    """
+
     def can_reload(self) -> bool:
         """
         Can this handler reload?
@@ -515,9 +639,6 @@ class ResourceHandler(object):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to query facts for.
         """
-
-    def close(self) -> None:
-        pass
 
     def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
@@ -728,69 +849,6 @@ class ResourceHandler(object):
 
         return facts
 
-    def available(self, resource: resources.Resource) -> bool:
-        """
-        Returns true if this handler is available for the given resource
-
-        :param resource: Is this handler available for the given resource?
-        :return: Available or not?
-        """
-        return True
-
-    def get_file(self, hash_id: str) -> Optional[bytes]:
-        """
-        Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
-        content to identify it.
-
-        :param hash_id: The id of the content/file to retrieve from the server.
-        :return: The content in the form of a bytestring or none is the content does not exist.
-        """
-
-        def call() -> typing.Awaitable[Result]:
-            return self.get_client().get_file(hash_id)
-
-        result = self.run_sync(call)
-        if result.code == 404:
-            return None
-        elif result.result and result.code == 200:
-            file_contents = base64.b64decode(result.result["content"])
-            actual_hash_of_file = hash_file(file_contents)
-            if hash_id != actual_hash_of_file:
-                raise Exception(f"File hash verification failed, expected: {hash_id} but got {actual_hash_of_file}")
-            return file_contents
-        else:
-            raise Exception("An error occurred while retrieving file %s" % hash_id)
-
-    def stat_file(self, hash_id: str) -> bool:
-        """
-        Check if a file exists on the server. This method does and async call to the server and blocks on the result.
-
-        :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
-        :return: True if the file is available on the server.
-        """
-
-        def call() -> typing.Awaitable[Result]:
-            return self.get_client().stat_file(hash_id)
-
-        result = self.run_sync(call)
-        return result.code == 200
-
-    def upload_file(self, hash_id: str, content: bytes) -> None:
-        """
-        Upload a file to the server
-
-        :param hash_id: The id to identify the content. The convention is to use the sha1sum of the content to identify it.
-        :param content: A byte string with the content
-        """
-
-        def call() -> typing.Awaitable[Result]:
-            return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
-
-        try:
-            self.run_sync(call)
-        except Exception:
-            raise Exception("Unable to upload file to the server.")
-
 
 @stable_api
 class CRUDHandler(ResourceHandler):
@@ -990,7 +1048,7 @@ class Commander(object):
     @classmethod
     def get_provider(
         cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
-    ) -> ResourceHandler:
+    ) -> HandlerAPI:
         """
         Return a provider to handle the given resource
         """
