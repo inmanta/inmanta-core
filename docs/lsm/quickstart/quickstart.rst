@@ -86,7 +86,7 @@ This folder contains a project.yml, which looks like this:
     - type: package
         url: https://packages.inmanta.com/public/quickstart/python/simple/
     - type: package
-        url: https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/python/simple/
+        url: https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/python/simple/
     install_mode: release
     requires:
 

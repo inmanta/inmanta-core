@@ -192,12 +192,12 @@ Install the software
     .. code-block:: sh
        :substitutions:
 
-        [inmanta-service-orchestrator-|iso_major|-stable]
-        name=inmanta-service-orchestrator-|iso_major|-stable
-        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/rpm/el/8/$basearch
+        [inmanta-service-orchestrator-|version_major|-stable]
+        name=inmanta-service-orchestrator-|version_major|-stable
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/rpm/el/8/$basearch
         repo_gpgcheck=1
         enabled=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/cfg/gpg/gpg.|iso_gpg_key|.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/cfg/gpg/gpg.|iso_gpg_key|.key
         gpgcheck=1
         sslverify=1
         sslcacert=/etc/pki/tls/certs/ca-bundle.crt

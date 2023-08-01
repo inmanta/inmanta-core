@@ -124,7 +124,7 @@ release = version
 
 
 iso_gpg_key: str
-oss_gpg_key: str
+oss_gpg_key: str = "A34DD0A274F07713"
 
 try:
     # if product's conf.py injected an iso_gpg_key, use that one
@@ -133,17 +133,10 @@ except NameError:
     # else set a dummy value
     iso_gpg_key = "<gpg_key>"
 
-try:
-    # if product's conf.py injected oss_gpg_key, use that one
-    oss_gpg_key
-except NameError:
-    # else set a dummy value
-    oss_gpg_key = "<gpg_key>"
-
 
 version_major = int(version.split(".")[0])
 rst_prolog = f"""
-    .. |iso_major| replace:: {version_major}
+    .. |version_major| replace:: {version_major}
     .. |iso_gpg_key| replace:: {iso_gpg_key}
     .. |oss_gpg_key| replace:: {oss_gpg_key}
 """
