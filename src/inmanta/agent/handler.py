@@ -455,10 +455,9 @@ class HandlerAPI(ABC):
         requires: Dict[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        This method is always be called by the agent, even when one of the requires of the given resource
-        failed to deploy. The default implementation of this method will deploy the given resource when all its
-        requires were deployed successfully. Override this method if a different condition determines whether the
-        resource should deploy.
+        Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
+        This method is always called by the agent, even when one of the requires of the given resource
+        failed to deploy.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
@@ -700,7 +699,6 @@ class ResourceHandler(HandlerAPI):
         requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
         This method is always called by the agent, even when one of the requires of the given resource
         failed to deploy. The default implementation of this method will deploy the given resource when all its
         requires were deployed successfully. Override this method if a different condition determines whether the
