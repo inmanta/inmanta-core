@@ -12,13 +12,11 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 from importlib.metadata import version as meta_version, PackageNotFoundError
-import logging
 import shutil
 import sys, os, pkg_resources, datetime
 
 from sphinx.errors import ConfigError
 
-LOGGER = logging.getLogger(__name__)
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -107,7 +105,6 @@ if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
     #    of the inmanta-core documentation. During the ISO docs build,
     #    this value will be overwritten with the ISO product version.
     version = "1.0.0"
-    iso_major = int(version.split(".")[0])
 
 else:
     try:
