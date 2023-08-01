@@ -11,8 +11,10 @@
 #
 # All configuration values have a default; values that are commented out
 # serve to show the default.
+import importlib.metadata
 import shutil
 import sys, os, pkg_resources, datetime
+from importlib.metadata import PackageNotFoundError
 from sphinx.errors import ConfigError
 
 # If extensions (or modules to document with autodoc) are in another directory,
@@ -94,26 +96,27 @@ copyright = f'{datetime.datetime.now().year} Inmanta NV'
 # built documents.
 #
 # The short X.Y version.
-if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
-    # Used to:
-    # 1) Decouple the inmanta-core package from the inmanta
-    #    package when running the tests.
-    # 2) Build the ISO documentation, which is built on top
-    #    of the inmanta-core documentation. During the ISO docs build,
-    #    this value will be overwritten with the ISO product version.
-    version = "1.0.0"
-else:
-    try:
-        version = pkg_resources.get_distribution("inmanta").version
-    except pkg_resources.DistributionNotFound:
-        raise ConfigError(
-            """
+version: str
+try:
+    # if product's conf.py injected version information, use that one
+    version
+except NameError:
+    if "INMANTA_DONT_DISCOVER_VERSION" in os.environ:
+        # Used to:
+        # Decouple the inmanta-core package from the inmanta package when running the tests.
+        version = "1.0.0"
+    else:
+        try:
+            version = importlib.metadata.version("inmanta")
+        except PackageNotFoundError:
+            raise ConfigError(
+                """
 The inmanta package is not installed. This way sphinx failed to discover the version number that should be
 displayed on the documentation pages. Either install the inmanta package or set the environment variable
 INMANTA_DONT_DISCOVER_VERSION when the version number is not important for this documentation build. The latter
 solution will set the version number to 1.0.0.
-            """
-        )
+                """
+            )
 
 # The full version, including alpha/beta/rc tags.
 release = version
