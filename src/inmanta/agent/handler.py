@@ -47,7 +47,6 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-R = TypeVar("R", bound=resources.Resource)
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
@@ -425,13 +424,20 @@ class HandlerAPI(ABC):
     At the end, it also defined a number of utility methods.
 
     New handlers are registered with the :func:`~inmanta.agent.handler.provider` decorator.
+    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
+    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
+    operations.
 
-    :param agent: The agent responsible for this handler
+    :param agent: The agent that is executing this handler.
+    :param io: The io object to use.
     """
 
-    def __init__(self, agent: "inmanta.agent.agent.AgentInstance") -> None:
+    def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
         self._agent = agent
-
+        if io is None:
+            raise Exception("Unsupported: no resource mgmt in RH")
+        else:
+            self._io = io
         self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
@@ -594,15 +600,8 @@ class HandlerAPI(ABC):
 @stable_api
 class ResourceHandler(HandlerAPI):
     """
-    A baseclass for classes that handle resources. New handler are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator.
+    A baseclass for classes that handle resources.
 
-    The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
-    makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
-    operations.
-
-    :param agent: The agent that is executing this handler.
-    :param io: The io object to use.
     """
 
     def can_reload(self) -> bool:
@@ -707,8 +706,6 @@ class ResourceHandler(HandlerAPI):
         requires were deployed successfully. Override this method if a different condition determines whether the
         resource should deploy.
 
-        The actual logic to deploy the resource should be defined in the `execute` method.
-
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
         :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
@@ -769,50 +766,48 @@ class ResourceHandler(HandlerAPI):
                 failed=str(failed_dependencies),
             )
 
-    @abstractmethod
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
-        Implements the actual logic to deploy a resource.
+        Update the given resource. This method is called by the agent. Most handlers will not override this method
+        and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
+        :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
+        :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to check the current state of.
         :param dry_run: True will only determine the required changes but will not execute them.
         """
+        try:
+            self.pre(ctx, resource)
 
-    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
-        """
-        Run a the given async function on the ioloop of the agent. It will block the current thread until the future
-        resolves.
+            changes = self.list_changes(ctx, resource)
+            ctx.update_changes(changes)
 
-        :param func: A function that returns a yieldable future.
-        :return: The result of the async function.
-        """
-        f: Future[T] = Future()
+            if not dry_run:
+                self.do_changes(ctx, resource, changes)
+                ctx.set_status(const.ResourceState.deployed)
+            else:
+                ctx.set_status(const.ResourceState.dry)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
 
-        # This function is not typed because of generics, the used methods and currying
-        def run() -> None:
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+            )
+        finally:
             try:
-                result = func()
-                if result is not None:
-                    from tornado.gen import convert_yielded
-
-                    result = convert_yielded(result)
-                    concurrent.chain_future(result, f)
+                self.post(ctx, resource)
             except Exception as e:
-                f.set_exception(e)
-
-        self._ioloop.call_soon_threadsafe(run)
-
-        return f.result()
-
-    def get_client(self) -> protocol.SessionClient:
-        """
-        Get the client instance that identifies itself with the agent session.
-        :return: A client that is associated with the session of the agent that executes this handler.
-        """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
