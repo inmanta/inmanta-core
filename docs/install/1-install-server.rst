@@ -4,7 +4,7 @@ Install Inmanta
 ***************
 
 This page explains how to install the Inmanta orchestrator software and setup an orchestration server. Regardless what platform
-you installed it on, Inmanta requires at least the latest Python 3.6 and git to be installed.
+you installed it on, Inmanta requires at least the latest Python 3.9 and git to be installed.
 
 
 Install the software

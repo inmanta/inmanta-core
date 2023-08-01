@@ -10,12 +10,12 @@ email-validator==2.0.0.post2
 execnet==1.9.0
 importlib_metadata==6.8.0
 jinja2==3.1.2
-more-itertools==9.1.0
+more-itertools==10.0.0
 netifaces==0.11.0
 packaging==23.1
-pip==23.2
+pip==23.2.1
 ply==3.11
-pydantic==1.10.11
+pydantic==1.10.12
 pyformance==0.4
 PyJWT==2.8.0
 pynacl==1.5.0

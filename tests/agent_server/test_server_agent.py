@@ -1810,7 +1810,7 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
     result = await client.delete_environment(id=env_id)
-    assert result.code == 200
+    assert result.code == 200, result.result
 
     # The autostarted agent should be terminated when its environment is deleted.
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
@@ -1827,7 +1827,7 @@ async def test_stop_autostarted_agents_on_project_removal(server, client, resour
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=2)
 
     result = await client.delete_project(id=project1_id)
-    assert result.code == 200
+    assert result.code == 200, result.result
 
     # The autostarted agent of proj1 should be terminated when its project is deleted
     # The autostarted agent of proj2 keep running
