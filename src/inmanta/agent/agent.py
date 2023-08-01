@@ -35,7 +35,7 @@ from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
-from inmanta.agent.handler import ResourceHandler, SkipResource
+from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
@@ -151,7 +151,7 @@ class ResourceAction(ResourceActionBase):
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
         # setup provider
-        provider: Optional[ResourceHandler] = None
+        provider: Optional[HandlerAPI] = None
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
         except ChannelClosedException as e:
@@ -766,7 +766,7 @@ class AgentInstance(object):
             return False
         return True
 
-    async def get_provider(self, resource: Resource) -> ResourceHandler:
+    async def get_provider(self, resource: Resource) -> HandlerAPI:
         provider = await asyncio.get_running_loop().run_in_executor(
             self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
         )
