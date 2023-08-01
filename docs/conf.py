@@ -126,9 +126,6 @@ release = version
 iso_gpg_key: str
 oss_gpg_key: str
 
-# iso_gpg_key="1544C2C1F409E6E1"
-# oss_gpg_key="A34DD0A274F07713"
-
 try:
     # if product's conf.py injected an iso_gpg_key, use that one
     iso_gpg_key
