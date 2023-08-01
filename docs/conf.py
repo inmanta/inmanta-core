@@ -123,19 +123,33 @@ solution will set the version number to 1.0.0.
 release = version
 
 
+iso_gpg_key: str
+oss_gpg_key: str
+
+# iso_gpg_key="1544C2C1F409E6E1"
+# oss_gpg_key="A34DD0A274F07713"
+
 try:
-    # Determine if this is an iso or an oss build:
-    iso_flavour = meta_version("inmanta-service-orchestrator")
-    version_major = int(version.split(".")[0])
-    iso_gpg_key="1544C2C1F409E6E1"
-    rst_prolog = f"""
-        .. |iso_major| replace:: {version_major}
-        .. |iso_gpg_key| replace:: {iso_gpg_key}
-    """
-except PackageNotFoundError:
-    # We are building the oss docs
-    oss_gpg_key="A34DD0A274F07713"
-    rst_prolog = ".. |oss_gpg_key| replace:: %s" % oss_gpg_key
+    # if product's conf.py injected an iso_gpg_key, use that one
+    iso_gpg_key
+except NameError:
+    # else set a dummy value
+    iso_gpg_key = "<gpg_key>"
+
+try:
+    # if product's conf.py injected oss_gpg_key, use that one
+    oss_gpg_key
+except NameError:
+    # else set a dummy value
+    oss_gpg_key = "<gpg_key>"
+
+
+version_major = int(version.split(".")[0])
+rst_prolog = f"""
+    .. |iso_major| replace:: {version_major}
+    .. |iso_gpg_key| replace:: {iso_gpg_key}
+    .. |oss_gpg_key| replace:: {oss_gpg_key}
+"""
 
 
 
