@@ -1036,6 +1036,8 @@ class OrchestrationService(protocol.ServerSlice):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
+        # TODO: do we need to check if it IS already released?
+
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
         now = datetime.datetime.now().astimezone()
@@ -1083,6 +1085,9 @@ class OrchestrationService(protocol.ServerSlice):
 
         increment_ids, neg_increment = increments
         await self.resource_service.mark_deployed(env, neg_increment, now, version_id)
+
+        # Set the updated field:
+        await data.Resource.copy_last_success(env.id, version_id)
 
         # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
         # This has to be done after the resources outside of the increment have been marked as deployed.
