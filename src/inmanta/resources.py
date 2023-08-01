@@ -293,7 +293,7 @@ class Resource(metaclass=ResourceMeta):
             )
 
         # agent_value is no longer a proxy.DynamicProxy here, force this for mypy validation
-        return Id(entity_name, str(agent_value), attribute_name, attribute_value)
+        return Id(entity_name, str(agent_value), attribute_name, str(attribute_value))
 
     @classmethod
     def map_field(

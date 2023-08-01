@@ -422,13 +422,12 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
-@stable_api
-class HandlerABC(ABC, Generic[R]):
+class HandlerAPI(ABC):
     """
-    Top-level abstract base class all handlers should inherit from. New handlers are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator. This class is generic with regard to the resource
-    type this handler is responsible for.
+    Base class describing the interface between the agent and the handler. This class first defines the interface
+    At the end, it also defined a number of utility methods.
 
+    New handlers are registered with the :func:`~inmanta.agent.handler.provider` decorator.
     The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
     makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
     operations.
@@ -439,14 +438,20 @@ class HandlerABC(ABC, Generic[R]):
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
         self._agent = agent
-        self._client: Optional[protocol.SessionClient] = None
         if io is None:
             raise Exception("Unsupported: no resource mgmt in RH")
         else:
             self._io = io
+        self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
+    # Interface
+
+    def close(self) -> None:
+        pass
+
+    @abstractmethod
     def deploy(
         self,
         ctx: HandlerContext,
@@ -461,6 +466,249 @@ class HandlerABC(ABC, Generic[R]):
         resource should deploy.
 
         The actual logic to deploy the resource should be defined in the `execute` method.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to deploy
+        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
+        """
+        pass
+
+    @abstractmethod
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
+        """
+        Implements the actual logic to deploy a resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param dry_run: True will only determine the required changes but will not execute them.
+        """
+        pass
+
+    @abstractmethod
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        """
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
+        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        pass
+
+    def available(self, resource: resources.Resource) -> bool:
+        """
+        Returns true if this handler is available for the given resource
+
+        :param resource: Is this handler available for the given resource?
+        :return: Available or not?
+        """
+        return True
+
+    # Utility methods
+    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
+        """
+        Run the given async function on the ioloop of the agent. It will block the current thread until the future
+        resolves.
+
+        :param func: A function that returns a yieldable future.
+        :return: The result of the async function.
+        """
+        f: Future[T] = Future()
+
+        # This function is not typed because of generics, the used methods and currying
+        def run() -> None:
+            try:
+                result = func()
+                if result is not None:
+                    from tornado.gen import convert_yielded
+
+                    result = convert_yielded(result)
+                    concurrent.chain_future(result, f)
+            except Exception as e:
+                f.set_exception(e)
+
+        self._ioloop.call_soon_threadsafe(run)
+
+        return f.result()
+
+    def set_cache(self, cache: AgentCache) -> None:
+        self.cache = cache
+
+    def get_client(self) -> protocol.SessionClient:
+        """
+        Get the client instance that identifies itself with the agent session.
+
+        :return: A client that is associated with the session of the agent that executes this handler.
+        """
+        if self._client is None:
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+        return self._client
+
+    def get_file(self, hash_id: str) -> Optional[bytes]:
+        """
+        Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
+        content to identify it.
+
+        :param hash_id: The id of the content/file to retrieve from the server.
+        :return: The content in the form of a bytestring or none is the content does not exist.
+        """
+
+        def call() -> typing.Awaitable[Result]:
+            return self.get_client().get_file(hash_id)
+
+        result = self.run_sync(call)
+        if result.code == 404:
+            return None
+        elif result.result and result.code == 200:
+            file_contents = base64.b64decode(result.result["content"])
+            actual_hash_of_file = hash_file(file_contents)
+            if hash_id != actual_hash_of_file:
+                raise Exception(f"File hash verification failed, expected: {hash_id} but got {actual_hash_of_file}")
+            return file_contents
+        else:
+            raise Exception("An error occurred while retrieving file %s" % hash_id)
+
+    def stat_file(self, hash_id: str) -> bool:
+        """
+        Check if a file exists on the server. This method does and async call to the server and blocks on the result.
+
+        :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
+        :return: True if the file is available on the server.
+        """
+
+        def call() -> typing.Awaitable[Result]:
+            return self.get_client().stat_file(hash_id)
+
+        result = self.run_sync(call)
+        return result.code == 200
+
+    def upload_file(self, hash_id: str, content: bytes) -> None:
+        """
+        Upload a file to the server
+
+        :param hash_id: The id to identify the content. The convention is to use the sha1sum of the content to identify it.
+        :param content: A byte string with the content
+        """
+
+        def call() -> typing.Awaitable[Result]:
+            return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+
+        try:
+            self.run_sync(call)
+        except Exception:
+            raise Exception("Unable to upload file to the server.")
+
+
+@stable_api
+class ResourceHandler(HandlerAPI):
+    """
+    A baseclass for classes that handle resources.
+
+    """
+
+    def can_reload(self) -> bool:
+        """
+        Can this handler reload?
+
+        :return: Return true if this handler needs to reload on requires changes.
+        """
+        return False
+
+    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Perform a reload of this resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to reload.
+        """
+
+    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
+    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed after an operation. Override this method to run after an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
+    def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        """
+        Calculate the diff between the current and desired resource state.
+
+        :param current: The current state of the resource
+        :param desired: The desired state of the resource
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
+        """
+        changes = {}
+
+        # check attributes
+        for field in current.__class__.fields:
+            current_value = getattr(current, field)
+            desired_value = getattr(desired, field)
+
+            if current_value != desired_value and desired_value is not None:
+                changes[field] = {"current": current_value, "desired": desired_value}
+
+        return changes
+
+    def check_resource(self, ctx: HandlerContext, resource: resources.Resource) -> resources.Resource:
+        """
+        Check the current state of a resource
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :return: A resource to represents the current state. Use the :func:`~inmanta.resources.Resource.clone` to create
+                 clone of the given resource that can be modified.
+        """
+        raise NotImplementedError()
+
+    def list_changes(self, ctx: HandlerContext, resource: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        """
+        Returns the changes required to bring the resource on this system in the state described in the resource entry.
+        This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
+        """
+        current = self.check_resource(ctx, resource)
+        return self._diff(current, resource)
+
+    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: Dict[str, Dict[str, object]]) -> None:
+        """
+        Do the changes required to bring the resource on this system in the state of the given resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param changes: The changes that need to occur as reported by
+                        :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
+        """
+        raise NotImplementedError()
+
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: abc.Mapping[ResourceIdStr, ResourceState],
+    ) -> None:
+        """
+        Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
+        This method is always called by the agent, even when one of the requires of the given resource
+        failed to deploy. The default implementation of this method will deploy the given resource when all its
+        requires were deployed successfully. Override this method if a different condition determines whether the
+        resource should deploy.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
@@ -522,220 +770,6 @@ class HandlerABC(ABC, Generic[R]):
                 failed=str(failed_dependencies),
             )
 
-    def pre(self, ctx: HandlerContext, resource: R) -> None:
-        """
-        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-        to run before an operation.
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def post(self, ctx: HandlerContext, resource: R) -> None:
-        """
-        Method executed after an operation. Override this method to run after an operation.
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def close(self) -> None:
-        """
-        Custom logic to perform when the handler is being closed
-        """
-
-    @abstractmethod
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
-        """
-        Implements the actual logic to deploy a resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param dry_run: True will only determine the required changes but will not execute them.
-        """
-
-    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
-        """
-        Run the given async function on the ioloop of the agent. It will block the current thread until the future
-        resolves.
-
-        :param func: A function that returns a yieldable future.
-        :return: The result of the async function.
-        """
-        f: Future[T] = Future()
-
-        # This function is not typed because of generics, the used methods and currying
-        def run() -> None:
-            try:
-                result = func()
-                if result is not None:
-                    from tornado.gen import convert_yielded
-
-                    result = convert_yielded(result)
-                    concurrent.chain_future(result, f)
-            except Exception as e:
-                f.set_exception(e)
-
-        self._ioloop.call_soon_threadsafe(run)
-
-        return f.result()
-
-    def available(self, resource: resources.Resource) -> bool:
-        """
-        Returns true if this handler is available for the given resource
-
-        :param resource: Is this handler available for the given resource?
-        :return: Available or not?
-        """
-        return True
-
-    def set_cache(self, cache: AgentCache) -> None:
-        self.cache = cache
-
-    def get_client(self) -> protocol.SessionClient:
-        """
-        Get the client instance that identifies itself with the agent session.
-        :return: A client that is associated with the session of the agent that executes this handler.
-        """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
-
-    def can_reload(self) -> bool:
-        """
-        Can this handler reload?
-
-        :return: Return true if this handler needs to reload on requires changes.
-        """
-        return False
-
-    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Perform a reload of this resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to reload.
-        """
-        pass
-
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
-        """
-        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
-        either via the return value of this method or by adding the fact to the HandlerContext via the
-        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
-
-        :param ctx: Context object to report changes, logs and facts to the agent and server.
-        :param resource: The resource to query facts for.
-        :return: A dict with fact names as keys and facts values.
-        """
-        return {}
-
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
-        """
-        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
-        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        :return: A dict with fact names as keys and facts values.
-        """
-        try:
-            self.pre(ctx, resource)
-            facts = self.facts(ctx, resource)
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
-
-        return facts
-
-
-@stable_api
-class ResourceHandler(HandlerABC):
-    """
-    Classes that handle resources and deploy them should inherit from this class. New handler are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator.
-
-
-    """
-
-    def set_cache(self, cache: AgentCache) -> None:
-        self.cache = cache
-
-    def get_client(self) -> protocol.SessionClient:
-        """
-        Get the client instance that identifies itself with the agent session.
-
-        :return: A client that is associated with the session of the agent that executes this handler.
-        """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
-
-    def close(self) -> None:
-        pass
-
-    def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        """
-        Calculate the diff between the current and desired resource state.
-
-        :param current: The current state of the resource
-        :param desired: The desired state of the resource
-        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
-                 fields that require changes.
-        """
-        changes = {}
-
-        # check attributes
-        for field in current.__class__.fields:
-            current_value = getattr(current, field)
-            desired_value = getattr(desired, field)
-
-            if current_value != desired_value and desired_value is not None:
-                changes[field] = {"current": current_value, "desired": desired_value}
-
-        return changes
-
-    def check_resource(self, ctx: HandlerContext, resource: resources.Resource) -> resources.Resource:
-        """
-        Check the current state of a resource
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :return: A resource to represents the current state. Use the :func:`~inmanta.resources.Resource.clone` to create
-                 clone of the given resource that can be modified.
-        """
-        raise NotImplementedError()
-
-    def list_changes(self, ctx: HandlerContext, resource: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        """
-        Returns the changes required to bring the resource on this system in the state described in the resource entry.
-        This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
-                 fields that require changes.
-        """
-        current = self.check_resource(ctx, resource)
-        return self._diff(current, resource)
-
-    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: Dict[str, Dict[str, object]]) -> None:
-        """
-        Do the changes required to bring the resource on this system in the state of the given resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param changes: The changes that need to occur as reported by
-                        :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
-        """
-        raise NotImplementedError()
-
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
         Update the given resource. This method is called by the agent. Most handlers will not override this method
@@ -779,59 +813,43 @@ class ResourceHandler(HandlerABC):
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
-    def get_file(self, hash_id: str) -> Optional[bytes]:
+    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
-        Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
-        content to identify it.
+        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
+        either via the return value of this method or by adding the fact to the HandlerContext via the
+        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
 
-        :param hash_id: The id of the content/file to retrieve from the server.
-        :return: The content in the form of a bytestring or none is the content does not exist.
+        :param ctx: Context object to report changes, logs and facts to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
         """
+        return {}
 
-        def call() -> typing.Awaitable[Result]:
-            return self.get_client().get_file(hash_id)
-
-        result = self.run_sync(call)
-        if result.code == 404:
-            return None
-        elif result.result and result.code == 200:
-            file_contents = base64.b64decode(result.result["content"])
-            actual_hash_of_file = hash_file(file_contents)
-            if hash_id != actual_hash_of_file:
-                raise Exception(f"File hash verification failed, expected: {hash_id} but got {actual_hash_of_file}")
-            return file_contents
-        else:
-            raise Exception("An error occurred while retrieving file %s" % hash_id)
-
-    def stat_file(self, hash_id: str) -> bool:
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
-        Check if a file exists on the server. This method does and async call to the server and blocks on the result.
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
+        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
+        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
 
-        :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
-        :return: True if the file is available on the server.
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
         """
-
-        def call() -> typing.Awaitable[Result]:
-            return self.get_client().stat_file(hash_id)
-
-        result = self.run_sync(call)
-        return result.code == 200
-
-    def upload_file(self, hash_id: str, content: bytes) -> None:
-        """
-        Upload a file to the server
-
-        :param hash_id: The id to identify the content. The convention is to use the sha1sum of the content to identify it.
-        :param content: A byte string with the content
-        """
-
-        def call() -> typing.Awaitable[Result]:
-            return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
-
         try:
-            self.run_sync(call)
-        except Exception:
-            raise Exception("Unable to upload file to the server.")
+            self.pre(ctx, resource)
+            facts = self.facts(ctx, resource)
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
+
+        return facts
 
 
 @stable_api
@@ -1004,7 +1022,7 @@ class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
 
 
 @stable_api
-class DiscoveryHandler(HandlerABC, Generic[R, D]):
+class DiscoveryHandler(HandlerAPI, Generic[R, D]):
     """
     The DiscoveryHandler is generic with regard to two resource types:
         - R denotes the handler's Discovery Resource type, used to drive resource discovery. This is not a
@@ -1077,10 +1095,10 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Type[HandlerABC]]] = defaultdict(dict)
+    __command_functions: Dict[str, Dict[str, Type[HandlerAPI]]] = defaultdict(dict)
 
     @classmethod
-    def get_handlers(cls) -> Dict[str, Dict[str, Type[HandlerABC]]]:
+    def get_handlers(cls) -> Dict[str, Dict[str, Type[HandlerAPI]]]:
         return cls.__command_functions
 
     @classmethod
@@ -1093,18 +1111,15 @@ class Commander(object):
 
     @classmethod
     def _get_instance(
-        cls,
-        handler_class: Type[HandlerABC],
-        agent: "inmanta.agent.agent.AgentInstance",
-        io: "IOBase",
-    ) -> Union[HandlerABC]:
+        cls, handler_class: Type[HandlerAPI], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+    ) -> HandlerAPI:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
     def get_provider(
         cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
-    ) -> Union[HandlerABC]:
+    ) -> HandlerAPI:
         """
         Return a provider to handle the given resource
         """
@@ -1142,7 +1157,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: Type[HandlerABC]) -> None:
+    def add_provider(cls, resource: str, name: str, provider: Type["HandlerAPI"]) -> None:
         """
         Register a new provider
 
@@ -1156,14 +1171,14 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type[HandlerABC]]]:
+    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type["HandlerAPI"]]]:
         """Return an iterator over resource type, handler definition"""
         for resource_type, handler_map in cls.__command_functions.items():
             for handle_name, handler_class in handler_map.items():
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type[HandlerABC]]:
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["HandlerAPI"]]:
         """
         Return the class of the handler for the given type and with the given name
         """
