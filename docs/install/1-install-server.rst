@@ -4,7 +4,7 @@ Install Inmanta
 ***************
 
 This page explains how to install the Inmanta orchestrator software and setup an orchestration server. Regardless what platform
-you installed it on, Inmanta requires at least the latest Python 3.6 and git to be installed.
+you installed it on, Inmanta requires at least the latest Python 3.6 and git to be installed. |iso_gpg_key| OVER SUBT |iso_major|
 
 
 Install the software
@@ -22,6 +22,8 @@ Install the software
             For RHEL, Almalinux and Rockylinux 8 and 9  based systems use dnf:
 
             .. code-block:: sh
+                :substitutions:
+
 
                 sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
                 [inmanta-oss-stable]
@@ -29,7 +31,7 @@ Install the software
                 baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
                 repo_gpgcheck=1
                 enabled=1
-                gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
+                gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.|oss_gpg_key|.key
                 gpgcheck=1
                 sslverify=1
                 sslcacert=/etc/pki/tls/certs/ca-bundle.crt
@@ -195,7 +197,7 @@ Install the software
         baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/rpm/el/8/$basearch
         repo_gpgcheck=1
         enabled=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/cfg/gpg/gpg.|gpg_key|.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|iso_major|-stable/cfg/gpg/gpg.|iso_gpg_key|.key
         gpgcheck=1
         sslverify=1
         sslcacert=/etc/pki/tls/certs/ca-bundle.crt

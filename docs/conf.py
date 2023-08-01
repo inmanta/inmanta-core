@@ -125,18 +125,20 @@ solution will set the version number to 1.0.0.
 # The full version, including alpha/beta/rc tags.
 release = version
 
+
 try:
-    # iso_flavour = pkg_resources.get_distribution("inmanta-service-orchestrator").version
+    # Determine if this is an iso or an oss build:
     iso_flavour = meta_version("inmanta-service-orchestrator")
     version_major = int(version.split(".")[0])
-    gpg_key="1544C2C1F409E6E1"
-    rst_prolog = (
-        f".. |iso_major| replace:: {version_major}\n"
-        f".. |gpg_key| replace:: {gpg_key}"
-    )
+    iso_gpg_key="1544C2C1F409E6E1"
+    rst_prolog = f"""
+        .. |iso_major| replace:: {version_major}
+        .. |iso_gpg_key| replace:: {iso_gpg_key}
+    """
 except PackageNotFoundError:
-    pass
-
+    # We are building the oss docs
+    oss_gpg_key="A34DD0A274F07713"
+    rst_prolog = ".. |oss_gpg_key| replace:: %s" % oss_gpg_key
 
 
 
