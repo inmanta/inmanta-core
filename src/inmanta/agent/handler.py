@@ -1038,7 +1038,6 @@ class DiscoveryHandler(HandlerAPI, Generic[R, D]):
     ) -> None:
         self.execute(ctx, resource)
 
-
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         pass
 
