@@ -1030,6 +1030,36 @@ class DiscoveryHandler(HandlerAPI, Generic[R, D]):
           discovered and reported to the server. Objects of this type must be serializable.
     """
 
+    def deploy(
+        self,
+        ctx: HandlerContext,
+        resource: resources.Resource,
+        requires: abc.Mapping[ResourceIdStr, ResourceState],
+    ) -> None:
+        self.execute(ctx, resource)
+
+
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        pass
+
+    def pre(self, ctx: HandlerContext, resource: R) -> None:
+        """
+        Override this method to run custom logic before resource discovery.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The Discovery Resource used to drive resource discovery.
+        """
+        pass
+
+    def post(self, ctx: HandlerContext, resource: R) -> None:
+        """
+        Override this method to run custom logic after resource discovery.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The Discovery Resource used to drive resource discovery.
+        """
+        pass
+
     @abstractmethod
     def discover_resources(self, ctx: HandlerContext, discovery_resource: R) -> abc.Mapping[ResourceIdStr, D]:
         """
