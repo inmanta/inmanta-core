@@ -209,8 +209,7 @@ The first option, ``inmanta-cli``, will automatically create a ``.inmanta`` file
 If you have chosen the second option, the Web Console, you need to copy the environment ID for later use, either:
 
  - from the URL, e.g. ec05d6d9-25a4-4141-a92f-38e24a12b721 from the http://172.30.0.3:8888/console/desiredstate?env=ec05d6d9-25a4-4141-a92f-38e24a12b721.
- - or by clicking on the `Settings` pane, then in the `Environment` tab, scroll down all the way to the bottom of the page and copy the environment ID.
-
+ - or by clicking on the gear icon on the top right of the Web Console, then click on Environment, scroll down all the way to the bottom of the page and copy the environment ID.
 
 Configuring SR Linux
 _______________________________
