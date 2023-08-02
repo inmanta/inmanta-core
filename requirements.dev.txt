@@ -9,6 +9,8 @@ types-setuptools==65.6.0.2
 types-toml==0.10.8.1
 flake8-junit-report==2.1.0
 
-# documentation theme
+
+# documentation
 furo==2022.12.7
 sphinx-design==0.3.0
+Sphinx-Substitution-Extensions==2022.2.16

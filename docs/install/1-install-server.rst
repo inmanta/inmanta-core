@@ -22,6 +22,8 @@ Install the software
             For RHEL, Almalinux and Rockylinux 8 based systems use dnf:
 
             .. code-block:: sh
+                :substitutions:
+
 
                 sudo tee /etc/yum.repos.d/inmanta-oss-stable.repo <<EOF
                 [inmanta-oss-stable]
@@ -29,7 +31,7 @@ Install the software
                 baseurl=https://packages.inmanta.com/public/oss-stable/rpm/el/\$releasever/\$basearch
                 repo_gpgcheck=1
                 enabled=1
-                gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.A34DD0A274F07713.key
+                gpgkey=https://packages.inmanta.com/public/oss-stable/gpg.|oss_gpg_key|.key
                 gpgcheck=1
                 sslverify=1
                 sslcacert=/etc/pki/tls/certs/ca-bundle.crt
@@ -188,13 +190,14 @@ Install the software
     ``/etc/yum.repos.d/inmanta.repo`` with the following content:
 
     .. code-block:: sh
+       :substitutions:
 
-        [inmanta-service-orchestrator-5-stable]
-        name=inmanta-service-orchestrator-5-stable
-        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-5-stable/rpm/el/8/$basearch
+        [inmanta-service-orchestrator-|version_major|-stable]
+        name=inmanta-service-orchestrator-|version_major|-stable
+        baseurl=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/rpm/el/8/$basearch
         repo_gpgcheck=1
         enabled=1
-        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-5-stable/cfg/gpg/gpg.1544C2C1F409E6E1.key
+        gpgkey=https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/cfg/gpg/gpg.|iso_gpg_key|.key
         gpgcheck=1
         sslverify=1
         sslcacert=/etc/pki/tls/certs/ca-bundle.crt
