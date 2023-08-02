@@ -46,8 +46,9 @@ Pull the image
     Use docker pull to get the desired image:
 
     .. code-block:: sh
+       :substitutions:
 
-        docker pull containers.inmanta.com/containers/service-orchestrator:7
+        docker pull containers.inmanta.com/containers/service-orchestrator:|version_major|
 
 
     This command will pull the latest version of the Inmanta Service Orchestrator image.
@@ -97,6 +98,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
 .. only:: iso
 
     .. code-block:: yaml
+       :substitutions:
 
         version: '3'
         services:
@@ -112,7 +114,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
 
             inmanta-server:
                 container_name: inmanta_orchestrator
-                image: containers.inmanta.com/containers/service-orchestrator:7
+                image: containers.inmanta.com/containers/service-orchestrator:|version_major|
                 ports:
                     - 8888:8888
                 volumes:
@@ -173,10 +175,11 @@ If you use docker-compose, you can simply update this section of the example abo
 .. only:: iso
 
     .. code-block:: yaml
+        :substitutions:
 
         inmanta-server:
             container_name: inmanta_orchestrator
-            image: containers.inmanta.com/containers/service-orchestrator:7
+            image: containers.inmanta.com/containers/service-orchestrator:|version_major|
             ports:
                 - 8888:8888
             volumes:
@@ -280,10 +283,11 @@ There are two ways you can achieve this:
 .. only:: iso
 
     .. code-block:: yaml
+        :substitutions:
 
         inmanta-server:
             container_name: inmanta_orchestrator
-            image: containers.inmanta.com/containers/service-orchestrator:7
+            image: containers.inmanta.com/containers/service-orchestrator:|version_major|
             ports:
                 - 8888:8888
             volumes:

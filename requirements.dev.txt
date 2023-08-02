@@ -1,4 +1,4 @@
-inmanta-dev-dependencies[pytest,async,core,sphinx]==2.53.0
+inmanta-dev-dependencies[pytest,async,core]==2.53.0
 bumpversion==0.6.0
 openapi_spec_validator==0.5.1
 pip2pi==0.8.2
@@ -9,6 +9,17 @@ types-setuptools==65.6.0.2
 types-toml==0.10.8.1
 flake8-junit-report==2.1.0
 
-# documentation theme
+
+# documentation
 furo==2022.12.7
+inmanta-sphinx==1.7.0
+myst-parser==2.0.0
+sphinx==7.1.1
+sphinxcontrib-contentui==0.2.5
+sphinxcontrib-redoc==1.6.0
+sphinxcontrib-serializinghtml==1.1.5
+sphinx-argparse==0.4.0
+sphinx-autodoc-annotation==1.0-1
+sphinx-click==4.4.0
 sphinx-design==0.3.0
+Sphinx-Substitution-Extensions==2022.2.16
