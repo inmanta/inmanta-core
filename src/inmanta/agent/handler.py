@@ -418,6 +418,7 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
+@stable_api
 class HandlerAPI(ABC):
     """
     Base class describing the interface between the agent and the handler. This class first defines the interface
