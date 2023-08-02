@@ -1,4 +1,4 @@
-description: Add top-level handler abstract base class.
+description: Add top-level handler abstract base class `HandlerAPI`.
 issue-nr: 6025
 change-type: minor
 destination-branches: [master, iso6]
