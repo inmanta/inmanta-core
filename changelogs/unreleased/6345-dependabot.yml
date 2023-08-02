@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump cryptography from 41.0.2 to 41.0.3
+destination-branches:
+- master
+sections: {}
