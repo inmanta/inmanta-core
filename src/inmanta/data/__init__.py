@@ -4265,7 +4265,6 @@ class ResourceAction(BaseDocument):
         last_deploy_start: Optional[object]
 
         async with cls.get_connection() as connection:
-            print("STage 1")
             # Step 1: Get the resource
             # also check we are currently deploying
             resource: Optional[Resource] = await Resource.get_one(
@@ -4282,7 +4281,6 @@ class ResourceAction(BaseDocument):
 
             # steps 2:
             # find the interval between the current deploy (now) and the previous successful deploy
-            print("Stage 2:", resource.last_success)
             last_deploy_start = resource.last_success
 
             # Step 4: get the relevant resource actions
@@ -4956,13 +4954,19 @@ class Resource(BaseDocument):
         if not last_released:
             return
         previous_version = last_released.version
-        query = (
-            f"UPDATE {cls.table_name()} as new_resource "
-            f"SET last_success = (SELECT last_success from {cls.table_name()} as old_resource where old_resource.model=$3 and old_resource.environment=$2 and old_resource.resource_id=new_resource.resource_id)"
-            f"where new_resource.model=$1 and new_resource.environment=$2 and new_resource.last_success is null"
-        )
-        async with cls.get_connection() as connection:
-            await cls._execute_query(query, version, environment, previous_version)
+        query = f"""
+        UPDATE {cls.table_name()} as new_resource
+        SET
+            last_success = (
+                SELECT last_success from {cls.table_name()} as old_resource
+                WHERE old_resource.model=$3
+                AND old_resource.environment=$2
+                AND old_resource.resource_id=new_resource.resource_id
+            )
+        WHERE new_resource.model=$1
+        AND new_resource.environment=$2
+        AND new_resource.last_success is null"""
+        await cls._execute_query(query, version, environment, previous_version)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()

@@ -1036,8 +1036,6 @@ class OrchestrationService(protocol.ServerSlice):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        # TODO: do we need to check if it IS already released?
-
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = await model.get_undeployable()
         now = datetime.datetime.now().astimezone()
