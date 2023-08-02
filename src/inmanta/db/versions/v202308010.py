@@ -42,7 +42,7 @@ async def update(connection: Connection) -> None:
             COALESCE((SELECT started from base_ra where  ORDER BY started DESC LIMIT 1), NULL) as started
             """
 
-    query = """
+    update_query = """
     UPDATE resource as r
     SET last_success = (
         SELECT max(started)
@@ -56,6 +56,11 @@ async def update(connection: Connection) -> None:
             AND ra.action='deploy'
             and ra.status='deployed'
     )
-    WHERE ROW(model, environment) in (select max(version) as version, environment from configurationmodel where released = True group by environment);
+    WHERE ROW(model, environment) in (
+        SELECT
+            max(version) as version,
+            environment
+        FROM configurationmodel where released = True
+        GROUP BY environment);
     """
-    # TODO: set field an latest released version
+    await connection.execute(schema)

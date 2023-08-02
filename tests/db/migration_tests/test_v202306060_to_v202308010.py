@@ -21,17 +21,24 @@ from typing import Awaitable, Callable, List
 
 import pytest
 
+from inmanta.data import Environment, ConfigurationModel, Resource
+
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202306060.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
-    """
-    verify that the discovered_at column is added, that the table is renamed and that the primary key is changed
-    """
-
     await migrate_db_from()
+    env = await Environment.get_one(name="dev-1")
+    assert env
+    model = await ConfigurationModel.get_latest_version(env.id)
+    assert model
+    resources = await Resource.get_list(environment=env.id, model=model.version)
+    assert resources
 
+    for resource in resources:
+        print(resource)
+        assert resource.last_success
 
 
 
