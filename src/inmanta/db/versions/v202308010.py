@@ -63,4 +63,4 @@ async def update(connection: Connection) -> None:
         FROM configurationmodel where released = True
         GROUP BY environment);
     """
-    await connection.execute(schema)
+    await connection.execute(update_query)

@@ -21,7 +21,8 @@ from typing import Awaitable, Callable, List
 
 import pytest
 
-from inmanta.data import Environment, ConfigurationModel, Resource
+from inmanta import const
+from inmanta.data import ConfigurationModel, Environment, Resource, ResourceAction
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202306060.sql"))
@@ -33,12 +34,28 @@ async def test_migration(
     assert env
     model = await ConfigurationModel.get_latest_version(env.id)
     assert model
+    assert model.version == 3
     resources = await Resource.get_list(environment=env.id, model=model.version)
     assert resources
 
+    expected = 0
     for resource in resources:
-        print(resource)
-        assert resource.last_success
+        if resource.resource_id == "std::AgentConfig[internal,agentname=localhost]":
+            # always success
+            assert resource.last_success
+            # verify time on last success
+            actions = await ResourceAction.query_resource_actions(
+                environment=env.id, resource_id=resource.resource_id, action=const.ResourceAction.deploy
+            )
+            last_deploy = actions[0]
+            last_deploy.version == 2
+            assert resource.last_success == last_deploy.finished
+            expected += 1
+        if resource.resource_id == "std::File[localhost,path=/tmp/test]":
+            # always fails
+            assert resource.last_success is None
+            expected += 1
 
-
-
+    # assert we saw both resources
+    # I do it this way, so more resources can be added without breaking this
+    assert expected == 2

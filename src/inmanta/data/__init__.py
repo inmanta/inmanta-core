@@ -4157,6 +4157,7 @@ class ResourceAction(BaseDocument):
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
+        resource_id: Optional[ResourceIdStr] = None,
     ) -> List["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
@@ -4189,6 +4190,10 @@ class ResourceAction(BaseDocument):
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
             values.append(cls._get_value(resource_id_value))
+            parameter_index += 1
+        if resource_id:
+            query += f" AND r.resource_id = ${parameter_index}::varchar"
+            values.append(cls._get_value(resource_id))
             parameter_index += 1
         if log_severity:
             # <@ Is contained by
