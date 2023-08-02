@@ -49,7 +49,7 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-R = TypeVar("R", bound=resources.Resource)
+R = TypeVar("R", bound=resources.DiscoveryResource)
 D = TypeVar("D")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
