@@ -422,6 +422,7 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
+@stable_api
 class HandlerAPI(ABC):
     """
     Base class describing the interface between the agent and the handler. This class first defines the interface
@@ -461,9 +462,7 @@ class HandlerAPI(ABC):
         """
         Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
         This method is always called by the agent, even when one of the requires of the given resource
-        failed to deploy. The default implementation of this method will deploy the given resource when all its
-        requires were deployed successfully. Override this method if a different condition determines whether the
-        resource should deploy.
+        failed to deploy.
 
         The actual logic to deploy the resource should be defined in the `execute` method.
 
@@ -704,7 +703,6 @@ class ResourceHandler(HandlerAPI):
         requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
         This method is always called by the agent, even when one of the requires of the given resource
         failed to deploy. The default implementation of this method will deploy the given resource when all its
         requires were deployed successfully. Override this method if a different condition determines whether the
