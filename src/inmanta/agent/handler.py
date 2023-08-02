@@ -26,7 +26,7 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from concurrent.futures import Future
 from functools import partial
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Dict, Generic, List, Mapping, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -731,7 +731,7 @@ class ResourceHandler(HandlerAPI):
             return result.result["data"]
 
         def filter_resources_in_unexpected_state(
-            reqs: Dict[ResourceIdStr, ResourceState]
+            reqs: Mapping[ResourceIdStr, ResourceState]
         ) -> Dict[ResourceIdStr, ResourceState]:
             """
             Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
@@ -1033,13 +1033,13 @@ class DiscoveryHandler(HandlerAPI, Generic[R, D]):
     def deploy(
         self,
         ctx: HandlerContext,
-        resource: resources.Resource,
+        resource: R,
         requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         self.execute(ctx, resource)
 
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
-        pass
+        return {}
 
     def pre(self, ctx: HandlerContext, resource: R) -> None:
         """
