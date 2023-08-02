@@ -25,23 +25,6 @@ async def update(connection: Connection) -> None:
     # For each environment
     # For the latest released version
     # Set the last success
-
-    """
-            with
-            base_ra as (
-            SELECT ra.*
-                FROM public.resourceaction_resource as jt
-                    INNER JOIN public.resourceaction as ra
-                        ON ra.action_id = jt.resource_action_id
-                    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
-                    ORDER BY ra.started DESC
-            )
-        SELECT
-            (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
-            (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status,
-            COALESCE((SELECT started from base_ra where  ORDER BY started DESC LIMIT 1), NULL) as started
-            """
-
     update_query = """
     UPDATE resource as r
     SET last_success = (
