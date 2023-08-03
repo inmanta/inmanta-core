@@ -529,7 +529,7 @@ class HandlerAPI(ABC):
     @abstractmethod
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
-        This method contains the logic to enforce a resource's intent.
+        Enforce a resource's intent and inform the handler context of any relevant changes (e.g. set deployed status, report attribute changes). Called only when all of its dependencies have successfully deployed.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy.
