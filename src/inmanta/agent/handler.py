@@ -418,6 +418,7 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
+# Explicitly not yet part of the stable API until the interface has had some time to mature.
 class HandlerAPI(ABC):
     """
     Base class describing the interface between the agent and the handler. This class first defines the interface.
@@ -529,7 +530,8 @@ class HandlerAPI(ABC):
     @abstractmethod
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
-        Enforce a resource's intent and inform the handler context of any relevant changes (e.g. set deployed status, report attribute changes). Called only when all of its dependencies have successfully deployed.
+        Enforce a resource's intent and inform the handler context of any relevant changes (e.g. set deployed status,
+        report attribute changes). Called only when all of its dependencies have successfully deployed.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy.
