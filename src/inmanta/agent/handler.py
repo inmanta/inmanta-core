@@ -448,7 +448,7 @@ class HandlerAPI(ABC):
     def close(self) -> None:
         """
         Override this method to implement custom logic called by the agent on handler deactivation. i.e. when the
-        instantiated handler will no longer be used by the handler.
+        instantiated handler will no longer be used by the agent.
         """
         pass
 
