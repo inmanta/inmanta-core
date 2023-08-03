@@ -547,52 +547,6 @@ class HandlerAPI(ABC):
         """
         return True
 
-    def can_reload(self) -> bool:
-        """
-        Can this handler reload?
-
-        :return: Return true if this handler needs to reload on requires changes.
-        """
-        return False
-
-    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Perform a reload of this resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to reload.
-        """
-
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-        to run before an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed after an operation. Override this method to run after an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
-        """
-        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
-        either via the return value of this method or by adding the fact to the HandlerContext via the
-        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.HandlerAPI.pre`
-        and :func:`~inmanta.agent.handler.HandlerAPI.post` are called before and after this method.
-
-        :param ctx: Context object to report changes, logs and facts to the agent and server.
-        :param resource: The resource to query facts for.
-        :return: A dict with fact names as keys and facts values.
-        """
-        return {}
-
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
@@ -619,6 +573,53 @@ class HandlerAPI(ABC):
         return facts
 
     # Utility methods
+
+    def can_reload(self) -> bool:
+        """
+        Can this handler reload?
+
+        :return: Return true if this handler needs to reload on requires changes.
+        """
+        return False
+
+    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Perform a reload of this resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to reload.
+        """
+
+    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource being handled.
+        """
+
+    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed after a handler operation. Override this method to run after an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource being handled.
+        """
+
+    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        """
+        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
+        either via the return value of this method or by adding the fact to the HandlerContext via the
+        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.HandlerAPI.pre`
+        and :func:`~inmanta.agent.handler.HandlerAPI.post` are called before and after this method.
+
+        :param ctx: Context object to report changes, logs and facts to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        return {}
+
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
         """
         Run a the given async function on the ioloop of the agent. It will block the current thread until the future
