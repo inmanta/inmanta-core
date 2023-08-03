@@ -446,6 +446,10 @@ class HandlerAPI(ABC):
     # Interface
 
     def close(self) -> None:
+        """
+        Override this method to implement custom logic called by the agent on handler deactivation. i.e. when the
+        instantiated handler will no longer be used by the handler.
+        """
         pass
 
     @abstractmethod
@@ -499,10 +503,10 @@ class HandlerAPI(ABC):
 
     def available(self, resource: resources.Resource) -> bool:
         """
-        Returns true if this handler is available for the given resource
+        Override this method to implement custom handler selection logic, e.g. if multiple handlers were defined
+        for the same resource type.
 
-        :param resource: Is this handler available for the given resource?
-        :return: Available or not?
+        :param resource: Resource for which to check whether this handler is available.
         """
         return True
 
@@ -534,6 +538,12 @@ class HandlerAPI(ABC):
         return f.result()
 
     def set_cache(self, cache: AgentCache) -> None:
+        """
+        The agent calls this method when it has deemed this handler suitable for a given resource. This cache will be
+        used for methods decorated with @cache.
+
+        :param cache: The AgentCache to use.
+        """
         self.cache = cache
 
     def get_client(self) -> protocol.SessionClient:
@@ -548,8 +558,7 @@ class HandlerAPI(ABC):
 
     def get_file(self, hash_id: str) -> Optional[bytes]:
         """
-        Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
-        content to identify it.
+        Retrieve a file from the fileserver identified with the given id.
 
         :param hash_id: The id of the content/file to retrieve from the server.
         :return: The content in the form of a bytestring or none is the content does not exist.
@@ -572,7 +581,7 @@ class HandlerAPI(ABC):
 
     def stat_file(self, hash_id: str) -> bool:
         """
-        Check if a file exists on the server. This method does and async call to the server and blocks on the result.
+        Check if a file exists on the server.
 
         :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
         :return: True if the file is available on the server.
