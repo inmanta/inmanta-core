@@ -475,7 +475,7 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
     Fixture that returns the type of a column in a table
     """
 
-    async def _get_type_of_column(table_name: str, column_name: str) -> List[str]:
+    async def _get_type_of_column(table_name: str, column_name: str) -> Optional[str]:
         data_type = await postgresql_client.fetchval(
             """
                 SELECT data_type
