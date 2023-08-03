@@ -463,9 +463,9 @@ class HandlerAPI(ABC):
         The agent calls this method for a given resource as soon as all its dependencies (`requires` relation) are ready.
         It is always called, even when one of the dependencies failed to deploy.
 
-        Takes appropriate action based on the state of its dependencies. Calls `execute` iff the handler should actually execute,
-        i.e. enforce the intent represented by the resource. A handler may choose not to proceed to this execution stage, e.g.
-        when one of the resource's dependencies failed.
+        Takes appropriate action based on the state of its dependencies. Calls `execute` iff the handler should actually
+        execute, i.e. enforce the intent represented by the resource. A handler may choose not to proceed to this execution
+        stage, e.g. when one of the resource's dependencies failed.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
@@ -527,27 +527,21 @@ class HandlerAPI(ABC):
                 failed=str(failed_dependencies),
             )
 
-
     @abstractmethod
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
-        Update the given resource. This method is called by the agent. Most handlers will not override this method
-        and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
-        :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
-        :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
+        This method contains the logic to enforce a resource's intent.
 
         :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param dry_run: True will only determine the required changes but will not execute them.
+        :param resource: The resource to deploy.
+        :param dry_run: If set to true, the intent is not enforced, only the set of changes it would bring is computed.
         """
         pass
 
     @abstractmethod
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
-        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
-        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
+        This method is called by the agent to query for facts.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to query facts for.
@@ -759,7 +753,6 @@ class ResourceHandler(HandlerAPI):
                         :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
         """
         raise NotImplementedError()
-
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
