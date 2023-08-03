@@ -457,8 +457,12 @@ class HandlerAPI(ABC):
     ) -> None:
         """
         Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
-        This method is always called by the agent, even when one of the requires of the given resource
-        failed to deploy.
+        The agent calls this method for a given resource as soon as all its dependencies (`requires` relation) are ready.
+        It is always called, even when one of the dependencies failed to deploy.
+        
+        Takes appropriate action based on the state of its dependencies. Calls `execute` iff the handler should actually execute,
+        i.e. enforce the intent represented by the resource. A handler may choose not to proceed to this execution stage, e.g.
+        when one of the resource's dependencies failed.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
