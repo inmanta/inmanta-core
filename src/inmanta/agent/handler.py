@@ -550,8 +550,7 @@ class HandlerAPI(ABC):
 
     def available(self, resource: resources.Resource) -> bool:
         """
-        Override this method to implement custom handler selection logic, e.g. if multiple handlers were defined
-        for the same resource type.
+        Kept for backwards compatibility, new handler implementations should never override this.
 
         :param resource: Resource for which to check whether this handler is available.
         """
