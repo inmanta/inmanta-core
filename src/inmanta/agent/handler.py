@@ -421,8 +421,8 @@ class HandlerContext(LoggerABC):
 @stable_api
 class HandlerAPI(ABC):
     """
-    Base class describing the interface between the agent and the handler. This class first defines the interface
-    At the end, it also defined a number of utility methods.
+    Base class describing the interface between the agent and the handler. This class first defines the interface.
+    At the end, it also defines a number of utility methods.
 
     New handlers are registered with the :func:`~inmanta.agent.handler.provider` decorator.
     The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
@@ -551,7 +551,7 @@ class HandlerAPI(ABC):
         :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
-        def call() -> typing.Awaitable[Result]:
+        def call() -> abc.Awaitable[Result]:
             return self.get_client().get_file(hash_id)
 
         result = self.run_sync(call)
@@ -588,7 +588,7 @@ class HandlerAPI(ABC):
         :param content: A byte string with the content
         """
 
-        def call() -> typing.Awaitable[Result]:
+        def call() -> abc.Awaitable[Result]:
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
