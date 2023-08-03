@@ -452,18 +452,17 @@ class HandlerAPI(ABC):
         """
         pass
 
-    @abstractmethod
     def deploy(
         self,
         ctx: HandlerContext,
         resource: resources.Resource,
-        requires: Dict[ResourceIdStr, ResourceState],
+        requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
         Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
         The agent calls this method for a given resource as soon as all its dependencies (`requires` relation) are ready.
         It is always called, even when one of the dependencies failed to deploy.
-        
+
         Takes appropriate action based on the state of its dependencies. Calls `execute` iff the handler should actually execute,
         i.e. enforce the intent represented by the resource. A handler may choose not to proceed to this execution stage, e.g.
         when one of the resource's dependencies failed.
@@ -472,7 +471,62 @@ class HandlerAPI(ABC):
         :param resource: The resource to deploy
         :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
         """
-        pass
+
+        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
+            return self.get_client().resource_did_dependency_change(
+                tid=self._agent.environment, rvid=resource.id.resource_version_str()
+            )
+
+        def _should_reload() -> bool:
+            if not self.can_reload():
+                return False
+            result = self.run_sync(_call_resource_did_dependency_change)
+            if not result.result:
+                raise Exception("Failed to determine whether resource should reload")
+
+            if result.code != 200:
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
+            return result.result["data"]
+
+        def filter_resources_in_unexpected_state(
+            reqs: Dict[ResourceIdStr, ResourceState]
+        ) -> Dict[ResourceIdStr, ResourceState]:
+            """
+            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
+            """
+            unexpected_states = {
+                const.ResourceState.available,
+                const.ResourceState.dry,
+                const.ResourceState.undefined,
+                const.ResourceState.skipped_for_undefined,
+                const.ResourceState.deploying,
+            }
+            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
+
+        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
+        if resources_in_unexpected_state:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(
+                "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
+                resource=resource.id.resource_version_str(),
+                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
+            )
+            return
+
+        failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
+        if not any(failed_dependencies):
+            self.execute(ctx, resource)
+            if _should_reload():
+                self.do_reload(ctx, resource)
+        else:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.info(
+                "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
+                resource=resource.id.resource_version_str(),
+                failed=str(failed_dependencies),
+            )
+
 
     @abstractmethod
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
@@ -706,77 +760,6 @@ class ResourceHandler(HandlerAPI):
         """
         raise NotImplementedError()
 
-    def deploy(
-        self,
-        ctx: HandlerContext,
-        resource: resources.Resource,
-        requires: abc.Mapping[ResourceIdStr, ResourceState],
-    ) -> None:
-        """
-        This method is always called by the agent, even when one of the requires of the given resource
-        failed to deploy. The default implementation of this method will deploy the given resource when all its
-        requires were deployed successfully. Override this method if a different condition determines whether the
-        resource should deploy.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to deploy
-        :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
-        """
-
-        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
-            return self.get_client().resource_did_dependency_change(
-                tid=self._agent.environment, rvid=resource.id.resource_version_str()
-            )
-
-        def _should_reload() -> bool:
-            if not self.can_reload():
-                return False
-            result = self.run_sync(_call_resource_did_dependency_change)
-            if not result.result:
-                raise Exception("Failed to determine whether resource should reload")
-
-            if result.code != 200:
-                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
-            return result.result["data"]
-
-        def filter_resources_in_unexpected_state(
-            reqs: Dict[ResourceIdStr, ResourceState]
-        ) -> Dict[ResourceIdStr, ResourceState]:
-            """
-            Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
-            """
-            unexpected_states = {
-                const.ResourceState.available,
-                const.ResourceState.dry,
-                const.ResourceState.undefined,
-                const.ResourceState.skipped_for_undefined,
-                const.ResourceState.deploying,
-            }
-            return {rid: state for rid, state in reqs.items() if state in unexpected_states}
-
-        resources_in_unexpected_state = filter_resources_in_unexpected_state(requires)
-        if resources_in_unexpected_state:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(
-                "Resource %(resource)s skipped because a dependency is in an unexpected state: %(unexpected_states)s",
-                resource=resource.id.resource_version_str(),
-                unexpected_states=str({rid: state.value for rid, state in resources_in_unexpected_state.items()}),
-            )
-            return
-
-        failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
-        if not any(failed_dependencies):
-            self.execute(ctx, resource)
-            if _should_reload():
-                self.do_reload(ctx, resource)
-        else:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.info(
-                "Resource %(resource)s skipped due to failed dependencies: %(failed)s",
-                resource=resource.id.resource_version_str(),
-                failed=str(failed_dependencies),
-            )
 
     def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
         """
