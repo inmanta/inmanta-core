@@ -542,7 +542,9 @@ class HandlerAPI(ABC):
     @abstractmethod
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
-        This method is called by the agent to query for facts.
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
+        and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
+        :func:`~inmanta.agent.handler.HandlerAPI.facts` to do the actually querying.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to query facts for.
@@ -573,6 +575,24 @@ class HandlerAPI(ABC):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to reload.
         """
+
+    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
+    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Method executed after an operation. Override this method to run after an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        """
+
 
     # Utility methods
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
@@ -680,24 +700,6 @@ class ResourceHandler(HandlerAPI):
     A baseclass for classes that handle resources.
 
     """
-
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-        to run before an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed after an operation. Override this method to run after an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
     def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
@@ -797,18 +799,7 @@ class ResourceHandler(HandlerAPI):
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
-        """
-        Override this method to implement fact querying. A queried fact can be reported back in two different ways:
-        either via the return value of this method or by adding the fact to the HandlerContext via the
-        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
 
-        :param ctx: Context object to report changes, logs and facts to the agent and server.
-        :param resource: The resource to query facts for.
-        :return: A dict with fact names as keys and facts values.
-        """
-        return {}
 
     def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
