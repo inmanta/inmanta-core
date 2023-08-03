@@ -418,7 +418,6 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
-@stable_api
 class HandlerAPI(ABC):
     """
     Base class describing the interface between the agent and the handler. This class first defines the interface.
@@ -680,10 +679,6 @@ class ResourceHandler(HandlerAPI):
     A baseclass for classes that handle resources.
 
     """
-
-
-
-
 
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
