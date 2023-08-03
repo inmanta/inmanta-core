@@ -470,7 +470,7 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
 
 
 @pytest.fixture(scope="function")
-def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
+def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str]]]:
     """
     Fixture that returns the type of a column in a table
     """
