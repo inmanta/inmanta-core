@@ -485,7 +485,7 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
                     AND column_name = $2;
             """,
             table_name,
-            column_name
+            column_name,
         )
         return data_type
 

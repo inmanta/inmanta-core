@@ -28,7 +28,7 @@ async def test_migration(
     get_type_of_column: Callable[[], Awaitable[List[str]]],
 ) -> None:
     """
-    verify that the discovered_at column is added, that the table is renamed and that the primary key is changed
+    verify that the type of the discovered_at column in the discoveredresource table changed
     """
     assert await get_type_of_column("discoveredresource", "discovered_at") == "timestamp without time zone"
 
