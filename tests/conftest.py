@@ -477,7 +477,7 @@ def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
 
     async def _get_type_of_column(table_name: str, column_name: str) -> List[str]:
         data_type = await postgresql_client.fetchval(
-            f"""
+            """
                 SELECT data_type
                 FROM information_schema.columns
                 WHERE table_schema = 'public'
