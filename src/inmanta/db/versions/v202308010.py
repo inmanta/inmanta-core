@@ -28,7 +28,7 @@ async def update(connection: Connection) -> None:
     update_query = """
     UPDATE resource as r
     SET last_success = (
-        SELECT max(started)
+        SELECT max(finished)
         FROM resourceaction_resource as jt
         INNER JOIN resourceaction as ra
             ON ra.action_id = jt.resource_action_id
