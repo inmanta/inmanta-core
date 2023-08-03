@@ -572,6 +572,15 @@ class HandlerAPI(ABC):
 
         return facts
 
+    def set_cache(self, cache: AgentCache) -> None:
+        """
+        The agent calls this method when it has deemed this handler suitable for a given resource. This cache will be
+        used for methods decorated with @cache.
+
+        :param cache: The AgentCache to use.
+        """
+        self.cache = cache
+
     # Utility methods
 
     def can_reload(self) -> bool:
@@ -645,15 +654,6 @@ class HandlerAPI(ABC):
         self._ioloop.call_soon_threadsafe(run)
 
         return f.result()
-
-    def set_cache(self, cache: AgentCache) -> None:
-        """
-        The agent calls this method when it has deemed this handler suitable for a given resource. This cache will be
-        used for methods decorated with @cache.
-
-        :param cache: The AgentCache to use.
-        """
-        self.cache = cache
 
     def get_client(self) -> protocol.SessionClient:
         """
