@@ -468,6 +468,29 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
 
 
 @pytest.fixture(scope="function")
+def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str]]]:
+    """
+    Fixture that returns the type of a column in a table
+    """
+
+    async def _get_type_of_column(table_name: str, column_name: str) -> Optional[str]:
+        data_type = await postgresql_client.fetchval(
+            """
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                    AND table_name = $1
+                    AND column_name = $2;
+            """,
+            table_name,
+            column_name,
+        )
+        return data_type
+
+    return _get_type_of_column
+
+
+@pytest.fixture(scope="function")
 def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
     old_prefix = sys.prefix
