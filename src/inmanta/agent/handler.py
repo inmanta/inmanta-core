@@ -490,8 +490,8 @@ class HandlerAPI(ABC):
             return result.result["data"]
 
         def filter_resources_in_unexpected_state(
-            reqs: Dict[ResourceIdStr, ResourceState]
-        ) -> Dict[ResourceIdStr, ResourceState]:
+            reqs: abc.Mapping[ResourceIdStr, ResourceState]
+        ) -> abc.Mapping[ResourceIdStr, ResourceState]:
             """
             Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
             """
@@ -557,6 +557,22 @@ class HandlerAPI(ABC):
         :param resource: Resource for which to check whether this handler is available.
         """
         return True
+
+    def can_reload(self) -> bool:
+        """
+        Can this handler reload?
+
+        :return: Return true if this handler needs to reload on requires changes.
+        """
+        return False
+
+    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+        Perform a reload of this resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to reload.
+        """
 
     # Utility methods
     def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
@@ -665,21 +681,9 @@ class ResourceHandler(HandlerAPI):
 
     """
 
-    def can_reload(self) -> bool:
-        """
-        Can this handler reload?
 
-        :return: Return true if this handler needs to reload on requires changes.
-        """
-        return False
 
-    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Perform a reload of this resource.
 
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to reload.
-        """
 
     def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
