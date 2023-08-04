@@ -592,6 +592,12 @@ class ResourceService(protocol.ServerSlice):
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
+        """
+        :param is_increment_notification: is this the increment calucation setting the deployed status,
+            instead of an actual deploy? Used to keep track of the last_success field on the resources,
+            which should not be updated for increments.
+        """
+
         def convert_legacy_state(
             status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
         ) -> Optional[const.ResourceState]:
