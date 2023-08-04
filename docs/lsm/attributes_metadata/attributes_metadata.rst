@@ -1,9 +1,9 @@
-*******************
-Attributes metadata
-*******************
+*****************************
+Attribute and entity metadata
+*****************************
 
 
-This section describes the metadata fields that can be associated with the attributes of a service entity or an embedded entity and how these metadata fields can be set in the model.
+This section describes the metadata fields that can be associated with service entities, embedded entities and its attributes and how these metadata fields can be set in the model.
 
 
 Attribute description
@@ -85,3 +85,90 @@ Supported values
 
 
 Attributes modifiers can also be specified on :ref:`relational attributes<attribute_modifiers_on_a_relationship>`.
+
+
+------------
+
+Annotations
+~~~~~~~~~~~
+
+Definition
+##########
+
+Annotations are key-value pairs that can be associated with an entity (service entity or embedded entity) or
+an attribute (simple attribute or relational attribute). These annotations are intended for the web-console to
+improve visualizations and the user-experience.
+
+Annotations on entities
+#######################
+
+Annotations can be attached to an entity using the ``__annotations`` attribute. This attribute has the type ``dict``
+and requires a default value that defines the annotations. Each key-value pair in the dictionary contains respectively
+the name and the value of the annotation. The value of an annotation must always be a string.
+
+Example
+#######
+
+The example below illustrates how the annotation ``annotation1=value1`` can be set on on a service entity.
+Annotations can be set on embedded entities in the same way.
+
+.. code-block:: inmanta
+
+    entity Interface extends lsm::ServiceEntity:
+        string interface_name
+        dict __annotations = {"annotation1": "value1"}
+    end
+
+
+Annotations on simple attributes
+################################
+
+Annotations can be attached to simple (non-relational) attributes by defining an attribute of type dict, with a name
+``<attribute>__annotations``, where ``<attribute>`` is the name of the attribute the annotations belong to. This
+attribute needs a default value containing the attributes. The values of the elements in the dictionary must be
+strings.
+
+Example
+#######
+
+The example below shows how the annotation ``annotation1=value1`` is set on the attribute ``interface_name``.
+Annotations can be set on simple attributes of embedded entities in the same way.
+
+.. code-block:: inmanta
+
+    entity Interface extends lsm::ServiceEntity:
+        string interface_name
+        dict interface_name__annotations = {"annotation1": "value1"}
+    end
+
+Annotations on relational attributes
+####################################
+
+Annotations can be attach to a relational attribute by replacing the ``--`` part of the relationship definition with
+an instance of the ``lsm::RelationAnnotations`` entity. This entity has a dict attribute ``annotations`` that
+represent the annotation that should be set on the relational attribute. The values of this dictionary must
+be strings. The annotations are always attached to the attribute that is exposed via the lsm API, i.e. the attribute
+that doesn't start with an underscore. By convention the name of the ``lsm::RelationAnnotations`` instance should be
+prefixed and suffixed with two underscores. This improves the readability of the relationship definition.
+
+Example
+#######
+
+The example below illustrates how the annotation ``annotation1=value1`` can be attached to the relational attribute
+``ports``.
+
+.. code-block:: inmanta
+
+    entity Router extends lsm::ServiceEntity:
+        string name
+    end
+
+    entity Port extends lsm::EmbeddedEntity:
+        number id
+    end
+
+    __annotations__ = lsm::RelationAnnotations(
+        annotations={"annotation1": "value1"}
+    )
+    Router.ports [0:] __annotations__ Port._router [1]
+
