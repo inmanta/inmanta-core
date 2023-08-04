@@ -4284,11 +4284,11 @@ class ResourceAction(BaseDocument):
                     f" for resource {resource_version_id_str} is {resource.status}."
                 )
 
-            # steps 2:
+            # Step 2:
             # find the interval between the current deploy (now) and the previous successful deploy
             last_deploy_start = resource.last_success
 
-            # Step 4: get the relevant resource actions
+            # Step 3: get the relevant resource actions
             # Do it in one query for all dependencies
 
             # Construct the query
