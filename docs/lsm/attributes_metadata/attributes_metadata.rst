@@ -95,9 +95,7 @@ Annotations
 Definition
 ##########
 
-Annotations are key-value pairs that can be associated with an entity (service entity or embedded entity) or
-an attribute (simple attribute or relational attribute). These annotations are intended for the web-console to
-improve visualizations and the user-experience.
+Annotations are key-value pairs that can be associated with an entity (service entity or embedded entity) or an attribute (simple attribute or relational attribute). These annotations  don't influence the behavior of LSM or the Inmanta Service Orchestrator itself, but are intended to pass meta data to other components. For example, they can be used to pass on visualization meta-data to the the web-console to improve the user-experience.
 
 Annotations on entities
 #######################
@@ -144,9 +142,9 @@ Annotations can be set on simple attributes of embedded entities in the same way
 Annotations on relational attributes
 ####################################
 
-Annotations can be attach to a relational attribute by replacing the ``--`` part of the relationship definition with
+Annotations can be attached to a relational attribute by replacing the ``--`` part of the relationship definition with
 an instance of the ``lsm::RelationAnnotations`` entity. This entity has a dict attribute ``annotations`` that
-represent the annotation that should be set on the relational attribute. The values of this dictionary must
+represents the annotation that should be set on the relational attribute. The values of this dictionary must
 be strings. The annotations are always attached to the attribute that is exposed via the lsm API, i.e. the attribute
 that doesn't start with an underscore. By convention the name of the ``lsm::RelationAnnotations`` instance should be
 prefixed and suffixed with two underscores. This improves the readability of the relationship definition.
