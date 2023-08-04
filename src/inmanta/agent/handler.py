@@ -551,7 +551,7 @@ class HandlerAPI(ABC):
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
         and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
-        :func:`~inmanta.agent.handler.HandlerAPI.facts` to do the actually querying.
+        :func:`~inmanta.agent.handler.HandlerAPI.facts` to do the actual querying.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to query facts for.
