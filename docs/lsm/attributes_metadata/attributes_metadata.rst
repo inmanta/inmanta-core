@@ -109,14 +109,14 @@ the name and the value of the annotation. The value of an annotation must always
 Example
 #######
 
-The example below illustrates how the annotation ``annotation1=value1`` can be set on on a service entity.
+The example below illustrates how the annotation ``annotation=value`` can be set on on a service entity.
 Annotations can be set on embedded entities in the same way.
 
 .. code-block:: inmanta
 
     entity Interface extends lsm::ServiceEntity:
         string interface_name
-        dict __annotations = {"annotation1": "value1"}
+        dict __annotations = {"annotation": "value"}
     end
 
 
@@ -131,14 +131,14 @@ strings.
 Example
 #######
 
-The example below shows how the annotation ``annotation1=value1`` is set on the attribute ``interface_name``.
+The example below shows how the annotation ``annotation=value`` is set on the attribute ``interface_name``.
 Annotations can be set on simple attributes of embedded entities in the same way.
 
 .. code-block:: inmanta
 
     entity Interface extends lsm::ServiceEntity:
         string interface_name
-        dict interface_name__annotations = {"annotation1": "value1"}
+        dict interface_name__annotations = {"annotation": "value"}
     end
 
 Annotations on relational attributes
@@ -154,7 +154,7 @@ prefixed and suffixed with two underscores. This improves the readability of the
 Example
 #######
 
-The example below illustrates how the annotation ``annotation1=value1`` can be attached to the relational attribute
+The example below illustrates how the annotation ``annotation=value`` can be attached to the relational attribute
 ``ports``.
 
 .. code-block:: inmanta
@@ -168,7 +168,7 @@ The example below illustrates how the annotation ``annotation1=value1`` can be a
     end
 
     __annotations__ = lsm::RelationAnnotations(
-        annotations={"annotation1": "value1"}
+        annotations={"annotation": "value"}
     )
     Router.ports [0:] __annotations__ Port._router [1]
 
