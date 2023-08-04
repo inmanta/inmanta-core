@@ -55,7 +55,7 @@ DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
 
-MAX_ITERATIONS = 100000
+MAX_ITERATIONS = 100_000
 
 
 class Scheduler(object):
