@@ -1180,6 +1180,9 @@ class OrchestrationService(protocol.ServerSlice):
         increment_ids, neg_increment = increments
         await self.resource_service.mark_deployed(env, neg_increment, now, version_id)
 
+        # Set the updated field:
+        await data.Resource.copy_last_success(env.id, version_id)
+
         # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
         # This has to be done after the resources outside of the increment have been marked as deployed.
         await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)

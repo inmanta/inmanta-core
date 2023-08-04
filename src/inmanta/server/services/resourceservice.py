@@ -411,6 +411,7 @@ class ResourceService(protocol.ServerSlice):
             change=const.Change.nochange,
             send_events=False,
             keep_increment_cache=True,
+            is_increment_notification=True,
         )
 
     async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
@@ -539,10 +540,15 @@ class ResourceService(protocol.ServerSlice):
                 if not keep_increment_cache:
                     self.clear_env_cache(env)
 
+                extra_fields = {}
+                if status == ResourceState.deployed:
+                    extra_fields["last_success"] = resource_action.started
+
                 await resource.update_fields(
                     last_deploy=finished,
                     status=status,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
+                    **extra_fields,
                     connection=connection,
                 )
 
@@ -582,9 +588,16 @@ class ResourceService(protocol.ServerSlice):
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
+        is_increment_notification: bool = False,
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
+        """
+        :param is_increment_notification: is this the increment calucation setting the deployed status,
+            instead of an actual deploy? Used to keep track of the last_success field on the resources,
+            which should not be updated for increments.
+        """
+
         def convert_legacy_state(
             status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
         ) -> Optional[const.ResourceState]:
@@ -760,7 +773,12 @@ class ResourceService(protocol.ServerSlice):
 
                         model_version = None
                         for res in resources:
-                            await update_fields_resource(res, last_deploy=finished, status=status, connection=connection)
+                            extra_fields = {}
+                            if status == ResourceState.deployed and not is_increment_notification:
+                                extra_fields["last_success"] = resource_action.started
+                            await update_fields_resource(
+                                res, last_deploy=finished, status=status, **extra_fields, connection=connection
+                            )
                             model_version = res.model
 
                             if (
