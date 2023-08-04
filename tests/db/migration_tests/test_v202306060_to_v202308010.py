@@ -46,9 +46,10 @@ async def test_migration(
             actions = await ResourceAction.query_resource_actions(
                 environment=env.id, resource_id=resource.resource_id, action=const.ResourceAction.deploy
             )
-            last_deploy = actions[0]
-            last_deploy.version == 2
-            assert resource.last_success == last_deploy.finished
+            last_deploy = actions[1]
+            assert last_deploy.version == 2
+            assert resource.last_success == last_deploy.started
+            assert last_deploy.started != last_deploy.finished
             expected += 1
         if resource.resource_id == "std::File[localhost,path=/tmp/test]":
             # always fails

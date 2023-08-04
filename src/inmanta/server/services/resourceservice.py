@@ -542,7 +542,7 @@ class ResourceService(protocol.ServerSlice):
 
                 extra_fields = {}
                 if status == ResourceState.deployed:
-                    extra_fields["last_success"] = finished
+                    extra_fields["last_success"] = resource_action.started
 
                 await resource.update_fields(
                     last_deploy=finished,
@@ -769,7 +769,7 @@ class ResourceService(protocol.ServerSlice):
                         for res in resources:
                             extra_fields = {}
                             if status == ResourceState.deployed and not is_increment_notification:
-                                extra_fields["last_success"] = finished
+                                extra_fields["last_success"] = resource_action.started
                             await update_fields_resource(
                                 res, last_deploy=finished, status=status, **extra_fields, connection=connection
                             )

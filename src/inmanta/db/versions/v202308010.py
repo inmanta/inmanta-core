@@ -28,7 +28,7 @@ async def update(connection: Connection) -> None:
     update_query = """
     UPDATE resource as r
     SET last_success = (
-        SELECT max(finished)
+        SELECT max(started)
         FROM resourceaction_resource as jt
         INNER JOIN resourceaction as ra
             ON ra.action_id = jt.resource_action_id
@@ -37,7 +37,8 @@ async def update(connection: Connection) -> None:
             AND ra.environment=r.environment
             AND jt.resource_id=r.resource_id
             AND ra.action='deploy'
-            and ra.status='deployed'
+            AND ra.status='deployed'
+            AND NOT (ra.messages[1]->>'msg' = 'Setting deployed due to known good status')
     )
     WHERE ROW(model, environment) in (
         SELECT
