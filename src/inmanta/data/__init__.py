@@ -4166,6 +4166,7 @@ class ResourceAction(BaseDocument):
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
+        resource_id: Optional[ResourceIdStr] = None,
     ) -> List["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
@@ -4198,6 +4199,10 @@ class ResourceAction(BaseDocument):
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
             values.append(cls._get_value(resource_id_value))
+            parameter_index += 1
+        if resource_id:
+            query += f" AND r.resource_id = ${parameter_index}::varchar"
+            values.append(cls._get_value(resource_id))
             parameter_index += 1
         if log_severity:
             # <@ Is contained by
@@ -4265,66 +4270,41 @@ class ResourceAction(BaseDocument):
         # This is bang on the critical path for the agent
         # Squeeze out as much performance from postgresql as we can
 
-        # steps 1 and 2:
-        # find the interval between the current deploy and the previous successful deploy
-        # also check we are currently deploying
-        # do all of this in one query
         resource_version_id_str = resource_id.resource_version_str()
         resource_id_str = resource_id.resource_str()
 
         # These two variables are actually of type datetime.datetime
         # but mypy doesn't know as they come from the DB
         # mypy also doesn't care, because they go back into the DB
-        current_deploy_start: object
         last_deploy_start: Optional[object]
 
-        end_query = """
-        with
-            base_ra as (
-            SELECT ra.*
-                FROM public.resourceaction_resource as jt
-                    INNER JOIN public.resourceaction as ra
-                        ON ra.action_id = jt.resource_action_id
-                    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
-                    ORDER BY ra.started DESC
-            )
-        SELECT
-            (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
-            (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status,
-            COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started
-        """
-
         async with cls.get_connection() as connection:
-            result = await connection.fetchrow(end_query, env.id, resource_id_str)
-
-            if not result or result["begin_status"] is None:
-                raise BadRequest(
-                    "Fetching resource events only makes sense when the resource is currently deploying. Resource"
-                    f" {resource_version_id_str} has not started deploying yet."
-                )
-            if result["begin_status"] != const.ResourceState.deploying:
-                raise BadRequest(
-                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_version_id_str} is {result['begin_status']}."
-                )
-            current_deploy_start = result["begin_started"]
-            last_deploy_start = result["started"]
-
-            # Step3: Get the resource
+            # Step 1: Get the resource
+            # also check we are currently deploying
             resource: Optional[Resource] = await Resource.get_one(
                 environment=env.id, resource_id=resource_id_str, model=resource_id.version, connection=connection
             )
             if resource is None:
                 raise NotFound(f"Resource with id {resource_version_id_str} was not found in environment {env.id}")
 
-            # Step 4: get the relevant resource actions
+            if resource.status != const.ResourceState.deploying:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
+                    f" for resource {resource_version_id_str} is {resource.status}."
+                )
+
+            # Step 2:
+            # find the interval between the current deploy (now) and the previous successful deploy
+            last_deploy_start = resource.last_success
+
+            # Step 3: get the relevant resource actions
             # Do it in one query for all dependencies
 
             # Construct the query
             arg = ArgumentCollector(offset=2)
 
             # First make the filter
-            filter = f"AND ra.started<{arg(current_deploy_start)}"
+            filter = ""
             if last_deploy_start:
                 filter += f" AND ra.started > {arg(last_deploy_start)}"
             if exclude_change:
@@ -4385,6 +4365,7 @@ class Resource(BaseDocument):
                            used to determine if a resource describes the same state across versions
     :param resource_id_value: The attribute value from the resource id
     :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
+    :param last_success: The last time this resource (with this ID) was deployed successfully, across versions and hashes
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -4401,6 +4382,7 @@ class Resource(BaseDocument):
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
+    last_success: Optional[datetime.datetime] = None
 
     # State related
     attributes: Dict[str, Any] = {}
@@ -5071,6 +5053,30 @@ class Resource(BaseDocument):
         async with cls.get_connection(connection) as con:
             result = await con.fetch(query, environment, version, resource_sets)
             return {record["resource_id"]: cls(from_postgres=True, **record) for record in result}
+
+    @classmethod
+    async def copy_last_success(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+    ) -> None:
+        last_released = await ConfigurationModel.get_latest_version(environment)
+        if not last_released:
+            return
+        previous_version = last_released.version
+        query = f"""
+        UPDATE {cls.table_name()} as new_resource
+        SET
+            last_success = (
+                SELECT last_success from {cls.table_name()} as old_resource
+                WHERE old_resource.model=$3
+                AND old_resource.environment=$2
+                AND old_resource.resource_id=new_resource.resource_id
+            )
+        WHERE new_resource.model=$1
+        AND new_resource.environment=$2
+        AND new_resource.last_success is null"""
+        await cls._execute_query(query, version, environment, previous_version)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
