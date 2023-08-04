@@ -1,0 +1,6 @@
+---
+description: "Prefix the error messages produced by the `inmanta module release` command with `Error:` to make clear it's an error message."
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
