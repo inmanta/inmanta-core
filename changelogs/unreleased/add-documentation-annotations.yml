@@ -1,0 +1,6 @@
+---
+description: Add documentation regarding annotations that can be set on service entities, embedded entities and LSM exposed attributes.
+issue-nr: 604
+issue-repo: lsm
+change-type: patch
+destination-branches: [master, iso6]
