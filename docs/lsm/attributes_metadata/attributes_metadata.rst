@@ -145,9 +145,8 @@ Annotations on relational attributes
 Annotations can be attached to a relational attribute by replacing the ``--`` part of the relationship definition with
 an instance of the ``lsm::RelationAnnotations`` entity. This entity has a dict attribute ``annotations`` that
 represents the annotations that should be set on the relational attribute. The values of this dictionary must
-be strings. The annotations are always attached to the attribute that is exposed via the lsm API, i.e. the attribute
-that doesn't start with an underscore. By convention the name of the ``lsm::RelationAnnotations`` instance should be
-prefixed and suffixed with two underscores. This improves the readability of the relationship definition.
+be strings. By convention the name of the ``lsm::RelationAnnotations`` instance should be prefixed and suffixed with
+two underscores. This improves the readability of the relationship definition.
 
 Example
 #######
