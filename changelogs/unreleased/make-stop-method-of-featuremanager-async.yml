@@ -1,0 +1,6 @@
+---
+description: "Make the stop() method of the FeatureManager asynchronous + Make sure that calling BootLoader.stop() after BootLoader.load_slices() calls stop on the loaded FeatureManager."
+issue-nr: 520
+issue-repo: inmanta-license
+change-type: patch
+destination-branches: [master, iso6]
