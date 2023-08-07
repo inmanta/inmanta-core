@@ -48,6 +48,7 @@ LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
+TResource = TypeVar("TResource", bound=resources.Resource)
 
 
 @stable_api
@@ -419,7 +420,7 @@ class HandlerContext(LoggerABC):
 
 
 # Explicitly not yet part of the stable API until the interface has had some time to mature.
-class HandlerAPI(ABC):
+class HandlerAPI(ABC, Generic[TResource]):
     """
     Base class describing the interface between the agent and the handler. This class first defines the interface.
     At the end, it also defines a number of utility methods.
@@ -455,7 +456,7 @@ class HandlerAPI(ABC):
     def deploy(
         self,
         ctx: HandlerContext,
-        resource: resources.Resource,
+        resource: TResource,
         requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
@@ -528,7 +529,7 @@ class HandlerAPI(ABC):
             )
 
     @abstractmethod
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         """
         Enforce a resource's intent and inform the handler context of any relevant changes (e.g. set deployed status,
         report attribute changes). Called only when all of its dependencies have successfully deployed.
@@ -539,7 +540,7 @@ class HandlerAPI(ABC):
         """
         pass
 
-    def available(self, resource: resources.Resource) -> bool:
+    def available(self, resource: TResource) -> bool:
         """
         Kept for backwards compatibility, new handler implementations should never override this.
 
@@ -547,7 +548,7 @@ class HandlerAPI(ABC):
         """
         return True
 
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> Dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
         and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
@@ -591,7 +592,7 @@ class HandlerAPI(ABC):
         """
         return False
 
-    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+    def do_reload(self, ctx: HandlerContext, resource: TResource) -> None:
         """
         Perform a reload of this resource.
 
@@ -599,7 +600,7 @@ class HandlerAPI(ABC):
         :param resource: The resource to reload.
         """
 
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+    def pre(self, ctx: HandlerContext, resource: TResource) -> None:
         """
         Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
         to run before an operation.
@@ -608,7 +609,7 @@ class HandlerAPI(ABC):
         :param resource: The resource being handled.
         """
 
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+    def post(self, ctx: HandlerContext, resource: TResource) -> None:
         """
         Method executed after a handler operation. Override this method to run after an operation.
 
@@ -616,7 +617,7 @@ class HandlerAPI(ABC):
         :param resource: The resource being handled.
         """
 
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+    def facts(self, ctx: HandlerContext, resource: TResource) -> Dict[str, object]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
         either via the return value of this method or by adding the fact to the HandlerContext via the
@@ -720,13 +721,13 @@ class HandlerAPI(ABC):
 
 
 @stable_api
-class ResourceHandler(HandlerAPI):
+class ResourceHandler(HandlerAPI[TResource]):
     """
     A baseclass for classes that handle resources.
 
     """
 
-    def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def _diff(self, current: TResource, desired: TResource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
 
@@ -747,7 +748,7 @@ class ResourceHandler(HandlerAPI):
 
         return changes
 
-    def check_resource(self, ctx: HandlerContext, resource: resources.Resource) -> resources.Resource:
+    def check_resource(self, ctx: HandlerContext, resource: TResource) -> TResource:
         """
         Check the current state of a resource
 
@@ -758,7 +759,7 @@ class ResourceHandler(HandlerAPI):
         """
         raise NotImplementedError()
 
-    def list_changes(self, ctx: HandlerContext, resource: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def list_changes(self, ctx: HandlerContext, resource: TResource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
         Returns the changes required to bring the resource on this system in the state described in the resource entry.
         This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
@@ -771,7 +772,7 @@ class ResourceHandler(HandlerAPI):
         current = self.check_resource(ctx, resource)
         return self._diff(current, resource)
 
-    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: Dict[str, Dict[str, object]]) -> None:
+    def do_changes(self, ctx: HandlerContext, resource: TResource, changes: Dict[str, Dict[str, object]]) -> None:
         """
         Do the changes required to bring the resource on this system in the state of the given resource.
 
@@ -782,7 +783,7 @@ class ResourceHandler(HandlerAPI):
         """
         raise NotImplementedError()
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         """
         Update the given resource. This method is called by the agent. Most handlers will not override this method
         and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
@@ -826,14 +827,17 @@ class ResourceHandler(HandlerAPI):
                 )
 
 
+TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
+
+
 @stable_api
-class CRUDHandler(ResourceHandler):
+class CRUDHandler(ResourceHandler[TPurgeableResource]):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
     """
 
-    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
         the method implementation should modify the attributes of this resource to the current state.
@@ -845,7 +849,7 @@ class CRUDHandler(ResourceHandler):
         :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
 
-    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be created.
 
@@ -855,7 +859,7 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be deleted.
 
@@ -865,9 +869,7 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def update_resource(
-        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
-    ) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
@@ -880,7 +882,7 @@ class CRUDHandler(ResourceHandler):
         """
 
     def calculate_diff(
-        self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
+        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
     ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
@@ -895,7 +897,7 @@ class CRUDHandler(ResourceHandler):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
+    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: Optional[bool] = None) -> None:
         """
         Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
 
@@ -965,34 +967,8 @@ class CRUDHandler(ResourceHandler):
                 )
 
 
-TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
-
-
-@stable_api
-class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
-    """
-    This class offers the same functionality as the CRUDHandler class, but was made generic on the type of PurgeableResource.
-    """
-
-    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
-        pass
-
-    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
-        pass
-
-    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
-        pass
-
-    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
-        pass
-
-    def calculate_diff(
-        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
-    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        return super().calculate_diff(ctx, current, desired)
-
-    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
-        super().execute(ctx, resource, dry_run)
+# This is kept for backwards compatibility with versions explicitly importing CRUDHandlerGeneric
+CRUDHandlerGeneric = CRUDHandler
 
 
 class Commander(object):
