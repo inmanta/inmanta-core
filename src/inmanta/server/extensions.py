@@ -178,7 +178,7 @@ class FeatureManager:
             return True
         return item in value
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Called when the server is stopped"""
 
 

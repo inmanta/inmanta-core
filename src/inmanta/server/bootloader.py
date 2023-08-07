@@ -80,7 +80,6 @@ class InmantaBootloader(object):
 
     async def start(self) -> None:
         ctx = self.load_slices()
-        self.feature_manager = ctx.get_feature_manager()
         for mypart in ctx.get_slices():
             self.restserver.add_slice(mypart)
             ctx.get_feature_manager().add_slice(mypart)
@@ -101,7 +100,7 @@ class InmantaBootloader(object):
     async def _stop(self) -> None:
         await self.restserver.stop()
         if self.feature_manager is not None:
-            self.feature_manager.stop()
+            await self.feature_manager.stop()
 
     @classmethod
     def get_available_extensions(cls) -> Dict[str, str]:
@@ -230,4 +229,6 @@ class InmantaBootloader(object):
         Load all slices in the server
         """
         exts: Dict[str, ModuleType] = self._load_extensions(load_all_extensions)
-        return self._collect_slices(exts, only_register_environment_settings)
+        ctx: ApplicationContext = self._collect_slices(exts, only_register_environment_settings)
+        self.feature_manager = ctx.get_feature_manager()
+        return ctx
