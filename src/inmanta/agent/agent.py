@@ -151,7 +151,7 @@ class ResourceAction(ResourceActionBase):
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
         # setup provider
-        provider: Optional[HandlerAPI] = None
+        provider: Optional[HandlerAPI[Any]] = None
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
         except ChannelClosedException as e:
@@ -766,7 +766,7 @@ class AgentInstance(object):
             return False
         return True
 
-    async def get_provider(self, resource: Resource) -> HandlerAPI:
+    async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
         provider = await asyncio.get_running_loop().run_in_executor(
             self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
         )

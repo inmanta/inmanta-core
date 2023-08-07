@@ -976,10 +976,10 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
+    __command_functions: Dict[str, Dict[str, Type[ResourceHandler[Any]]]] = defaultdict(dict)
 
     @classmethod
-    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
+    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler[Any]]]]:
         return cls.__command_functions
 
     @classmethod
@@ -992,15 +992,15 @@ class Commander(object):
 
     @classmethod
     def _get_instance(
-        cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
-    ) -> ResourceHandler:
+        cls, handler_class: Type[ResourceHandler[Any]], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+    ) -> ResourceHandler[Any]:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
     def get_provider(
         cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
-    ) -> HandlerAPI:
+    ) -> HandlerAPI[Any]:
         """
         Return a provider to handle the given resource
         """
@@ -1038,7 +1038,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: Type["ResourceHandler"]) -> None:
+    def add_provider(cls, resource: str, name: str, provider: Type[ResourceHandler[Any]]) -> None:
         """
         Register a new provider
 
@@ -1052,14 +1052,14 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
+    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type[ResourceHandler[Any]]]]:
         """Return an iterator over resource type, handler definition"""
         for resource_type, handler_map in cls.__command_functions.items():
             for handle_name, handler_class in handler_map.items():
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["ResourceHandler"]]:
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type[ResourceHandler[Any]]]:
         """
         Return the class of the handler for the given type and with the given name
         """
