@@ -733,10 +733,10 @@ class AgentInstance(object):
                 self._deploy_splay_value,
                 (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT),
             )
-            interval_schedule: IntervalSchedule = IntervalSchedule(
+            interval_schedule_deploy: IntervalSchedule = IntervalSchedule(
                 interval=float(self._deploy_interval), initial_delay=float(self._deploy_splay_value)
             )
-            self._enable_time_trigger(deploy_action, interval_schedule)
+            self._enable_time_trigger(deploy_action, interval_schedule_deploy)
         if isinstance(self._repair_interval, int):
             if self._repair_interval == 0:
                 return
@@ -746,10 +746,10 @@ class AgentInstance(object):
                 self._repair_splay_value,
                 (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT),
             )
-            interval_schedule: IntervalSchedule = IntervalSchedule(
+            interval_schedule_repair: IntervalSchedule = IntervalSchedule(
                 interval=float(self._repair_interval), initial_delay=float(self._repair_splay_value)
             )
-            self._enable_time_trigger(repair_action, interval_schedule)
+            self._enable_time_trigger(repair_action, interval_schedule_repair)
 
         if isinstance(self._repair_interval, str):
             self.logger.info("Scheduling repair with cron expression %s", self._repair_interval)
