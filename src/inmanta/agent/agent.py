@@ -738,7 +738,7 @@ class AgentInstance(object):
             )
             self._enable_time_trigger(deploy_action, interval_schedule_deploy)
         if isinstance(self._repair_interval, int):
-            if self._repair_interval == 0:
+            if not self._repair_interval:
                 return
             self.logger.info(
                 "Scheduling repair with interval %d and splay %d (first run at %s)",
