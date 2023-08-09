@@ -17,6 +17,7 @@
 """
 import asyncio
 import dataclasses
+import datetime
 import logging
 import time
 import uuid
@@ -386,6 +387,10 @@ async def test_spontaneous_deploy(
     ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
+@pytest.mark.parametrize(
+    "agent-repair-interval",
+    ["2"],
+)
 async def test_spontaneous_repair(
     resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server
 ):

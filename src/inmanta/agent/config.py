@@ -116,9 +116,9 @@ agent_repair_interval = Option(
     "config",
     "agent-repair-interval",
     600,
-    "The number of seconds between two repair runs (full deploy) of the agent. "
+    "The number of seconds between two repair runs (full deploy) of the agent or a cron expression of when to run the repair run"
     + "Set this to 0 to disable the scheduled repair runs.",
-    is_time,
+    is_time_or_cron,
 )
 agent_repair_splay_time = Option(
     "config",

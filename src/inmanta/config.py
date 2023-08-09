@@ -34,6 +34,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
+from crontab import CronTab
 from inmanta import const
 
 LOGGER = logging.getLogger(__name__)
@@ -205,6 +206,17 @@ def is_float(value: str) -> float:
 def is_time(value: str) -> int:
     """Time, the number of seconds represented as an integer value"""
     return int(value)
+
+
+def is_time_or_cron(value: str) -> Union[int, str]:
+    """Time, the number of seconds represented as an integer value"""
+    if isinstance(value, int):
+        return value
+    try:
+        CronTab(value)
+    except ValueError as e:
+        return int(value)
+    return value
 
 
 def is_bool(value: Union[bool, str]) -> bool:
