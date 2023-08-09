@@ -388,11 +388,11 @@ async def test_spontaneous_deploy(
 
 
 @pytest.mark.parametrize(
-    "agent-repair-interval",
+    "agent_repair_interval",
     ["2"],
 )
 async def test_spontaneous_repair(
-    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, agent_repair_interval
 ):
     """
     dryrun and deploy a configuration model
@@ -401,7 +401,7 @@ async def test_spontaneous_repair(
 
     env_id = environment
 
-    Config.set("config", "agent-repair-interval", "2")
+    Config.set("config", "agent-repair-interval", agent_repair_interval)
     Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 
