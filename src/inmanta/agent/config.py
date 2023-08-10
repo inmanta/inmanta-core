@@ -118,7 +118,7 @@ agent_repair_interval = Option(
     600,
     "Either the number of seconds between two repair runs (full deploy) of the agent or a cron-like expression"
     "If a cron-like expression is specified, a repair will be run following a cron-like time-to-run specification, interpreted in UTC"
-    "(e.g. `min hour dom month dow`). A repair will be requested at the scheduled time. Note that if a cron expression is use"
+    "(e.g. `min hour dom month dow`). A repair will be requested at the scheduled time. Note that if a cron expression is used"
     "the 'agent_repair_splay_time' setting will be ignored"
     "Setting this to 0 to disable the scheduled repair runs.",
     is_time_or_cron,
