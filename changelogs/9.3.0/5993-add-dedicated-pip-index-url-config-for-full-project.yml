@@ -5,6 +5,6 @@ destination-branches: [master, iso6]
 sections:
   minor-improvement: "{{description}}"
   deprecation-note: >
-    Setting a package source in the project.yml file through the `repo -> url <index_url> option with type `package`
-    is now deprecated in favour of the `pip -> index_urls <index_url> option.`
+    Setting a package source in the project.yml file through the `repo -> url <index_url>` option with type `package`
+    is now deprecated in favour of the `pip -> index_urls <index_url>` option.
 

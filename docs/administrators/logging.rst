@@ -98,7 +98,7 @@ Apply the changes by reloading the service file and restarting the Inmanta serve
 
 .. code-block:: sh
 
-  sudo systemctl daemon-reload inmanta-server
+  sudo systemctl daemon-reload
   sudo systemctl restart inmanta-server
 
 
