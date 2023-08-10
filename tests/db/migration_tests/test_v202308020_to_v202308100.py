@@ -22,6 +22,6 @@ import pytest
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202308020.sql"))
-async def test_migration(migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
+async def test_add_indexes_for_cascading_delete(migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
     # This migration script only adds indexes. Just verify that the script doesn't fail.
     await migrate_db_from()
