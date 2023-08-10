@@ -1,0 +1,6 @@
+---
+description: Improve the performance of the API endpoints that clear or delete an environment.
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"
