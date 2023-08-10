@@ -752,7 +752,7 @@ class AgentInstance(object):
             self._enable_time_trigger(repair_action, interval_schedule_repair)
 
         if isinstance(self._repair_interval, str):
-            self.logger.info("Scheduling repair with cron expression %s", self._repair_interval)
+            self.logger.info("Scheduling repair with cron expression '%s'", self._repair_interval)
             cron_schedule = CronSchedule(cron=self._repair_interval)
             self._enable_time_trigger(repair_action, cron_schedule)
 
