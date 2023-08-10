@@ -312,6 +312,9 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     await agent.start()
     aclient = agent._client
 
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
     version = (await client_multi.reserve_version(environment_multi)).result["data"]
 
     resources = [
@@ -480,6 +483,9 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
+
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = await clienthelper.get_version()
 
@@ -791,6 +797,9 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     Test querying resource actions via the API
     """
     aclient = agent._client
+
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = await clienthelper.get_version()
 
