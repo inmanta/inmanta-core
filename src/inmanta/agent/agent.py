@@ -29,7 +29,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -634,7 +634,7 @@ class AgentInstance(object):
         self._deploy_splay_value = random.randint(0, deploy_splay_time)
 
         # do regular repair runs
-        self._repair_interval = cfg.agent_repair_interval.get()
+        self._repair_interval: Union[int, str] = cfg.agent_repair_interval.get()
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
@@ -738,7 +738,7 @@ class AgentInstance(object):
             )
             self._enable_time_trigger(deploy_action, interval_schedule_deploy)
         if isinstance(self._repair_interval, int):
-            if not self._repair_interval:
+            if self._repair_interval <= 0:
                 return
             self.logger.info(
                 "Scheduling repair with interval %d and splay %d (first run at %s)",
