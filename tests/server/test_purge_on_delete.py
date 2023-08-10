@@ -143,7 +143,7 @@ async def test_purge_on_delete_requires(
     file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
 
     assert file2["id"] in file1["attributes"]["requires"]
-    assert type(file1["attributes"]["requires"]) == list
+    assert isinstance(file1["attributes"]["requires"], list)
     assert len(file1["provides"]) == 0
 
     assert len(file2["attributes"]["requires"]) == 0
