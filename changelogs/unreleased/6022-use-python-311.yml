@@ -1,0 +1,6 @@
+description: support python3.11
+issue-nr: 6022
+change-type: major
+destination-branches: [master]
+sections:
+  feature: "{{description}}"
