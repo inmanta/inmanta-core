@@ -301,7 +301,7 @@ def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, Rem
 def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement]") -> None:
     """Merge two maps str->[T] by concatting their lists."""
     for req in new:
-        key = req.key.replace("-", "_")
+        key = req.project_name.replace("-", "_")
         if key not in mainspec:
             mainspec[key] = [req]
         else:
