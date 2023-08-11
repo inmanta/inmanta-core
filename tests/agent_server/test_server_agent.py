@@ -386,17 +386,24 @@ async def test_spontaneous_deploy(
     ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
+@pytest.mark.parametrize(
+    "cron",
+    [False, True],
+)
 async def test_spontaneous_repair(
-    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, cron
 ):
     """
-    dryrun and deploy a configuration model
+    Test that a repair run is executed every 2 seconds as specified in the agent_repair_interval (using a cron or not)
     """
     resource_container.Provider.reset()
+    agent_repair_interval = "2"
+    if cron:
+        agent_repair_interval = "*/2 * * * * * *"
 
     env_id = environment
 
-    Config.set("config", "agent-repair-interval", "2")
+    Config.set("config", "agent-repair-interval", agent_repair_interval)
     Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 

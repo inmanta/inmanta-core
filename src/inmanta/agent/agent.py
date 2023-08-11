@@ -29,7 +29,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -44,7 +44,16 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future, join_threadpools
+from inmanta.util import (
+    CronSchedule,
+    IntervalSchedule,
+    NamedLock,
+    ScheduledTask,
+    TaskMethod,
+    TaskSchedule,
+    add_future,
+    join_threadpools,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -625,7 +634,7 @@ class AgentInstance(object):
         self._deploy_splay_value = random.randint(0, deploy_splay_time)
 
         # do regular repair runs
-        self._repair_interval = cfg.agent_repair_interval.get()
+        self._repair_interval: Union[int, str] = cfg.agent_repair_interval.get()
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
@@ -724,18 +733,30 @@ class AgentInstance(object):
                 self._deploy_splay_value,
                 (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT),
             )
-            self._enable_time_trigger(deploy_action, self._deploy_interval, self._deploy_splay_value)
-        if self._repair_interval > 0:
+            interval_schedule_deploy: IntervalSchedule = IntervalSchedule(
+                interval=float(self._deploy_interval), initial_delay=float(self._deploy_splay_value)
+            )
+            self._enable_time_trigger(deploy_action, interval_schedule_deploy)
+        if isinstance(self._repair_interval, int):
+            if self._repair_interval <= 0:
+                return
             self.logger.info(
                 "Scheduling repair with interval %d and splay %d (first run at %s)",
                 self._repair_interval,
                 self._repair_splay_value,
                 (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT),
             )
-            self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
+            interval_schedule_repair: IntervalSchedule = IntervalSchedule(
+                interval=float(self._repair_interval), initial_delay=float(self._repair_splay_value)
+            )
+            self._enable_time_trigger(repair_action, interval_schedule_repair)
 
-    def _enable_time_trigger(self, action: TaskMethod, interval: int, splay: int) -> None:
-        schedule: IntervalSchedule = IntervalSchedule(interval=float(interval), initial_delay=float(splay))
+        if isinstance(self._repair_interval, str):
+            self.logger.info("Scheduling repair with cron expression '%s'", self._repair_interval)
+            cron_schedule = CronSchedule(cron=self._repair_interval)
+            self._enable_time_trigger(repair_action, cron_schedule)
+
+    def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
         self._time_triggered_actions.add(ScheduledTask(action=action, schedule=schedule))
 
