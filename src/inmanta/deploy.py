@@ -482,15 +482,12 @@ host=localhost
         loud_logger = logging.getLogger("tornado")
         loud_logger.propagate = True
 
-        join_list: List[subprocess.Popen] = []
         if hasattr(self, "_server_proc"):
             self._server_proc.terminate()
-            join_list.append(self._server_proc)
 
         if hasattr(self, "_postgresproc"):
             self._postgresproc.stop()
-            join_list.append(self._postgresproc)
 
         # ensure children are down
-        for to_join in join_list:
-            to_join.wait(20)
+        if hasattr(self, "_server_proc"):
+            self._server_proc.wait(20)
