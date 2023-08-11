@@ -487,3 +487,7 @@ host=localhost
 
         if hasattr(self, "_postgresproc"):
             self._postgresproc.stop()
+
+        # ensure children are down
+        if hasattr(self, "_server_proc"):
+            self._server_proc.wait(20)
