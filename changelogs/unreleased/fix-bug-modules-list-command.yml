@@ -1,0 +1,6 @@
+---
+description: "Fix the bugs in the `inmanta modules list` command where the output incorrectly indicates that the installed version of a module matches the relevant version constraints and where the version numbers are badly formatted when the version number doesn't contains a patch number (example: `<major>.<minor>`)."
+change-type: patch
+destination-branches: [iso4]
+sections:
+  bugfix: "{{description}}"

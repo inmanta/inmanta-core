@@ -182,4 +182,16 @@ def modules_repo(modules_dir):
     make_module_simple_deps(reporoot, "I")
     make_module_simple_deps(reporoot, "J")
 
+    mod_a = make_module_simple(reporoot, "mod_a")
+    add_file(mod_a, "nsignal", "present", "third commit", version="4.0.0")
+
+    project = makeproject(
+        reporoot,
+        "project_with_underscored_dep_name",
+        deps=[("mod_a", "==3.2.0")],
+        imports=["mod_a"],
+        install_mode=InstallMode.release,
+    )
+    commitmodule(project, "first commit")
+
     return reporoot

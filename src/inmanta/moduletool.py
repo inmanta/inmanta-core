@@ -422,6 +422,7 @@ version: 0.0.1dev0"""
                 print("    - %s==%s" % (name, version))
         else:
             t = texttable.Texttable()
+            t.set_cols_dtype(["t", "t", "t", "i"])
             t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
             t.header(("Name", "Installed version", "Expected in project", "Matches"))
             for row in table:
