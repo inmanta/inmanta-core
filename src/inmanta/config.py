@@ -209,7 +209,7 @@ def is_time(value: str) -> int:
 
 
 def is_time_or_cron(value: Union[int, str]) -> Union[int, str]:
-    """Time, the number of seconds represented as an integer value"""
+    """Time, the number of seconds represented as an integer value or a cron-like expression"""
     if isinstance(value, int):
         return value
     try:
