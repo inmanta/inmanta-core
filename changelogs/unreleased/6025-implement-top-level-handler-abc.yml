@@ -1,4 +1,4 @@
-description: Add top-level handler abstract base class `HandlerAPI`.
+description: Add top-level handler abstract base class `HandlerAPI` and made resource handlers generic in their resource type.
 issue-nr: 6025
 change-type: minor
 destination-branches: [master]
