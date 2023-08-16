@@ -630,7 +630,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         """
         return {}
 
-    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
+    def run_sync(self, func: typing.Callable[[], abc.Awaitable[T]]) -> T:
         """
         Run a the given async function on the ioloop of the agent. It will block the current thread until the future
         resolves.
