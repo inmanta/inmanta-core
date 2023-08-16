@@ -1491,3 +1491,50 @@ async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema, env
         for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
             result = await data_cls.get_list(environment=env2.id)
             assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:3]
+
+
+async def test_get_environment_metrics_api_endpoint_round_to_prev_hour(
+    server_with_dummy_metric_collectors,
+    client,
+    project_default,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
+):
+    """
+    Verify whether the get_environment_metrics() endpoint rounds the timestamps correctly when the
+    round_timestamps_to_previous_hour option is set to True.
+    """
+    env_id = await environment_creator(client, project_default, env_name="env1")
+
+    start_interval = datetime(year=2023, month=1, day=1, hour=9, minute=20, second=22, microsecond=33).astimezone()
+    await data.EnvironmentMetricsGauge.insert_many(
+        [
+            data.EnvironmentMetricsGauge(
+                environment=uuid.UUID(env_id),
+                metric_name="gauge_metric1",
+                category=DEFAULT_CATEGORY,
+                timestamp=start_interval + timedelta(minutes=i * 15),
+                count=1,
+            )
+            for i in range(20)
+        ]
+    )
+
+    nb_datapoints = 2
+    start_interval_plus_3h = start_interval + timedelta(hours=3)
+    result = await client.get_environment_metrics(
+        tid=env_id,
+        metrics=["gauge_metric1"],
+        start_interval=start_interval,
+        end_interval=start_interval_plus_3h,
+        nb_datapoints=nb_datapoints,
+        round_timestamps_to_previous_hour=True,
+    )
+    assert result.code == 200, result.result
+    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
+    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_3h)
+    timestamps = [datetime.fromisoformat(t) for t in result.result["data"]["timestamps"]]
+    assert len(timestamps) == 2
+    assert timestamps[-1] == get_as_naive_datetime(start_interval_plus_3h.replace(minute=0, second=0, microsecond=0))
+    assert timestamps[0] == get_as_naive_datetime(
+        (start_interval_plus_3h - timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
+    )

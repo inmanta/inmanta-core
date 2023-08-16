@@ -1298,6 +1298,7 @@ def get_environment_metrics(
     start_interval: datetime.datetime,
     end_interval: datetime.datetime,
     nb_datapoints: int,
+    round_timestamps_to_previous_hour: bool = False,
 ) -> model.EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
@@ -1307,6 +1308,7 @@ def get_environment_metrics(
     :param start_interval: The start of the time window for which the metrics should be returned.
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
+    :param round_timestamps_to_previous_hour: True iff the returned timestamps are rounded to the previous hour.
     """
 
 

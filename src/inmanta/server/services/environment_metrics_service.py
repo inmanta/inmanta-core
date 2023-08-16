@@ -311,7 +311,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             )
 
     def _divide_time_interval_in_time_windows(
-        self, start_interval: datetime, end_interval: datetime, nb_time_windows: int
+        self, start_interval: datetime, end_interval: datetime, nb_time_windows: int, round_timestamps_to_previous_hour: bool
     ) -> list[datetime]:
         """
         This method divides the given time interval into the given number of time windows.
@@ -321,6 +321,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         total_seconds_in_interval = (end_interval - start_interval).total_seconds()
         seconds_per_window = math.floor(total_seconds_in_interval / nb_time_windows)
         result = [end_interval - timedelta(seconds=seconds_per_window) * i for i in range(nb_time_windows)]
+        if round_timestamps_to_previous_hour:
+            result = [r.replace(minute=0, second=0, microsecond=0) for r in result]
         result.reverse()
         return result
 
@@ -332,6 +334,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         start_interval: datetime,
         end_interval: datetime,
         nb_datapoints: int,
+        round_timestamps_to_previous_hour: bool = False,
     ) -> EnvironmentMetricsResult:
         if start_interval >= end_interval:
             raise BadRequest("start_interval should be strictly smaller than end_interval.")
@@ -343,6 +346,11 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             raise BadRequest("nb_datapoints should be larger than 0")
         if not metrics:
             raise BadRequest("The 'metrics' argument should contain the name of at least one metric.")
+        if round_timestamps_to_previous_hour and (end_interval - start_interval).total_seconds() < 3600:
+            raise BadRequest(
+                "When round_timestamps_to_previous_hour is True, the start_interval and end_interval need to be separated"
+                " from each other with at least the number of hours equal to nb_datapoints."
+            )
         unknown_metric_names = [
             m for m in metrics if m not in self.metrics_collectors.keys() and m != "orchestrator.compile_rate"
         ]
@@ -376,7 +384,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             metric="metric_name",
             group_by="category",
             table_name=EnvironmentMetricsGauge.table_name(),
-            aggregation_function="(sum(count)::float)/(count(*)::float)",
+            aggregation_function="(avg(count)::float)",
             metrics_list="$5",
         )
         query_on_timer_table = _get_sub_query(
@@ -434,7 +442,9 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         return EnvironmentMetricsResult(
             start=start_interval,
             end=end_interval,
-            timestamps=self._divide_time_interval_in_time_windows(start_interval, end_interval, nb_datapoints),
+            timestamps=self._divide_time_interval_in_time_windows(
+                start_interval, end_interval, nb_datapoints, round_timestamps_to_previous_hour
+            ),
             metrics=result_metrics,
         )
 
