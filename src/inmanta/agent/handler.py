@@ -548,7 +548,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         """
         return True
 
-    def check_facts(self, ctx: HandlerContext, resource: TResource) -> Dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
         and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
