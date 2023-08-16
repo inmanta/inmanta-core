@@ -976,7 +976,7 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Type[ResourceHandler[Any]]]] = defaultdict(dict)
+    __command_functions: dict[str, dict[str, Type[ResourceHandler[Any]]]] = defaultdict(dict)
 
     @classmethod
     def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler[Any]]]]:
