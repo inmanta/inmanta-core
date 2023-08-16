@@ -727,7 +727,7 @@ class ResourceHandler(HandlerAPI[TResource]):
 
     """
 
-    def _diff(self, current: TResource, desired: TResource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def _diff(self, current: TResource, desired: TResource) -> dict[str, dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
 
