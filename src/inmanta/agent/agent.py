@@ -1004,7 +1004,7 @@ class AgentInstance(object):
             try:
                 res["attributes"]["id"] = res["id"]
                 if res["resource_type"] not in failed_resource_types:
-                    resource = Resource.deserialize(res["attributes"])
+                    resource: Resource = Resource.deserialize(res["attributes"])
                     loaded_resources.append(resource)
 
                     state = const.ResourceState[res["status"]]

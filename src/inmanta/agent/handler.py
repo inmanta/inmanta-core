@@ -910,9 +910,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
             # state defines purged=true but the read_resource fails to set it to false if the resource does exist
             desired = resource
-            assert isinstance(desired, resources.PurgeableResource)
-            current = desired.clone(purged=False)
-            assert isinstance(current, resources.PurgeableResource)
+            current: TPurgeableResource = desired.clone(purged=False)
             changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
                 ctx.debug("Calling read_resource")
