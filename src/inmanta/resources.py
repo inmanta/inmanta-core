@@ -550,7 +550,7 @@ class Id(object):
         return hash(str(self))
 
     def __eq__(self, other: object) -> bool:
-        return str(self) == str(other) and type(self) == type(other)
+        return str(self) == str(other) and type(self) is type(other)
 
     def resource_str(self) -> ResourceIdStr:
         return cast(
