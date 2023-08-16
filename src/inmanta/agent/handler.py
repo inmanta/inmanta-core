@@ -617,7 +617,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param resource: The resource being handled.
         """
 
-    def facts(self, ctx: HandlerContext, resource: TResource) -> Dict[str, object]:
+    def facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
         either via the return value of this method or by adding the fact to the HandlerContext via the
