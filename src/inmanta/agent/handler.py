@@ -772,7 +772,7 @@ class ResourceHandler(HandlerAPI[TResource]):
         current = self.check_resource(ctx, resource)
         return self._diff(current, resource)
 
-    def do_changes(self, ctx: HandlerContext, resource: TResource, changes: Dict[str, Dict[str, object]]) -> None:
+    def do_changes(self, ctx: HandlerContext, resource: TResource, changes: abc.Mapping[str, abc.Mapping[str, object]]) -> None:
         """
         Do the changes required to bring the resource on this system in the state of the given resource.
 
