@@ -759,7 +759,7 @@ class ResourceHandler(HandlerAPI[TResource]):
         """
         raise NotImplementedError()
 
-    def list_changes(self, ctx: HandlerContext, resource: TResource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def list_changes(self, ctx: HandlerContext, resource: TResource) -> dict[str, dict[str, typing.Any]]:
         """
         Returns the changes required to bring the resource on this system in the state described in the resource entry.
         This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
