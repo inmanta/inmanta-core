@@ -724,7 +724,6 @@ class HandlerAPI(ABC, Generic[TResource]):
 class ResourceHandler(HandlerAPI[TResource]):
     """
     A baseclass for classes that handle resources.
-
     """
 
     def _diff(self, current: TResource, desired: TResource) -> dict[str, dict[str, typing.Any]]:
