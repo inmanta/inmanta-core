@@ -206,7 +206,7 @@ def resource_container():
         fields = ("key", "value", "set_state_to_deployed", "purged")
 
     @provider("test::Resource", name="test_resource")
-    class Provider(ResourceHandler):
+    class Provider(ResourceHandler[MyResource]):
         def check_resource(self, ctx, resource):
             self.read(resource.id.get_agent_name(), resource.key)
             assert resource.value != const.UNKNOWN_STRING
@@ -332,7 +332,7 @@ def resource_container():
             cls._RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
 
     @provider("test::Fail", name="test_fail")
-    class Fail(ResourceHandler):
+    class Fail(ResourceHandler[FailR]):
         def check_resource(self, ctx, resource):
             current = resource.clone()
             current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
@@ -348,7 +348,7 @@ def resource_container():
             raise Exception()
 
     @provider("test::FailFast", name="test_failfast")
-    class FailFast(ResourceHandler):
+    class FailFast(ResourceHandler[FailFastR]):
         def check_resource(self, ctx: HandlerContext, resource: Resource) -> Resource:
             raise Exception("An\nError\tMessage")
 
@@ -358,7 +358,7 @@ def resource_container():
             raise Exception("An\nError\tMessage")
 
     @provider("test::Fact", name="test_fact")
-    class Fact(ResourceHandler):
+    class Fact(ResourceHandler[FactResource]):
         def check_resource(self, ctx, resource):
             current = resource.clone()
             current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
@@ -422,7 +422,7 @@ def resource_container():
         pass
 
     @provider("test::BadLogging", name="test_bad_logging")
-    class BadLogging(ResourceHandler):
+    class BadLogging(ResourceHandler[BadLoggingR]):
         def check_resource(self, ctx, resource):
             current = resource.clone()
             return current
@@ -529,7 +529,7 @@ def resource_container():
             await asyncio.sleep(0.1)
 
     @provider("test::Wait", name="test_wait")
-    class Wait(ResourceHandler):
+    class Wait(ResourceHandler[WaitR]):
         def __init__(self, agent, io=None):
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()
