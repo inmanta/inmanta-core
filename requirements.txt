@@ -1,6 +1,6 @@
 asyncpg==0.28.0
 click-plugins==1.1.1
-click==8.1.6
+click==8.1.7
 colorlog==6.7.0
 cookiecutter==2.3.0
 crontab==1.0.1
