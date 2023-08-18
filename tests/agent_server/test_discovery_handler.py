@@ -180,7 +180,7 @@ async def test_discovery_resource_handler_basic_test(
         get_fact_actions = [a for a in result.result["data"] if a["action"] == const.ResourceAction.getfact.value]
         return len(get_fact_actions) > 0
 
-    await retry_limited(fact_discovery_finished, timeout=10)
+    await retry_limited(fact_discovery_finished_successfully, timeout=10)
 
 
 @pytest.mark.parametrize("direct_dependency_failed", [True, False])
