@@ -21,10 +21,12 @@ import logging
 import traceback
 import typing
 import uuid
+import json
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from functools import partial
 
 from tornado import concurrent
 
@@ -33,7 +35,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, ResourceIdStr, DiscoveredResource
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -47,6 +49,10 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+# A resource present in the model that describes the resources that should be discovered
+TDiscovery = TypeVar("TDiscovery", bound=resources.DiscoveryResource)
+# The type of elements produced by the resource discovery process.
+TDiscovered = TypeVar("TDiscovered")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 TResource = TypeVar("TResource", bound=resources.Resource)
 
@@ -429,12 +435,13 @@ class HandlerAPI(ABC, Generic[TResource]):
     The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
     makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
     operations.
-
-    :param agent: The agent that is executing this handler.
-    :param io: The io object to use.
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
+        """
+        :param agent: The agent that is executing this handler.
+        :param io: The io object to use.
+        """
         self._agent = agent
         if io is None:
             raise Exception("Unsupported: no resource mgmt in RH")
@@ -473,23 +480,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
         """
 
-        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
-            return self.get_client().resource_did_dependency_change(
-                tid=self._agent.environment, rvid=resource.id.resource_version_str()
-            )
-
-        def _should_reload() -> bool:
-            if not self.can_reload():
-                return False
-            result = self.run_sync(_call_resource_did_dependency_change)
-            if not result.result:
-                raise Exception("Failed to determine whether resource should reload")
-
-            if result.code != 200:
-                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
-            return result.result["data"]
-
         def filter_resources_in_unexpected_state(
             reqs: abc.Mapping[ResourceIdStr, ResourceState]
         ) -> abc.Mapping[ResourceIdStr, ResourceState]:
@@ -518,8 +508,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
             self.execute(ctx, resource)
-            if _should_reload():
-                self.do_reload(ctx, resource)
+            self.post_execute(ctx, resource)
         else:
             ctx.set_status(const.ResourceState.skipped)
             ctx.info(
@@ -540,6 +529,12 @@ class HandlerAPI(ABC, Generic[TResource]):
         """
         pass
 
+    def post_execute(self, ctx: HandlerContext, resource: TResource) -> None:
+        """
+        This method is called by the deploy() method right after the execute() method was called.
+        """
+        pass
+
     def available(self, resource: TResource) -> bool:
         """
         Kept for backwards compatibility, new handler implementations should never override this.
@@ -548,30 +543,16 @@ class HandlerAPI(ABC, Generic[TResource]):
         """
         return True
 
-    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
+    @abstractmethod
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
         """
-        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
-        and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
-        :func:`~inmanta.agent.handler.HandlerAPI.facts` to do the actual querying.
+        This method is called by the agent to query for facts.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to query facts for.
         :return: A dict with fact names as keys and facts values.
         """
-        try:
-            self.pre(ctx, resource)
-            facts = self.facts(ctx, resource)
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
-
-        return facts
+        pass
 
     def set_cache(self, cache: AgentCache) -> None:
         """
@@ -594,11 +575,12 @@ class HandlerAPI(ABC, Generic[TResource]):
 
     def do_reload(self, ctx: HandlerContext, resource: TResource) -> None:
         """
-        Perform a reload of this resource.
+        Perform a reload of this resource. This method is executed after the post() method is called.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to reload.
         """
+        pass
 
     def pre(self, ctx: HandlerContext, resource: TResource) -> None:
         """
@@ -608,6 +590,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource being handled.
         """
+        pass
 
     def post(self, ctx: HandlerContext, resource: TResource) -> None:
         """
@@ -616,6 +599,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource being handled.
         """
+        pass
 
     def facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
@@ -723,7 +707,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 @stable_api
 class ResourceHandler(HandlerAPI[TResource]):
     """
-    A baseclass for classes that handle resources.
+    A class that handle resources.
     """
 
     def _diff(self, current: TResource, desired: TResource) -> dict[str, dict[str, typing.Any]]:
@@ -824,6 +808,59 @@ class ResourceHandler(HandlerAPI[TResource]):
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
+
+    def post_execute(self, ctx: HandlerContext, resource: TResource) -> None:
+        """
+        This method is called by the deploy() method right after the execute() method was called.
+        """
+        if self._should_reload(resource):
+            self.do_reload(ctx, resource)
+
+    def _should_reload(self, resource: TResource) -> bool:
+        """
+        Return True iff the given resource should be reloaded.
+        """
+        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
+            return self.get_client().resource_did_dependency_change(
+                tid=self._agent.environment, rvid=resource.id.resource_version_str()
+            )
+
+        if not self.can_reload():
+            return False
+        result = self.run_sync(_call_resource_did_dependency_change)
+        if not result.result:
+            raise Exception("Failed to determine whether resource should reload")
+
+        if result.code != 200:
+            error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+            raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
+        return result.result["data"]
+
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
+        """
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
+        and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
+        :func:`~inmanta.agent.handler.HandlerAPI.facts` to do the actual querying.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        facts = {}
+        try:
+            self.pre(ctx, resource)
+            facts = self.facts(ctx, resource)
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
+
+        return facts
 
 
 TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
@@ -966,6 +1003,88 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
 
 # This is kept for backwards compatibility with versions explicitly importing CRUDHandlerGeneric
 CRUDHandlerGeneric = CRUDHandler
+
+
+@stable_api
+class DiscoveryHandler(HandlerAPI, Generic[TDiscovery, TDiscovered]):
+    """
+    The DiscoveryHandler is generic with regard to two resource types:
+        - TDiscovery denotes the handler's Discovery Resource type, used to drive resource discovery. This is not a
+          conventional resource type expected to be deployed on a network, but rather a way to express
+          the intent to discover resources of the second type TDiscovered already present on the network.
+        - TDiscovered denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
+          discovered and reported to the server. Objects of this type must be serializable.
+    """
+
+    def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> Dict[str, object]:
+        return {}
+
+    @abstractmethod
+    def discover_resources(
+        self, ctx: HandlerContext, discovery_resource: TDiscovery
+    ) -> abc.Mapping[ResourceIdStr, TDiscovered]:
+        """
+        Implement this method to define specific resource discovery logic. This method will be called
+        by the handler's `execute` method during deployment of the corresponding discovery resource
+        by the agent.
+        """
+        raise NotImplementedError()
+
+    def execute(self, ctx: HandlerContext, resource: TDiscovery, dry_run: bool = False) -> None:
+        """
+        Generic logic to perform during resource discovery. This method is called when the agent wants
+        to deploy the corresponding discovery resource. The default behaviour of this method is to call
+        the `discover_resources` method, serialize the returned values and report them to the server.
+        """
+        if dry_run:
+            return
+
+        def _call_discovered_resource_create_batch(
+            discovered_resources: abc.Sequence[DiscoveredResource],
+        ) -> typing.Awaitable[Result]:
+            return self.get_client().discovered_resource_create_batch(
+                tid=self._agent.environment, discovered_resources=discovered_resources
+            )
+
+        try:
+            self.pre(ctx, resource)
+            discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
+            discovered_resources: abc.Sequence[DiscoveredResource] = [
+                DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
+                for resource_id, values in discovered_resources_raw.items()
+            ]
+            result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
+
+            if result.code != 200:
+                assert result.result is not None  # Make mypy happy
+                ctx.set_status(const.ResourceState.failed)
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                ctx.error(
+                    "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
+                    code=result.code,
+                    error_msg_from_server=error_msg_from_server,
+                )
+            else:
+                ctx.set_status(const.ResourceState.deployed)
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during resource discovery triggered by %(resource_id)s (exception: %(exception)s",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    (
+                        "An error occurred during post stage of resource discovery "
+                        "triggered by %(resource_id)s (exception: %(exception)s"
+                    ),
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
 
 class Commander(object):

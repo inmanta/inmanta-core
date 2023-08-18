@@ -15,88 +15,92 @@
 
     Contact: code@inmanta.com
 """
-import os
 import uuid
 from collections import abc
-from typing import Optional
 
 import pytest
 
-import inmanta
 from agent_server.conftest import _deploy_resources, wait_for_n_deployed_resources
 from inmanta import data
 from inmanta.agent.handler import DiscoveryHandler, HandlerContext, provider
-from inmanta.agent.io.local import IOBase
+from inmanta import const
 from inmanta.data import ResourceIdStr
+from inmanta.util import retry_limited
 from inmanta.data.model import BaseModel
 from inmanta.resources import DiscoveryResource, Id, resource
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta import util
 
 
 @pytest.fixture
-async def discovery_resource_and_handler(tmpdir):
+def all_values() -> list[str]:
+    """
+    This fixture returns a list of values that will be discovered by the handle registered via the
+    discovery_resource_and_handler fixture.
+    """
+    return ["one", "two", "three"]
+
+
+@pytest.fixture
+def discovery_resource_and_handler(all_values: list[str]) -> None:
+    """
+    This fixture registers a DiscoveryResource and DiscoveryHandler that discovers all the values returned by
+    the all_values fixtures.
+    """
+
     @resource("test::MyDiscoveryResource", agent="discovery_agent", id_attribute="key")
     class MyDiscoveryResource(DiscoveryResource):
         fields = ("key",)
 
     class MyUnmanagedResource(BaseModel):
-        path: str
+        val: str
 
-    @provider("test::MyDiscoveryResource", name="my_discoveryresource_handler")
-    class Mock_DiscoveryHandler(DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
-        def __init__(self, agent: inmanta.agent.agent.AgentInstance, io: Optional[IOBase] = None):
-            super().__init__(agent, io)
-            self._top_dir_path = os.path.abspath(tmpdir)
-            self._client = None
+    @provider("test::MyDiscoveryResource", name="my_discovery_handler")
+    class MyDiscoveryHandler(DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
 
         def discover_resources(
             self, ctx: HandlerContext, discovery_resource: MyDiscoveryResource
         ) -> abc.Mapping[ResourceIdStr, MyUnmanagedResource]:
-            dirs = os.listdir(self._top_dir_path)
-
-            resources = {
+            return {
                 Id(
-                    entity_type="std::Directory",
+                    entity_type="test::MyUnmanagedResource",
                     agent_name="discovery_agent",
-                    attribute="path",
-                    attribute_value=os.path.join(self._top_dir_path, dir),
-                ).resource_str(): MyUnmanagedResource(path=os.path.join(self._top_dir_path, dir))
-                for dir in dirs
+                    attribute="val",
+                    attribute_value=val,
+                ).resource_str(): MyUnmanagedResource(val=val)
+                for val in all_values
             }
-
-            return resources
-
-        def close(self) -> None:
-            pass
 
 
 async def test_discovery_resource_handler_basic_test(
-    server, client, clienthelper, environment, no_agent_backoff, tmpdir, agent_factory, discovery_resource_and_handler
+    server,
+    client,
+    clienthelper,
+    environment,
+    no_agent_backoff,
+    agent_factory,
+    discovery_resource_and_handler,
+    all_values: list[str],
 ):
     """
-    This test creates sub-directories and checks that they are discovered as resources of type std::Directory.
-    This test also verifies that the DiscoveryHandler reports an empty diff when a dry-run is requested.
+    This test case verifies the basic functionality of a DiscoveryHandler. It also verifies that the DiscoveryHandler reports
+    an empty diff when a dry-run is requested.
     """
 
-    agent = await agent_factory(
+    await agent_factory(
         environment=environment,
-        agent_map={"host": "localhost"},
-        hostname="host",
-        agent_names=["discovery_agent"],
-        code_loader=True,
+        agent_map={"discovery_agent": "localhost"},
+        hostname="discovery_agent",
     )
 
-    # Populate tmpdir
-    for i in range(6):
-        tmpdir.mkdir(f"sub_dir_{i}")
-
     version = await clienthelper.get_version()
+    resource_id = "test::MyDiscoveryResource[discovery_agent,key=key1]"
+    resource_version_id = f"{resource_id},v={version}"
 
     resources = [
         {
             "key": "key1",
-            "value": "value2",
-            "id": "test::MyDiscoveryResource[discovery_agent,key=key1],v=%d" % version,
+            "id": resource_version_id,
             "send_event": True,
             "purged": False,
             "requires": [],
@@ -116,12 +120,6 @@ async def test_discovery_resource_handler_basic_test(
     resource_list = await data.Resource.get_resources_in_latest_version(uuid.UUID(environment))
     assert resource_list, resource_list
 
-    await agent.ensure_code(
-        environment=environment,
-        version=version,
-        resource_types=["test::MyDiscoveryResource"],
-    )
-
     # Ensure that a dry-run doesn't do anything for a DiscoveryHandler
     result = await client.dryrun_request(tid=environment, id=1)
     assert result.code == 200
@@ -138,7 +136,7 @@ async def test_discovery_resource_handler_basic_test(
     assert result.code == 200
     resources_in_dryrun = result.result["dryrun"]["resources"]
     assert len(resources_in_dryrun) == 1
-    assert not resources_in_dryrun["test::MyDiscoveryResource[discovery_agent,key=key1],v=1"]["changes"], resources_in_dryrun
+    assert not resources_in_dryrun[resource_version_id]["changes"], resources_in_dryrun
 
     # Ensure that the deployment of the DiscoveryResource results in discovered resources.
     result = await client.release_version(environment, version, push=True)
@@ -149,24 +147,53 @@ async def test_discovery_resource_handler_basic_test(
     result = await client.get_version(tid=environment, id=version)
     assert result.code == 200
 
-    result = await client.discovered_resources_get_batch(
-        environment,
-    )
+    result = await client.discovered_resources_get_batch(environment)
     assert result.code == 200
+    discovered = result.result["data"]
     expected = [
         {
-            "discovered_resource_id": f"std::Directory[discovery_agent,path={tmpdir}/sub_dir_{i}]",
-            "values": {"path": f"{tmpdir}/sub_dir_{i}"},
+            "discovered_resource_id": f"test::MyUnmanagedResource[discovery_agent,val={val}]",
+            "values": {"val": val},
         }
-        for i in range(6)
+        for val in all_values
     ]
-    assert result.result["data"] == expected
 
-    # TODO: Test facts
+    def sort_on_discovered_resource_id(elem):
+        return elem["discovered_resource_id"]
+
+    assert sorted(discovered, key=sort_on_discovered_resource_id) == sorted(expected, key=sort_on_discovered_resource_id)
+
+    # Make sure that a get_facts call on a DiscoveryHandler doesn't fails
+    agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+    status_code, message = await agent_manager.request_parameter(env_id=uuid.UUID(environment), resource_id=resource_id)
+    assert status_code == 503, message
+
+    async def fact_discovery_finished_successfully() -> bool:
+        result = await client.get_resource_actions(
+            tid=environment,
+            resource_type="test::MyDiscoveryResource",
+            agent="discovery_agent",
+            attribute="key",
+            attribute_value="key1",
+        )
+        assert result.code == 200
+        get_fact_actions = [a for a in result.result["data"] if a["action"] == const.ResourceAction.getfact.value]
+        return len(get_fact_actions) > 0
+
+    await retry_limited(fact_discovery_finished, timeout=10)
 
 
+@pytest.mark.parametrize("direct_dependency_failed", [True, False])
 async def test_discovery_resource_requires_provides(
-    server, client, clienthelper, environment, no_agent_backoff, tmpdir, agent_factory, discovery_resource_and_handler, resource_container
+    server,
+    client,
+    clienthelper,
+    environment,
+    no_agent_backoff,
+    agent_factory,
+    discovery_resource_and_handler,
+    all_values: list[str],
+    direct_dependency_failed: bool,
 ):
     """
     This test verifies that the requires/provides relationships are taken into account for a DiscoveryResource.
@@ -180,39 +207,54 @@ async def test_discovery_resource_requires_provides(
         code_loader=True,
     )
 
-    # Populate tmpdir
-    for i in range(6):
-        tmpdir.mkdir(f"sub_dir_{i}")
-
     version = await clienthelper.get_version()
 
-    resources = [
-        {
-            "key": "key1",
-            "value": "value1",
-            "id": f"test::FailFastCRUD[agent1,key=key1],v={version}",
-            "send_event": True,
-            "purged": False,
-            "purge_on_delete": False,
-            "requires": [],
-        },
-        {
-            "key": "key2",
-            "value": "value2",
-            "id": f"test::Resource[agent1,key=key2],v={version}",
-            "send_event": True,
-            "purged": False,
-            "requires": [f"test::FailFastCRUD[agent1,key=key1],v={version}"],
-        },
-        {
-            "key": "key1",
-            "value": "value2",
-            "id": f"test::MyDiscoveryResource[discovery_agent,key=key1],v={version}",
-            "send_event": True,
-            "purged": False,
-            "requires": [f"test::Resource[agent1,key=key2],v={version}"],
-        },
-    ]
+    if direct_dependency_failed:
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::FailFastCRUD[agent1,key=key1],v={version}",
+                "send_event": True,
+                "purged": False,
+                "purge_on_delete": False,
+                "requires": [],
+            },
+            {
+                "key": "key1",
+                "id": f"test::MyDiscoveryResource[discovery_agent,key=key1],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [f"test::FailFastCRUD[agent1,key=key1],v={version}"],
+            },
+        ]
+    else:
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": f"test::FailFastCRUD[agent1,key=key1],v={version}",
+                "send_event": True,
+                "purged": False,
+                "purge_on_delete": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": f"test::Resource[agent1,key=key2],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [f"test::FailFastCRUD[agent1,key=key1],v={version}"],
+            },
+            {
+                "key": "key1",
+                "id": f"test::MyDiscoveryResource[discovery_agent,key=key1],v={version}",
+                "send_event": True,
+                "purged": False,
+                "requires": [f"test::Resource[agent1,key=key2],v={version}"],
+            },
+        ]
 
     result = await client.put_version(
         tid=environment,
@@ -237,13 +279,10 @@ async def test_discovery_resource_requires_provides(
 
     result = await client.get_version(tid=environment, id=version)
     assert result.code == 200
+    discovery_resources = [r for r in result.result["resources"] if r["resource_type"] == "test::MyDiscoveryResource"]
+    assert len(discovery_resources) == 1
+    assert discovery_resources[0]["status"] == "skipped"
 
-    result = await client.resource_logs(tid=environment, rid="test::MyDiscoveryResource[discovery_agent,key=key1]")
-    assert result.code == 200
-
-    result = await client.discovered_resources_get_batch(
-        environment,
-    )
+    result = await client.discovered_resources_get_batch(environment)
     assert result.code == 200
     assert result.result["data"] == []
-
