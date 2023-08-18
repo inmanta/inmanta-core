@@ -576,7 +576,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         return True
 
     @abstractmethod
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> Dict[str, object]:
         """
         This method is called by the agent to query for facts.
 
@@ -834,7 +834,7 @@ class ResourceHandler(HandlerAPI[TResource]):
         if result.code != 200:
             error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
             raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
-        return result.result["data"]
+        return cast(bool, result.result["data"])
 
     def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
@@ -974,7 +974,7 @@ CRUDHandlerGeneric = CRUDHandler
 
 
 @stable_api
-class DiscoveryHandler(HandlerAPI, Generic[TDiscovery, TDiscovered]):
+class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered]):
     """
     The DiscoveryHandler is generic with regard to two resource types:
         - TDiscovery denotes the handler's Discovery Resource type, used to drive resource discovery. This is not a
