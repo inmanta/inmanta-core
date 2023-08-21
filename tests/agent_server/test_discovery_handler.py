@@ -194,7 +194,7 @@ async def test_discovery_resource_requires_provides(
     This test verifies that the requires/provides relationships are taken into account for a DiscoveryResource.
     """
 
-    agent = await agent_factory(
+    await agent_factory(
         environment=environment,
         agent_map={"host": "localhost"},
         hostname="host",
