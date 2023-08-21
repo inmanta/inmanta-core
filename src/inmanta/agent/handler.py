@@ -584,7 +584,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param resource: The resource to query facts for.
         :return: A dict with fact names as keys and facts values.
         """
-        pass
+        raise NotImplementedError()
 
     def set_cache(self, cache: AgentCache) -> None:
         """
@@ -992,9 +992,8 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         self, ctx: HandlerContext, discovery_resource: TDiscovery
     ) -> abc.Mapping[ResourceIdStr, TDiscovered]:
         """
-        Implement this method to define specific resource discovery logic. This method will be called
-        by the handler's `execute` method during deployment of the corresponding discovery resource
-        by the agent.
+        This method implements the resource discovery logic. This method will be called
+        by the handler during deployment of the corresponding discovery resource.
         """
         raise NotImplementedError()
 

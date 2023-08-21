@@ -80,8 +80,9 @@ async def test_discovery_resource_handler_basic_test(
     all_values: list[str],
 ):
     """
-    This test case verifies the basic functionality of a DiscoveryHandler. It also verifies that the DiscoveryHandler reports
-    an empty diff when a dry-run is requested.
+    This test case verifies the basic functionality of a DiscoveryHandler.
+    Is also verifies that executing a dry-run or a get-fact request on a DiscoveryResource doesn't fail
+    and doesn't do anything by default.
     """
 
     await agent_factory(
@@ -141,9 +142,6 @@ async def test_discovery_resource_handler_basic_test(
 
     await wait_for_n_deployed_resources(client, environment, version, n=1)
 
-    result = await client.get_version(tid=environment, id=version)
-    assert result.code == 200
-
     result = await client.discovered_resources_get_batch(environment)
     assert result.code == 200
     discovered = result.result["data"]
@@ -201,7 +199,6 @@ async def test_discovery_resource_requires_provides(
         agent_map={"host": "localhost"},
         hostname="host",
         agent_names=["discovery_agent", "agent1"],
-        code_loader=True,
     )
 
     version = await clienthelper.get_version()
@@ -263,16 +260,10 @@ async def test_discovery_resource_requires_provides(
     )
     assert result.code == 200, result.result
 
-    await agent.ensure_code(
-        environment=environment,
-        version=version,
-        resource_types=["test::MyDiscoveryResource"],
-    )
-
     result = await client.release_version(environment, version, push=True)
     assert result.code == 200
 
-    await wait_for_n_deployed_resources(client, environment, version, n=1)
+    await wait_for_n_deployed_resources(client, environment, version, n=len(resources))
 
     result = await client.get_version(tid=environment, id=version)
     assert result.code == 200

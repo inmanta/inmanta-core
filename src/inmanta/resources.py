@@ -570,7 +570,7 @@ class Id(object):
 
     def resource_str(self) -> ResourceIdStr:
         """
-        String representation for this resource with the following format:
+        String representation for this resource id with the following format:
             <type>[<agent>,<attribute>=<value>]
             - type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
             - agent: The agent responsible for this resource.
