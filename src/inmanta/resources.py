@@ -422,7 +422,7 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self, **kwargs: Any) -> "Resource":
+    def clone(self: T, **kwargs: Any) -> T:
         """
         Create a clone of this resource. The given kwargs can be used to override attributes.
 

@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump sphinxcontrib-serializinghtml from 1.1.8 to 1.1.9
+destination-branches:
+- master
+sections: {}
