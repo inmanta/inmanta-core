@@ -559,7 +559,7 @@ class HandlerAPI(ABC, Generic[TResource]):
         return True
 
     @abstractmethod
-    def check_facts(self, ctx: HandlerContext, resource: TResource) -> Dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
         This method is called by the agent to query for facts.
 
@@ -722,7 +722,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 @stable_api
 class ResourceHandler(HandlerAPI[TResource]):
     """
-    A class that handle resources.
+    A class that handles resources.
     """
 
     def _diff(self, current: TResource, desired: TResource) -> dict[str, dict[str, typing.Any]]:
