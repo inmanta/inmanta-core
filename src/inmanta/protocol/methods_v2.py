@@ -1308,7 +1308,18 @@ def get_environment_metrics(
     :param start_interval: The start of the time window for which the metrics should be returned.
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
-    :param round_timestamps_to_previous_hour: True iff the returned timestamps are rounded to the previous hour.
+    :param round_timestamps_to_previous_hour: True iff the given start_interval and end_interval are rounded to a full hour.
+                                              The start_interval is rounded to the previous full hour and the end_interval
+                                              is rounded to the next full hour, unless they were already rounded.
+                                              When this parameter is set to True, the returned number of datapoints might
+                                              be less than the requested number of datapoints if this is required to
+                                              make the rounded interval dividable into equally sized full hour time windows.
+    :raises BadRequest: start_interval >= end_interval
+    :raises BadRequest: nb_datapoints < 0
+    :raises BadRequest: The provided metrics list is an empty list.
+    :raises BadRequest: The start_interval and end_interval are not separated from each other by at least nb_datapoints minutes separated from each other.
+    :raises BadRequest: The round_timestamps_to_previous_hour parameter is set to True and the amount of hours between
+                        start_interval and end_interval is less than the requested number of datapoints.
     """
 
 
