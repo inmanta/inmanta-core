@@ -1317,7 +1317,8 @@ def get_environment_metrics(
     :raises BadRequest: start_interval >= end_interval
     :raises BadRequest: nb_datapoints < 0
     :raises BadRequest: The provided metrics list is an empty list.
-    :raises BadRequest: The start_interval and end_interval are not separated from each other by at least nb_datapoints minutes separated from each other.
+    :raises BadRequest: The start_interval and end_interval are not separated from each other by at least nb_datapoints minutes
+                        separated from each other.
     :raises BadRequest: The round_timestamps_to_previous_hour parameter is set to True and the amount of hours between
                         start_interval and end_interval is less than the requested number of datapoints.
     """

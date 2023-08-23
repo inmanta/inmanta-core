@@ -1593,6 +1593,8 @@ async def test_get_environment_metrics_interval_too_short(server_with_dummy_metr
         round_timestamps_to_previous_hour=True,
     )
     assert result.code == 400
-    assert "Invalid request: When round_timestamps_to_previous_hour is set to True, the number of hours between" \
-           " start_interval and end_interval should be at least the amount of hours equal to" \
-           " nb_datapoints." in result.result["message"]
+    assert (
+        "Invalid request: When round_timestamps_to_previous_hour is set to True, the number of hours between"
+        " start_interval and end_interval should be at least the amount of hours equal to"
+        " nb_datapoints." in result.result["message"]
+    )
