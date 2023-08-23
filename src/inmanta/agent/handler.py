@@ -739,7 +739,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 @stable_api
 class ResourceHandler(HandlerAPI[TResource]):
     """
-    A class that handle resources.
+    A class that handles resources.
     """
 
     def _diff(self, current: TResource, desired: TResource) -> dict[str, dict[str, typing.Any]]:
