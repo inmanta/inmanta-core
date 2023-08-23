@@ -17,16 +17,16 @@
 """
 import base64
 import inspect
+import json
 import logging
 import traceback
 import typing
 import uuid
-import json
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 from functools import partial
+from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -35,7 +35,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, DiscoveredResource
+from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -518,16 +518,48 @@ class HandlerAPI(ABC, Generic[TResource]):
             )
 
     @abstractmethod
+    def _do_execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
+        """
+        This method contains the actual logic that enforced the intent of the resource without the setup, teardown
+        and error handling code. See documentation execute() method.
+        """
+        raise NotImplementedError()
+
     def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         """
         Enforce a resource's intent and inform the handler context of any relevant changes (e.g. set deployed status,
         report attribute changes). Called only when all of its dependencies have successfully deployed.
 
+        This method contains all the common setup, teardown and error handling logic between the different handlers.
+        The specific execution logic for a certain handler is implemented in the abstract _do_execute() method.
+
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy.
         :param dry_run: If set to true, the intent is not enforced, only the set of changes it would bring is computed.
         """
-        pass
+        try:
+            self.pre(ctx, resource)
+            self._do_execute(ctx, resource, dry_run)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+                traceback=traceback.format_exc(),
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
     def post_execute(self, ctx: HandlerContext, resource: TResource) -> None:
         """
@@ -766,48 +798,15 @@ class ResourceHandler(HandlerAPI[TResource]):
         """
         raise NotImplementedError()
 
-    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
-        """
-        Update the given resource. This method is called by the agent. Most handlers will not override this method
-        and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
-        :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
-        :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
+    def _do_execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
+        changes = self.list_changes(ctx, resource)
+        ctx.update_changes(changes)
 
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param dry_run: True will only determine the required changes but will not execute them.
-        """
-        try:
-            self.pre(ctx, resource)
-
-            changes = self.list_changes(ctx, resource)
-            ctx.update_changes(changes)
-
-            if not dry_run:
-                self.do_changes(ctx, resource, changes)
-                ctx.set_status(const.ResourceState.deployed)
-            else:
-                ctx.set_status(const.ResourceState.dry)
-        except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
-
-        except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
-            )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
+        if not dry_run:
+            self.do_changes(ctx, resource, changes)
+            ctx.set_status(const.ResourceState.deployed)
+        else:
+            ctx.set_status(const.ResourceState.dry)
 
     def post_execute(self, ctx: HandlerContext, resource: TResource) -> None:
         """
@@ -820,6 +819,7 @@ class ResourceHandler(HandlerAPI[TResource]):
         """
         Return True iff the given resource should be reloaded.
         """
+
         def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
             return self.get_client().resource_did_dependency_change(
                 tid=self._agent.environment, rvid=resource.id.resource_version_str()
@@ -933,72 +933,40 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: Optional[bool] = None) -> None:
-        """
-        Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param dry_run: True will only determine the required changes but will not execute them.
-        """
+    def _do_execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
+        # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
+        # state defines purged=true but the read_resource fails to set it to false if the resource does exist
+        desired = resource
+        current: TPurgeableResource = desired.clone(purged=False)
+        changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
         try:
-            self.pre(ctx, resource)
+            ctx.debug("Calling read_resource")
+            self.read_resource(ctx, current)
+            changes = self.calculate_diff(ctx, current, desired)
 
-            # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
-            # state defines purged=true but the read_resource fails to set it to false if the resource does exist
-            desired = resource
-            current: TPurgeableResource = desired.clone(purged=False)
-            changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
-            try:
-                ctx.debug("Calling read_resource")
-                self.read_resource(ctx, current)
-                changes = self.calculate_diff(ctx, current, desired)
+        except ResourcePurged:
+            if not desired.purged:
+                changes["purged"] = dict(desired=desired.purged, current=True)
 
-            except ResourcePurged:
-                if not desired.purged:
-                    changes["purged"] = dict(desired=desired.purged, current=True)
+        for field, values in changes.items():
+            ctx.add_change(field, desired=values["desired"], current=values["current"])
 
-            for field, values in changes.items():
-                ctx.add_change(field, desired=values["desired"], current=values["current"])
+        if not dry_run:
+            if "purged" in changes:
+                if not changes["purged"]["desired"]:
+                    ctx.debug("Calling create_resource")
+                    self.create_resource(ctx, desired)
+                else:
+                    ctx.debug("Calling delete_resource")
+                    self.delete_resource(ctx, desired)
 
-            if not dry_run:
-                if "purged" in changes:
-                    if not changes["purged"]["desired"]:
-                        ctx.debug("Calling create_resource")
-                        self.create_resource(ctx, desired)
-                    else:
-                        ctx.debug("Calling delete_resource")
-                        self.delete_resource(ctx, desired)
+            elif not desired.purged and len(changes) > 0:
+                ctx.debug("Calling update_resource", changes=changes)
+                self.update_resource(ctx, dict(changes), desired)
 
-                elif not desired.purged and len(changes) > 0:
-                    ctx.debug("Calling update_resource", changes=changes)
-                    self.update_resource(ctx, dict(changes), desired)
-
-                ctx.set_status(const.ResourceState.deployed)
-            else:
-                ctx.set_status(const.ResourceState.dry)
-
-        except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
-
-        except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
-                traceback=traceback.format_exc(),
-            )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
+            ctx.set_status(const.ResourceState.deployed)
+        else:
+            ctx.set_status(const.ResourceState.dry)
 
 
 # This is kept for backwards compatibility with versions explicitly importing CRUDHandlerGeneric
@@ -1029,7 +997,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         """
         raise NotImplementedError()
 
-    def execute(self, ctx: HandlerContext, resource: TDiscovery, dry_run: bool = False) -> None:
+    def _do_execute(self, ctx: HandlerContext, resource: TDiscovery, dry_run: bool = False) -> None:
         """
         Generic logic to perform during resource discovery. This method is called when the agent wants
         to deploy the corresponding discovery resource. The default behaviour of this method is to call
@@ -1045,45 +1013,24 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 tid=self._agent.environment, discovered_resources=discovered_resources
             )
 
-        try:
-            self.pre(ctx, resource)
-            discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-            discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
-                for resource_id, values in discovered_resources_raw.items()
-            ]
-            result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
+        discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
+        discovered_resources: abc.Sequence[DiscoveredResource] = [
+            DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
+            for resource_id, values in discovered_resources_raw.items()
+        ]
+        result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
 
-            if result.code != 200:
-                assert result.result is not None  # Make mypy happy
-                ctx.set_status(const.ResourceState.failed)
-                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-                ctx.error(
-                    "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
-                    code=result.code,
-                    error_msg_from_server=error_msg_from_server,
-                )
-            else:
-                ctx.set_status(const.ResourceState.deployed)
-        except Exception as e:
+        if result.code != 200:
+            assert result.result is not None  # Make mypy happy
             ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                "An error occurred during resource discovery triggered by %(resource_id)s (exception: %(exception)s",
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
+            error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+            ctx.error(
+                "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
+                code=result.code,
+                error_msg_from_server=error_msg_from_server,
             )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    (
-                        "An error occurred during post stage of resource discovery "
-                        "triggered by %(resource_id)s (exception: %(exception)s"
-                    ),
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
+        else:
+            ctx.set_status(const.ResourceState.deployed)
 
 
 class Commander(object):

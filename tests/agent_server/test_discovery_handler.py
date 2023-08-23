@@ -20,16 +20,14 @@ from collections import abc
 
 import pytest
 
-from agent_server.conftest import _deploy_resources, wait_for_n_deployed_resources
-from inmanta import data
+from agent_server.conftest import wait_for_n_deployed_resources
+from inmanta import const, data, util
 from inmanta.agent.handler import DiscoveryHandler, HandlerContext, provider
-from inmanta import const
 from inmanta.data import ResourceIdStr
-from inmanta.util import retry_limited
 from inmanta.data.model import BaseModel
 from inmanta.resources import DiscoveryResource, Id, resource
 from inmanta.server import SLICE_AGENT_MANAGER
-from inmanta import util
+from inmanta.util import retry_limited
 
 
 @pytest.fixture
@@ -57,7 +55,6 @@ def discovery_resource_and_handler(all_values: list[str]) -> None:
 
     @provider("test::MyDiscoveryResource", name="my_discovery_handler")
     class MyDiscoveryHandler(DiscoveryHandler[MyDiscoveryResource, MyUnmanagedResource]):
-
         def discover_resources(
             self, ctx: HandlerContext, discovery_resource: MyDiscoveryResource
         ) -> abc.Mapping[ResourceIdStr, MyUnmanagedResource]:
