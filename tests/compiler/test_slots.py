@@ -53,6 +53,7 @@ from inmanta.execute.runtime import (
     QueueScheduler,
     RawUnit,
     Resolver,
+    ResultCollector,
     ResultVariable,
     SetPromise,
     Waiter,
@@ -99,7 +100,11 @@ def test_slots_ast():
     """
     Verify that all AST nodes below RequiresEmitStatement and all location objects use slots.
     """
-    for ast_node_cls in chain(utils.get_all_subclasses(RequiresEmitStatement), utils.get_all_subclasses(Location)):
+    for ast_node_cls in chain(
+        utils.get_all_subclasses(RequiresEmitStatement),
+        utils.get_all_subclasses(Location),
+        utils.get_all_subclasses(ResultCollector),
+    ):
         if inspect.isabstract(ast_node_cls):
             continue
         assert_slotted(create_instance(ast_node_cls))

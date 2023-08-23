@@ -180,26 +180,27 @@ class SubConstructor(ExpressionStatement):
 class GradualFor(ResultCollector[object]):
     # this class might be unnecessary if receive-result is always called and exactly once
 
+    __slots__ = ("statement", "resolver", "queue", "lhs", "_nb_received", "_complete", "final_result")
+
     def __init__(self, stmt: "For", resolver: Resolver, queue: QueueScheduler) -> None:
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen: set[int] = list()
+        self._nb_received: int = 0
 
     def complete(self, all_values: abc.Sequence[object]):
         """
         Indicate that all results have been received. No further calls to `receive_result` should be done after this.
-        Mutually exclusive with `set_unknown`.
         """
-        if self.seen:
-            if len(self.seen) != len(all_values):
-                raise Exception("for loop helper received some but not all values gradually %s vs %s" % (self.seen, all_values))
+        if self._nb_received > 0:
+            if self._nb_received != len(all_values):
+                raise InvalidCompilerState("for loop helper received some but not all list elements gradually")
         else:
             for value in all_values:
                 self.receive_result(value, location=self.stmt.location)
 
     def receive_result(self, value: object, location: Location) -> bool:
-        self.seen.append(id(value))
+        self._nb_received += 1
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)
