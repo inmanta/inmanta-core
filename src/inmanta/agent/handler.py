@@ -912,7 +912,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
         # state defines purged=true but the read_resource fails to set it to false if the resource does exist
         desired = resource
@@ -979,7 +979,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         """
         raise NotImplementedError()
 
-    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: TDiscovery, dry_run: bool = False) -> None:
         """
         Logic to perform during resource discovery. This method is called when the agent wants
         to deploy the corresponding discovery resource. The default behaviour of this method is to call
