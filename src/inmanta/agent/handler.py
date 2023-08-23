@@ -507,8 +507,29 @@ class HandlerAPI(ABC, Generic[TResource]):
 
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
-            self.execute(ctx, resource)
-            self.post_execute(ctx, resource)
+            try:
+                self.pre(ctx, resource)
+                self.execute(ctx, resource)
+            except SkipResource as e:
+                ctx.set_status(const.ResourceState.skipped)
+                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            except Exception as e:
+                ctx.set_status(const.ResourceState.failed)
+                ctx.exception(
+                    "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                    traceback=traceback.format_exc(),
+                )
+            finally:
+                try:
+                    self.post(ctx, resource)
+                except Exception as e:
+                    ctx.exception(
+                        "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                        resource_id=resource.id,
+                        exception=f"{e.__class__.__name__}('{e}')",
+                    )
         else:
             ctx.set_status(const.ResourceState.skipped)
             ctx.info(
@@ -518,52 +539,14 @@ class HandlerAPI(ABC, Generic[TResource]):
             )
 
     @abstractmethod
-    def _do_execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
-        """
-        This method contains the actual logic that enforced the intent of the resource without the setup, teardown
-        and error handling code. See documentation execute() method.
-        """
-        raise NotImplementedError()
-
     def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         """
         Enforce a resource's intent and inform the handler context of any relevant changes (e.g. set deployed status,
         report attribute changes). Called only when all of its dependencies have successfully deployed.
 
-        This method contains all the common setup, teardown and error handling logic between the different handlers.
-        The specific execution logic for a certain handler is implemented in the abstract _do_execute() method.
-
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy.
         :param dry_run: If set to true, the intent is not enforced, only the set of changes it would bring is computed.
-        """
-        try:
-            self.pre(ctx, resource)
-            self._do_execute(ctx, resource, dry_run)
-        except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
-        except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
-                traceback=traceback.format_exc(),
-            )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
-
-    def post_execute(self, ctx: HandlerContext, resource: TResource) -> None:
-        """
-        This method is called by the deploy() method right after the execute() method was called.
         """
         pass
 
@@ -798,22 +781,18 @@ class ResourceHandler(HandlerAPI[TResource]):
         """
         raise NotImplementedError()
 
-    def _do_execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         changes = self.list_changes(ctx, resource)
         ctx.update_changes(changes)
 
         if not dry_run:
             self.do_changes(ctx, resource, changes)
             ctx.set_status(const.ResourceState.deployed)
+
+            if self._should_reload(resource):
+                self.do_reload(ctx, resource)
         else:
             ctx.set_status(const.ResourceState.dry)
-
-    def post_execute(self, ctx: HandlerContext, resource: TResource) -> None:
-        """
-        This method is called by the deploy() method right after the execute() method was called.
-        """
-        if self._should_reload(resource):
-            self.do_reload(ctx, resource)
 
     def _should_reload(self, resource: TResource) -> bool:
         """
@@ -933,7 +912,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         """
         return self._diff(current, desired)
 
-    def _do_execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
         # state defines purged=true but the read_resource fails to set it to false if the resource does exist
         desired = resource
@@ -965,6 +944,9 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                 self.update_resource(ctx, dict(changes), desired)
 
             ctx.set_status(const.ResourceState.deployed)
+
+            if self._should_reload(resource):
+                self.do_reload(ctx, resource)
         else:
             ctx.set_status(const.ResourceState.dry)
 
@@ -997,9 +979,9 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         """
         raise NotImplementedError()
 
-    def _do_execute(self, ctx: HandlerContext, resource: TDiscovery, dry_run: bool = False) -> None:
+    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         """
-        Generic logic to perform during resource discovery. This method is called when the agent wants
+        Logic to perform during resource discovery. This method is called when the agent wants
         to deploy the corresponding discovery resource. The default behaviour of this method is to call
         the `discover_resources` method, serialize the returned values and report them to the server.
         """
