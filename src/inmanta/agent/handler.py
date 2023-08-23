@@ -590,7 +590,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 
     def do_reload(self, ctx: HandlerContext, resource: TResource) -> None:
         """
-        Perform a reload of this resource. This method is executed after the post() method is called.
+        Perform a reload of this resource.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to reload.

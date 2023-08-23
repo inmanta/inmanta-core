@@ -4,3 +4,4 @@ change-type: minor
 destination-branches: [master]
 sections:
   feature: "{{description}}"
+  upgrade-note: "The execution of do_reload() and execute() now execute between `pre()` and `post()` have been called."
