@@ -49,6 +49,7 @@ from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 from tornado import gen
+from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
@@ -114,9 +115,16 @@ def start_server(options: argparse.Namespace) -> None:
 def start_agent(options: argparse.Namespace) -> None:
     from inmanta.agent import agent
 
-    util.ensure_event_loop()
+    # The call to configure() should be done as soon as possible.
+    # If an AsyncHTTPClient is started before this call, the max_client
+    # will not be taken into account.
+    max_clients: Optional[int] = Config.get("agent_rest_transport", "max_clients", None)
+    if max_clients:
+        AsyncHTTPClient.configure(None, max_clients=max_clients)
 
+    util.ensure_event_loop()
     a = agent.Agent()
+
     setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()

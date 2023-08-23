@@ -1,0 +1,4 @@
+description: added pytest-inmanta-extensions to dependabot ignore list
+change-type: patch
+destination-branches:
+  - master

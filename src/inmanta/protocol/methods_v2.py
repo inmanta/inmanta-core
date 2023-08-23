@@ -129,7 +129,7 @@ def environment_create(
     Create a new environment
 
     :param project_id: The id of the project this environment belongs to
-    :param name: The name of the environment
+    :param name: The name of the environment. The name should be unique for each project.
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
     :param environment_id: A unique environment id, if none an id is allocated by the server
@@ -593,8 +593,8 @@ def get_resource_events(
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
-    deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in descending
-    order according to their started timestamp.
+    successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
+    descending order according to their started timestamp.
 
     This method searches through all versions of this resource.
     This method should only be called when a deploy is in progress.

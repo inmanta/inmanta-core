@@ -293,7 +293,7 @@ class Resource(metaclass=ResourceMeta):
             )
 
         # agent_value is no longer a proxy.DynamicProxy here, force this for mypy validation
-        return Id(entity_name, str(agent_value), attribute_name, attribute_value)
+        return Id(entity_name, str(agent_value), attribute_name, str(attribute_value))
 
     @classmethod
     def map_field(
@@ -422,7 +422,7 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self, **kwargs: Any) -> "Resource":
+    def clone(self: T, **kwargs: Any) -> T:
         """
         Create a clone of this resource. The given kwargs can be used to override attributes.
 
@@ -550,7 +550,7 @@ class Id(object):
         return hash(str(self))
 
     def __eq__(self, other: object) -> bool:
-        return str(self) == str(other) and type(self) == type(other)
+        return str(self) == str(other) and type(self) is type(other)
 
     def resource_str(self) -> ResourceIdStr:
         return cast(

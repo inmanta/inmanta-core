@@ -1,0 +1,7 @@
+---
+description: Improve agents responsiveness for agents with a large number of connections and introduce a parameter to set the max-clients limit on an agent.
+issue-nr: 241
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

@@ -1,0 +1,8 @@
+description: Add top-level handler abstract base class `HandlerAPI` and made resource handlers generic in their resource type.
+issue-nr: 6025
+change-type: major
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
+  deprecation-note: "The CRUDHandlerGeneric is now deprecated in favor of the CRUDHandler class"
+  upgrade-note: "When implementing a generic handler (extending from Generic), the Generic class must be mentioned last in the list of base classes of that handler."

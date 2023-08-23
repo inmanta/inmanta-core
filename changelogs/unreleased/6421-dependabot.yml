@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump furo from 2023.8.17 to 2023.8.19
+destination-branches:
+- master
+sections: {}

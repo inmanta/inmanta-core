@@ -2,7 +2,7 @@ from setuptools import setup, find_namespace_packages
 from os import path
 
 requires = [
-    "asyncpg>=0.25,<0.29",
+    "asyncpg~=0.25",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
     "click>=8.0,<8.2",
@@ -16,7 +16,7 @@ requires = [
     "execnet>=1,<2",
     "importlib_metadata>=4,<7",
     "jinja2~=3.0",
-    "more-itertools>=8,<10",
+    "more-itertools>=8,<11",
     "netifaces~=0.11",
     # leave upper bound floating for fast-moving and extremely stable packaging
     "packaging>=21.3",

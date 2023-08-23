@@ -29,13 +29,13 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
-from inmanta.agent.handler import ResourceHandler, SkipResource
+from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
@@ -44,7 +44,16 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future, join_threadpools
+from inmanta.util import (
+    CronSchedule,
+    IntervalSchedule,
+    NamedLock,
+    ScheduledTask,
+    TaskMethod,
+    TaskSchedule,
+    add_future,
+    join_threadpools,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -151,7 +160,7 @@ class ResourceAction(ResourceActionBase):
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
         # setup provider
-        provider: Optional[ResourceHandler] = None
+        provider: Optional[HandlerAPI[Any]] = None
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
         except ChannelClosedException as e:
@@ -625,7 +634,7 @@ class AgentInstance(object):
         self._deploy_splay_value = random.randint(0, deploy_splay_time)
 
         # do regular repair runs
-        self._repair_interval = cfg.agent_repair_interval.get()
+        self._repair_interval: Union[int, str] = cfg.agent_repair_interval.get()
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
@@ -724,18 +733,30 @@ class AgentInstance(object):
                 self._deploy_splay_value,
                 (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT),
             )
-            self._enable_time_trigger(deploy_action, self._deploy_interval, self._deploy_splay_value)
-        if self._repair_interval > 0:
+            interval_schedule_deploy: IntervalSchedule = IntervalSchedule(
+                interval=float(self._deploy_interval), initial_delay=float(self._deploy_splay_value)
+            )
+            self._enable_time_trigger(deploy_action, interval_schedule_deploy)
+        if isinstance(self._repair_interval, int):
+            if self._repair_interval <= 0:
+                return
             self.logger.info(
                 "Scheduling repair with interval %d and splay %d (first run at %s)",
                 self._repair_interval,
                 self._repair_splay_value,
                 (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT),
             )
-            self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
+            interval_schedule_repair: IntervalSchedule = IntervalSchedule(
+                interval=float(self._repair_interval), initial_delay=float(self._repair_splay_value)
+            )
+            self._enable_time_trigger(repair_action, interval_schedule_repair)
 
-    def _enable_time_trigger(self, action: TaskMethod, interval: int, splay: int) -> None:
-        schedule: IntervalSchedule = IntervalSchedule(interval=float(interval), initial_delay=float(splay))
+        if isinstance(self._repair_interval, str):
+            self.logger.info("Scheduling repair with cron expression '%s'", self._repair_interval)
+            cron_schedule = CronSchedule(cron=self._repair_interval)
+            self._enable_time_trigger(repair_action, cron_schedule)
+
+    def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
         self._time_triggered_actions.add(ScheduledTask(action=action, schedule=schedule))
 
@@ -766,7 +787,7 @@ class AgentInstance(object):
             return False
         return True
 
-    async def get_provider(self, resource: Resource) -> ResourceHandler:
+    async def get_provider(self, resource: Resource) -> HandlerAPI[Any]:
         provider = await asyncio.get_running_loop().run_in_executor(
             self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
         )
@@ -1004,7 +1025,7 @@ class AgentInstance(object):
             try:
                 res["attributes"]["id"] = res["id"]
                 if res["resource_type"] not in failed_resource_types:
-                    resource = Resource.deserialize(res["attributes"])
+                    resource: Resource = Resource.deserialize(res["attributes"])
                     loaded_resources.append(resource)
 
                     state = const.ResourceState[res["status"]]

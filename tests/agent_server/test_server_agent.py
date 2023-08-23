@@ -386,17 +386,24 @@ async def test_spontaneous_deploy(
     ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
+@pytest.mark.parametrize(
+    "cron",
+    [False, True],
+)
 async def test_spontaneous_repair(
-    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, cron
 ):
     """
-    dryrun and deploy a configuration model
+    Test that a repair run is executed every 2 seconds as specified in the agent_repair_interval (using a cron or not)
     """
     resource_container.Provider.reset()
+    agent_repair_interval = "2"
+    if cron:
+        agent_repair_interval = "*/2 * * * * * *"
 
     env_id = environment
 
-    Config.set("config", "agent-repair-interval", "2")
+    Config.set("config", "agent-repair-interval", agent_repair_interval)
     Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 
@@ -1810,7 +1817,7 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
     result = await client.delete_environment(id=env_id)
-    assert result.code == 200
+    assert result.code == 200, result.result
 
     # The autostarted agent should be terminated when its environment is deleted.
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
@@ -1827,7 +1834,7 @@ async def test_stop_autostarted_agents_on_project_removal(server, client, resour
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=2)
 
     result = await client.delete_project(id=project1_id)
-    assert result.code == 200
+    assert result.code == 200, result.result
 
     # The autostarted agent of proj1 should be terminated when its project is deleted
     # The autostarted agent of proj2 keep running

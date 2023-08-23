@@ -1238,8 +1238,9 @@ version: 0.0.1dev0"""
         ]
         if versions_between_current_and_new_version:
             raise click.ClickException(
-                f"Stable release {versions_between_current_and_new_version[0]} exists between "
-                f"current version {current_version} and new version {new_version}"
+                f"Error: Stable release {versions_between_current_and_new_version[0]} exists between "
+                f"current version {current_version} and new version {new_version}. Make sure your branch is up-to-update "
+                f"with the remote repository."
             )
 
         return new_version
@@ -1262,18 +1263,18 @@ version: 0.0.1dev0"""
         # Validate patch, minor, major
         nb_version_bump_arguments_set = sum([revision, patch, minor, major])
         if nb_version_bump_arguments_set > 1:
-            raise click.UsageError("Only one of --revision, --patch, --minor and --major can be set at the same time.")
+            raise click.UsageError("Error: Only one of --revision, --patch, --minor and --major can be set at the same time.")
 
         # Make module
         module_dir = os.path.abspath(os.getcwd())
         module: Module[ModuleMetadata] = self.construct_module(project=DummyProject(), path=module_dir)
         if not gitprovider.is_git_repository(repo=module_dir):
-            raise click.ClickException(f"Directory {module_dir} is not a git repository.")
+            raise click.ClickException(f"Error: Directory {module_dir} is not a git repository.")
 
         # Validate current state of the module
         current_version: Version = module.version
         if current_version.epoch != 0:
-            raise click.ClickException("Version with an epoch value larger than zero are not supported by this tool.")
+            raise click.ClickException("Error: Version with an epoch value larger than zero are not supported by this tool.")
         gitprovider.fetch(module_dir)
 
         # Get history
@@ -1324,7 +1325,7 @@ version: 0.0.1dev0"""
         else:
             release_tag: Version = VersionOperation.set_version_tag(new_version, version_tag="")
             if release_tag in stable_releases:
-                raise click.ClickException(f"A Git version tag already exists for version {release_tag}")
+                raise click.ClickException(f"Error: A Git version tag already exists for version {release_tag}")
             module.rewrite_version(new_version=str(release_tag), version_tag="")
             if changelog:
                 changelog.set_release_date_for_version(release_tag)
