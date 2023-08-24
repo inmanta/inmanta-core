@@ -336,12 +336,8 @@ class EnvironmentMetricsService(protocol.ServerSlice):
             hour_in_time_window_rounded: int = math.floor(
                 (end_interval - start_interval).total_seconds() / nb_time_windows / 3600
             )
-            start_interval: datetime = self._round_timestamp_for_interval(
-                start_interval, hour_in_time_window_rounded, round_up=False
-            )
-            end_interval: datetime = self._round_timestamp_for_interval(
-                end_interval, hour_in_time_window_rounded, round_up=True
-            )
+            start_interval = self._round_timestamp_for_interval(start_interval, hour_in_time_window_rounded, round_up=False)
+            end_interval = self._round_timestamp_for_interval(end_interval, hour_in_time_window_rounded, round_up=True)
             nb_time_windows = int((end_interval - start_interval).total_seconds() / (hour_in_time_window_rounded * 3600))
         total_seconds_in_interval: float = (end_interval - start_interval).total_seconds()
         seconds_per_time_window = math.floor(total_seconds_in_interval / nb_time_windows)
