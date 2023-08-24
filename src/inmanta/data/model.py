@@ -677,8 +677,8 @@ class EnvironmentMetricsResult(BaseModel):
     """
     A container for metrics as returned by the /metrics endpoint.
 
-    :param start: The starting of the requested aggregation interval.
-    :param end: The end of the requested aggregation interval.
+    :param start: The starting of the aggregation interval.
+    :param end: The end of the aggregation interval.
     :param timestamps: The timestamps that belongs to the aggregated metrics present in the `metrics` dictionary.
     :param metrics: A dictionary that maps the name of a metric to a list of aggregated datapoints. For metrics that are not
                     grouped on a specific property, this list only contains the values of the metrics. For metrics that
