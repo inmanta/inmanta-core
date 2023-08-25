@@ -511,56 +511,6 @@ def p_block(p: YaccProduction) -> None:
 
 
 # RELATION
-def p_relation_deprecated(p: YaccProduction) -> None:
-    "relation : class_ref ID multi REL multi class_ref ID"
-    if not (p[4] == "--"):
-        LOGGER.warning(
-            "DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" % (p[4], Location(file, p.lineno(4)))
-        )
-    p[0] = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
-    attach_lnr(p, 2)
-    deprecated_relation_warning(p)
-
-
-def p_relation_deprecated_comment(p: YaccProduction) -> None:
-    "relation : class_ref ID multi REL multi class_ref ID MLS"
-    if not (p[4] == "--"):
-        LOGGER.warning(
-            "DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" % (p[4], Location(file, p.lineno(4)))
-        )
-    rel = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
-    rel.comment = str(p[8])
-    p[0] = rel
-    attach_lnr(p, 2)
-    deprecated_relation_warning(p)
-
-
-def deprecated_relation_warning(p: YaccProduction) -> None:
-    def format_multi(multi: Tuple[int, Optional[int]]) -> str:
-        values: Tuple[str, str] = tuple(v if v is not None else "" for v in multi)
-        return "[%s:%s]" % values if values[0] != values[1] else "[%s]" % values[0]
-
-    warnings.warn(
-        SyntaxDeprecationWarning(
-            p[0].location,
-            None,
-            "The relation definition syntax"
-            " `{entity_left} {attr_left_on_right} {multi_left} {rel} {multi_right} {entity_right} {attr_right_on_left}`"
-            " is deprecated. Please use"
-            " `{entity_left}.{attr_right_on_left} {multi_right} -- {entity_right}.{attr_left_on_right} {multi_left}`"
-            " instead.".format(
-                entity_left=p[1],
-                attr_left_on_right=p[2],
-                multi_left=format_multi(p[3]),
-                rel=p[4],
-                multi_right=format_multi(p[5]),
-                entity_right=p[6],
-                attr_right_on_left=p[7],
-            ),
-        ),
-    )
-
-
 def p_relation_outer_comment(p: YaccProduction) -> None:
     "relation : relation_def MLS"
     rel = p[1]
