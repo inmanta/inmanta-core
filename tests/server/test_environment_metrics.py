@@ -1491,3 +1491,122 @@ async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema, env
         for data_cls in [data.EnvironmentMetricsGauge, data.EnvironmentMetricsTimer]:
             result = await data_cls.get_list(environment=env2.id)
             assert sorted([r.timestamp for r in result], reverse=True) == timestamps_metrics[0:3]
+
+
+@pytest.mark.parametrize(
+    "start_interval_request, end_interval_request, nb_datapoints_request",
+    [
+        # Verify that the rounding works correctly
+        (
+            datetime(year=2023, month=1, day=1, hour=2, minute=16, second=52, microsecond=33).astimezone(),
+            datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, microsecond=44).astimezone(),
+            10,
+        ),
+        # Verify that no rounding is done when the given parameters are already rounded
+        (
+            datetime(year=2023, month=1, day=1, hour=1).astimezone(),
+            datetime(year=2023, month=1, day=2, hour=16).astimezone(),
+            13,
+        ),
+    ],
+)
+async def test_get_environment_metrics_api_endpoint_round_timestamp(
+    server_with_dummy_metric_collectors,
+    client,
+    project_default,
+    environment_creator: Callable[[protocol.Client, str, str, bool], Awaitable[str]],
+    start_interval_request: datetime,
+    end_interval_request: datetime,
+    nb_datapoints_request: int,
+):
+    """
+    Verify whether the get_environment_metrics() endpoint rounds the timestamps correctly when the
+    round_timestamps option is set to True.
+    """
+    env_id = await environment_creator(client, project_default, env_name="env1")
+
+    # The expected parameters after rounding
+    start_interval_reply = datetime(year=2023, month=1, day=1, hour=1).astimezone()
+    end_interval_reply = datetime(year=2023, month=1, day=2, hour=16).astimezone()
+    nb_datapoints_reply = 13
+
+    # Insert one metric every hour
+    timestamp = datetime(year=2023, month=1, day=1, hour=0, minute=33, second=42).astimezone()
+    while timestamp < end_interval_reply:
+        await data.EnvironmentMetricsGauge(
+            environment=uuid.UUID(env_id),
+            metric_name="gauge_metric1",
+            category=DEFAULT_CATEGORY,
+            timestamp=timestamp,
+            count=5,
+        ).insert()
+        timestamp += timedelta(hours=1)
+
+    # Insert additional metrics on the boundary of the first time window to verify that the aggregation logic respects
+    # the time window boundaries correctly.
+    await data.EnvironmentMetricsGauge(
+        environment=uuid.UUID(env_id),
+        metric_name="gauge_metric1",
+        category=DEFAULT_CATEGORY,
+        timestamp=start_interval_reply + timedelta(hours=3) - timedelta(seconds=1),
+        count=1,
+    ).insert()
+    await data.EnvironmentMetricsGauge(
+        environment=uuid.UUID(env_id),
+        metric_name="gauge_metric1",
+        category=DEFAULT_CATEGORY,
+        timestamp=start_interval_reply + timedelta(hours=3),
+        count=2,
+    ).insert()
+    await data.EnvironmentMetricsGauge(
+        environment=uuid.UUID(env_id),
+        metric_name="gauge_metric1",
+        category=DEFAULT_CATEGORY,
+        timestamp=start_interval_reply + timedelta(hours=3) + timedelta(seconds=1),
+        count=3,
+    ).insert()
+
+    result = await client.get_environment_metrics(
+        tid=env_id,
+        metrics=["gauge_metric1"],
+        start_interval=start_interval_request,
+        end_interval=end_interval_request,
+        nb_datapoints=nb_datapoints_request,
+        round_timestamps=True,
+    )
+
+    assert result.code == 200, result.result
+    assert get_as_naive_datetime(start_interval_reply) == datetime.fromisoformat(result.result["data"]["start"])
+    assert get_as_naive_datetime(end_interval_reply) == datetime.fromisoformat(result.result["data"]["end"])
+    timestamps = [datetime.fromisoformat(t) for t in result.result["data"]["timestamps"]]
+    assert len(timestamps) == nb_datapoints_reply
+    assert timestamps == [
+        get_as_naive_datetime(start_interval_reply + timedelta(hours=3) * (i + 1)) for i in range(nb_datapoints_reply)
+    ]
+    expected_metrics = [5.0 for _ in range(nb_datapoints_reply)]
+    # Take the additional datapoints on the boundary of the first two time windows into account
+    expected_metrics[0] = (3 * 5 + 1) / 4
+    expected_metrics[1] = (3 * 5 + 2 + 3) / 5
+    assert result.result["data"]["metrics"]["gauge_metric1"] == expected_metrics
+
+
+async def test_get_environment_metrics_interval_too_short(server_with_dummy_metric_collectors, client, environment):
+    """
+    Verify that an exception is raised when the get_environment_metrics() endpoint is called with the
+    round_timestamps set to True and the provided interval is too short with respect to the
+    number of requested datapoints.
+    """
+    result = await client.get_environment_metrics(
+        tid=environment,
+        metrics=["gauge_metric1"],
+        start_interval=datetime(year=2023, month=1, day=1, hour=6, minute=33).astimezone(),
+        end_interval=datetime(year=2023, month=1, day=1, hour=7, minute=22).astimezone(),
+        nb_datapoints=2,
+        round_timestamps=True,
+    )
+    assert result.code == 400
+    assert (
+        "Invalid request: When round_timestamps is set to True, the number of hours between"
+        " start_interval and end_interval should be at least the amount of hours equal to"
+        " nb_datapoints." in result.result["message"]
+    )
