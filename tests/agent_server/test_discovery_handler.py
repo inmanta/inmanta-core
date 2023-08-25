@@ -33,7 +33,7 @@ from inmanta.util import retry_limited
 @pytest.fixture
 def all_values() -> list[str]:
     """
-    This fixture returns a list of values that will be discovered by the handle registered via the
+    This fixture returns a list of values that will be discovered by the handler registered via the
     discovery_resource_and_handler fixture.
     """
     return ["one", "two", "three"]

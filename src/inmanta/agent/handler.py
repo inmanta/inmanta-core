@@ -480,6 +480,23 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param requires: A dictionary mapping the resource id of each dependency of the given resource to its resource state.
         """
 
+        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
+            return self.get_client().resource_did_dependency_change(
+                tid=self._agent.environment, rvid=resource.id.resource_version_str()
+            )
+
+        def _should_reload() -> bool:
+            if not self.can_reload():
+                return False
+            result = self.run_sync(_call_resource_did_dependency_change)
+            if not result.result:
+                raise Exception("Failed to determine whether resource should reload")
+
+            if result.code != 200:
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
+            return result.result["data"]
+
         def filter_resources_in_unexpected_state(
             reqs: abc.Mapping[ResourceIdStr, ResourceState]
         ) -> abc.Mapping[ResourceIdStr, ResourceState]:
@@ -508,6 +525,8 @@ class HandlerAPI(ABC, Generic[TResource]):
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
             self.execute(ctx, resource)
+            if _should_reload():
+                self.do_reload(ctx, resource)
         else:
             ctx.set_status(const.ResourceState.skipped)
             ctx.info(
@@ -769,9 +788,6 @@ class ResourceHandler(HandlerAPI[TResource]):
             if not dry_run:
                 self.do_changes(ctx, resource, changes)
                 ctx.set_status(const.ResourceState.deployed)
-
-                if self._should_reload(resource):
-                    self.do_reload(ctx, resource)
             else:
                 ctx.set_status(const.ResourceState.dry)
         except SkipResource as e:
@@ -783,38 +799,16 @@ class ResourceHandler(HandlerAPI[TResource]):
                 "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                 resource_id=resource.id,
                 exception=f"{e.__class__.__name__}('{e}')",
-                traceback=traceback.format_exc(),
             )
         finally:
             try:
                 self.post(ctx, resource)
             except Exception as e:
                 ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
-
-    def _should_reload(self, resource: TResource) -> bool:
-        """
-        Return True iff the given resource should be reloaded.
-        """
-
-        def _call_resource_did_dependency_change() -> typing.Awaitable[Result]:
-            return self.get_client().resource_did_dependency_change(
-                tid=self._agent.environment, rvid=resource.id.resource_version_str()
-            )
-
-        if not self.can_reload():
-            return False
-        result = self.run_sync(_call_resource_did_dependency_change)
-        if not result.result:
-            raise Exception("Failed to determine whether resource should reload")
-
-        if result.code != 200:
-            error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-            raise Exception(f"Failed to determine whether resource should reload{error_msg_from_server}")
-        return cast(bool, result.result["data"])
 
     def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
@@ -948,14 +942,13 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                     self.update_resource(ctx, dict(changes), desired)
 
                 ctx.set_status(const.ResourceState.deployed)
-
-                if self._should_reload(resource):
-                    self.do_reload(ctx, resource)
             else:
                 ctx.set_status(const.ResourceState.dry)
+
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
             ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception(
@@ -969,7 +962,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
                 self.post(ctx, resource)
             except Exception as e:
                 ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
@@ -1056,7 +1049,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 self.post(ctx, resource)
             except Exception as e:
                 ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
