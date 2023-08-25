@@ -507,29 +507,7 @@ class HandlerAPI(ABC, Generic[TResource]):
 
         failed_dependencies = [req for req, status in requires.items() if status != ResourceState.deployed]
         if not any(failed_dependencies):
-            try:
-                self.pre(ctx, resource)
-                self.execute(ctx, resource)
-            except SkipResource as e:
-                ctx.set_status(const.ResourceState.skipped)
-                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
-            except Exception as e:
-                ctx.set_status(const.ResourceState.failed)
-                ctx.exception(
-                    "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                    traceback=traceback.format_exc(),
-                )
-            finally:
-                try:
-                    self.post(ctx, resource)
-                except Exception as e:
-                    ctx.exception(
-                        "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
-                        resource_id=resource.id,
-                        exception=f"{e.__class__.__name__}('{e}')",
-                    )
+            self.execute(ctx, resource)
         else:
             ctx.set_status(const.ResourceState.skipped)
             ctx.info(
@@ -782,17 +760,40 @@ class ResourceHandler(HandlerAPI[TResource]):
         raise NotImplementedError()
 
     def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
-        changes = self.list_changes(ctx, resource)
-        ctx.update_changes(changes)
+        try:
+            self.pre(ctx, resource)
 
-        if not dry_run:
-            self.do_changes(ctx, resource, changes)
-            ctx.set_status(const.ResourceState.deployed)
+            changes = self.list_changes(ctx, resource)
+            ctx.update_changes(changes)
 
-            if self._should_reload(resource):
-                self.do_reload(ctx, resource)
-        else:
-            ctx.set_status(const.ResourceState.dry)
+            if not dry_run:
+                self.do_changes(ctx, resource, changes)
+                ctx.set_status(const.ResourceState.deployed)
+
+                if self._should_reload(resource):
+                    self.do_reload(ctx, resource)
+            else:
+                ctx.set_status(const.ResourceState.dry)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+                traceback=traceback.format_exc(),
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
     def _should_reload(self, resource: TResource) -> bool:
         """
@@ -913,42 +914,65 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         return self._diff(current, desired)
 
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
-        # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
-        # state defines purged=true but the read_resource fails to set it to false if the resource does exist
-        desired = resource
-        current: TPurgeableResource = desired.clone(purged=False)
-        changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
         try:
-            ctx.debug("Calling read_resource")
-            self.read_resource(ctx, current)
-            changes = self.calculate_diff(ctx, current, desired)
+            self.pre(ctx, resource)
 
-        except ResourcePurged:
-            if not desired.purged:
-                changes["purged"] = dict(desired=desired.purged, current=True)
+            # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
+            # state defines purged=true but the read_resource fails to set it to false if the resource does exist
+            desired = resource
+            current: TPurgeableResource = desired.clone(purged=False)
+            changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+            try:
+                ctx.debug("Calling read_resource")
+                self.read_resource(ctx, current)
+                changes = self.calculate_diff(ctx, current, desired)
 
-        for field, values in changes.items():
-            ctx.add_change(field, desired=values["desired"], current=values["current"])
+            except ResourcePurged:
+                if not desired.purged:
+                    changes["purged"] = dict(desired=desired.purged, current=True)
 
-        if not dry_run:
-            if "purged" in changes:
-                if not changes["purged"]["desired"]:
-                    ctx.debug("Calling create_resource")
-                    self.create_resource(ctx, desired)
-                else:
-                    ctx.debug("Calling delete_resource")
-                    self.delete_resource(ctx, desired)
+            for field, values in changes.items():
+                ctx.add_change(field, desired=values["desired"], current=values["current"])
 
-            elif not desired.purged and len(changes) > 0:
-                ctx.debug("Calling update_resource", changes=changes)
-                self.update_resource(ctx, dict(changes), desired)
+            if not dry_run:
+                if "purged" in changes:
+                    if not changes["purged"]["desired"]:
+                        ctx.debug("Calling create_resource")
+                        self.create_resource(ctx, desired)
+                    else:
+                        ctx.debug("Calling delete_resource")
+                        self.delete_resource(ctx, desired)
 
-            ctx.set_status(const.ResourceState.deployed)
+                elif not desired.purged and len(changes) > 0:
+                    ctx.debug("Calling update_resource", changes=changes)
+                    self.update_resource(ctx, dict(changes), desired)
 
-            if self._should_reload(resource):
-                self.do_reload(ctx, resource)
-        else:
-            ctx.set_status(const.ResourceState.dry)
+                ctx.set_status(const.ResourceState.deployed)
+
+                if self._should_reload(resource):
+                    self.do_reload(ctx, resource)
+            else:
+                ctx.set_status(const.ResourceState.dry)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+                traceback=traceback.format_exc(),
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
 
 # This is kept for backwards compatibility with versions explicitly importing CRUDHandlerGeneric
@@ -988,31 +1012,54 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         if dry_run:
             return
 
-        def _call_discovered_resource_create_batch(
-            discovered_resources: abc.Sequence[DiscoveredResource],
-        ) -> typing.Awaitable[Result]:
-            return self.get_client().discovered_resource_create_batch(
-                tid=self._agent.environment, discovered_resources=discovered_resources
-            )
+        try:
+            self.pre(ctx, resource)
 
-        discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
-        discovered_resources: abc.Sequence[DiscoveredResource] = [
-            DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
-            for resource_id, values in discovered_resources_raw.items()
-        ]
-        result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
+            def _call_discovered_resource_create_batch(
+                discovered_resources: abc.Sequence[DiscoveredResource],
+            ) -> typing.Awaitable[Result]:
+                return self.get_client().discovered_resource_create_batch(
+                    tid=self._agent.environment, discovered_resources=discovered_resources
+                )
 
-        if result.code != 200:
-            assert result.result is not None  # Make mypy happy
+            discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
+            discovered_resources: abc.Sequence[DiscoveredResource] = [
+                DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
+                for resource_id, values in discovered_resources_raw.items()
+            ]
+            result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
+
+            if result.code != 200:
+                assert result.result is not None  # Make mypy happy
+                ctx.set_status(const.ResourceState.failed)
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                ctx.error(
+                    "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
+                    code=result.code,
+                    error_msg_from_server=error_msg_from_server,
+                )
+            else:
+                ctx.set_status(const.ResourceState.deployed)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+        except Exception as e:
             ctx.set_status(const.ResourceState.failed)
-            error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
-            ctx.error(
-                "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
-                code=result.code,
-                error_msg_from_server=error_msg_from_server,
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+                traceback=traceback.format_exc(),
             )
-        else:
-            ctx.set_status(const.ResourceState.deployed)
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
 
 class Commander(object):
