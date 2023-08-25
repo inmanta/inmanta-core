@@ -19,7 +19,6 @@ import functools
 import logging
 import re
 import string
-import warnings
 from collections import abc
 from dataclasses import dataclass
 from itertools import accumulate
@@ -56,7 +55,7 @@ from inmanta.ast.statements.define import (
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, For, If, ListComprehension, WrappedKwargs
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning, plyInmantaLex
+from inmanta.parser import InvalidNamespaceAccess, ParserException, plyInmantaLex
 from inmanta.parser.cache import CacheManager
 from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 
