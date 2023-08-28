@@ -1298,6 +1298,7 @@ def get_environment_metrics(
     start_interval: datetime.datetime,
     end_interval: datetime.datetime,
     nb_datapoints: int,
+    round_timestamps: bool = False,
 ) -> model.EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
@@ -1307,6 +1308,19 @@ def get_environment_metrics(
     :param start_interval: The start of the time window for which the metrics should be returned.
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
+    :param round_timestamps: If this parameter is set to True, the timestamps in the reply will be rounded to a full hour.
+                             All time windows in the reply will have an equal size. To achieve this the start_interval,
+                             end_interval and nb_datapoint in the reply may differ from the ones requested.
+                               * The start_interval may be smaller than requested
+                               * The end_interval may be larger than requested
+                               * The nb_datapoints may be larger than requested
+    :raises BadRequest: start_interval >= end_interval
+    :raises BadRequest: nb_datapoints < 0
+    :raises BadRequest: The provided metrics list is an empty list.
+    :raises BadRequest: The start_interval and end_interval are not separated from each other by at least nb_datapoints minutes
+                        separated from each other.
+    :raises BadRequest: The round_timestamps parameter is set to True and the amount of hours between
+                        start_interval and end_interval is less than the requested number of datapoints.
     """
 
 
