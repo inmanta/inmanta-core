@@ -296,7 +296,7 @@ end
 implement Host using none
 implement File using none
 
-Host host [1] -- [0:] File files
+Host.files [0:] -- File.host [1]
 
 index Host(name)
 index File(host, name)
