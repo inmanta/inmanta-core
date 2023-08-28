@@ -829,7 +829,7 @@ class ResourceHandler(HandlerAPI[TResource]):
                 self.post(ctx, resource)
             except Exception as e:
                 ctx.exception(
-                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
+                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s)",
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
