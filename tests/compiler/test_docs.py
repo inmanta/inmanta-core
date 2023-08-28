@@ -18,7 +18,7 @@
 import inmanta.compiler as compiler
 
 
-def test_doc_string_on_new_relation(snippetcompiler):
+def test_doc_string_on_relation_unidir(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity File:
@@ -35,6 +35,24 @@ Each file needs to be associated with a host
     )
     (types, _) = compiler.do_compile()
     assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
+
+
+def test_doc_string_on_relation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity File:
+end
+entity Host:
+end
+File.host [0:] -- Host.file [1]
+\"""
+Each file needs to be associated with a host
+\"""
+"""
+    )
+    (types, _) = compiler.do_compile()
+    assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
+    assert types["__config__::Host"].get_attribute("file").comment.strip() == "Each file needs to be associated with a host"
 
 
 def test_function_in_typedef(snippetcompiler):
