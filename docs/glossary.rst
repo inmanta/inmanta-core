@@ -124,7 +124,7 @@ Glossary
         server.
 
     infrastructure
-        That what Inmanta manages. This could be virtual machines with resources in these virtual
+        This is what Inmanta manages. This could be virtual machines with resources in these virtual
         machines. Physical servers and their os. Containers or resources at a cloud provider without
         any servers (e.g. "serverless")
 
