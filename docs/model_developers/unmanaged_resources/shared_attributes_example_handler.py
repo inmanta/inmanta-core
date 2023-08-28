@@ -24,9 +24,10 @@ class Credentials:
 
 @resource("my_module::Interface", agent="host.name", id_attribute="name")
 class Interface(Credentials, PurgeableResource):
-    fields = ("name",)
+    fields = ("name", "ip_address")
 
     name: str
+    ip_address: str
 
 
 @resource("my_module::InterfaceDiscovery", agent="host.name", id_attribute="host")
