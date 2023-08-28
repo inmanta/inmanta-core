@@ -343,12 +343,6 @@ For example
 Relation multiplicities are enforced by the compiler. If they are violated a compilation error
 is issued.
 
-.. note::
-
-    In previous version another relation syntax was used that was less natural to read and allowed only bidirectional relations. The relation above was defined as ``File file [1:] -- [1] Service service``
-    This synax is deprecated but still widely used in many modules.
-
-
 .. _lang-instance:
 
 Instantiation

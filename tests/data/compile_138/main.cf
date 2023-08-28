@@ -18,8 +18,8 @@ end
 entity Name:
 end
 
-Agent agent [1] -- [0:] Name names
-std::Host host [1] -- [0:1] Agent agent
+Name.agent [1] -- Agent.names [0:]
+Agent.host [1] -- std::Host.agent [0:1]
 
 implement Agent using std::none
 implement Name using std::none
