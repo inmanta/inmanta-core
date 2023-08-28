@@ -1,35 +1,15 @@
-entity MyResourceBase:
+entity InterfaceDiscovery extends std::DiscoveryResource:
     """
-    Base class for common parts between actual resource and discovery resource.
-    Concretely this means all attributes and relations that are part of
-    the resource's environment rather than the resource itself.
+    A discovery resource that discovers interfaces on a specific host.
+
+    :attr name_filter: If not null, only discover interfaces for which the name matches this regular expression.
+                       Otherwise discover all the interfaces on the host.
     """
-    string username = "admin"
-    string password = "4dm1n"
+    string? name_filter = null
 end
 
-MyResourceBase.host [1] -- std::Host
+InterfaceDiscovery.host [1] -- std::Host
 
-entity MyResource extends MyResourceBase, std::PurgeableResource:
-    int my_id
-    int value
-end
+index InterfaceDiscovery(host)
 
-entity MyDiscoveryResource extends MyResourceBase, std::DiscoveryResource:
-    """
-    A discovery resource with a broad scope: discovers all resources
-    of type MyResource on the given host.
-    """
-end
-
-index MyDiscoveryResource(host)
-
-entity MyFilteredDiscoveryResource extends MyResourceBase, std::DiscoveryResource:
-    """
-    A discovery resource with a narrow scope: discovers resources of
-    type MyResource below the given path on the given host.
-    """
-    string path = "/home/admin/my_directory_tree/"
-end
-
-index MyFilteredDiscoveryResource(host, path)
+implement InterfaceDiscovery using std::none
