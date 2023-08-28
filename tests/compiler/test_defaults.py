@@ -46,8 +46,8 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:] Test2 test2
-Test1 test1 [0:1] -- [0:] Test2 test2
+Test1.test2 [0:] -- Test2.test1 [1]
+Test1.test2 [0:] -- Test2.test1 [0:1]
 """
     )
     with pytest.raises(DuplicateException):

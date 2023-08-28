@@ -465,6 +465,15 @@ class PurgeableResource(Resource):
 
 
 @stable_api
+class DiscoveryResource(Resource):
+    """
+    See :inmanta:entity:`std::DiscoveryResource` for more information.
+    """
+
+    fields = ()
+
+
+@stable_api
 class ManagedResource(Resource):
     """
     See :inmanta:entity:`std::ManagedResource` for more information.
@@ -499,6 +508,13 @@ class Id(object):
     """
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
+        """
+        :attr entity_type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+        :attr agent_name: The agent responsible for this resource.
+        :attr attribute: The key attribute that uniquely identifies this resource on the agent
+        :attr attribute_value: The corresponding value for this key attribute.
+        :attr version: The version number for this resource.
+        """
         self._entity_type = entity_type
         self._agent_name = agent_name
         self._attribute = attribute
@@ -553,6 +569,15 @@ class Id(object):
         return str(self) == str(other) and type(self) is type(other)
 
     def resource_str(self) -> ResourceIdStr:
+        """
+        String representation for this resource id with the following format:
+            <type>[<agent>,<attribute>=<value>]
+            - type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+            - agent: The agent responsible for this resource.
+            - attribute: The key attribute that uniquely identifies this resource on the agent
+            - value: The corresponding value for this key attribute.
+        :return: Returns a :py:class:`inmanta.data.model.ResourceIdStr`
+        """
         return cast(
             ResourceIdStr,
             "%(type)s[%(agent)s,%(attribute)s=%(value)s]"

@@ -1,0 +1,8 @@
+---
+description: Removed support for the legacy relationship syntax from the compiler.
+issue-nr: 5265
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"

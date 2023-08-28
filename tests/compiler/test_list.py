@@ -23,7 +23,7 @@ import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, OptionalValueException, RuntimeException
 
 
-def test_list_atributes(snippetcompiler):
+def test_list_attributes(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -61,7 +61,7 @@ d = Jos(bar = [], floom=["test","test2"])
     check_jos(scope.lookup("d"), [], floom=["test", "test2"])
 
 
-def test_list_atribute_type_violation_1(snippetcompiler):
+def test_list_attribute_type_violation_1(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -75,7 +75,7 @@ c = Jos()
         compiler.do_compile()
 
 
-def test_list_atribute_type_violation_2(snippetcompiler):
+def test_list_attribute_type_violation_2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -89,7 +89,7 @@ c = Jos()
         compiler.do_compile()
 
 
-def test_list_atribute_type_violation_3(snippetcompiler):
+def test_list_attribute_type_violation_3(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Jos:
@@ -115,7 +115,7 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 tests [0:] -- [0:] Test2 tests
+Test1.tests [0:] -- Test2.tests [0:]
 
 t1 = Test1(tests=[])
 std::print(t1.tests)
