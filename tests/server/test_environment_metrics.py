@@ -1498,15 +1498,15 @@ async def test_cleanup_environment_metrics(init_dataclasses_and_load_schema, env
     [
         # Verify that the rounding works correctly
         (
-            datetime(year=2023, month=1, day=1, hour=2, minute=16, second=52, microsecond=33).astimezone(),
-            datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, microsecond=44).astimezone(),
+            datetime(year=2023, month=1, day=1, hour=2, minute=16, second=52, microsecond=33, tzinfo=timezone.utc),
+            datetime(year=2023, month=1, day=2, hour=15, minute=12, second=22, microsecond=44, tzinfo=timezone.utc),
             10,
         ),
         # Verify that no rounding is done when the given parameters are already rounded
         (
-            datetime(year=2023, month=1, day=1, hour=1).astimezone(),
-            datetime(year=2023, month=1, day=2, hour=16).astimezone(),
-            13,
+            datetime(year=2023, month=1, day=1, hour=0, tzinfo=timezone.utc),
+            datetime(year=2023, month=1, day=2, hour=18, tzinfo=timezone.utc),
+            14,
         ),
     ],
 )
@@ -1526,12 +1526,12 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
     env_id = await environment_creator(client, project_default, env_name="env1")
 
     # The expected parameters after rounding
-    start_interval_reply = datetime(year=2023, month=1, day=1, hour=1).astimezone()
-    end_interval_reply = datetime(year=2023, month=1, day=2, hour=16).astimezone()
-    nb_datapoints_reply = 13
+    start_interval_reply = datetime(year=2023, month=1, day=1, hour=0, tzinfo=timezone.utc)
+    end_interval_reply = datetime(year=2023, month=1, day=2, hour=18, tzinfo=timezone.utc)
+    nb_datapoints_reply = 14
 
     # Insert one metric every hour
-    timestamp = datetime(year=2023, month=1, day=1, hour=0, minute=33, second=42).astimezone()
+    timestamp = datetime(year=2023, month=1, day=1, hour=0, minute=33, second=42, tzinfo=timezone.utc)
     while timestamp < end_interval_reply:
         await data.EnvironmentMetricsGauge(
             environment=uuid.UUID(env_id),
