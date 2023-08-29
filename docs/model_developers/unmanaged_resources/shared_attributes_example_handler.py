@@ -85,7 +85,7 @@ class InterfaceHandler(Authenticator, CRUDHandler[Interface]):
 
 
 @provider("my_module::InterfaceDiscovery", name="interface_discovery_handler")
-class InterfaceDiscoveryHandler(DiscoveryHandler[InterfaceDiscovery, UnmanagedInterface]):
+class InterfaceDiscoveryHandler(Authenticator, DiscoveryHandler[InterfaceDiscovery, UnmanagedInterface]):
 
     def pre(self, ctx: HandlerContext, resource: InterfaceDiscovery) -> None:
         self.login(resource)
@@ -101,7 +101,7 @@ class InterfaceDiscoveryHandler(DiscoveryHandler[InterfaceDiscovery, UnmanagedIn
         """
         discovered: abc.Iterator[UnmanagedInterface] = (
             UnmanagedInterface(**attributes) for attributes in self._get_discovered_resources(discovery_resource.host)
-            if discovery_resource.name_filter is not None and re.match(discovery_resource.name_filter, attributes["interface_name"])
+            if discovery_resource.name_filter is None or re.match(discovery_resource.name_filter, attributes["interface_name"])
         )
         return {
             resources.Id(
