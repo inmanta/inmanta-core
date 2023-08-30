@@ -35,13 +35,13 @@ class UnmanagedInterface(pydantic.BaseModel):
 class InterfaceDiscoveryHandler(DiscoveryHandler[InterfaceDiscovery, UnmanagedInterface]):
     def discover_resources(
         self, ctx: HandlerContext, discovery_resource: InterfaceDiscovery
-    ) -> abc.Mapping[ResourceIdStr, UnmanagedInterface]:
+    ) -> dict[ResourceIdStr, UnmanagedInterface]:
         """
         Entrypoint that is called by the agent when the discovery resource is deployed.
         """
         discovered: abc.Iterator[UnmanagedInterface] = (
             UnmanagedInterface(**attributes) for attributes in self._get_discovered_resources(discovery_resource.host)
-            if discovery_resource.name_filter is not None and re.match(discovery_resource.name_filter, attributes["interface_name"])
+            if discovery_resource.name_filter is None or re.match(discovery_resource.name_filter, attributes["interface_name"])
         )
         return {
             resources.Id(
