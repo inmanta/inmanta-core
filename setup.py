@@ -34,7 +34,7 @@ requires = [
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
-    "build~=0.7",
+    "build>=0.7,<2.0",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
 ]
