@@ -1,0 +1,7 @@
+description: Reduce log level of compiler scheduler from debug to trace
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}, to reduce compiler log output"
+
+
