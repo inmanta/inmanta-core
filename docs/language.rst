@@ -120,6 +120,21 @@ Literal values can be assigned to variables
     import ip::services
     sshservice = ip::services::ssh
 
+.. note::
+    It is possible to make a string span multiple lines by triple quoting it e.g.:
+
+.. code-block:: inmanta
+
+    multi_line_string = """This
+    string
+    spans
+    multiple
+    lines"""
+
+.. note::
+    Raw and format string (see :ref:`language_reference_string_formatting`) treat backslashes as regular characters.
+    On the other hand, in regular and multi-line strings, escape characters (e.g. `\n`, `\t`...) are interpreted and
+    therefore backslashes need to be escaped in order to be displayed:
 
 
 Primitive types
@@ -395,6 +410,22 @@ attribute names as keys and the desired values as values. For example:
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
 
+It is also possible to append elements to a relation with the `+=` operator.
+
+.. code-block:: inmanta
+
+    Host.files [0:] -- File.host [1]
+
+    h1 = Host("test")
+    h1.files += f1
+    h1.files += f2
+    h1.files += f3
+
+    // h1.files equals [f1, f2, f3]
+
+
+.. note::
+    This syntax is only defined for relations. The `+=` operator can not be used on variables, which are immutable
 
 Referring to instances
 ++++++++++++++++++++++
@@ -679,6 +710,8 @@ To prevent string interpolation, use raw strings
     # containing the {{ and \n
     motd = r"Welcome to {{hostname}}\n"
 
+
+.. _language_reference_string_formatting:
 
 String formatting
 +++++++++++++++++
