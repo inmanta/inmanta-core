@@ -343,7 +343,7 @@ class Scheduler(object):
         # Use the relation precedence rules to determine which drv should be frozen
         queue = PrioritisedDelayedResultVariableQueue(attributes_with_precedence_rule, freeze_candidates)
         drv_to_freeze = queue.popleft()
-        LOGGER.debug("Waiting blocked on %s", drv_to_freeze)
+        LOGGER.log(LOG_LEVEL_TRACE, "Waiting blocked on %s", drv_to_freeze)
         drv_to_freeze.freeze()
         return True
 
@@ -399,7 +399,8 @@ class Scheduler(object):
             else:
                 i += 1
 
-            LOGGER.debug(
+            LOGGER.log(
+                LOG_LEVEL_TRACE,
                 "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
                 i,
                 len(basequeue),
@@ -451,7 +452,7 @@ class Scheduler(object):
                 waitqueue.replace(w for w in zerowaiters_tmp if w.get_progress_potential() > 0)
                 zerowaiters = deque(w for w in zerowaiters_tmp if w.get_progress_potential() <= 0)
                 while len(waitqueue) > 0 and not progress:
-                    LOGGER.debug("Moved zerowaiters to waiters")
+                    LOGGER.log(LOG_LEVEL_TRACE, "Moved zerowaiters to waiters")
                     next_rv = waitqueue.popleft()
                     if next_rv.get_waiting_providers() > 0:
                         next_rv.unqueue()
@@ -466,14 +467,15 @@ class Scheduler(object):
 
             if not progress:
                 # no one waiting anymore, all done, freeze and finish
-                LOGGER.debug("Finishing statements with no waiters")
+                LOGGER.log(LOG_LEVEL_TRACE, "Finishing statements with no waiters")
 
                 while len(zerowaiters) > 0:
                     next_rv = zerowaiters.pop()
                     next_rv.freeze()
 
         now = time.time()
-        LOGGER.debug(
+        LOGGER.log(
+            LOG_LEVEL_TRACE,
             "Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)",
             i,
             len(basequeue),
