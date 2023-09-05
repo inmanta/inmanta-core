@@ -133,8 +133,8 @@ Literal values can be assigned to variables
 
 .. note::
     Raw and format string (see :ref:`language_reference_string_formatting`) treat backslashes as regular characters.
-    On the other hand, in regular and multi-line strings, escape characters (e.g. `\n`, `\t`...) are interpreted and
-    therefore backslashes need to be escaped in order to be displayed:
+    On the other hand, in regular and multi-line strings, escape characters (e.g. ``\n``, ``\t``...) are interpreted and
+    therefore backslashes need to be escaped in order to be displayed.
 
 
 Primitive types
@@ -399,7 +399,7 @@ any values to the relation attribute.
     // adding a value twice does not affect the relation,
     // s1.files still equals [f1, f2, f3]
 
-In addition, attributes can be assigned in a constructor using keyword arguments by using `**dct` where `dct` is a dictionary that contains
+In addition, attributes can be assigned in a constructor using keyword arguments by using :code:`**dct` where :code:`dct` is a dictionary that contains
 attribute names as keys and the desired values as values. For example:
 
 .. code-block:: inmanta
@@ -410,7 +410,7 @@ attribute names as keys and the desired values as values. For example:
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
 
-It is also possible to append elements to a relation with the `+=` operator.
+It is also possible to append elements to a relation with the :code:`+=` operator.
 
 .. code-block:: inmanta
 
@@ -425,7 +425,7 @@ It is also possible to append elements to a relation with the `+=` operator.
 
 
 .. note::
-    This syntax is only defined for relations. The `+=` operator can not be used on variables, which are immutable
+    This syntax is only defined for relations. The :code:`+=` operator can not be used on variables, which are immutable
 
 Referring to instances
 ++++++++++++++++++++++
@@ -467,10 +467,11 @@ When nesting constructors, short names can be used for the nested constructors, 
         )
     )
 
-However, when relying on type inference,
+However, when relying on type inference:
+
 1. avoid creating sibling types with the same name, but different fully qualified name, as they may become indistinguishable, breaking the inference on existing models.
 
-    1. if multiple types exist with the same name, and one is in scope, that one is selected (i.e it is defined in this module, a parent module or `std`)
+    1. if multiple types exist with the same name, and one is in scope, that one is selected (i.e. it is defined in this module, a parent module or ``std``)
     2. if multiple types exist that are all out of scope, inference fails
 
 2. make sure the type you want to infer is imported somewhere in the model. Otherwise the compiler will not find it.
