@@ -35,8 +35,7 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set
 
 import click
 import more_itertools
