@@ -410,7 +410,7 @@ attribute names as keys and the desired values as values. For example:
     file1_config = {"path": "/opt/1"}
     f1 = File(host=h1, **file1_config)
 
-It is also possible to append elements to a relation with the :code:`+=` operator.
+It is also possible to append elements to a relation with the :code:`+=` operator:
 
 .. code-block:: inmanta
 
@@ -425,7 +425,7 @@ It is also possible to append elements to a relation with the :code:`+=` operato
 
 
 .. note::
-    This syntax is only defined for relations. The :code:`+=` operator can not be used on variables, which are immutable
+    This syntax is only defined for relations. The :code:`+=` operator can not be used on variables, which are immutable.
 
 Referring to instances
 ++++++++++++++++++++++
