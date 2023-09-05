@@ -1576,9 +1576,8 @@ build-backend = "setuptools.build_meta"
                 """
                 )
             builder = build.ProjectBuilder(
-                srcdir=tmp_python_project_dir,
-                python_executable=self._isolated_env.executable,
-                scripts_dir=self._isolated_env.scripts_dir,
+                source_dir=tmp_python_project_dir,
+                python_executable=self._isolated_env.python_executable,
             )
             isolated_env.install(builder.build_system_requires)
             isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
