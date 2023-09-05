@@ -45,11 +45,11 @@ from cookiecutter.main import cookiecutter
 from pkg_resources import Requirement, parse_version
 
 import build
+import build as build_module  # additionaly import as an alias for use in contexts with a name clash
 import build.env
 import inmanta
 import inmanta.warnings
 import toml
-from build.env import DefaultIsolatedEnv
 from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
@@ -1523,7 +1523,7 @@ class ModuleBuildFailedError(Exception):
 BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
-class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
+class DefaultIsolatedEnvCached(build.env.DefaultIsolatedEnv):
     """
     An IsolatedEnvBuilder that maintains its build environment across invocations of the context manager.
     This class is only used by the test suite. It decreases the runtime of the test suite because the build
@@ -1536,7 +1536,7 @@ class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
 
     def __init__(self) -> None:
         super().__init__()
-        self._isolated_env: Optional[build.env.IsolatedEnv] = None
+        self._isolated_env: Optional[build.env.DefaultIsolatedEnv] = None
 
     @classmethod
     def get_instance(cls) -> "DefaultIsolatedEnvCached":
@@ -1547,7 +1547,7 @@ class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
             cls._instance = cls()
         return cls._instance
 
-    def __enter__(self) -> build.env.IsolatedEnv:
+    def __enter__(self) -> build.env.DefaultIsolatedEnv:
         if not self._isolated_env:
             self._isolated_env = super(DefaultIsolatedEnvCached, self).__enter__()
             self._install_build_requirements(self._isolated_env)
@@ -1556,7 +1556,7 @@ class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
             setattr(self._isolated_env, "install", lambda *args, **kwargs: None)
         return self._isolated_env
 
-    def _install_build_requirements(self, isolated_env: build.env.IsolatedEnv) -> None:
+    def _install_build_requirements(self, isolated_env: build.env.DefaultIsolatedEnv) -> None:
         """
         Install the build requirements required to build the modules present in the tests/data/modules_v2 directory.
         """
@@ -1761,7 +1761,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         metadata_file = os.path.join(build_path, "setup.cfg")
         shutil.copy(metadata_file, python_pkg_dir)
 
-    def _get_isolated_env_builder(self) -> DefaultIsolatedEnv:
+    def _get_isolated_env_builder(self) -> build_module.env.DefaultIsolatedEnv:
         """
         Returns the DefaultIsolatedEnv instance that should be used to build V2 modules. To speed to up the test
         suite, the build environment is cached when the tests are ran. This is possible because all modules, built
@@ -1771,7 +1771,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED:
             return DefaultIsolatedEnvCached.get_instance()
         else:
-            return DefaultIsolatedEnv()
+            return build.env.DefaultIsolatedEnv()
 
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
