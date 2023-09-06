@@ -455,10 +455,8 @@ author = Inmanta <code@inmanta.com>
     if install:
         env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
     if publish_index is not None:
-        with build.env.IsolatedEnvBuilder() as build_env:
-            builder = build.ProjectBuilder(
-                srcdir=path, python_executable=build_env.executable, scripts_dir=build_env.scripts_dir
-            )
+        with build.env.DefaultIsolatedEnv() as build_env:
+            builder = build.ProjectBuilder(source_dir=path, python_executable=build_env.python_executable)
             build_env.install(builder.build_system_requires)
             build_env.install(builder.get_requires_for_build(distribution="wheel"))
             builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)
