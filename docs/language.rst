@@ -120,21 +120,6 @@ Literal values can be assigned to variables
     import ip::services
     sshservice = ip::services::ssh
 
-.. note::
-    It is possible to make a string span multiple lines by triple quoting it e.g.:
-
-.. code-block:: inmanta
-
-    multi_line_string = """This
-    string
-    spans
-    multiple
-    lines"""
-
-.. note::
-    Raw and format string (see :ref:`language_reference_string_formatting`) treat backslashes as regular characters.
-    On the other hand, in regular and multi-line strings, escape characters (e.g. ``\n``, ``\t``...) are interpreted and
-    therefore backslashes need to be escaped in order to be displayed.
 
 
 Primitive types
@@ -191,6 +176,24 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
     # value = "value"
     # incorrect, can't assign to dict after construction
     # a["otherkey"] = "othervalue"
+
+Strings
++++++++
+
+It is possible to make a string span multiple lines by triple quoting it e.g.:
+
+.. code-block:: inmanta
+
+    multi_line_string = """This
+    string
+    spans
+    multiple
+    lines"""
+
+.. note::
+    Raw and format string (see :ref:`language_reference_string_formatting`) treat backslashes as regular characters.
+    On the other hand, in regular and multi-line strings, escape characters (e.g. ``\n``, ``\t``...) are interpreted and
+    therefore backslashes need to be escaped in order to be displayed.
 
 
 .. _lang-conditions:
