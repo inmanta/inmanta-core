@@ -49,6 +49,7 @@ async def test_get_facts(resource_container, client, clienthelper, environment, 
     assert result.code == 503
 
     env_uuid = uuid.UUID(env_id)
+
     async def has_params():
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
         return len(params) >= 3

@@ -1033,7 +1033,7 @@ class OrchestrationService(protocol.ServerSlice):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Apireturn:
         async with data.ConfigurationModel.get_connection(connection) as connection:
-            # async with connection.transaction():
+            async with connection.transaction():
                 model = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
                 if model is None:
                     return 404, {"message": "The request version does not exist."}
