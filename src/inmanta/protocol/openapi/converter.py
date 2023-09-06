@@ -48,6 +48,7 @@ from inmanta.protocol.openapi.model import (
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
+from pydantic import ConfigDict
 
 
 def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
@@ -201,9 +202,7 @@ class OpenApiTypeConverter:
     def get_openapi_type(self, type_annotation: Type) -> Schema:
         class Sub(BaseModel):
             the_field: type_annotation
-
-            class Config:
-                arbitrary_types_allowed = True
+            model_config = ConfigDict(arbitrary_types_allowed=True)
 
         pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
         pydantic_result.title = None

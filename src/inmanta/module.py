@@ -67,7 +67,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
+from pydantic import field_validator, StringConstraints, BaseModel, Field, NameEmail, ValidationError
 from pydantic.error_wrappers import display_errors
 
 import packaging.version
@@ -84,6 +84,7 @@ from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
+from typing_extensions import Annotated
 
 try:
     from typing import TYPE_CHECKING
@@ -1220,7 +1221,7 @@ class Metadata(BaseModel):
     name: str
     description: Optional[str] = None
     freeze_recursive: bool = False
-    freeze_operator: str = Field(default="~=", regex=FreezeOperator.get_regex_for_validation())
+    freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
 
     _raw_parser: Type[RawParser]
 
@@ -1247,7 +1248,7 @@ class MetadataFieldRequires(BaseModel):
             return [v]
         return v
 
-    @validator("requires", pre=True)
+    @field_validator("requires", mode="before")
     @classmethod
     def requires_to_list(cls, v: object) -> object:
         return cls.to_list(v)
@@ -1260,9 +1261,9 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
-    deprecated: Optional[bool]
+    deprecated: Optional[bool] = None
 
-    @validator("version")
+    @field_validator("version")
     @classmethod
     def is_pep440_version(cls, v: str) -> str:
         try:
@@ -1347,7 +1348,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     _raw_parser: Type[YamlParser] = YamlParser
 
-    @validator("compiler_version")
+    @field_validator("compiler_version")
     @classmethod
     def is_pep440_version_v1(cls, v: str) -> str:
         return cls.is_pep440_version(v)
@@ -1395,7 +1396,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
     _raw_parser: Type[CfgParser] = CfgParser
 
-    @validator("version")
+    @field_validator("version")
     @classmethod
     def is_base_version(cls, v: str) -> str:
         version_obj: version.Version = version.Version(v)
@@ -1424,7 +1425,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         return v.base_version, get_version_tag(v)
 
-    @validator("version_tag")
+    @field_validator("version_tag")
     @classmethod
     def is_valid_version_tag(cls, v: str) -> str:
         try:
@@ -1433,7 +1434,7 @@ class ModuleV2Metadata(ModuleMetadata):
             raise ValueError(f"Version tag {v} is not PEP440 compliant") from e
         return v
 
-    @validator("name")
+    @field_validator("name")
     @classmethod
     def validate_name_field(cls, v: str) -> str:
         """
@@ -1629,17 +1630,17 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-    relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
+    relation_precedence_policy: List[Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]] = []
     strict_deps_check: bool = True
     agent_install_dependency_modules: bool = False
     pip: ProjectPipConfig = ProjectPipConfig()
 
-    @validator("modulepath", pre=True)
+    @field_validator("modulepath", mode="before")
     @classmethod
     def modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
 
-    @validator("repo", pre=True)
+    @field_validator("repo", mode="before")
     @classmethod
     def validate_repo_field(cls, v: object) -> List[Dict[Any, Any]]:
         v_as_list = cls.to_list(v)

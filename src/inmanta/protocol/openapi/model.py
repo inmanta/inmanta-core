@@ -24,7 +24,7 @@ https://github.com/tiangolo/fastapi
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from pydantic import AnyUrl, Field
+from pydantic import ConfigDict, AnyUrl, Field
 
 from inmanta.data.model import BaseModel
 
@@ -189,9 +189,7 @@ class ParameterBase(BaseModel):
 class Parameter(ParameterBase):
     name: str
     in_: ParameterType = Field(..., alias="in")
-
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Header(ParameterBase):

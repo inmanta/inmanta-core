@@ -23,7 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import Extra, root_validator, validator
+from pydantic import field_validator, ConfigDict, root_validator, Field
 from pydantic.fields import ModelField
 
 import inmanta
@@ -79,15 +79,9 @@ class BaseModel(pydantic.BaseModel):
     _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
         validator_timezone_aware_timestamps
     )
-
-    class Config:
-        """
-        Pydantic config.
-        """
-
-        # Populate models with the value property of enums, rather than the raw enum.
-        # This is useful to serialise model.dict() later
-        use_enum_values = True
+    # Populate models with the value property of enums, rather than the raw enum.
+    # This is useful to serialise model.dict() later
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class ExtensionStatus(BaseModel):
@@ -116,7 +110,7 @@ class FeatureStatus(BaseModel):
 
     slice: str
     name: str
-    value: Optional[Any]
+    value: Optional[Any] = None
 
 
 class StatusResponse(BaseModel):
@@ -147,10 +141,10 @@ class CompileData(BaseModel):
 
 class CompileRunBase(BaseModel):
     id: uuid.UUID
-    remote_id: Optional[uuid.UUID]
+    remote_id: Optional[uuid.UUID] = None
     environment: uuid.UUID
-    requested: Optional[datetime.datetime]
-    started: Optional[datetime.datetime]
+    requested: Optional[datetime.datetime] = None
+    started: Optional[datetime.datetime] = None
 
     do_export: bool
     force_update: bool
@@ -160,36 +154,36 @@ class CompileRunBase(BaseModel):
     partial: bool
     removed_resource_sets: list[str]
 
-    exporter_plugin: Optional[str]
+    exporter_plugin: Optional[str] = None
 
-    notify_failed_compile: Optional[bool]
-    failed_compile_message: Optional[str]
+    notify_failed_compile: Optional[bool] = None
+    failed_compile_message: Optional[str] = None
 
 
 class CompileRun(CompileRunBase):
-    compile_data: Optional[CompileData]
+    compile_data: Optional[CompileData] = None
 
 
 class CompileReport(CompileRunBase):
-    completed: Optional[datetime.datetime]
-    success: Optional[bool]
-    version: Optional[int]
+    completed: Optional[datetime.datetime] = None
+    success: Optional[bool] = None
+    version: Optional[int] = None
 
 
 class CompileRunReport(BaseModel):
     id: uuid.UUID
     started: datetime.datetime
-    completed: Optional[datetime.datetime]
+    completed: Optional[datetime.datetime] = None
     command: str
     name: str
     errstream: str
     outstream: str
-    returncode: Optional[int]
+    returncode: Optional[int] = None
 
 
 class CompileDetails(CompileReport):
-    compile_data: Optional[CompileData]
-    reports: Optional[List[CompileRunReport]]
+    compile_data: Optional[CompileData] = None
+    reports: Optional[List[CompileRunReport]] = None
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
@@ -216,7 +210,7 @@ class AttributeStateChange(BaseModel):
     current: Optional[Any] = None
     desired: Optional[Any] = None
 
-    @validator("current", "desired")
+    @field_validator("current", "desired")
     @classmethod
     def check_serializable(cls, v: Optional[Any]) -> Optional[Any]:
         """
@@ -251,8 +245,8 @@ class Environment(BaseModel):
     repo_branch: str
     settings: Dict[str, EnvSettingType]
     halted: bool
-    description: Optional[str]
-    icon: Optional[str]
+    description: Optional[str] = None
+    icon: Optional[str] = None
 
 
 class Project(BaseModel):
@@ -287,7 +281,7 @@ class EnvironmentSetting(BaseModel):
     recompile: bool
     update_model: bool
     agent_restart: bool
-    allowed_values: Optional[List[EnvSettingType]]
+    allowed_values: Optional[List[EnvSettingType]] = None
 
 
 class EnvironmentSettingsReponse(BaseModel):
@@ -298,13 +292,10 @@ class EnvironmentSettingsReponse(BaseModel):
 class ModelMetadata(BaseModel):
     """Model metadata"""
 
-    inmanta_compile_state: const.Compilestate = const.Compilestate.success
+    inmanta_compile_state: const.Compilestate = Field(const.Compilestate.success, alias="inmanta:compile:state")
     message: str
     type: str
-    extra_data: Optional[JsonType]
-
-    class Config:
-        fields = {"inmanta_compile_state": {"alias": "inmanta:compile:state"}}
+    extra_data: Optional[JsonType] = None
 
 
 class ResourceMinimal(BaseModel):
@@ -314,15 +305,13 @@ class ResourceMinimal(BaseModel):
 
     id: ResourceVersionIdStr
 
+    @field_validator("id")
     @classmethod
-    @validator("id")
     def id_is_resource_version_id(cls, v):
         if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
-
-    class Config:
-        extra = Extra.allow
+    model_config = ConfigDict(extra="allow")
 
 
 class Resource(BaseModel):
@@ -333,10 +322,10 @@ class Resource(BaseModel):
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
-    last_deploy: Optional[datetime.datetime]
+    last_deploy: Optional[datetime.datetime] = None
     attributes: JsonType
     status: const.ResourceState
-    resource_set: Optional[str]
+    resource_set: Optional[str] = None
 
 
 class ResourceAction(BaseModel):
@@ -346,11 +335,11 @@ class ResourceAction(BaseModel):
     action_id: uuid.UUID
     action: const.ResourceAction
     started: datetime.datetime
-    finished: Optional[datetime.datetime]
-    messages: Optional[List[JsonType]]
-    status: Optional[const.ResourceState]
-    changes: Optional[JsonType]
-    change: Optional[const.Change]
+    finished: Optional[datetime.datetime] = None
+    messages: Optional[List[JsonType]] = None
+    status: Optional[const.ResourceState] = None
+    changes: Optional[JsonType] = None
+    change: Optional[const.Change] = None
     send_event: Optional[bool] = None  # Deprecated field
 
 
@@ -383,16 +372,11 @@ class ResourceDeploySummary(BaseModel):
 
 
 class LogLine(BaseModel):
-    class Config:
-        """
-        Pydantic config.
-        """
-
-        # Override the setting from the BaseModel class as such that the level field is
-        # serialises using the name of the enum instead of its value. This is required
-        # to make sure that data sent to the API endpoints resource_action_update
-        # and resource_deploy_done are serialized consistently using the name of the enum.
-        use_enum_values = False
+    # Override the setting from the BaseModel class as such that the level field is
+    # serialized using the name of the enum instead of its value. This is required
+    # to make sure that data sent to the API endpoints resource_action_update
+    # and resource_deploy_done are serialized consistently using the name of the enum.
+    model_config = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel
     msg: str
@@ -500,7 +484,7 @@ class ReleasedResourceDetails(ResourceDetails):
     :param requires_status: The id and status of the resources this resource requires
     """
 
-    last_deploy: Optional[datetime.datetime]
+    last_deploy: Optional[datetime.datetime] = None
     first_generated_time: datetime.datetime
     first_generated_version: int
     status: ReleasedResourceState
@@ -562,8 +546,8 @@ class Parameter(BaseModel):
     value: str
     environment: uuid.UUID
     source: str
-    updated: Optional[datetime.datetime]
-    metadata: Optional[JsonType]
+    updated: Optional[datetime.datetime] = None
+    metadata: Optional[JsonType] = None
 
 
 class Fact(Parameter):
@@ -584,11 +568,11 @@ class Agent(BaseModel):
 
     environment: uuid.UUID
     name: str
-    last_failover: Optional[datetime.datetime]
+    last_failover: Optional[datetime.datetime] = None
     paused: bool
-    process_id: Optional[uuid.UUID]
-    process_name: Optional[str]
-    unpause_on_resume: Optional[bool]
+    process_id: Optional[uuid.UUID] = None
+    process_name: Optional[str] = None
+    unpause_on_resume: Optional[bool] = None
     status: const.AgentStatus
 
 
@@ -596,10 +580,10 @@ class AgentProcess(BaseModel):
     sid: uuid.UUID
     hostname: str
     environment: uuid.UUID
-    first_seen: Optional[datetime.datetime]
-    last_seen: Optional[datetime.datetime]
-    expired: Optional[datetime.datetime]
-    state: Optional[Dict[str, Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]]
+    first_seen: Optional[datetime.datetime] = None
+    last_seen: Optional[datetime.datetime] = None
+    expired: Optional[datetime.datetime] = None
+    state: Optional[Dict[str, Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]] = None
 
 
 class DesiredStateLabel(BaseModel):
@@ -628,7 +612,7 @@ class DryRun(BaseModel):
     id: uuid.UUID
     environment: uuid.UUID
     model: int
-    date: Optional[datetime.datetime]
+    date: Optional[datetime.datetime] = None
     total: int = 0
     todo: int = 0
 
@@ -726,7 +710,7 @@ class DiscoveredResource(BaseModel):
     discovered_resource_id: ResourceIdStr
     values: JsonType
 
-    @validator("discovered_resource_id")
+    @field_validator("discovered_resource_id")
     @classmethod
     def discovered_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
         if resources.Id.is_resource_id(v):
