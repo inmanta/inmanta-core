@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from inmanta import config, const, module, postgresproc, protocol
 from inmanta.config import Config
+from inmanta.protocol import Result
 from inmanta.types import JsonType
 from inmanta.util import get_free_tcp_port
 
@@ -220,14 +221,16 @@ host=localhost
 
         return None
 
-    def _latest_version_instance(self, environment_id: str) -> Optional[dict]:
-        result = self._client.list_versions(tid=environment_id)
+    def _latest_version_instance(self, environment_id: str) -> Optional[JsonType]:
+        result: Result = self._client.list_versions(tid=environment_id)
         if result.code != 200:
             LOGGER.error("Unable to get all version of environment %s", environment_id)
             return None
 
-        if "versions" in result.result and len(result.result["versions"]) > 0:
-            return result.result["versions"][0]
+        if result.result and "versions" in result.result and len(result.result["versions"]) > 0:
+            version = result.result["versions"][0]
+            assert isinstance(version, dict)  # mypy
+            return version
 
         return None
 
@@ -364,10 +367,12 @@ host=localhost
 
     def deploy(self, dry_run: bool, report: bool = True) -> None:
         version_instance = self._latest_version_instance(self._environment_id)
+
+        if version_instance is None:
+            return
+
         version: int = version_instance["version"]
         LOGGER.info("Latest version for created environment is %s", version)
-        if version is None:
-            return
 
         # release the version!
         if not dry_run:
