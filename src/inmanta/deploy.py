@@ -209,18 +209,6 @@ host=localhost
 
         return env_id
 
-    def _latest_version(self, environment_id: str) -> Optional[int]:
-        result = self._client.list_versions(tid=environment_id)
-        if result.code != 200:
-            LOGGER.error("Unable to get all version of environment %s", environment_id)
-            return None
-
-        if "versions" in result.result and len(result.result["versions"]) > 0:
-            versions: List[int] = [x["version"] for x in result.result["versions"]]
-            return versions[0]
-
-        return None
-
     def _latest_version_instance(self, environment_id: str) -> Optional[JsonType]:
         result: Result = self._client.list_versions(tid=environment_id)
         if result.code != 200:

@@ -4660,7 +4660,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(
-        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]], connection: Optional[Connection] = None
+        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]], *, connection: Optional[Connection] = None
     ) -> List[Dict[str, Any]]:
         if not projection:
             projection = "*"
@@ -5484,7 +5484,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     async def get_increment(
-        cls, environment: uuid.UUID, version: int, connection: Optional[Connection] = None
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
     ) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
