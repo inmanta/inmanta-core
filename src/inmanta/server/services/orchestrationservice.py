@@ -40,7 +40,7 @@ from inmanta.data.model import (
 )
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -1032,87 +1032,96 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Apireturn:
-        model = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
-        if model is None:
-            return 404, {"message": "The request version does not exist."}
+        async with data.ConfigurationModel.get_connection(connection) as connection:
+            # async with connection.transaction():
+                model = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
+                if model is None:
+                    return 404, {"message": "The request version does not exist."}
 
-        # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-        undep = await model.get_undeployable()
-        now = datetime.datetime.now().astimezone()
+                if model.released:
+                    raise Conflict(f"The version {version_id} on environment {env} is already released.")
 
-        if undep:
-            undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-            # not checking error conditions
-            await self.resource_service.resource_action_update(
-                env,
-                undep_ids,
-                action_id=uuid.uuid4(),
-                started=now,
-                finished=now,
-                status=const.ResourceState.undefined,
-                action=const.ResourceAction.deploy,
-                changes={},
-                messages=[],
-                change=const.Change.nochange,
-                send_events=False,
-                connection=connection,
-            )
+                # Already mark undeployable resources as deployed to create a better UX (change the version counters)
+                undep = await model.get_undeployable()
+                now = datetime.datetime.now().astimezone()
 
-            skippable = await model.get_skipped_for_undeployable()
-            if skippable:
-                skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
-                # not checking error conditions
-                await self.resource_service.resource_action_update(
+                if undep:
+                    undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
+                    # not checking error conditions
+                    await self.resource_service.resource_action_update(
+                        env,
+                        undep_ids,
+                        action_id=uuid.uuid4(),
+                        started=now,
+                        finished=now,
+                        status=const.ResourceState.undefined,
+                        action=const.ResourceAction.deploy,
+                        changes={},
+                        messages=[],
+                        change=const.Change.nochange,
+                        send_events=False,
+                        connection=connection,
+                    )
+
+                    skippable = await model.get_skipped_for_undeployable()
+                    if skippable:
+                        skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
+                        # not checking error conditions
+                        await self.resource_service.resource_action_update(
+                            env,
+                            skippable_ids,
+                            action_id=uuid.uuid4(),
+                            started=now,
+                            finished=now,
+                            status=const.ResourceState.skipped_for_undefined,
+                            action=const.ResourceAction.deploy,
+                            changes={},
+                            messages=[],
+                            change=const.Change.nochange,
+                            send_events=False,
+                            connection=connection,
+                        )
+
+                increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.resource_service.get_increment(
                     env,
-                    skippable_ids,
-                    action_id=uuid.uuid4(),
-                    started=now,
-                    finished=now,
-                    status=const.ResourceState.skipped_for_undefined,
-                    action=const.ResourceAction.deploy,
-                    changes={},
-                    messages=[],
-                    change=const.Change.nochange,
-                    send_events=False,
+                    version_id,
                     connection=connection,
                 )
 
-        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.resource_service.get_increment(
-            env, version_id
-        )
+                increment_ids, neg_increment = increments
+                await self.resource_service.mark_deployed(env, neg_increment, now, version_id, connection=connection)
 
-        increment_ids, neg_increment = increments
-        await self.resource_service.mark_deployed(env, neg_increment, now, version_id)
+                # Set the updated field:
+                await data.Resource.copy_last_success(env.id, version_id, connection=connection)
 
-        # Set the updated field:
-        await data.Resource.copy_last_success(env.id, version_id)
+                # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
+                # This has to be done after the resources outside of the increment have been marked as deployed.
+                await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
 
-        # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
-        # This has to be done after the resources outside of the increment have been marked as deployed.
-        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+            if model.total == 0:
+                await model.mark_done(connection=connection)
+                return 200, {"model": model}
 
-        if model.total == 0:
-            await model.mark_done(connection=connection)
-            return 200, {"model": model}
+            if push:
+                # fetch all resource in this cm and create a list of distinct agents
+                agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
+                await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
-        if push:
-            # fetch all resource in this cm and create a list of distinct agents
-            agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
-            await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
-
-            for agent in agents:
-                client = self.agentmanager_service.get_agent_client(env.id, agent)
-                if client is not None:
-                    if not agent_trigger_method:
-                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
-                        incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
+                for agent in agents:
+                    client = self.agentmanager_service.get_agent_client(env.id, agent)
+                    if client is not None:
+                        if not agent_trigger_method:
+                            env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
+                            incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
+                        else:
+                            incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+                        self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
                     else:
-                        incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                    self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
-                else:
-                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
+                        LOGGER.warning(
+                            "Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id
+                        )
 
-        return 200, {"model": model}
+            return 200, {"model": model}
 
     @handle(methods.deploy, env="tid")
     async def deploy(

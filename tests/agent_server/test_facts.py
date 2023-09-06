@@ -49,10 +49,11 @@ async def test_get_facts(resource_container, client, clienthelper, environment, 
     assert result.code == 503
 
     env_uuid = uuid.UUID(env_id)
-    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-    while len(params) < 3:
+    async def has_params():
         params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        await asyncio.sleep(0.1)
+        return len(params) >= 3
+
+    await retry_limited(has_params, 5)
 
     result = await client.get_param(env_id, "key1", resource_id_wov)
     assert result.code == 200
