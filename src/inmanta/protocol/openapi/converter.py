@@ -20,6 +20,7 @@ import json
 import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
+from pydantic import ConfigDict
 from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 from pydantic.typing import NoneType
@@ -48,7 +49,6 @@ from inmanta.protocol.openapi.model import (
 from inmanta.server import config
 from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
-from pydantic import ConfigDict
 
 
 def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:

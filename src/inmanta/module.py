@@ -67,7 +67,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import field_validator, StringConstraints, BaseModel, Field, NameEmail, ValidationError
+from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 from pydantic.error_wrappers import display_errors
 
 import packaging.version
@@ -1630,7 +1630,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-    relation_precedence_policy: List[Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]] = []
+    relation_precedence_policy: List[
+        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
+    ] = []
     strict_deps_check: bool = True
     agent_install_dependency_modules: bool = False
     pip: ProjectPipConfig = ProjectPipConfig()

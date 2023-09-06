@@ -23,7 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import field_validator, ConfigDict, root_validator, Field
+from pydantic import ConfigDict, Field, field_validator, root_validator
 from pydantic.fields import ModelField
 
 import inmanta
@@ -311,6 +311,7 @@ class ResourceMinimal(BaseModel):
         if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
+
     model_config = ConfigDict(extra="allow")
 
 

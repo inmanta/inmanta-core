@@ -24,7 +24,7 @@ https://github.com/tiangolo/fastapi
 from enum import Enum
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from pydantic import ConfigDict, AnyUrl, Field
+from pydantic import AnyUrl, ConfigDict, Field
 
 from inmanta.data.model import BaseModel
 
