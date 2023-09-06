@@ -535,6 +535,11 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_m
     :param push: Notify all agents to deploy the version
     :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy when
                                 push is true.
+
+     :return: Returns the following status codes:
+            200: The version is released
+            404: The requested version does not exist
+            409: The requested version was already release
     """
 
 
