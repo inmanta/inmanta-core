@@ -117,7 +117,7 @@ from inmanta.db import util as db_util
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import IsolatedEnvBuilderCached, ModuleTool, V2ModuleBuilder
+from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -561,7 +561,7 @@ def clean_reset_session():
     Execute cleanup tasks that should only run at the end of the test suite.
     """
     yield
-    IsolatedEnvBuilderCached.get_instance().destroy()
+    DefaultIsolatedEnvCached.get_instance().destroy()
 
 
 def reset_all_objects():
@@ -574,7 +574,7 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
-    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
@@ -583,7 +583,7 @@ def reset_all_objects():
 
 @pytest.fixture()
 def disable_isolated_env_builder_cache() -> None:
-    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = True
+    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = True
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -1728,7 +1728,7 @@ async def migrate_db_from(
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
 def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
     """
-    When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
+    When the test suite runs, the python environment used to build V2 modules is cached using the DefaultIsolatedEnvCached
     class. This cache relies on the fact that all modules in the tests/data/modules_v2 directory use the same build-backand
     and build requirements. This guard verifies whether that assumption is fulfilled and raises an exception if it's not.
     """
