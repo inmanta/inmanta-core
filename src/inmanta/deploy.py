@@ -216,8 +216,18 @@ host=localhost
 
         if "versions" in result.result and len(result.result["versions"]) > 0:
             versions: List[int] = [x["version"] for x in result.result["versions"]]
-            sorted(versions)
             return versions[0]
+
+        return None
+
+    def _latest_version_instance(self, environment_id: str) -> Optional[dict]:
+        result = self._client.list_versions(tid=environment_id)
+        if result.code != 200:
+            LOGGER.error("Unable to get all version of environment %s", environment_id)
+            return None
+
+        if "versions" in result.result and len(result.result["versions"]) > 0:
+            return result.result["versions"][0]
 
         return None
 
@@ -353,21 +363,30 @@ host=localhost
         return True
 
     def deploy(self, dry_run: bool, report: bool = True) -> None:
-        version = self._latest_version(self._environment_id)
+        version_instance = self._latest_version_instance(self._environment_id)
+        version: int = version_instance["version"]
         LOGGER.info("Latest version for created environment is %s", version)
         if version is None:
             return
 
         # release the version!
         if not dry_run:
-            self._check_result(
-                self._client.release_version(
-                    tid=self._environment_id,
-                    id=version,
-                    push=True,
-                    agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+            if not version_instance["released"]:
+                self._check_result(
+                    self._client.release_version(
+                        tid=self._environment_id,
+                        id=version,
+                        push=True,
+                        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+                    )
                 )
-            )
+            else:
+                self._check_result(
+                    self._client.deploy(
+                        tid=self._environment_id,
+                        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+                    )
+                )
             if report:
                 self.progress_deploy_report(version)
 
