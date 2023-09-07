@@ -539,7 +539,7 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_m
      :return: Returns the following status codes:
             200: The version is released
             404: The requested version does not exist
-            409: The requested version was already release
+            409: The requested version was already released
     """
 
 
