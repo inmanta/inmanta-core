@@ -61,6 +61,7 @@ from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
     ExecutionContext,
     ExecutionUnit,
+    HybridResultCollector,
     Instance,
     ListElementVariable,
     QueueScheduler,
@@ -180,13 +181,12 @@ class SubConstructor(ExpressionStatement):
 class GradualFor(ResultCollector[object]):
     # this class might be unnecessary if receive-result is always called and exactly once
 
-    __slots__ = ("statement", "resolver", "queue", "lhs", "_nb_received", "_complete", "final_result")
+    __slots__ = ("statement", "resolver", "queue")
 
     def __init__(self, stmt: "For", resolver: Resolver, queue: QueueScheduler) -> None:
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self._nb_received: int = 0
 
     def complete(self, all_values: abc.Sequence[object]):
         """
@@ -268,6 +268,7 @@ class For(RequiresEmitStatement):
         helper = requires[self]
         assert isinstance(helper, GradualFor)
 
+        # TODO: this should probably be [] if var is Unknown -> add test
         helper.complete(var)
 
         return None
@@ -454,7 +455,7 @@ expression for an element should not be executed because the element was filtere
 """
 
 
-class ListComprehensionCollector(RawResumer, ResultCollector[object]):
+class ListComprehensionCollector(RawResumer, HybridResultCollector[object]):
     """
     Result collector (gradual or otherwise) for the list comprehension statement. When it receives a
     result, it sets up appropriate (gradual or otherwise) execution for the value expression, with the lhs as final result
@@ -556,7 +557,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Mutually exclusive with `set_unknown`.
         """
         if self._results:
-            # TODO: this message is incomplete
+            # TODO: this comment is incomplete
             # We should only have received previous results in gradual mode, if the
             if self.lhs is None:
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
@@ -566,6 +567,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             for value in all_values:
                 self.receive_result(value, location=self.statement.location)
 
+        # TODO: note to self: list comp needs to know completeness so it can collect all value expressions for execution
         RawUnit(queue, resolver, dict(enumerate(self._results)), resumer=self)
 
     def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:

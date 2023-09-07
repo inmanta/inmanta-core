@@ -166,9 +166,11 @@ class RequiresEmitStatement(DynamicStatement):
     ) -> Dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
-        resultcollector as a listener to result variables.
+        resultcollector as a listener to result variables. If resultcollector receives any values, these are guaranteed to be
+        exactly the same as those returned by `execute` (though the ordering might differ).
         When this method is called, the caller must make sure to eventually call `execute` as well.
         """
+        # TODO: does the guarantee in the docstring hold? What if a literal list contains both gradually executable and non-gradually executable expressions? Even list comprehension could have this
         return self.requires_emit(resolver, queue)
 
     def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:

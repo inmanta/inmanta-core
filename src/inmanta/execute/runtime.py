@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
+from collections import abc
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
@@ -24,6 +25,7 @@ from inmanta.ast import (
     AttributeException,
     CompilerException,
     DoubleSetException,
+    InvalidCompilerState,
     Locatable,
     Location,
     ModifiedAfterFreezeException,
@@ -75,6 +77,25 @@ class ResultCollector(Generic[T_contra]):
 
         :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
             waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
+        """
+        raise NotImplementedError()
+
+
+# TODO: use/drop class, if drop: move parts of docstrings?
+class HybridResultCollector(ResultCollector[T_contra]):
+    """
+    Result collector for use in hybrid contexts where gradual execution may or may not be supported. In addition to
+    gradual result collection, this class supports non-gradual result registration. When no more values will be provided,
+    the caller may call the `complete` method to indicate completeness. If `complete` is never called, this class behaves
+
+    """
+
+    def complete(self, all_values: abc.Sequence[T_contra]) -> None:
+        """
+        Indicate that all results have been received. No further calls to `receive_result` should be done after this.
+
+        :param all_values: all non-gradual values relevant for this collector. In practice, due to the result collector
+            invariants, this should always correspond to the values that were already reported gradually, if any.
         """
         raise NotImplementedError()
 
@@ -145,8 +166,11 @@ class VariableABC(Generic[T_co]):
 
     def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> None:
         """
-        Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
-        assignments of `null` will not be reported.
+        Add a listener to report new values to. It may report no values at all but if it reports at least one, each value
+        (e.g. in case of a list in a gradual context) will be reported exactly once and as soon as it becomes available (i.e.
+        immediately if the variable already has a value). In other words, if any values are reported to the listener, these will
+        be the exact same values (though possibly in a different order) as the ones the variable eventually resolves to.
+        Explicit assignments of `null` will never be reported.
 
         Each listener is expected to register one associated waiter to track completeness. The progress potential implementation
         is based on this invariant.
@@ -154,7 +178,6 @@ class VariableABC(Generic[T_co]):
         :param resultcollector: The collector for the values of this variable.
         :param location: The location associated with this listener.
         """
-        raise NotImplementedError()
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
@@ -290,12 +313,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
 
     def receive_result(self, value: T, location: Location) -> bool:
         return True
-
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
-        """
-        Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
-        """
-        pass
 
     def is_multi(self) -> bool:
         return False
@@ -682,10 +699,11 @@ class ListLiteral(BaseListVariable):
         acquired before the first is fulfilled, the list can safely be frozen once all registered promises have been fulfilled.
         """
         super().fulfill(promise)
-        # 100% accurate promisse tracking
+        # 100% accurate promise tracking
         if self.get_waiting_providers() == 0:
             self.freeze()
 
+    # TODO: is this right? Could be called multiple times as resultcollector
     def _set_value(self, value: ListValue, location: Location, recur: bool = True) -> bool:
         """
         First half of set_value, returns True if second half should run

@@ -113,6 +113,8 @@ class CreateList(ReferenceStatement):
 
         # Assignments, wired for gradual
         for expr in self.items:
+            # TODO: is this right? No: it doesn't support non-gradual execution
+            #ExecutionUnit(queue, resolver, ResultVariable(), expr.requires_emit_gradual(resolver, queue, temp), expr, self)
             ExecutionUnit(queue, resolver, temp, expr.requires_emit_gradual(resolver, queue, temp), expr, self)
 
         if not self.items:
