@@ -122,7 +122,12 @@ class BooleanEqualityFilter(Filter):
     """Represents a valid boolean which should be handled as an equality filter"""
 
     field: Optional[bool] = None
-    validate_field: classmethod = validator("field", pre=True, allow_reuse=True)(parse_single_value)
+
+    # [pydantic v1->v2] https://docs.pydantic.dev/2.3/migration/#the-allow_reuse-keyword-argument-is-no-longer-necessary
+    @field_validator("field", mode="before")
+    @classmethod
+    def val_field(cls, v: Optional[bool]) -> Optional[bool]:
+        return parse_single_value(v)
 
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
         if self.field is not None:

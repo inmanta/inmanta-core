@@ -22,7 +22,7 @@ from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic import ConfigDict
 from pydantic.networks import AnyUrl
-from pydantic.schema import model_schema
+from pydantic.v1.schema import model_schema
 from pydantic.typing import NoneType
 from typing_inspect import get_args, get_origin, is_generic_type
 
