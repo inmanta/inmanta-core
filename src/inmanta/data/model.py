@@ -76,7 +76,7 @@ class ExtensionStatus(BaseModel):
 
 class SliceStatus(BaseModel):
     """
-    Status response for slices loaded in the the server
+    Status response for slices loaded in the server
     """
 
     name: str
