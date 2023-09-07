@@ -26,7 +26,7 @@ texttable==1.6.7
 tornado==6.3.3
 toml==0.10.2
 typing_inspect==0.9.0
-build==1.0.0
+build==1.0.3
 ruamel.yaml==0.17.32
 
 # Optional import in code
