@@ -446,7 +446,7 @@ class VersionedResourceDetails(ResourceDetails):
     version: int
 
     @classmethod
-    @model_validator(mode="before")
+    @model_validator(mode="before") # https://docs.pydantic.dev/2.3/errors/usage_errors/#root-validator-pre-skip
     def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
