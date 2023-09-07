@@ -32,26 +32,6 @@ from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
-# This reference to the actual pydantic field_type_schema method is only loaded once
-old_field_type_schema = pydantic.schema.field_type_schema
-
-
-def patch_pydantic_field_type_schema() -> None:
-    """
-    This ugly patch fixes the serialization of models containing Optional in them.
-    https://github.com/samuelcolvin/pydantic/issues/1270
-
-    The fix for this issue will be included in pydantic V2.
-    """
-
-    def patch_nullable(field: ModelField, **kwargs):
-        f_schema, definitions, nested_models = old_field_type_schema(field, **kwargs)
-        if field.allow_none:
-            f_schema["nullable"] = True
-        return f_schema, definitions, nested_models
-
-    pydantic.schema.field_type_schema = patch_nullable
-
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
     if value.tzinfo is None:
