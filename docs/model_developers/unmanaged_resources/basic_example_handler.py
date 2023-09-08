@@ -28,7 +28,7 @@ class UnmanagedInterface(pydantic.BaseModel):
     """
     host: str
     interface_name: str
-    ip_address: pydantic.IPvAnyAddress
+    ip_address: str
 
 
 @provider("my_module::InterfaceDiscovery", name="interface_discovery_handler")
@@ -40,7 +40,7 @@ class InterfaceDiscoveryHandler(DiscoveryHandler[InterfaceDiscovery, UnmanagedIn
         Entrypoint that is called by the agent when the discovery resource is deployed.
         """
         discovered: abc.Iterator[UnmanagedInterface] = (
-            UnmanagedInterface(**attributes) for attributes in self._get_discovered_resources(discovery_resource.host)
+            UnmanagedInterface(**attributes) for attributes in self._get_discovered_interfaces(discovery_resource)
             if discovery_resource.name_filter is None or re.match(discovery_resource.name_filter, attributes["interface_name"])
         )
         return {
@@ -53,7 +53,7 @@ class InterfaceDiscoveryHandler(DiscoveryHandler[InterfaceDiscovery, UnmanagedIn
             for res in discovered
         }
 
-    def _get_discovered_resources(self, host: str) -> list[dict[str, object]]:
+    def _get_discovered_interfaces(self, discovery_resource: InterfaceDiscovery) -> list[dict[str, object]]:
         """
         A helper method that contains the logic to discover the unmanaged interfaces in the network.
         It returns a list of dictionaries where each dictionary contains the attributes of an unmanaged resource.

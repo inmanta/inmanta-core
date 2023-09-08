@@ -10,7 +10,7 @@ from inmanta.agent.handler import provider, DiscoveryHandler, HandlerContext, CR
 from inmanta.resources import resource, DiscoveryResource, PurgeableResource
 
 
-class Credentials:
+class InterfaceBase:
     fields = ("host", "username", "password")
 
     host: str
@@ -21,9 +21,17 @@ class Credentials:
     def get_host(exporter, resource):
         return resource.host.name
 
+    @staticmethod
+    def get_username(exporter, resource):
+        return resource.credentials.username
+
+    @staticmethod
+    def get_password(exporter, resource):
+        return resource.credentials.password
+
 
 @resource("my_module::Interface", agent="host.name", id_attribute="name")
-class Interface(Credentials, PurgeableResource):
+class Interface(InterfaceBase, PurgeableResource):
     fields = ("name", "ip_address")
 
     name: str
@@ -31,7 +39,7 @@ class Interface(Credentials, PurgeableResource):
 
 
 @resource("my_module::InterfaceDiscovery", agent="host.name", id_attribute="host")
-class InterfaceDiscovery(Credentials, DiscoveryResource):
+class InterfaceDiscovery(InterfaceBase, DiscoveryResource):
     fields = ("name_filter",)
 
     name_filter: Optional[str]
@@ -40,11 +48,11 @@ class InterfaceDiscovery(Credentials, DiscoveryResource):
 class UnmanagedInterface(pydantic.BaseModel):
     """
     Datastructure used by the InterfaceDiscoveryHandler to return the attributes
-    of its discovered resources.
+    of the discovered resources.
     """
     host: str
     interface_name: str
-    ip_address: pydantic.IPvAnyAddress
+    ip_address: str
 
 
 class Authenticator:
@@ -52,10 +60,10 @@ class Authenticator:
     Helper class that handles the authentication to the remote host.
     """
 
-    def login(self, credentials: Credentials) -> None:
+    def login(self, credentials: InterfaceBase) -> None:
         raise NotImplementedError()
 
-    def logout(self, credentials: Credentials) -> None:
+    def logout(self, credentials: InterfaceBase) -> None:
         raise NotImplementedError()
 
 
@@ -100,7 +108,7 @@ class InterfaceDiscoveryHandler(Authenticator, DiscoveryHandler[InterfaceDiscove
         Entrypoint that is called by the agent when the discovery resource is deployed.
         """
         discovered: abc.Iterator[UnmanagedInterface] = (
-            UnmanagedInterface(**attributes) for attributes in self._get_discovered_resources(discovery_resource.host)
+            UnmanagedInterface(**attributes) for attributes in self._get_discovered_interfaces(discovery_resource)
             if discovery_resource.name_filter is None or re.match(discovery_resource.name_filter, attributes["interface_name"])
         )
         return {
@@ -113,9 +121,9 @@ class InterfaceDiscoveryHandler(Authenticator, DiscoveryHandler[InterfaceDiscove
             for res in discovered
         }
 
-    def _get_discovered_resources(self, host: str) -> list[dict[str, object]]:
+    def _get_discovered_interfaces(self, discovery_resource: InterfaceDiscovery) -> list[dict[str, object]]:
         """
         A helper method that contains the logic to discover the unmanaged interfaces in the network.
-        It returns a list of dictionaries where each dictionary contains the attributes of an unmanaged resource.
+        It returns a list of dictionaries where each dictionary contains the attributes of a discovered interface.
         """
         raise NotImplementedError()

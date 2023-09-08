@@ -1,3 +1,5 @@
+import ip
+
 entity InterfaceDiscovery extends std::DiscoveryResource:
     """
     A discovery resource that discovers interfaces on a specific host.
@@ -8,7 +10,7 @@ entity InterfaceDiscovery extends std::DiscoveryResource:
     string? name_filter = null
 end
 
-InterfaceDiscovery.host [1] -- std::Host
+InterfaceDiscovery.host [1] -- ip::Host
 
 index InterfaceDiscovery(host)
 
