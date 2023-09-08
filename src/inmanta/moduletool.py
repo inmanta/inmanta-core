@@ -35,8 +35,7 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set
 
 import click
 import more_itertools
@@ -46,11 +45,10 @@ from cookiecutter.main import cookiecutter
 from pkg_resources import Requirement, parse_version
 
 import build
-import build.env
 import inmanta
 import inmanta.warnings
 import toml
-from build.env import IsolatedEnvBuilder
+from build.env import DefaultIsolatedEnv
 from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
@@ -1525,7 +1523,7 @@ class ModuleBuildFailedError(Exception):
 BUILD_FILE_IGNORE_PATTERN: Pattern[str] = re.compile("|".join(("__pycache__", "__cfcache__", r".*\.pyc", rf"{CF_CACHE_DIR}")))
 
 
-class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
+class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
     """
     An IsolatedEnvBuilder that maintains its build environment across invocations of the context manager.
     This class is only used by the test suite. It decreases the runtime of the test suite because the build
@@ -1534,14 +1532,14 @@ class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
     This class is a singleton. The get_instance() method should be used to obtain an instance of this class.
     """
 
-    _instance: Optional["IsolatedEnvBuilderCached"] = None
+    _instance: Optional["DefaultIsolatedEnvCached"] = None
 
     def __init__(self) -> None:
         super().__init__()
-        self._isolated_env: Optional[build.env.IsolatedEnv] = None
+        self._isolated_env: Optional[DefaultIsolatedEnv] = None
 
     @classmethod
-    def get_instance(cls) -> "IsolatedEnvBuilderCached":
+    def get_instance(cls) -> "DefaultIsolatedEnvCached":
         """
         This method should be used to obtain an instance of this class, because this class is a singleton.
         """
@@ -1549,16 +1547,16 @@ class IsolatedEnvBuilderCached(IsolatedEnvBuilder):
             cls._instance = cls()
         return cls._instance
 
-    def __enter__(self) -> build.env.IsolatedEnv:
+    def __enter__(self) -> DefaultIsolatedEnv:
         if not self._isolated_env:
-            self._isolated_env = super(IsolatedEnvBuilderCached, self).__enter__()
+            self._isolated_env = super(DefaultIsolatedEnvCached, self).__enter__()
             self._install_build_requirements(self._isolated_env)
             # All build dependencies are installed, so we can disable the install() method on self._isolated_env.
             # This prevents unnecessary pip processes from being spawned.
             setattr(self._isolated_env, "install", lambda *args, **kwargs: None)
         return self._isolated_env
 
-    def _install_build_requirements(self, isolated_env: build.env.IsolatedEnv) -> None:
+    def _install_build_requirements(self, isolated_env: DefaultIsolatedEnv) -> None:
         """
         Install the build requirements required to build the modules present in the tests/data/modules_v2 directory.
         """
@@ -1577,16 +1575,13 @@ build-backend = "setuptools.build_meta"
                 """
                 )
             builder = build.ProjectBuilder(
-                srcdir=tmp_python_project_dir,
-                python_executable=self._isolated_env.executable,
-                scripts_dir=self._isolated_env.scripts_dir,
+                source_dir=tmp_python_project_dir,
+                python_executable=self._isolated_env.python_executable,
             )
             isolated_env.install(builder.build_system_requires)
             isolated_env.install(builder.get_requires_for_build(distribution="wheel"))
 
-    def __exit__(
-        self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]
-    ) -> None:
+    def __exit__(self, *args: object) -> None:
         # Ignore implementation from the super class to keep the environment
         pass
 
@@ -1595,12 +1590,12 @@ build-backend = "setuptools.build_meta"
         Cleanup the cached build environment. It should be called at the end of the test suite.
         """
         if self._isolated_env:
-            super(IsolatedEnvBuilderCached, self).__exit__(None, None, None)
+            super(DefaultIsolatedEnvCached, self).__exit__()
             self._isolated_env = None
 
 
 class V2ModuleBuilder:
-    DISABLE_ISOLATED_ENV_BUILDER_CACHE: bool = False
+    DISABLE_DEFAULT_ISOLATED_ENV_CACHED: bool = False
 
     def __init__(self, module_path: str) -> None:
         """
@@ -1766,17 +1761,17 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         metadata_file = os.path.join(build_path, "setup.cfg")
         shutil.copy(metadata_file, python_pkg_dir)
 
-    def _get_isolated_env_builder(self) -> IsolatedEnvBuilder:
+    def _get_isolated_env_builder(self) -> DefaultIsolatedEnv:
         """
-        Returns the IsolatedEnvBuilder instance that should be used to build V2 modules. To speed to up the test
+        Returns the DefaultIsolatedEnv instance that should be used to build V2 modules. To speed to up the test
         suite, the build environment is cached when the tests are ran. This is possible because all modules, built
         by the test suite, have the same build requirements. For tests that need to test the code path used in
-        production, the V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE flag can be set to True.
+        production, the V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED flag can be set to True.
         """
-        if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE:
-            return IsolatedEnvBuilderCached.get_instance()
+        if inmanta.RUNNING_TESTS and not V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED:
+            return DefaultIsolatedEnvCached.get_instance()
         else:
-            return IsolatedEnvBuilder()
+            return DefaultIsolatedEnv()
 
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
@@ -1785,7 +1780,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         try:
             with self._get_isolated_env_builder() as env:
                 distribution = "wheel"
-                builder = build.ProjectBuilder(srcdir=build_path, python_executable=env.executable, scripts_dir=env.scripts_dir)
+                builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
                 env.install(builder.build_system_requires)
                 env.install(builder.get_requires_for_build(distribution=distribution))
                 return builder.build(distribution=distribution, output_directory=output_directory)
