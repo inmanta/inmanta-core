@@ -22,12 +22,12 @@ from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic import ConfigDict
 from pydantic.networks import AnyUrl
-from pydantic.v1.schema import model_schema
-from pydantic.typing import NoneType
+from pydantic.v1.schema import model_schema  # [TODO] migrate to v2
+from pydantic.v1.typing import NoneType  # [TODO] migrate to v2
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
-from inmanta.data.model import BaseModel, patch_pydantic_field_type_schema
+from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,

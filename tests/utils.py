@@ -31,7 +31,7 @@ from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
-from pydantic.tools import lru_cache
+from pydantic.v1.tools import lru_cache
 
 import build
 import build.env
