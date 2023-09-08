@@ -12,7 +12,7 @@ implement Credentials using std::none
 
 entity InterfaceBase:
     """
-    Base class for the Interface and InterfaceDiscovery handler.
+    Base entity for the Interface and InterfaceDiscovery handler.
     """
 end
 
@@ -31,8 +31,7 @@ end
 
 index Interface(host, name)
 
-implement Interface using parents
-implement Interface using std::none
+implement Interface using parents, std::none
 
 entity InterfaceDiscovery extends InterfaceBase, std::DiscoveryResource:
     """
@@ -46,5 +45,4 @@ end
 
 index InterfaceDiscovery(host)
 
-implement InterfaceDiscovery using parents
-implement InterfaceDiscovery using std::none
+implement InterfaceDiscovery using parents, std::none

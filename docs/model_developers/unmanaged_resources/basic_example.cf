@@ -14,4 +14,4 @@ InterfaceDiscovery.host [1] -- ip::Host
 
 index InterfaceDiscovery(host)
 
-implement InterfaceDiscovery using std::none
+implement InterfaceDiscovery using parents, std::none
