@@ -30,7 +30,7 @@ import pytest
 
 from inmanta import data
 from inmanta.data import model
-from utils import v1_module_from_template, _wait_until_deployment_finishes
+from utils import _wait_until_deployment_finishes, v1_module_from_template
 
 DOCS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "docs")
 
@@ -142,7 +142,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
     with open(cf_file_path, "r") as fh:
         cf_file_content = fh.read()
 
-    attributes_discovered_resources = [{'host': 'localhost', 'interface_name': 'eth0', 'ip_address': '10.10.10.10'}]
+    attributes_discovered_resources = [{"host": "localhost", "interface_name": "eth0", "ip_address": "10.10.10.10"}]
     init_py_path = os.path.join(
         os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/basic_example_handler.py"
     )
@@ -199,8 +199,8 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
         cf_file_content = fh.read()
 
     attributes_discovered_resources = [
-        {'host': 'localhost', 'interface_name': 'eth0', 'ip_address': '10.10.10.10'},
-        {'host': 'localhost', 'interface_name': 'eth1', 'ip_address': '20.20.20.20'},
+        {"host": "localhost", "interface_name": "eth0", "ip_address": "10.10.10.10"},
+        {"host": "localhost", "interface_name": "eth1", "ip_address": "20.20.20.20"},
     ]
     init_py_path = os.path.join(
         os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/shared_attributes_example_handler.py"
