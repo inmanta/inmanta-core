@@ -7,23 +7,28 @@
     *****************
 
     1. Create a support archive:
+        1. Using the CLI tool:
 
-        1. Log on to the orchestrator machine
-        2. Run one of the following commands:
+            1. Log on to the orchestrator machine
+            2. Run one of the following commands:
 
-        * if the orchestrator is still running:
+            * if the orchestrator is still running:
 
-            .. code-block:: sh
+                .. code-block:: sh
 
-                inmanta-support-tool collect-from-server
+                    inmanta-support-tool collect-from-server
 
 
-        * if the orchestrator is not running:
+            * if the orchestrator is not running:
 
-            .. code-block:: sh
+                .. code-block:: sh
 
-                inmanta-support-tool --config-dir /etc/inmanta/inmanta.dir collect-full
-
+                    inmanta-support-tool --config-dir /etc/inmanta/inmanta.dir collect-full
+        
+        2. Using the web-console:
+        
+        Use the ``Download support archive`` button at the right top of the ``Home > Status`` page.
+        By clicking this button the support archive will be downloaded.
 
     2. Classify the severity of the incident
 

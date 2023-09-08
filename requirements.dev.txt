@@ -1,10 +1,10 @@
-inmanta-dev-dependencies[pytest,async,core]==2.81.0
+inmanta-dev-dependencies[pytest,async,core]==2.82.0
 bumpversion==0.6.0
 openapi_spec_validator==0.6.0
 pip2pi==0.8.2
 types-PyYAML==6.0.12.11
 types-python-dateutil==2.8.19.14
-types-setuptools==68.1.0.0
+types-setuptools==68.1.0.1
 types-toml==0.10.8.7
 flake8-junit-report==2.1.0
 
@@ -12,7 +12,7 @@ flake8-junit-report==2.1.0
 furo==2023.8.19
 inmanta-sphinx==1.7.0
 myst-parser==2.0.0
-sphinx==7.2.3
+sphinx==7.2.5
 sphinxcontrib-contentui==0.2.5
 sphinxcontrib-redoc==1.6.0
 sphinxcontrib-serializinghtml==1.1.9
