@@ -24,7 +24,7 @@ version = "8.5.1"
 requires = [
     "asyncpg",
     "click",
-    f"inmanta-core~={version}.dev",
+    f"inmanta-core~={version}.0.dev",
     "pip2pi",
     "pyformance",
     "pytest-asyncio",
