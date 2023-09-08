@@ -461,7 +461,7 @@ def resource_action_update(
 @method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     """
-    Returns a list of all available versions
+    Returns a list of all available versions, ordered by version number, descending
 
     :param tid: The id of the environment
     :param start: Optional, parameter to control the amount of results that are returned. 0 is the latest version.

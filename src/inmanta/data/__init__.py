@@ -5512,7 +5512,7 @@ class ConfigurationModel(BaseDocument):
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
         values = [cls._get_value(environment)]
-        version_records = await cls._fetch_query(query, *values)
+        version_records = await cls._fetch_query(query, *values, connection=connection)
 
         versions = [record["version"] for record in version_records]
 
