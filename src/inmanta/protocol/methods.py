@@ -68,7 +68,7 @@ RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 # Method for working with projects
 @method(path="/project", operation="PUT", client_types=[const.ClientType.api])
-def create_project(name: str, project_id: uuid.UUID = None):
+def create_project(name: str, project_id: Optional[uuid.UUID] = None):
     """
     Create a new project
 
@@ -108,7 +108,7 @@ def get_project(id: uuid.UUID):
 # Methods for working with environments
 @method(path="/environment", operation="PUT", client_types=[const.ClientType.api])
 def create_environment(
-    project_id: uuid.UUID, name: str, repository: str = None, branch: str = None, environment_id: uuid.UUID = None
+    project_id: uuid.UUID, name: str, repository: str = None, branch: str = None, environment_id: Optional[uuid.UUID] = None
 ):
     """
     Create a new environment
