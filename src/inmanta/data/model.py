@@ -272,11 +272,13 @@ class EnvironmentSettingsReponse(BaseModel):
 class ModelMetadata(BaseModel):
     """Model metadata"""
 
-    inmanta_compile_state: const.Compilestate = Field(const.Compilestate.success, alias="inmanta:compile:state")
+    inmanta_compile_state: const.Compilestate = Field(const.Compilestate.success, alias="inmanta:compile:state")  # [TODO] check pydantic migration https://docs.pydantic.dev/dev-v2/migration/#changes-to-config
     message: str
     type: str
     extra_data: Optional[JsonType] = None
 
+    # TODO[pydantic]: The following keys were removed: `fields`.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
 
 class ResourceMinimal(BaseModel):
     """
