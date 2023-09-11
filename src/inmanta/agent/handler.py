@@ -981,9 +981,8 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
         - TDiscovered denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
           discovered and reported to the server. Objects of this type must be either:
              1. A pydantic object
-             2. An object that inherits from `inmanta.util.JSONSerializable`
-             3. An object that has a `to_dict()` method that returns a serializable dictionary
-             4. A serializable dictionary
+             2. An object that has a `to_dict()` method that returns a serializable dictionary
+             3. A serializable dictionary
     """
 
     def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> Dict[str, object]:
