@@ -274,6 +274,6 @@ entity Test:
     std::date d = "nodatevalue"
 end
         """,
-        "Invalid value 'nodatevalue', does not match constraint `(std::validate_type('datetime.date',self) == true)`"
+        "Invalid value 'nodatevalue', does not match constraint `std::validate_type('datetime.date',self)`"
         " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3:15))",
     )
