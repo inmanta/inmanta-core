@@ -200,7 +200,7 @@ async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
                 print(f"{name}: WAIT")
                 await lock.wait()
                 assert len(record) == 1
-                if record[0] == True:
+                if record[0] is True:
                     return False
                 print(f"{name}: UPDATE")
                 await connection.execute("UPDATE root SET released=true where name=$1", "root1")

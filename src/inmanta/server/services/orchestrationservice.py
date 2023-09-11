@@ -1116,6 +1116,9 @@ class OrchestrationService(protocol.ServerSlice):
                 return 200, {"model": model}
 
             if push:
+                # We can't be in a transaction here, or the agent will not see the data that as committed
+                # This assert prevents anyone from wrapping this method in a transaction by accident
+                assert not connection.is_in_transaction()
                 # fetch all resource in this cm and create a list of distinct agents
                 agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
                 await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
