@@ -24,7 +24,7 @@ requires = [
     "pip>=21.3",
     "ply~=3.0",
     # lower bound because of pydantic/pydantic#5821
-    "pydantic>=1.10.8,<2",
+    "pydantic~=2.3",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",
