@@ -24,7 +24,18 @@ from inmanta.const import AgentTriggerMethod
 LOGGER = logging.getLogger("test")
 
 
-async def test_deploy_with_failure_masking(server, agent: Agent, environment, resource_container, clienthelper, client):
+async def test_6475_deploy_with_failure_masking(server, agent: Agent, environment, resource_container, clienthelper, client):
+    """
+    Consider:
+
+    a version v1 is deploying
+    a new version v2 is released
+    resource a[k=x],v=2 is marked as deployed for known good state
+    resource a[k=x],v=1 fails
+
+    Now, the good state of v2 has masked the bad state of v1.
+    """
+
     async def make_version() -> int:
         version = await clienthelper.get_version()
         rvid = f"test::Wait[agent1,key=key1],v={version}"
