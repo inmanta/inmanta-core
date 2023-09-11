@@ -105,7 +105,7 @@ entity A:
         mytype v = [42, 42]
 end
         """,
-        "Invalid value [42, 42], does not match constraint `(std::unique(self) == true)`"
+        "Invalid value [42, 42], does not match constraint `std::unique(self)`"
         " (reported in mytype v = List() ({dir}/main.cf:5:16))",
     )
 
