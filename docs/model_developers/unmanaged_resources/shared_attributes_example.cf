@@ -1,0 +1,48 @@
+import ip
+
+entity Credentials:
+    """
+    An entity that holds the shared attributes between the Interface and InterfaceDiscovery entity.
+    """
+    string username
+    string password
+end
+
+implement Credentials using std::none
+
+entity InterfaceBase:
+    """
+    Base entity for the Interface and InterfaceDiscovery handler.
+    """
+end
+
+InterfaceBase.credentials [1] -- Credentials
+InterfaceBase.host [1] -- ip::Host
+
+implement InterfaceBase using std::none
+
+entity Interface extends InterfaceBase, std::PurgeableResource:
+    """
+    An entity that represents an interface that is managed by the Inmanta server.
+    """
+    string name
+    std::ipv4_address ip_address
+end
+
+index Interface(host, name)
+
+implement Interface using parents, std::none
+
+entity InterfaceDiscovery extends InterfaceBase, std::DiscoveryResource:
+    """
+    A discovery resource used to discover interfaces that exist on a specific host.
+
+    :attr name_filter: If not null, this resource only discovers the interfaces for which the name matches this
+                       regular expression. Otherwise discover all the interfaces on the host.
+    """
+    string? name_filter = null
+end
+
+index InterfaceDiscovery(host)
+
+implement InterfaceDiscovery using parents, std::none
