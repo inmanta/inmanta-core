@@ -5334,7 +5334,9 @@ class ConfigurationModel(BaseDocument):
         return versions[0]
 
     @classmethod
-    async def get_version_nr_latest_version(cls, environment: uuid.UUID) -> Optional[int]:
+    async def get_version_nr_latest_version(
+        cls, environment: uuid.UUID, *, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> Optional[int]:
         """
         Get the version number of the latest released version in the given environment.
         """
@@ -5344,7 +5346,7 @@ class ConfigurationModel(BaseDocument):
                     ORDER BY version DESC
                     LIMIT 1
                     """
-        result = await cls._fetchrow(query, cls._get_value(environment))
+        result = await cls._fetchrow(query, cls._get_value(environment), connection=connection)
         if not result:
             return None
         return int(result["version"])

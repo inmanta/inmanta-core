@@ -72,14 +72,17 @@ async def test_deploy_with_failure_masking(server, agent: Agent, environment, re
     assert result.code == 200
 
     # fail deploy
-    async def wait_condition():
-        result = await client.resource_logs(environment, "test::Wait[agent1,key=key1]", filter={"action": ["deploy"]})
-        assert result.code == 200
-        end_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
-        LOGGER.info("Deploys done: %s", end_lines)
-        return len(end_lines) < 2
+    def make_waiter(nr_of_deploys):
+        async def wait_condition():
+            result = await client.resource_logs(environment, "test::Resource[agent1,key=key2]", filter={"action": ["deploy"]})
+            assert result.code == 200
+            end_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
+            LOGGER.info("Deploys done: %s", end_lines)
+            return len(end_lines) < nr_of_deploys
 
-    await resource_container.wait_for_condition_with_waiters(wait_condition)
+        return wait_condition
+
+    await resource_container.wait_for_condition_with_waiters(make_waiter(2))
     assert resource_container.Provider.readcount("agent1", "key2") == 2
 
     # increment should contain the failed resource
@@ -87,10 +90,11 @@ async def test_deploy_with_failure_masking(server, agent: Agent, environment, re
     result = await agent._client.get_resources_for_agent(environment, "agent1", incremental_deploy=True, sid=sid)
     assert result.code == 200, result.result
     assert len(result.result["resources"]) == 1
+    assert result.result["resources"][0]["resource_id"] == "test::Resource[agent1,key=key2]"
 
     result = await client.deploy(environment, agent_trigger_method=AgentTriggerMethod.push_incremental_deploy)
     assert result.code == 200
-    await resource_container.wait_for_done_with_waiters(client, environment, v2, 2)
+    await resource_container.wait_for_condition_with_waiters(make_waiter(3))
 
     result = await client.resource_logs(environment, "test::Resource[agent1,key=key2]", filter={"action": ["deploy"]})
     assert result.code == 200

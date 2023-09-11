@@ -30,7 +30,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, InvalidSort
+from inmanta.data import APILIMIT, ConfigurationModel, InvalidSort
 from inmanta.data.dataview import (
     DiscoveredResourceView,
     ResourceHistoryView,
@@ -414,6 +414,109 @@ class ResourceService(protocol.ServerSlice):
             is_increment_notification=True,
         )
 
+    async def _update_deploy_state(
+        self,
+        env: data.Environment,
+        resource_id: ResourceIdStr,
+        timestamp: datetime.datetime,
+        version: int,
+        status: ResourceState,
+        message: str,
+        fail_on_error: bool,
+        is_increment_notification: bool,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """
+        Factored out the code to set a status on a resource
+
+        This excludes running `mark_done_if_done` and the agent push
+
+        Set the status of the provided resources as deployed
+        :param env: Environment to consider.
+        :param resource_id: resource to mark.
+        :param timestamp: Timestamp for the log message and the resource action entry.
+        :param version: Version of the resources to consider.
+        :param fail_on_error: When encountering an undeployable state: fail or do nothing?.
+        """
+        resource_version_id = resource_id + ",v=" + str(version)
+        logline = LogLine(
+            level=const.LogLevel.INFO,
+            msg=f"Setting {status.value} because of {message}",
+            timestamp=timestamp,
+        )
+
+        assert status in VALID_STATES_ON_STATE_UPDATE
+        assert status not in TRANSIENT_STATES
+
+        resources: List[data.Resource]
+        async with data.Resource.get_connection(connection) as connection:
+            async with connection.transaction():
+                # validate resources
+                resource = await data.Resource.get_one(
+                    environment=env.id,
+                    resource_id=resource_id,
+                    model=version,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_UPDATE,
+                    connection=connection,
+                )
+                if not resource:
+                    raise NotFound("The resource with the given ids do not exist in the given environment.")
+
+                # no escape from terminal
+                if resource.status != status and resource.status in TERMINAL_STATES:
+                    if not fail_on_error:
+                        return
+                    else:
+                        LOGGER.error("Attempting to set undeployable resource to deployable state")
+                        raise AssertionError("Attempting to set undeployable resource to deployable state")
+
+                resource_action = data.ResourceAction(
+                    environment=env.id,
+                    version=version,
+                    resource_version_ids=[resource_version_id],
+                    action_id=uuid.uuid4(),
+                    action=const.ResourceAction.deploy,
+                    started=timestamp,
+                    messages=[
+                        {
+                            **logline.dict(),
+                            "timestamp": logline.timestamp.astimezone().isoformat(timespec="microseconds"),
+                        }
+                    ],
+                    changes={},
+                    status=status,
+                    change=const.Change.nochange,
+                    finished=timestamp,
+                )
+                await resource_action.insert(connection=connection)
+
+                self.log_resource_action(
+                    env.id,
+                    [resource_version_id],
+                    logline.level.to_int,
+                    logline.timestamp,
+                    logline.msg,
+                )
+
+                self.clear_env_cache(env)
+
+                extra_fields = {}
+                if status == ResourceState.deployed and not is_increment_notification:
+                    extra_fields["last_success"] = timestamp
+
+                await resource.update_fields(
+                    last_deploy=timestamp,
+                    status=status,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    **extra_fields,
+                    connection=connection,
+                )
+
+                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
+                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
+
     async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
@@ -543,6 +646,23 @@ class ResourceService(protocol.ServerSlice):
                 extra_fields = {}
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
+
+                if status == ResourceState.failed or status == ResourceState.skipped:
+                    # Check if we are stale
+                    latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+                    if latest_version is not None and latest_version > resource_id.version:
+                        # we are stale, forward propagate our status
+                        await self._update_deploy_state(
+                            env,
+                            resource_id.resource_str(),
+                            finished,
+                            latest_version,
+                            status,
+                            f"update on stale version {resource_id.version}",
+                            fail_on_error=False,
+                            is_increment_notification=True,
+                            connection=connection,
+                        )
 
                 await resource.update_fields(
                     last_deploy=finished,
