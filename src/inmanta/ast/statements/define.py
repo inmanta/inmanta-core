@@ -437,10 +437,6 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         """
         contains_var = False
 
-        if hasattr(expression, "arguments"):
-            # some sort of function call
-            expression = Equals(expression, Literal(True))
-
         for var in expression.requires():
             if var == self.name or var == "self":
                 contains_var = True
