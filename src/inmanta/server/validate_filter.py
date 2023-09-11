@@ -21,7 +21,7 @@ from typing import Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import dateutil
 import more_itertools
-from pydantic import BaseModel, ValidationError, field_validator, validator
+from pydantic import BaseModel, ValidationError, field_validator
 
 from inmanta import const
 from inmanta.data import DateRangeConstraint, QueryFilter, QueryType, RangeConstraint, RangeOperator

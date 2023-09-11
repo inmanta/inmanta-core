@@ -67,7 +67,7 @@ import more_itertools
 import pkg_resources
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator, PrivateAttr
+from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 from pydantic.v1.error_wrappers import display_errors
 
 import packaging.version
@@ -1223,19 +1223,18 @@ class Metadata(BaseModel):
     freeze_recursive: bool = False
     freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
 
-    # refactored _raw_parser into _raw_parser_parse because: attributes starting with underscore are converted into a "private attribute" which is not validated
-    # or even set during calls to __init__, model_validate (Source:
+    # refactored _raw_parser into _raw_parser_parse because: attributes starting with underscore are converted into a
+    # "private attribute" which is not validated or even set during calls to __init__, model_validate (Source:
     # https://docs.pydantic.dev/latest/usage/models/#private-model-attributes)
 
     # _raw_parser: Type[RawParser]
 
-
     @classmethod
     def parse(cls: Type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
         raw: Mapping[str, object] = cls._raw_parser_parse(source)
-        module_name = raw.get('name', None)
+        module_name = raw.get("name", None)
         if module_name == "std":
-            raw['compiler_version'] = "2020.8" # ugly hack to get the tests to pass
+            raw["compiler_version"] = "2020.8"  # ugly hack to get the tests to pass
         try:
             return cls(**raw)
         except ValidationError as e:
@@ -1358,7 +1357,6 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def _raw_parser_parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
         return YamlParser.parse(source)
 
-
     @field_validator("compiler_version")
     @classmethod
     def is_pep440_version_v1(cls, v: str) -> str:
@@ -1408,7 +1406,6 @@ class ModuleV2Metadata(ModuleMetadata):
     @classmethod
     def _raw_parser_parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
         return CfgParser.parse(source)
-
 
     @field_validator("version")
     @classmethod
@@ -1653,7 +1650,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     @classmethod
     def _raw_parser_parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
         return YamlParser.parse(source)
-
 
     @field_validator("modulepath", mode="before")
     @classmethod

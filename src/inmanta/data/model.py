@@ -23,8 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, field_validator, root_validator, model_validator
-from pydantic.v1.fields import ModelField
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -272,13 +271,16 @@ class EnvironmentSettingsReponse(BaseModel):
 class ModelMetadata(BaseModel):
     """Model metadata"""
 
-    inmanta_compile_state: const.Compilestate = Field(const.Compilestate.success, alias="inmanta:compile:state")  # [TODO] check pydantic migration https://docs.pydantic.dev/dev-v2/migration/#changes-to-config
+    inmanta_compile_state: const.Compilestate = Field(
+        const.Compilestate.success, alias="inmanta:compile:state"
+    )  # [TODO] check pydantic migration https://docs.pydantic.dev/dev-v2/migration/#changes-to-config
     message: str
     type: str
     extra_data: Optional[JsonType] = None
 
     # TODO[pydantic]: The following keys were removed: `fields`.
     # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
+
 
 class ResourceMinimal(BaseModel):
     """
@@ -448,7 +450,7 @@ class VersionedResourceDetails(ResourceDetails):
     version: int
 
     @classmethod
-    @model_validator(mode="before") # https://docs.pydantic.dev/2.3/errors/usage_errors/#root-validator-pre-skip
+    @model_validator(mode="before")  # https://docs.pydantic.dev/2.3/errors/usage_errors/#root-validator-pre-skip
     def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
