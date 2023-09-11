@@ -5317,12 +5317,32 @@ class ConfigurationModel(BaseDocument):
         version: int,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
     ) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
         """
-        result = await cls.get_one(environment=environment, version=version, connection=connection)
+        result = await cls.get_one(environment=environment, version=version, connection=connection, lock=lock)
         return result
+
+    @classmethod
+    async def get_version_internal(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+    ) -> Optional["ConfigurationModel"]:
+        """Return a version, but don't populate the status and done fields, which are expensive to construct"""
+        query = f"""SELECT *
+                          FROM {ConfigurationModel.table_name()}
+                          WHERE environment=$1 AND version=$2 {lock.value};
+                          """
+        result = await cls.select_query(query, [environment, version], connection=connection)
+        if not result:
+            return None
+        return result[0]
 
     @classmethod
     async def get_latest_version(
@@ -5343,7 +5363,11 @@ class ConfigurationModel(BaseDocument):
         return versions[0]
 
     @classmethod
-    async def get_version_nr_latest_version(cls, environment: uuid.UUID) -> Optional[int]:
+    async def get_version_nr_latest_version(
+        cls,
+        environment: uuid.UUID,
+        connection: Optional[Connection] = None,
+    ) -> Optional[int]:
         """
         Get the version number of the latest released version in the given environment.
         """
@@ -5353,7 +5377,7 @@ class ConfigurationModel(BaseDocument):
                     ORDER BY version DESC
                     LIMIT 1
                     """
-        result = await cls._fetchrow(query, cls._get_value(environment))
+        result = await cls._fetchrow(query, cls._get_value(environment), connection=connection)
         if not result:
             return None
         return int(result["version"])

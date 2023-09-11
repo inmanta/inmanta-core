@@ -28,7 +28,7 @@ import pydantic
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, InvalidSort
+from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, InvalidSort, RowLockMode
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -1034,12 +1034,25 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> Apireturn:
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
-                model = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
+                model = await data.ConfigurationModel.get_version_internal(
+                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_UPDATE
+                )
                 if model is None:
                     return 404, {"message": "The request version does not exist."}
 
                 if model.released:
                     raise Conflict(f"The version {version_id} on environment {env} is already released.")
+
+                latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+
+                # ensure we are the latest version
+                # this is required for the subsequent increment calculation to make sense
+                # this does introduce a race condition, with any OTHER release running concurrently on this environment
+                # We could lock the get_version_nr_latest_version for update to prevent this
+                if model.version < (latest_version or -1):
+                    raise Conflict(
+                        f"The version {version_id} on environment {env} is older then the latest released version {latest_version}."
+                    )
 
                 # Already mark undeployable resources as deployed to create a better UX (change the version counters)
                 undep = await model.get_undeployable()
