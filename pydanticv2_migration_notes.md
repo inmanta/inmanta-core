@@ -62,19 +62,35 @@ The following fixes are PoC grade i.e. not guaranteed to be correct:
 
 - https://github.com/inmanta/inmanta-core/blob/ce19daf93564918a281c6ad44c1f2d3d906e851e/src/inmanta/data/model.py#L307
 
+⬇
+
+- https://github.com/inmanta/inmanta-core/blob/8d5c2c59aacf9218eab2293991d05b2140410219/src/inmanta/data/model.py#L276
+
 ------------------------------------------------------
 
 
 - https://github.com/inmanta/inmanta-lsm/blob/f0ff765925a3e4fa8e2f322b333e1621cc61b42a/src/inmanta_lsm/model.py#L1885
+
+
+⬇
+
+- https://github.com/inmanta/inmanta-lsm/pull/1425/files#r1321729162
 
 ------------------------------------------------------
 
 - https://github.com/inmanta/inmanta-core/blob/e134b55107d1091bfca2a17174f0379f7279d20d/src/inmanta/server/validate_filter.py#L125
 see (https://docs.pydantic.dev/2.3/migration/#the-allow_reuse-keyword-argument-is-no-longer-necessary)
 
+⬇
+
+- https://github.com/inmanta/inmanta-core/pull/6463/files#r1321731415
 ------------------------------------------------------
 
 - https://github.com/inmanta/inmanta-core/blob/ee659f653170b5b1c699a2c85e815db5991a1325/src/inmanta/module.py#L1225
+
+⬇
+
+- https://github.com/inmanta/inmanta-core/pull/6463/files#r1321732770
 
 Change
 
@@ -99,6 +115,11 @@ see https://docs.pydantic.dev/latest/usage/models/#private-model-attributes
 
 
 - https://github.com/inmanta/inmanta-lsm/blob/3b960eb266a89313168b0def10695a70f8a45033/src/inmanta_lsm/model.py#L274
+
+⬇
+
+- https://github.com/inmanta/inmanta-lsm/pull/1425/files#r1321734333
+
 add  `__get_pydantic_core_schema__` to Operation:
 
 Because of :
