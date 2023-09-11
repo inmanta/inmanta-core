@@ -21,14 +21,14 @@ import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
-from typing import Dict
+from typing import Dict, Generic
 
 from pytest import fixture
 
 from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
-from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, TResource, provider
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -205,8 +205,15 @@ def resource_container():
 
         fields = ("key", "value", "set_state_to_deployed", "purged")
 
-    @provider("test::Resource", name="test_resource")
-    class Provider(ResourceHandler[MyResource]):
+    # Remote control state, shared over all resources
+    _STATE = defaultdict(dict)
+    _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+    _RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+    _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+    _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
+    _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
+
+    class Provider(ResourceHandler[TResource], Generic[TResource]):
         def check_resource(self, ctx, resource):
             self.read(resource.id.get_agent_name(), resource.key)
             assert resource.value != const.UNKNOWN_STRING
@@ -251,85 +258,82 @@ def resource_container():
             return True
 
         def do_reload(self, ctx, resource):
-            self.__class__._RELOAD_COUNT[resource.id.get_agent_name()][resource.key] += 1
-
-        _STATE = defaultdict(dict)
-        _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-        _RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-        _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-        _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
-        _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
+            _RELOAD_COUNT[resource.id.get_agent_name()][resource.key] += 1
 
         @classmethod
         def set_skip(cls, agent, key, skip):
-            cls._TO_SKIP[agent][key] = skip
+            _TO_SKIP[agent][key] = skip
 
         @classmethod
         def set_fail(cls, agent, key, failcount):
-            cls._TO_FAIL[agent][key] = failcount
+            _TO_FAIL[agent][key] = failcount
 
         @classmethod
         def skip(cls, agent, key):
-            doskip = cls._TO_SKIP[agent][key]
+            doskip = _TO_SKIP[agent][key]
             if doskip == 0:
                 return False
-            cls._TO_SKIP[agent][key] -= 1
+            _TO_SKIP[agent][key] -= 1
             return True
 
         @classmethod
         def fail(cls, agent, key):
-            doskip = cls._TO_FAIL[agent][key]
+            doskip = _TO_FAIL[agent][key]
             if doskip == 0:
                 return False
-            cls._TO_FAIL[agent][key] -= 1
+            _TO_FAIL[agent][key] -= 1
             return True
 
         @classmethod
         def touch(cls, agent, key):
-            cls._WRITE_COUNT[agent][key] += 1
+            _WRITE_COUNT[agent][key] += 1
 
         @classmethod
         def read(cls, agent, key):
-            cls._READ_COUNT[agent][key] += 1
+            _READ_COUNT[agent][key] += 1
 
         @classmethod
         def set(cls, agent, key, value):
-            cls._STATE[agent][key] = value
+            _STATE[agent][key] = value
 
         @classmethod
         def get(cls, agent, key):
-            if key in cls._STATE[agent]:
-                return cls._STATE[agent][key]
+            if key in _STATE[agent]:
+                return _STATE[agent][key]
             return None
 
         @classmethod
         def isset(cls, agent, key):
-            return key in cls._STATE[agent]
+            return key in _STATE[agent]
 
         @classmethod
         def delete(cls, agent, key):
             if cls.isset(agent, key):
-                del cls._STATE[agent][key]
+                del _STATE[agent][key]
 
         @classmethod
         def changecount(cls, agent, key):
-            return cls._WRITE_COUNT[agent][key]
+            return _WRITE_COUNT[agent][key]
 
         @classmethod
         def readcount(cls, agent, key):
-            return cls._READ_COUNT[agent][key]
+            return _READ_COUNT[agent][key]
 
         @classmethod
         def reloadcount(cls, agent, key):
-            return cls._RELOAD_COUNT[agent][key]
+            return _RELOAD_COUNT[agent][key]
 
         @classmethod
         def reset(cls):
-            cls._STATE = defaultdict(dict)
-            cls._WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-            cls._READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-            cls._TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
-            cls._RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+            _STATE.clear()
+            _WRITE_COUNT.clear()
+            _READ_COUNT.clear()
+            _TO_SKIP.clear()
+            _RELOAD_COUNT.clear()
+
+    @provider("test::Resource", name="test_resource")
+    class ResourceProvider(Provider[MyResource]):
+        pass
 
     @provider("test::Fail", name="test_fail")
     class Fail(ResourceHandler[FailR]):
@@ -508,7 +512,7 @@ def resource_container():
             result = await client.get_version(env_id, version)
             logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
             waiter.acquire()
-            waiter.notifyAll()
+            waiter.notify_all()
             waiter.release()
             await asyncio.sleep(0.1)
 
@@ -519,33 +523,23 @@ def resource_container():
         Wait until wait_condition() returns false
         """
         now = time.time()
-        while wait_condition():
+        while await wait_condition():
             if now + timeout < time.time():
                 raise Exception("Timeout")
             logger.info("waiting with waiters")
             waiter.acquire()
-            waiter.notifyAll()
+            waiter.notify_all()
             waiter.release()
             await asyncio.sleep(0.1)
 
     @provider("test::Wait", name="test_wait")
-    class Wait(ResourceHandler[WaitR]):
+    class Wait(Provider[WaitR]):
         def __init__(self, agent, io=None):
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()
 
-        def check_resource(self, ctx, resource):
-            current = resource.clone()
-            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
-
-            if not current.purged:
-                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
-            else:
-                current.value = None
-
-            return current
-
-        def do_changes(self, ctx, resource, changes):
+        def deploy(self, ctx, resource, requires) -> None:
+            # Hang even when skipped
             logger.info("Hanging waiter %s", self.traceid)
             waiter.acquire()
             notified_before_timeout = waiter.wait(timeout=10)
@@ -553,16 +547,34 @@ def resource_container():
             if not notified_before_timeout:
                 raise Exception("Timeout occurred")
             logger.info("Releasing waiter %s", self.traceid)
+            super().deploy(ctx, resource, requires)
+
+        def check_resource(self, ctx, resource):
+            self.read(resource.id.get_agent_name(), resource.key)
+            current = resource.clone()
+            current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
+
+            if not current.purged:
+                current.value = self.get(resource.id.get_agent_name(), resource.key)
+            else:
+                current.value = None
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            if self.fail(resource.id.get_agent_name(), resource.key):
+                raise Exception("Failed")
+
             if "purged" in changes:
                 if changes["purged"]["desired"]:
-                    Provider.delete(resource.id.get_agent_name(), resource.key)
+                    self.delete(resource.id.get_agent_name(), resource.key)
                     ctx.set_purged()
                 else:
-                    Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+                    self.set(resource.id.get_agent_name(), resource.key, resource.value)
                     ctx.set_created()
 
             elif "value" in changes:
-                Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+                self.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
 
     @provider("test::Deploy", name="test_wait")
