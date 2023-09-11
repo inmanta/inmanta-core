@@ -106,10 +106,15 @@ To:
 ```
 
 
-Because :E       AttributeError: 'ModelPrivateAttr' object has no attribute 'parse'
+Because :
+
+```sh
+
+E       AttributeError: 'ModelPrivateAttr' object has no attribute 'parse'
 attributes starting with underscore are converted into a "private attribute" which is not validated or even set during calls to __init__, model_validate
 see https://docs.pydantic.dev/latest/usage/models/#private-model-attributes
 
+```
 
 ------------------------------------------------------
 
