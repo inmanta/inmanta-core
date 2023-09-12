@@ -226,7 +226,8 @@ It is possible to make a string span multiple lines by triple quoting it e.g.:
 
 Raw strings are similar to python's raw strings in that they treat backslashes as regular characters.
 On the other hand, in regular and multi-line strings, escape characters (e.g. ``\n``, ``\t``...) are interpreted and
-therefore backslashes need to be escaped in order to be displayed.
+therefore backslashes need to be escaped in order to be displayed. In addition, no variable expansion is performed
+in raw strings.
 
 .. code-block:: inmanta
 
@@ -235,6 +236,11 @@ therefore backslashes need to be escaped in order to be displayed.
     # Output when displayed:
     # This is...\n...a raw string.
 
+    hostname = "serv1.example.org"
+    raw_motd = r"Welcome to {hostname}"
+
+    # Output when displayed:
+    # Welcome to {hostname}
 
 
 .. _language_reference_string_formatting:
@@ -249,7 +255,7 @@ An alternative syntax similar to python's `f-strings <https://peps.python.org/pe
     hostname = "serv1.example.org"
     motd = f"Welcome to {hostname}"
 
-    # Expected output e.g. when displayed:
+    # Output when displayed:
     # Welcome to serv1.example.org
 
 
@@ -264,7 +270,7 @@ can be used for fine-grained formatting:
 
     std::print(f"result: {arg:{width}.{precision}f}")
 
-    # Expected output:
+    # Output:
     # result:      12.35
 
 .. note::
@@ -290,7 +296,7 @@ included in:
     hostname = "serv1.example.org"
     motd = "Welcome to {{hostname}}"
 
-    # Expected output e.g. when displayed:
+    # Output when displayed:
     # Welcome to serv1.example.org
 
 
