@@ -280,7 +280,7 @@ can be used for fine-grained formatting:
 String interpolation
 ####################
 
-An alternative syntax to f-string is string interpolation. It allows variables to be included as parameters inside
+An alternative syntax to f-strings is string interpolation. It allows variables to be included as parameters inside
 a regular or multi-line string. The included variables are resolved in the lexical scope of the string they are
 included in:
 
