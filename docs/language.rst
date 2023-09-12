@@ -189,14 +189,14 @@ There are four kinds of strings in the Inmanta language:
 
     regular_string_1 = "This is...\n...a basic string."
 
-    # Expected output e.g. when displayed:
+    # Output when displayed:
     # This is...
     # ...a basic string.
 
 
     regular_string_2 = 'This one too.'
 
-    # Expected output e.g. when displayed:
+    # Output when displayed:
     # This one too.
 
 - multi-line strings
@@ -211,7 +211,7 @@ It is possible to make a string span multiple lines by triple quoting it e.g.:
     multiple
     lines"""
 
-    # Expected output e.g. when displayed:
+    # Output when displayed:
     # This
     # string
     # spans
@@ -232,7 +232,7 @@ therefore backslashes need to be escaped in order to be displayed.
 
     raw_string = r"This is...\n...a raw string."
 
-    # Expected output e.g. when displayed:
+    # Output when displayed:
     # This is...\n...a raw string.
 
 
