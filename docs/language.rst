@@ -180,8 +180,6 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
 Strings
 +++++++
 
-Overview
-########
 
 There are four kinds of strings in the Inmanta language:
 
@@ -219,7 +217,6 @@ It is possible to make a string span multiple lines by triple quoting it e.g.:
     # spans
     # multiple
     # lines
-    #
 
 .. note::
     Unlike python's multi-line strings, only double quotes are supported to define a multi-line string i.e. ``"""`` is
@@ -246,8 +243,6 @@ therefore backslashes need to be escaped in order to be displayed.
 
 
 An alternative syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
-
-Formatting strings
 
 .. code-block:: inmanta
 
@@ -276,10 +271,14 @@ can be used for fine-grained formatting:
     The \'=\' character specifier added in `python 3.8 <https://docs.python.org/3/whatsnew/3.8.html#f-strings-support-for-self-documenting-expressions-and-debugging>`_ is not supported yet in the Inmanta language.
 
 .. note::
-    Unlike in python, raw and format string cannot be used together in the same string e.g. ``raw_and_format = rf"Both specifiers"`` is not allowed.
+    Unlike in python, raw and format string cannot be used together in the same string e.g.
+    ``raw_and_format = rf"Both specifiers"`` is not allowed.
 
 
 .. _language_reference_string_interpolation:
+
+String interpolation
+####################
 
 An alternative syntax to f-string is string interpolation. It allows variables to be included as parameters inside
 a regular or multi-line string. The included variables are resolved in the lexical scope of the string they are
