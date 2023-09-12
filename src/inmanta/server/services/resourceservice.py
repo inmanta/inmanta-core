@@ -425,7 +425,9 @@ class ResourceService(protocol.ServerSlice):
         version, per environment.
 
         :param env: The environment to consider.
-        :parma version: The version of the model to consider.
+        :param version: The version of the model to consider.
+        :param connection: connection to use towards the DB.
+            When the connection is in a transaction, we will always invalidate the cache
         """
 
         def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
@@ -444,7 +446,7 @@ class ResourceService(protocol.ServerSlice):
             return incr, neg_incr
 
         increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
-        if increment is None:
+        if increment is None or (connection is not None and connection.is_in_transaction()):
             lock = self._increment_cache_locks[env.id]
             async with lock:
                 increment = _get_cache_entry()
