@@ -1056,7 +1056,7 @@ class OrchestrationService(protocol.ServerSlice):
                     )
 
                 # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-                undep = await model.get_undeployable()
+                undep = model.get_undeployable()
                 now = datetime.datetime.now().astimezone()
 
                 if undep:
@@ -1077,7 +1077,7 @@ class OrchestrationService(protocol.ServerSlice):
                         connection=connection,
                     )
 
-                    skippable = await model.get_skipped_for_undeployable()
+                    skippable = model.get_skipped_for_undeployable()
                     if skippable:
                         skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
                         # not checking error conditions

@@ -5434,13 +5434,13 @@ class ConfigurationModel(BaseDocument):
                 self.environment,
             )
 
-    async def get_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    async def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids)
         of resources which should get a skipped_for_undeployable state
