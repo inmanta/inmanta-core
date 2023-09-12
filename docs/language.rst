@@ -180,6 +180,29 @@ Lists of primitive types are also primitive types: ``string[]``, ``number[]``, `
 Strings
 +++++++
 
+Overview
+########
+
+There are four kinds of strings in the Inmanta language:
+
+- regular strings
+
+.. code-block:: inmanta
+
+    regular_string_1 = "This is...\n...a basic string."
+
+    # Expected output e.g. when displayed:
+    # This is...
+    # ...a basic string.
+
+
+    regular_string_2 = 'This one too.'
+
+    # Expected output e.g. when displayed:
+    # This one too.
+
+- multi-line strings
+
 It is possible to make a string span multiple lines by triple quoting it e.g.:
 
 .. code-block:: inmanta
@@ -190,10 +213,86 @@ It is possible to make a string span multiple lines by triple quoting it e.g.:
     multiple
     lines"""
 
+    # Expected output e.g. when displayed:
+    # This
+    # string
+    # spans
+    # multiple
+    # lines
+    #
+
 .. note::
-    Raw and format string (see :ref:`language_reference_string_formatting`) treat backslashes as regular characters.
-    On the other hand, in regular and multi-line strings, escape characters (e.g. ``\n``, ``\t``...) are interpreted and
-    therefore backslashes need to be escaped in order to be displayed.
+    Unlike python's multi-line strings, only double quotes are supported to define a multi-line string i.e. ``"""`` is
+    valid, but ``'''`` is not.
+
+- raw strings
+
+Raw strings are similar to python's raw strings in that they treat backslashes as regular characters.
+On the other hand, in regular and multi-line strings, escape characters (e.g. ``\n``, ``\t``...) are interpreted and
+therefore backslashes need to be escaped in order to be displayed.
+
+.. code-block:: inmanta
+
+    raw_string = r"This is...\n...a raw string."
+
+    # Expected output e.g. when displayed:
+    # This is...\n...a raw string.
+
+
+
+.. _language_reference_string_formatting:
+
+- f-strings
+
+
+An alternative syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
+
+Formatting strings
+
+.. code-block:: inmanta
+
+    hostname = "serv1.example.org"
+    motd = f"Welcome to {hostname}"
+
+    # Expected output e.g. when displayed:
+    # Welcome to serv1.example.org
+
+
+Python's format specification `mini-language <https://docs.python.org/3.9/library/string.html#format-specification-mini-language>`_
+can be used for fine-grained formatting:
+
+.. code-block:: inmanta
+
+    width = 10
+    precision = 2
+    arg = 12.34567
+
+    std::print(f"result: {arg:{width}.{precision}f}")
+
+    # Expected output:
+    # result:      12.35
+
+.. note::
+    The \'=\' character specifier added in `python 3.8 <https://docs.python.org/3/whatsnew/3.8.html#f-strings-support-for-self-documenting-expressions-and-debugging>`_ is not supported yet in the Inmanta language.
+
+.. note::
+    Unlike in python, raw and format string cannot be used together in the same string e.g. ``raw_and_format = rf"Both specifiers"`` is not allowed.
+
+
+.. _language_reference_string_interpolation:
+
+An alternative syntax to f-string is string interpolation. It allows variables to be included as parameters inside
+a regular or multi-line string. The included variables are resolved in the lexical scope of the string they are
+included in:
+
+
+.. code-block:: inmanta
+
+    hostname = "serv1.example.org"
+    motd = "Welcome to {{hostname}}"
+
+    # Expected output e.g. when displayed:
+    # Welcome to serv1.example.org
 
 
 .. _lang-conditions:
@@ -691,60 +790,6 @@ Transformations
 At the lowest level of abstraction the configuration of an infrastructure often consists of
 configuration files. To construct configuration files, templates and string interpolation can be used.
 
-
-String interpolation
-++++++++++++++++++++
-
-String interpolation allows variables to be included as parameters inside a string.
-
-The included variables are resolved in the lexical scope of the string they are included in.
-
-Interpolating strings
-
-.. code-block:: inmanta
-
-    hostname = "serv1.example.org"
-    motd = "Welcome to {{hostname}}\n"
-
-To prevent string interpolation, use raw strings
-
-.. code-block:: inmanta
-
-    # this string will go into the variable as is
-    # containing the {{ and \n
-    motd = r"Welcome to {{hostname}}\n"
-
-
-.. _language_reference_string_formatting:
-
-String formatting
-+++++++++++++++++
-
-An alternative syntax similar to python's `f-strings <https://peps.python.org/pep-3101/>`_ can be used for string formatting.
-
-Formatting strings
-
-.. code-block:: inmanta
-
-    hostname = "serv1.example.org"
-    motd = f"Welcome to {hostname}\n"
-
-Python's format specification `mini-language <https://docs.python.org/3.9/library/string.html#format-specification-mini-language>`_
-can be used for fine-grained formatting:
-
-.. code-block:: inmanta
-
-    width = 10
-    precision = 2
-    arg = 12.34567
-
-    std::print(f"result: {arg:{width}.{precision}f}")
-
-    # Expected output:
-    # "result:      12.35"
-
-.. note::
-    The \'=\' character specifier added in `python 3.8 <https://docs.python.org/3/whatsnew/3.8.html#f-strings-support-for-self-documenting-expressions-and-debugging>`_ is not supported yet in the Inmanta language.
 
 Templates
 +++++++++
