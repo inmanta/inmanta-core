@@ -1051,7 +1051,8 @@ class OrchestrationService(protocol.ServerSlice):
                 # We could lock the get_version_nr_latest_version for update to prevent this
                 if model.version < (latest_version or -1):
                     raise Conflict(
-                        f"The version {version_id} on environment {env} is older then the latest released version {latest_version}."
+                        f"The version {version_id} on environment {env} "
+                        f"is older then the latest released version {latest_version}."
                     )
 
                 # Already mark undeployable resources as deployed to create a better UX (change the version counters)
