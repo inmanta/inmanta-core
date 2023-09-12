@@ -5971,7 +5971,9 @@ class File(BaseDocument):
                 SELECT 1 FROM {cls.table_name()} WHERE content_hash=$1
             )
         """
-        return await cls._fetchval(query, content_hash)
+        result = await cls._fetchval(query, content_hash)
+        assert isinstance(result, bool)
+        return result
 
     @classmethod
     async def get_non_existing_files(cls, content_hashes: Iterable[str]) -> set[str]:
@@ -5990,7 +5992,7 @@ class File(BaseDocument):
             WHERE tmp_table.f_content_hash IS NULL
         """
         result = await cls._fetch_query(query, content_hashes)
-        return set(r["content_hash"] for r in result)
+        return set(cast(str, r["content_hash"]) for r in result)
 
 
 _classes = [
