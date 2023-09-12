@@ -5957,6 +5957,42 @@ class DiscoveredResource(BaseDocument):
         return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
 
 
+class File(BaseDocument):
+    content_hash: str
+    content: bytes
+
+    @classmethod
+    async def has_file_with_hash(cls, content_hash: str) -> bool:
+        """
+        Return True iff a file exists with the given content_hash.
+        """
+        query = f"""
+            SELECT EXISTS (
+                SELECT 1 FROM {cls.table_name()} WHERE content_hash=$1
+            )
+        """
+        return await cls._fetchval(query, content_hash)
+
+    @classmethod
+    async def get_non_existing_files(cls, content_hashes: Iterable[str]) -> set[str]:
+        """
+        Return a sub-list of content_hashes, with only those hashes that are not present in this database table.
+        The returned list will not contain duplicates.
+        """
+        query = f"""
+            SELECT DISTINCT tmp_table.h_content_hash AS content_hash
+            FROM (
+                SELECT f.content_hash AS f_content_hash, h.content_hash as h_content_hash
+                FROM {cls.table_name()} AS f RIGHT OUTER JOIN unnest($1::varchar[]) AS h(content_hash)
+                     ON f.content_hash = h.content_hash
+            ) as tmp_table
+            -- Only keep records for which no matching hash was found in the file table
+            WHERE tmp_table.f_content_hash IS NULL
+        """
+        result = await cls._fetch_query(query, content_hashes)
+        return set(r["content_hash"] for r in result)
+
+
 _classes = [
     Project,
     Environment,
@@ -5977,6 +6013,7 @@ _classes = [
     EnvironmentMetricsTimer,
     User,
     DiscoveredResource,
+    File,
 ]
 
 
