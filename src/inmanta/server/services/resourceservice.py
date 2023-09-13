@@ -899,6 +899,36 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
+                        if status == ResourceState.failed or status == ResourceState.skipped:
+                            # lock out release version
+                            await env.release_version_lock(connection=connection)
+                            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(
+                                env.id, connection=connection
+                            )
+
+                            for res in resources:
+                                if latest_version is not None and latest_version > res.model:
+                                    # we are stale, forward propagate our status
+                                    # this is required because:
+                                    # upon release of the newer version our old status
+                                    # may have been copied over into the new version
+                                    # (by the increment calculation)
+                                    # the new version may thus hide this failure
+                                    # issue #6475
+                                    # the release_version_lock above ensure we can not race with release itself
+                                    # this is at the end of the transaction to not block release too long
+                                    # and vice versa
+                                    await self._update_deploy_state(
+                                        env,
+                                        res.resource_id,
+                                        finished,
+                                        latest_version,
+                                        status,
+                                        f"update on stale version {res.model}",
+                                        fail_on_error=False,
+                                        connection=connection,
+                                    )
+
                         model_version = None
                         for res in resources:
                             extra_fields = {}
