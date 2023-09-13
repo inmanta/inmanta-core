@@ -676,7 +676,7 @@ class ResourceService(protocol.ServerSlice):
                         # the new version may thus hide this failure
                         # issue #6475
                         # the release_version_lock above ensure we can not race with release itself
-                        # this is at the end of the transaction tono block release too long
+                        # this is at the end of the transaction to not block release too long
                         # and vice versa
                         await self._update_deploy_state(
                             env,
