@@ -379,6 +379,7 @@ class ResourceService(protocol.ServerSlice):
         timestamp: datetime.datetime,
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
+        connection: Optional[Connection] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -412,16 +413,21 @@ class ResourceService(protocol.ServerSlice):
             send_events=False,
             keep_increment_cache=True,
             is_increment_notification=True,
+            connection=connection,
         )
 
-    async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+    async def get_increment(
+        self, env: data.Environment, version: int, connection: Optional[Connection] = None
+    ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
         In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
         version, per environment.
 
         :param env: The environment to consider.
-        :parma version: The version of the model to consider.
+        :param version: The version of the model to consider.
+        :param connection: connection to use towards the DB.
+            When the connection is in a transaction, we will always invalidate the cache
         """
 
         def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
@@ -440,12 +446,12 @@ class ResourceService(protocol.ServerSlice):
             return incr, neg_incr
 
         increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
-        if increment is None:
+        if increment is None or (connection is not None and connection.is_in_transaction()):
             lock = self._increment_cache_locks[env.id]
             async with lock:
                 increment = _get_cache_entry()
                 if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version)
+                    increment = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
                     self._increment_cache[env.id] = (version, *increment)
         return increment
 

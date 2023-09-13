@@ -192,6 +192,15 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
             push=False,
         )
         assert result.code == 200
+
+        result = await client.release_version(
+            environment,
+            version,
+            push=False,
+        )
+        # ensure we can only do it once
+        assert result.code == 409
+
         return rvid_r1_v1, rvid_r2_v1, rvid_r3_v1
 
     rvid_r1_v1, rvid_r2_v1, rvid_r3_v1 = await put_version()
