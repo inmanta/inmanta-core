@@ -329,6 +329,7 @@ def resource_container():
             _WRITE_COUNT.clear()
             _READ_COUNT.clear()
             _TO_SKIP.clear()
+            _TO_FAIL.clear()
             _RELOAD_COUNT.clear()
 
     @provider("test::Resource", name="test_resource")

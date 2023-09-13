@@ -397,7 +397,6 @@ class ResourceService(protocol.ServerSlice):
             "msg": "Setting deployed due to known good status",
             "timestamp": util.datetime_utc_isoformat(timestamp),
             "args": [],
-            "kwargs": {"version": version},
         }
         await self.resource_action_update(
             env,
@@ -426,19 +425,22 @@ class ResourceService(protocol.ServerSlice):
         status: ResourceState,
         message: str,
         fail_on_error: bool,
-        is_increment_notification: bool,
         connection: Optional[Connection] = None,
     ) -> None:
         """
+        Set the status of the provided resources as to skipped or failed
+
+        Performs all required bookkeeping for this.
+
         Factored out the code to set a status on a resource
 
-        This excludes running `mark_done_if_done` and the agent push
 
-        Set the status of the provided resources as deployed
         :param env: Environment to consider.
         :param resource_id: resource to mark.
         :param timestamp: Timestamp for the log message and the resource action entry.
         :param version: Version of the resources to consider.
+        :param status: status to set
+        :param message: reason to log on the transfer
         :param fail_on_error: When encountering an undeployable state: fail or do nothing?.
         """
         resource_version_id = resource_id + ",v=" + str(version)
@@ -446,11 +448,11 @@ class ResourceService(protocol.ServerSlice):
             level=const.LogLevel.INFO,
             msg=f"Setting {status.value} because of {message}",
             timestamp=timestamp,
-            kwargs={"version": version},
         )
 
-        assert status in VALID_STATES_ON_STATE_UPDATE
-        assert status not in TRANSIENT_STATES
+        assert status in [ResourceState.failed, ResourceState.skipped]
+        # this method is purpose specific for now.
+
         async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
@@ -504,20 +506,12 @@ class ResourceService(protocol.ServerSlice):
 
                 self.clear_env_cache(env)
 
-                extra_fields = {}
-                if status == ResourceState.deployed and not is_increment_notification:
-                    extra_fields["last_success"] = timestamp
-
                 await resource.update_fields(
                     last_deploy=timestamp,
                     status=status,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    **extra_fields,
                     connection=connection,
                 )
-
-                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
-                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
     async def get_increment(
         self, env: data.Environment, version: int, connection: Optional[Connection] = None
@@ -686,7 +680,6 @@ class ResourceService(protocol.ServerSlice):
                             status,
                             f"update on stale version {resource_id.version}",
                             fail_on_error=False,
-                            is_increment_notification=True,
                             connection=connection,
                         )
 

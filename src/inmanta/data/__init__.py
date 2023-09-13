@@ -1620,6 +1620,29 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
 
+    async def _xact_lock(
+        self, lock_key: int, instance_key: int, *, shared: bool = False, connection: asyncpg.Connection
+    ) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control
+
+        :param lock_key: the key identifying this lock (32 bit signed int)
+        :param instance_key: the key identifying the instance to lock (32 bit signed int)
+
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        lock: str = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        await connection.execute(
+            # Advisory lock keys are only 32 bit (or a single 64 bit key), while a full uuid is 128 bit.
+            # Since locking slightly too strictly at extremely low odds is acceptable, we only use a 32 bit subvalue
+            # of the uuid. For uuid4, time_low is (despite the name) randomly generated. Since it is an unsigned
+            # integer while Postgres expects a signed one, we shift it by 2**31.
+            f"SELECT {lock}($1, $2)",
+            lock_key,
+            instance_key,
+        )
+
     @classmethod
     async def insert_many(
         cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
@@ -2933,16 +2956,23 @@ RETURNING last_version;
         calls that need the latest version.
 
         :param env: The environment to acquire the lock for.
-        :param shared: If true, doesn't conflict with other shared locks, only with non-shared once.
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
         :param connection: The connection hosting the transaction for which to acquire a lock.
         """
-        lock: str = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
-        await connection.execute(
-            # Advisory lock keys are only 32 bit (or a single 64 bit key), while a full uuid is 128 bit.
-            # Since locking slightly too strictly at extremely low odds is acceptable, we only use a 32 bit subvalue
-            # of the uuid. For uuid4, time_low is (despite the name) randomly generated. Since it is an unsigned
-            # integer while Postgres expects a signed one, we shift it by 2**31.
-            f"SELECT {lock}({const.PG_ADVISORY_KEY_RELEASE_VERSION}, {self.id.time_low - 2**31})"
+        await self._xact_lock(
+            const.PG_ADVISORY_KEY_RELEASE_VERSION, self.id.time_low - 2**31, shared=shared, connection=connection
+        )
+
+    async def put_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control between put_version and put_partial.
+
+        :param env: The environment to acquire the lock for.
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        await self._xact_lock(
+            const.PG_ADVISORY_KEY_PUT_VERSION, self.id.time_low - 2**31, shared=shared, connection=connection
         )
 
 
