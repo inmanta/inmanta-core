@@ -99,14 +99,26 @@ class FileService(protocol.ServerSlice):
         Diff the two files identified with the two hashes
         """
 
+        def _parse_like_readlines(content: str) -> list[str]:
+            """
+            Parse the given string like <file_handle>.readlines() would do.
+            """
+            lines = content.split("\n")
+            if lines[-1] == "":
+                # file ended with a newline character
+                lines = lines[0:-1]
+            # Add newline characters that were removed by spit()
+            return [f"{r}\n" for r in lines]
+
         async def _get_lines_for_file(content_hash: str) -> list[str]:
-            if a == "" or a == "0":
+            if content_hash == "" or content_hash == "0":
                 return []
             else:
                 file = await File.get_one(content_hash=content_hash)
                 if not file:
                     raise NotFound()
-                return file.content.decode(encoding="utf-8").split("\n")
+                file_content = file.content.decode(encoding="utf-8")
+                return _parse_like_readlines(file_content)
 
         a_lines = await _get_lines_for_file(content_hash=a)
         b_lines = await _get_lines_for_file(content_hash=b)
