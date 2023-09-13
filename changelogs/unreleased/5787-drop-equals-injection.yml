@@ -1,0 +1,8 @@
+---
+description: Drop `== True` injection on constraints of a typedef.
+issue-nr: 5787
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]
+sections:
+  deprecation-note: "The compiler no longer explicitly injects the implied `== true` for plugin calls in typedef constraints"
