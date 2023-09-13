@@ -670,6 +670,14 @@ class ResourceService(protocol.ServerSlice):
                     latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
                     if latest_version is not None and latest_version > resource_id.version:
                         # we are stale, forward propagate our status
+                        # this is required because:
+                        # upon release of the newer version our old status may have been copied over into the new version
+                        # (by the increment calculation)
+                        # the new version may thus hide this failure
+                        # issue #6475
+                        # the release_version_lock above ensure we can not race with release itself
+                        # this is at the end of the transaction tono block release too long
+                        # and vice versa
                         await self._update_deploy_state(
                             env,
                             resource_id.resource_str(),
