@@ -18,13 +18,19 @@
 import asyncio
 import logging
 
+import pytest
+
 from inmanta.agent import Agent
 from inmanta.const import AgentTriggerMethod
+from test_data_concurrency import slowdown_queries
 
 LOGGER = logging.getLogger("test")
 
 
-async def test_6475_deploy_with_failure_masking(server, agent: Agent, environment, resource_container, clienthelper, client):
+@pytest.mark.slowtest
+async def test_6475_deploy_with_failure_masking(
+    server, agent: Agent, environment, resource_container, clienthelper, client, monkeypatch
+):
     """
     Consider:
 
@@ -78,9 +84,22 @@ async def test_6475_deploy_with_failure_masking(server, agent: Agent, environmen
     assert result.code == 200
 
     # add new version
-    v2 = await make_version()
-    result = await client.release_version(environment, v2, False)
-    assert result.code == 200
+    # hammer it with new versions!
+    new_versions_to_add = 20
+    new_versions_pre = 1
+
+    versions = [await make_version() for i in range(new_versions_to_add)]
+
+    for version in versions[0:new_versions_pre]:
+        result = await client.release_version(environment, version, False)
+        assert result.code == 200
+
+    slowdown_queries(monkeypatch, delay=0.01)
+
+    # let some run in parallel
+    tasks = [
+        asyncio.create_task(client.release_version(environment, version, False)) for version in versions[new_versions_pre:]
+    ]
 
     # fail deploy
     def make_waiter(nr_of_deploys):
@@ -96,6 +115,13 @@ async def test_6475_deploy_with_failure_masking(server, agent: Agent, environmen
     await resource_container.wait_for_condition_with_waiters(make_waiter(2))
     assert resource_container.Provider.readcount("agent1", "key2") == 2
 
+    await asyncio.gather(*tasks)
+
+    result = await client.resource_logs(environment, "test::Resource[agent1,key=key2]", filter={"action": ["deploy"]})
+    assert result.code == 200
+    for line in result.result["data"]:
+        LOGGER.info("Final logs: %s | %s", line["msg"], line["kwargs"])
+
     # increment should contain the failed resource
     sid = agent.sessionid
     result = await agent._client.get_resources_for_agent(environment, "agent1", incremental_deploy=True, sid=sid)
@@ -106,11 +132,6 @@ async def test_6475_deploy_with_failure_masking(server, agent: Agent, environmen
     result = await client.deploy(environment, agent_trigger_method=AgentTriggerMethod.push_incremental_deploy)
     assert result.code == 200
     await resource_container.wait_for_condition_with_waiters(make_waiter(3))
-
-    result = await client.resource_logs(environment, "test::Resource[agent1,key=key2]", filter={"action": ["deploy"]})
-    assert result.code == 200
-    for line in result.result["data"]:
-        LOGGER.info("Final logs: %s", line["msg"])
 
     # 2 times for v1
     # 1 time for v2

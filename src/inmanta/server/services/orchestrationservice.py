@@ -1034,6 +1034,9 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> Apireturn:
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
+                # explicit lock to allow patching of increments for stale failures
+                await env.release_version_lock(connection=connection)
+                # Row lock here also keeps siblings out
                 model = await data.ConfigurationModel.get_version_internal(
                     env.id, version_id, connection=connection, lock=RowLockMode.FOR_UPDATE
                 )

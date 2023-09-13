@@ -30,7 +30,7 @@ from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
-from inmanta.data import APILIMIT, ConfigurationModel, InvalidSort
+from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
     DiscoveredResourceView,
     ResourceHistoryView,
@@ -397,6 +397,7 @@ class ResourceService(protocol.ServerSlice):
             "msg": "Setting deployed due to known good status",
             "timestamp": util.datetime_utc_isoformat(timestamp),
             "args": [],
+            "kwargs": {"version": version},
         }
         await self.resource_action_update(
             env,
@@ -445,12 +446,11 @@ class ResourceService(protocol.ServerSlice):
             level=const.LogLevel.INFO,
             msg=f"Setting {status.value} because of {message}",
             timestamp=timestamp,
+            kwargs={"version": version},
         )
 
         assert status in VALID_STATES_ON_STATE_UPDATE
         assert status not in TRANSIENT_STATES
-
-        resources: List[data.Resource]
         async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
@@ -645,16 +645,28 @@ class ResourceService(protocol.ServerSlice):
                     connection=connection,
                 )
 
-                # final resource update
-                if not keep_increment_cache:
-                    self.clear_env_cache(env)
-
                 extra_fields = {}
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
 
+                await resource.update_fields(
+                    last_deploy=finished,
+                    status=status,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    **extra_fields,
+                    connection=connection,
+                )
+
+                # final resource update
+                if not keep_increment_cache:
+                    self.clear_env_cache(env)
+
+                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
+                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
+
                 if status == ResourceState.failed or status == ResourceState.skipped:
-                    # Check if we are stale
+                    # lock out release version
+                    await env.release_version_lock(connection=connection)
                     latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
                     if latest_version is not None and latest_version > resource_id.version:
                         # we are stale, forward propagate our status
@@ -669,17 +681,6 @@ class ResourceService(protocol.ServerSlice):
                             is_increment_notification=True,
                             connection=connection,
                         )
-
-                await resource.update_fields(
-                    last_deploy=finished,
-                    status=status,
-                    last_non_deploying_status=const.NonDeployingResourceState(status),
-                    **extra_fields,
-                    connection=connection,
-                )
-
-                if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
-                    await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
