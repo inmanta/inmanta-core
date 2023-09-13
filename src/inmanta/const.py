@@ -20,6 +20,8 @@ from enum import Enum
 
 from inmanta.stable_api import stable_api
 
+import datetime
+
 
 class ResourceState(str, Enum):
     unavailable = "unavailable"  # This state is set by the agent when no handler is available for the resource
@@ -329,3 +331,6 @@ PG_ADVISORY_KEY_PUT_VERSION = 1
 
 # The filename of the changelog file in an Inmanta module
 MODULE_CHANGELOG_FILE = "CHANGELOG.md"
+
+
+DATETIME_MIN_UTC = datetime.datetime(datetime.MINYEAR, 1, 1, tzinfo=datetime.timezone.utc)
