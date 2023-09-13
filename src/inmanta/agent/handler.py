@@ -17,7 +17,6 @@
 """
 import base64
 import inspect
-import json
 import logging
 import traceback
 import typing
@@ -980,7 +979,10 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
           conventional resource type expected to be deployed on a network, but rather a way to express
           the intent to discover resources of the second type TDiscovered already present on the network.
         - TDiscovered denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
-          discovered and reported to the server. Objects of this type must be serializable.
+          discovered and reported to the server. Objects of this type must be either:
+             1. A pydantic object
+             2. An object that has a `to_dict()` method that returns a serializable dictionary
+             3. A serializable dictionary
     """
 
     def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> Dict[str, object]:
@@ -1017,7 +1019,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
 
             discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
             discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=json.loads(json_encode(values)))
+                DiscoveredResource(discovered_resource_id=resource_id, values=values)
                 for resource_id, values in discovered_resources_raw.items()
             ]
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
