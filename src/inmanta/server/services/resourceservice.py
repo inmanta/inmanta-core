@@ -643,10 +643,13 @@ class ResourceService(protocol.ServerSlice):
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
 
+                propagate_last_produced_events = False
+                # keep track IF we need to propagate if we are stale
+                # but only do it at the end of the transaction
                 if change != Change.nochange:
                     # We are producing an event
                     extra_fields["last_produced_events"] = finished
-                    # TODO forward propagation
+                    propagate_last_produced_events = True
 
                 await resource.update_fields(
                     last_deploy=finished,
@@ -663,10 +666,12 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-                if status == ResourceState.failed or status == ResourceState.skipped:
+                propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
+                if propagate_deploy_state or propagate_last_produced_events:
                     # lock out release version
                     await env.release_version_lock(connection=connection)
                     latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+
                     if latest_version is not None and latest_version > resource_id.version:
                         # we are stale, forward propagate our status
                         # this is required because:
@@ -677,16 +682,21 @@ class ResourceService(protocol.ServerSlice):
                         # the release_version_lock above ensure we can not race with release itself
                         # this is at the end of the transaction to not block release too long
                         # and vice versa
-                        await self._update_deploy_state(
-                            env,
-                            resource_id.resource_str(),
-                            finished,
-                            latest_version,
-                            status,
-                            f"update on stale version {resource_id.version}",
-                            fail_on_error=False,
-                            connection=connection,
-                        )
+                        if propagate_deploy_state:
+                            await self._update_deploy_state(
+                                env,
+                                resource_id.resource_str(),
+                                finished,
+                                latest_version,
+                                status,
+                                f"update on stale version {resource_id.version}",
+                                fail_on_error=False,
+                                connection=connection,
+                            )
+                        if propagate_last_produced_events:
+                            await data.Resource.update_last_produced_events_if_newer(
+                                env, resource_id.resource_str(), latest_version, finished, connection=connection
+                            )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 

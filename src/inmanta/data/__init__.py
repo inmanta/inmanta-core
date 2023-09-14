@@ -4489,6 +4489,25 @@ class Resource(BaseDocument):
         result = await cls._fetch_query(query, *values, connection=connection)
         return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
+    @classmethod
+    async def update_last_produced_events_if_newer(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        version: int,
+        last_produced_events: datetime.datetime,
+        *,
+        connection: Optional[Connection] = None,
+    ):
+        query = f"""
+                UPDATE {cls.table_name()} as resource
+                SET
+                    last_produced_events = GREATEST($4, last_produced_events)
+                WHERE resource.model=$2
+                AND resource.environment=$1
+                AND resource.resource_id=$3  """
+        await cls._execute_query(query, environment, version, resource_ids, last_produced_events, connection=connection)
+
     def make_hash(self) -> None:
         character = json.dumps(
             {k: v for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]},
@@ -5024,26 +5043,17 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         from_version: int,
         to_version: int,
-        now: datetime.datetime,
         *,
         connection: Optional[Connection] = None,
     ) -> None:
         """
         Copy the value of last_produced events for every resource in the to_version from the from_version
-            if the hash is the same
-            otherwise set it to now
         """
         query = f"""
            UPDATE {cls.table_name()} as new_resource
            SET
                last_produced_events = (
-                   SELECT
-                       CASE WHEN old_resource.attribute_hash = new_resource.attribute_hash
-                       THEN
-                         old_resource.last_produced_events
-                       ELSE
-                          $4
-                       END
+                   SELECT old_resource.last_produced_events
                    FROM {cls.table_name()} as old_resource
                    WHERE old_resource.model=$3
                    AND old_resource.environment=$2
