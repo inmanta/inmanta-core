@@ -36,6 +36,8 @@ requires = [
     "build~=0.7",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
+    # sanity check to make sure filelock 3.12.4 is the culprit
+    "filelock==3.12.3",
 ]
 
 
