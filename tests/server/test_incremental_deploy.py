@@ -116,6 +116,9 @@ class MultiVersionSetup(object):
 
         if increment:
             self.results[agent].append(rid)
+        else:
+            # make sure it is set in the default dict
+            self.results[agent]
 
         for step in scenario.split():
             v -= 1
