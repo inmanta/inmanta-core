@@ -67,7 +67,7 @@ import inmanta.db.versions
 import inmanta.resources as resources
 import inmanta.util as util
 from crontab import CronTab
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState, DATETIME_MIN_UTC
+from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
@@ -4979,14 +4979,27 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         from_version: int,
         to_version: int,
+        now: datetime.datetime,
         *,
         connection: Optional[Connection] = None,
     ) -> None:
+        """
+        Copy the value of last_produced events for every resource in the to_version from the from_version
+            if the hash is the same
+            otherwise set it to now
+        """
         query = f"""
            UPDATE {cls.table_name()} as new_resource
            SET
                last_produced_events = (
-                   SELECT last_produced_events from {cls.table_name()} as old_resource
+                   SELECT
+                       CASE WHEN old_resource.attribute_hash = new_resource.attribute_hash
+                       THEN
+                         old_resource.last_produced_events
+                       ELSE
+                          $4
+                       END
+                   FROM {cls.table_name()} as old_resource
                    WHERE old_resource.model=$3
                    AND old_resource.environment=$2
                    AND old_resource.resource_id=new_resource.resource_id
@@ -4994,7 +5007,7 @@ class Resource(BaseDocument):
            WHERE new_resource.model=$1
            AND new_resource.environment=$2
            AND new_resource.last_produced_events is null"""
-        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
+        await cls._execute_query(query, to_version, environment, from_version, now, connection=connection)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
@@ -5562,9 +5575,14 @@ class ConfigurationModel(BaseDocument):
             last_success = resource["last_success"] or DATETIME_MIN_UTC
             for req in resource["attributes"]["requires"]:
                 req_res = id_to_resource[req]
-                assert req_res is not None # todo
+                assert req_res is not None  # todo
                 last_produced_events = req_res["last_produced_events"]
-                if last_produced_events is not None and last_produced_events > last_success:
+                if (
+                    last_produced_events is not None
+                    and last_produced_events > last_success
+                    and "send_event" in req_res["attributes"]
+                    and req_res["attributes"]["send_event"]
+                ):
                     in_increment = True
                     break
             if in_increment:

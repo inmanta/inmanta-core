@@ -16,11 +16,10 @@
     Contact: code@inmanta.com
 """
 
+import datetime
 from enum import Enum
 
 from inmanta.stable_api import stable_api
-
-import datetime
 
 
 class ResourceState(str, Enum):

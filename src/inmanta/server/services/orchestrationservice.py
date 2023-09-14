@@ -1099,9 +1099,13 @@ class OrchestrationService(protocol.ServerSlice):
                 if latest_version:
                     # Set the updated field:
                     await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
-                    await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
+                    await data.Resource.copy_last_produced_events(
+                        env.id, latest_version, version_id, now, connection=connection
+                    )
 
-                    increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.resource_service.get_increment(
+                    increments: tuple[
+                        abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]
+                    ] = await self.resource_service.get_increment(
                         env,
                         version_id,
                         connection=connection,

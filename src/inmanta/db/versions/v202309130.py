@@ -23,4 +23,3 @@ async def update(connection: Connection) -> None:
       ADD COLUMN last_produced_events TIMESTAMP WITH TIME ZONE;
     """
     await connection.execute(schema)
-
