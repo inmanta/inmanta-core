@@ -58,6 +58,7 @@ class MultiVersionSetup(object):
         self.firstversion: int = 100
         self.versions: List[List[Dict[str, Any]]] = [[] for _ in range(100)]
         self.states: Dict[str, ResourceState] = {}
+        self.states_per_version: Dict[int, Dict[str, ResourceState]] = defaultdict(dict)
         self.results: Dict[str, List[str]] = defaultdict(lambda: [])
         self.sid = uuid4()
 
@@ -130,7 +131,9 @@ class MultiVersionSetup(object):
             code = match.group(1)
             value = match.group(2)
             rvid = self.make_resource(name, value, v, agent, requires, send_event)
-            self.states[rvid] = self.expand_code(code)
+            state = self.expand_code(code)
+            self.states[rvid] = state
+            self.states_per_version[v][rvid] = state
         return rid
 
     async def setup_agent(self, server, environment):
@@ -170,31 +173,32 @@ class MultiVersionSetup(object):
 
                 result, _ = await serverdirect.release_version(env, version, False)
                 assert result == 200
-        for rid, state in self.states.items():
-            # Start the deploy
-            action_id = uuid.uuid4()
-            now = datetime.now()
-            if state == const.ResourceState.available:
-                # initial state can not be set
-                continue
-            if state not in const.TRANSIENT_STATES:
-                finished = now
-            else:
-                finished = None
-            result = await resource_service.resource_action_update(
-                env,
-                [rid],
-                action_id,
-                ResourceAction.deploy,
-                now,
-                finished,
-                status=state,
-                messages=[],
-                changes={},
-                change=None,
-                send_events=False,
-            )
-            assert result == 200
+
+            for rid, state in self.states_per_version[version].items():
+                # Start the deploy
+                action_id = uuid.uuid4()
+                now = datetime.now()
+                if state == const.ResourceState.available:
+                    # initial state can not be set
+                    continue
+                if state not in const.TRANSIENT_STATES:
+                    finished = now
+                else:
+                    finished = None
+                result = await resource_service.resource_action_update(
+                    env,
+                    [rid],
+                    action_id,
+                    ResourceAction.deploy,
+                    now,
+                    finished,
+                    status=state,
+                    messages=[],
+                    changes={},
+                    change=None,
+                    send_events=False,
+                )
+                assert result == 200
 
         # increments are disjoint
         pos, neg = await data.ConfigurationModel.get_increment(env.id, version)
@@ -213,6 +217,7 @@ class MultiVersionSetup(object):
             result, payload = await resource_service.get_resources_for_agent(
                 env, agent, version=None, incremental_deploy=True, sid=sid
             )
+            assert result == 200
             assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
@@ -450,7 +455,14 @@ async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, enviro
     assert_no_warning(caplog)
 
 
-async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event_cad(server, agent_factory, environment, caplog):
+    agent = await agent_factory(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost", "agent2": "localhost"},
+        code_loader=False,
+        agent_names=["agent1", "agent2"],
+    )
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
