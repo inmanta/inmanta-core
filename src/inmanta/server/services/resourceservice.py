@@ -416,6 +416,103 @@ class ResourceService(protocol.ServerSlice):
             connection=connection,
         )
 
+    async def _update_deploy_state(
+        self,
+        env: data.Environment,
+        resource_id: ResourceIdStr,
+        timestamp: datetime.datetime,
+        version: int,
+        status: ResourceState,
+        message: str,
+        fail_on_error: bool,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """
+        Set the status of the provided resources as to skipped or failed
+
+        Performs all required bookkeeping for this.
+
+        Factored out the code to set a status on a resource
+
+
+        :param env: Environment to consider.
+        :param resource_id: resource to mark.
+        :param timestamp: Timestamp for the log message and the resource action entry.
+        :param version: Version of the resources to consider.
+        :param status: status to set
+        :param message: reason to log on the transfer
+        :param fail_on_error: When encountering an undeployable state: fail or do nothing?.
+        """
+        resource_version_id = resource_id + ",v=" + str(version)
+        logline = LogLine(
+            level=const.LogLevel.INFO,
+            msg=f"Setting {status.value} because of {message}",
+            timestamp=timestamp,
+        )
+
+        assert status in [ResourceState.failed, ResourceState.skipped]
+        # this method is purpose specific for now.
+
+        async with data.Resource.get_connection(connection) as connection:
+            async with connection.transaction():
+                # validate resources
+                resource = await data.Resource.get_one(
+                    environment=env.id,
+                    resource_id=resource_id,
+                    model=version,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_UPDATE,
+                    connection=connection,
+                )
+                if not resource:
+                    raise NotFound("The resource with the given ids do not exist in the given environment.")
+
+                # no escape from terminal
+                if resource.status != status and resource.status in TERMINAL_STATES:
+                    if not fail_on_error:
+                        return
+                    else:
+                        LOGGER.error("Attempting to set undeployable resource to deployable state")
+                        raise AssertionError("Attempting to set undeployable resource to deployable state")
+
+                resource_action = data.ResourceAction(
+                    environment=env.id,
+                    version=version,
+                    resource_version_ids=[resource_version_id],
+                    action_id=uuid.uuid4(),
+                    action=const.ResourceAction.deploy,
+                    started=timestamp,
+                    messages=[
+                        {
+                            **logline.dict(),
+                            "timestamp": logline.timestamp.astimezone().isoformat(timespec="microseconds"),
+                        }
+                    ],
+                    changes={},
+                    status=status,
+                    change=const.Change.nochange,
+                    finished=timestamp,
+                )
+                await resource_action.insert(connection=connection)
+
+                self.log_resource_action(
+                    env.id,
+                    [resource_version_id],
+                    logline.level.to_int,
+                    logline.timestamp,
+                    logline.msg,
+                )
+
+                self.clear_env_cache(env)
+
+                await resource.update_fields(
+                    last_deploy=timestamp,
+                    status=status,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    connection=connection,
+                )
+
     async def get_increment(
         self, env: data.Environment, version: int, connection: Optional[Connection] = None
     ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
@@ -542,10 +639,6 @@ class ResourceService(protocol.ServerSlice):
                     connection=connection,
                 )
 
-                # final resource update
-                if not keep_increment_cache:
-                    self.clear_env_cache(env)
-
                 extra_fields = {}
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
@@ -558,8 +651,37 @@ class ResourceService(protocol.ServerSlice):
                     connection=connection,
                 )
 
+                # final resource update
+                if not keep_increment_cache:
+                    self.clear_env_cache(env)
+
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
+
+                if status == ResourceState.failed or status == ResourceState.skipped:
+                    # lock out release version
+                    await env.release_version_lock(connection=connection)
+                    latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+                    if latest_version is not None and latest_version > resource_id.version:
+                        # we are stale, forward propagate our status
+                        # this is required because:
+                        # upon release of the newer version our old status may have been copied over into the new version
+                        # (by the increment calculation)
+                        # the new version may thus hide this failure
+                        # issue #6475
+                        # the release_version_lock above ensure we can not race with release itself
+                        # this is at the end of the transaction to not block release too long
+                        # and vice versa
+                        await self._update_deploy_state(
+                            env,
+                            resource_id.resource_str(),
+                            finished,
+                            latest_version,
+                            status,
+                            f"update on stale version {resource_id.version}",
+                            fail_on_error=False,
+                            connection=connection,
+                        )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
@@ -776,6 +898,36 @@ class ResourceService(protocol.ServerSlice):
                         # final resource update
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
+
+                        if status == ResourceState.failed or status == ResourceState.skipped:
+                            # lock out release version
+                            await env.release_version_lock(connection=connection)
+                            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(
+                                env.id, connection=connection
+                            )
+
+                            for res in resources:
+                                if latest_version is not None and latest_version > res.model:
+                                    # we are stale, forward propagate our status
+                                    # this is required because:
+                                    # upon release of the newer version our old status
+                                    # may have been copied over into the new version
+                                    # (by the increment calculation)
+                                    # the new version may thus hide this failure
+                                    # issue #6475
+                                    # the release_version_lock above ensure we can not race with release itself
+                                    # this is at the end of the transaction to not block release too long
+                                    # and vice versa
+                                    await self._update_deploy_state(
+                                        env,
+                                        res.resource_id,
+                                        finished,
+                                        latest_version,
+                                        status,
+                                        f"update on stale version {res.model}",
+                                        fail_on_error=False,
+                                        connection=connection,
+                                    )
 
                         model_version = None
                         for res in resources:

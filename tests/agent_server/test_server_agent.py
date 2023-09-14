@@ -2139,7 +2139,7 @@ async def test_s_repair_postponed_due_to_running_deploy(
     # key3: Readcount=2; writecount=1
     await myagent_instance.get_latest_version_for_agent(DeployRequest(is_full_deploy=True, reason="Repair", is_periodic=False))
 
-    def wait_condition():
+    async def wait_condition():
         return not (
             resource_container.Provider.readcount(agent_name, "key3") == 2
             and resource_container.Provider.changecount(agent_name, "key3") == 1
@@ -2256,7 +2256,7 @@ async def test_s_repair_interrupted_by_deploy_request(
     assert resource_container.Provider.readcount(agent_name, "key3") >= 2
     assert resource_container.Provider.changecount(agent_name, "key3") >= 2
 
-    def wait_condition():
+    async def wait_condition():
         print(20 * "-")
         print("k1 R", resource_container.Provider.readcount(agent_name, "key1"))
         print("k1 C", resource_container.Provider.changecount(agent_name, "key1"))
@@ -2345,7 +2345,7 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
         DeployRequest(reason="Repair 2", is_full_deploy=True, is_periodic=False)
     )
 
-    def wait_condition():
+    async def wait_condition():
         return (
             resource_container.Provider.readcount(agent_name, "key1") != 3
             or resource_container.Provider.changecount(agent_name, "key1") != 1
