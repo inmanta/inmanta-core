@@ -1627,7 +1627,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         Acquires a transaction-level advisory lock for concurrency control
 
         :param lock_key: the key identifying this lock (32 bit signed int)
-        :param instance_key: the key identifying the instance to lock. We only use the lower 32 bits, so it can collide
+        :param instance_key: the key identifying the instance to lock.
+        We only use the lower 32 bits, so it can collide.
 
         :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
         :param connection: The connection hosting the transaction for which to acquire a lock.
