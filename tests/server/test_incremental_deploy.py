@@ -27,7 +27,7 @@ from uuid import UUID, uuid4
 import utils
 from inmanta import config, const, data
 from inmanta.agent.agent import Agent
-from inmanta.const import ResourceAction, ResourceState
+from inmanta.const import Change, ResourceAction, ResourceState
 from inmanta.resources import Id
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_ORCHESTRATION, SLICE_RESOURCE
 from inmanta.server.services.orchestrationservice import OrchestrationService
@@ -485,3 +485,76 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, agent_factory, e
         await setup.setup(orchestration_service, resource_service, env, sid)
 
     assert_no_warning(caplog)
+
+
+async def test_deploy_cad_double(server, agent_factory, environment, caplog, client, clienthelper):
+    # resource has CAD with send_events B requires A
+    # do full deploy
+    # then produce a change on A
+    # B is once more in the increment
+    agent = await agent_factory(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost", "agent2": "localhost"},
+        code_loader=False,
+        agent_names=["agent1", "agent2"],
+    )
+    sid = agent.sessionid
+
+    version = await clienthelper.get_version()
+    rvid = f"test::Resource[agent1,key=key1],v={version}"
+    rvid2 = f"test::Resource[agent2,key=key2],v={version}"
+
+    resources = [
+        {
+            "key": "key1",
+            "value": "value1",
+            "id": rvid,
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        },
+        {
+            "key": "key2",
+            "value": "value1",
+            "id": rvid2,
+            "send_event": False,
+            "purged": False,
+            "requires": [rvid],
+        },
+    ]
+    await clienthelper.put_version_simple(resources, version)
+    result = await client.release_version(environment, version, False)
+    assert result.code == 200
+
+    async def deploy(rid, change: Change = Change.nochange):
+        actionid = uuid.uuid4()
+        result = await agent._client.resource_deploy_start(environment, rid, actionid)
+        assert result.code == 200
+        await agent._client.resource_deploy_done(
+            environment,
+            rid,
+            actionid,
+            status=ResourceState.deployed,
+            messages=[],
+            changes={},
+            change=change,
+        )
+        assert result.code == 200
+
+    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
+    assert result.code == 200, result.result
+    assert len(result.result["resources"]) == 1
+
+    await deploy(rvid)
+    await deploy(rvid2)
+
+    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
+    assert result.code == 200, result.result
+    assert len(result.result["resources"]) == 0
+
+    await deploy(rvid, change=Change.updated)
+
+    result = await agent._client.get_resources_for_agent(environment, "agent2", incremental_deploy=True, sid=sid)
+    assert result.code == 200, result.result
+    assert len(result.result["resources"]) == 1

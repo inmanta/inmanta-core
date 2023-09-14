@@ -643,6 +643,11 @@ class ResourceService(protocol.ServerSlice):
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
 
+                if change != Change.nochange:
+                    # We are producing an event
+                    extra_fields["last_produced_events"] = finished
+                    # TODO forward propagation
+
                 await resource.update_fields(
                     last_deploy=finished,
                     status=status,
