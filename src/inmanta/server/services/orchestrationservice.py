@@ -1084,6 +1084,9 @@ class OrchestrationService(protocol.ServerSlice):
 
                 if latest_version:
                     # Set the updated field:
+                    # BE VERY CAREFUL
+                    # All state copied here has a race with stale deploy
+                    # This is handled in propagate_resource_state_if_stale
                     await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
                     await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
 
