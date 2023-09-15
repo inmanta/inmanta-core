@@ -835,23 +835,6 @@ class OrchestrationService(protocol.ServerSlice):
             result.append(unknown_parameter)
         return result
 
-    async def _put_version_lock(self, env: data.Environment, *, shared: bool = False, connection: asyncpg.Connection) -> None:
-        """
-        Acquires a transaction-level advisory lock for concurrency control between put_version and put_partial.
-
-        :param env: The environment to acquire the lock for.
-        :param shared: If true, doesn't conflict with other shared locks, only with non-shared once.
-        :param connection: The connection hosting the transaction for which to acquire a lock.
-        """
-        lock: str = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
-        await connection.execute(
-            # Advisory lock keys are only 32 bit (or a single 64 bit key), while a full uuid is 128 bit.
-            # Since locking slightly too strictly at extremely low odds is acceptable, we only use a 32 bit subvalue
-            # of the uuid. For uuid4, time_low is (despite the name) randomly generated. Since it is an unsigned
-            # integer while Postgres expects a signed one, we shift it by 2**31.
-            f"SELECT {lock}({const.PG_ADVISORY_KEY_PUT_VERSION}, {env.id.time_low - 2**31})"
-        )
-
     @handle(methods.put_version, env="tid")
     async def put_version(
         self,
@@ -888,7 +871,7 @@ class OrchestrationService(protocol.ServerSlice):
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
-                await self._put_version_lock(env, shared=True, connection=con)
+                await env.put_version_lock(shared=True, connection=con)
                 await self._put_version(
                     env, version, rid_to_resource, unknowns_objs, version_info, resource_sets, connection=con
                 )
@@ -950,7 +933,7 @@ class OrchestrationService(protocol.ServerSlice):
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with itself and with the lock acquired by put_version
-                await self._put_version_lock(env, shared=False, connection=con)
+                await env.put_version_lock(shared=False, connection=con)
 
                 # Only request a new version once the resource lock has been acquired to ensure a monotonic version history
                 version: int = await env.get_next_version(connection=con)
@@ -1034,6 +1017,9 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> Apireturn:
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
+                # explicit lock to allow patching of increments for stale failures
+                # (locks out patching stage of deploy_done to avoid races)
+                await env.acquire_release_version_lock(connection=connection)
                 model = await data.ConfigurationModel.get_version_internal(
                     env.id, version_id, connection=connection, lock=RowLockMode.FOR_UPDATE
                 )
