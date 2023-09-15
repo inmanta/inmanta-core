@@ -22,7 +22,7 @@ import pytest
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202308100.sql"))
-async def test_add_indexes_for_cascading_delete(
+async def test_add_file_table(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]]
 ) -> None:
     assert "file" not in await get_tables_in_db()
