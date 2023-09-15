@@ -4669,7 +4669,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(
-        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]]
+        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]], *, connection: Optional[Connection] = None
     ) -> List[Dict[str, Any]]:
         if not projection:
             projection = "*"
@@ -4677,7 +4677,7 @@ class Resource(BaseDocument):
             projection = ",".join(projection)
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
-        resource_records = await cls._fetch_query(query, *values)
+        resource_records = await cls._fetch_query(query, *values, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
             if "attributes" in res:
@@ -5059,8 +5059,10 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         version: int,
+        *,
+        connection: Optional[Connection] = None,
     ) -> None:
-        last_released = await ConfigurationModel.get_latest_version(environment)
+        last_released = await ConfigurationModel.get_latest_version(environment, connection=connection)
         if not last_released:
             return
         previous_version = last_released.version
@@ -5076,7 +5078,7 @@ class Resource(BaseDocument):
         WHERE new_resource.model=$1
         AND new_resource.environment=$2
         AND new_resource.last_success is null"""
-        await cls._execute_query(query, version, environment, previous_version)
+        await cls._execute_query(query, version, environment, previous_version, connection=connection)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
@@ -5420,26 +5422,57 @@ class ConfigurationModel(BaseDocument):
         version: int,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
     ) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
         """
-        result = await cls.get_one(environment=environment, version=version, connection=connection)
+        result = await cls.get_one(environment=environment, version=version, connection=connection, lock=lock)
         return result
 
     @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:
+    async def get_version_internal(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+    ) -> Optional["ConfigurationModel"]:
+        """Return a version, but don't populate the status and done fields, which are expensive to construct"""
+        query = f"""SELECT *
+                          FROM {ConfigurationModel.table_name()}
+                          WHERE environment=$1 AND version=$2 {lock.value};
+                          """
+        result = await cls.select_query(query, [environment, version], connection=connection)
+        if not result:
+            return None
+        return result[0]
+
+    @classmethod
+    async def get_latest_version(
+        cls,
+        environment: uuid.UUID,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> Optional["ConfigurationModel"]:
         """
         Get the latest released (most recent) version for the given environment
         """
-        versions = await cls.get_list(order_by_column="version", order="DESC", limit=1, environment=environment, released=True)
+        versions = await cls.get_list(
+            order_by_column="version", order="DESC", limit=1, environment=environment, released=True, connection=connection
+        )
         if len(versions) == 0:
             return None
 
         return versions[0]
 
     @classmethod
-    async def get_version_nr_latest_version(cls, environment: uuid.UUID) -> Optional[int]:
+    async def get_version_nr_latest_version(
+        cls,
+        environment: uuid.UUID,
+        connection: Optional[Connection] = None,
+    ) -> Optional[int]:
         """
         Get the version number of the latest released version in the given environment.
         """
@@ -5449,7 +5482,7 @@ class ConfigurationModel(BaseDocument):
                     ORDER BY version DESC
                     LIMIT 1
                     """
-        result = await cls._fetchrow(query, cls._get_value(environment))
+        result = await cls._fetchrow(query, cls._get_value(environment), connection=connection)
         if not result:
             return None
         return int(result["version"])
@@ -5506,13 +5539,13 @@ class ConfigurationModel(BaseDocument):
                 self.environment,
             )
 
-    async def get_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    async def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids)
         of resources which should get a skipped_for_undeployable state
@@ -5579,7 +5612,9 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
+    async def get_increment(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
+    ) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5595,7 +5630,7 @@ class ConfigurationModel(BaseDocument):
         projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
-        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
+        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a, connection=connection)
 
         # to increment
         increment: list[abc.Mapping[str, Any]] = []
@@ -5606,7 +5641,7 @@ class ConfigurationModel(BaseDocument):
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
         values = [cls._get_value(environment)]
-        version_records = await cls._fetch_query(query, *values)
+        version_records = await cls._fetch_query(query, *values, connection=connection)
 
         versions = [record["version"] for record in version_records]
 
@@ -5614,7 +5649,7 @@ class ConfigurationModel(BaseDocument):
             # todo in next version
             next: list[abc.Mapping[str, object]] = []
 
-            vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
+            vresources = await Resource.get_resources_for_version_raw(environment, version, projection, connection=connection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:
