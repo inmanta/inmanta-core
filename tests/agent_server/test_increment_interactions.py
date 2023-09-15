@@ -20,6 +20,7 @@ import logging
 
 import pytest
 
+from inmanta.agent import Agent
 from inmanta.const import AgentTriggerMethod
 from test_data_concurrency import slowdown_queries
 
@@ -28,7 +29,7 @@ LOGGER = logging.getLogger("test")
 
 @pytest.mark.slowtest
 async def test_6475_deploy_with_failure_masking(
-    server, agent, environment, resource_container, clienthelper, client, monkeypatch
+    server, agent: Agent, environment, resource_container, clienthelper, client, monkeypatch
 ):
     """
     Consider:
