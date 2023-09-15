@@ -49,7 +49,6 @@ from inmanta import COMPILER_VERSION
 from inmanta.server.config import server_timezone, server_tz_aware_timestamps
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
-from inmanta.server.config import server_tz_aware_timestamps, server_timezone
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -413,7 +412,9 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
     if server_tz_aware_timestamps:
-        return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone))).isoformat(timespec="microseconds")
+        return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone))).isoformat(
+            timespec="microseconds"
+        )
 
     return naive_utc_timestamp.isoformat(timespec="microseconds")
 
@@ -454,11 +455,7 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
     """
     if isinstance(o, datetime.datetime):
         # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
-<<<<<<< HEAD
-        return datetime_utc_isoformat(o, naive_utc=True)
-=======
         return datetime_iso_format(o, naive_utc=True)
->>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 
     return _custom_json_encoder(o)
 
