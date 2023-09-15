@@ -122,7 +122,7 @@ def get_bind_port() -> int:
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",
-    False,
+    True,
     "Whether the server should return timezone aware timestamps. "
     "If False the timestamps are in UTC (Time zone naive). "
     "If True the timestamps are in the time zone set by the server.timezone config option.",
