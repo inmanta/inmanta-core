@@ -118,7 +118,7 @@ def get_bind_port() -> int:
         )
         return Config.get("server_rest_transport", "port", 8888)
 
-
+server_utc_timestamps = Option("server", "utc_timestamps", True, "Enable authentication on the server API", is_bool)
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
 server_auth_method = Option("server", "auth_method", None, "The authentication method to use: oidc or database", is_str_opt)
 

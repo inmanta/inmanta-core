@@ -282,7 +282,7 @@ class ParameterService(protocol.ServerSlice):
                 "parameters": params,
                 "expire": self._fact_expire,
                 # Return datetime in UTC without explicit timezone offset
-                "now": util.datetime_utc_isoformat(datetime.datetime.now()),
+                "now": util.datetime_isoformat(datetime.datetime.now()),
             },
         )
 
