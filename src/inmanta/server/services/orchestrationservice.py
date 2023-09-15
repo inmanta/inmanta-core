@@ -28,7 +28,14 @@ import pydantic
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE, InvalidSort, RowLockMode
+from inmanta.data import (
+    APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    PURGE_ON_DELETE,
+    InvalidSort,
+    RowLockMode,
+)
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
