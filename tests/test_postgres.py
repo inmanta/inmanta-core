@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from asyncio import Event
 
 """
 This module contains tests related to PostgreSQL and how we interact with it. Its purpose is to verify PostgreSQL internals,
@@ -169,3 +170,61 @@ async def test_postgres_cascade_locking_order_siblings(
             deadlock,
             delete(),
         )
+
+
+@pytest.mark.slowtest
+async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
+    """
+    When do transaction lock each other out?
+    """
+
+    # Make a table
+    async with postgresql_pool.acquire() as connection:
+        await connection.execute("CREATE TABLE IF NOT EXISTS root (name varchar PRIMARY KEY, released BOOL);")
+        await connection.execute(
+            """
+            INSERT INTO root VALUES
+                ('root1', False),
+                ('root2', False);
+            """
+        )
+
+    async def update_root(name: str, lock: Event):
+        # Main routine: lock table and update if required
+        # there is lock given as an argument to make sure we can make one wait for the other
+        async with postgresql_pool.acquire() as connection:
+            async with connection.transaction():
+                print(f"{name}: ENTER")
+                # for update is the key here!!!
+                record = await connection.fetchrow("select released from root where name=$1 for update", "root1")
+                print(f"{name}: WAIT")
+                await lock.wait()
+                assert len(record) == 1
+                if record[0] is True:
+                    return False
+                print(f"{name}: UPDATE")
+                await connection.execute("UPDATE root SET released=true where name=$1", "root1")
+                return True
+        print(f"{name}: COMMITTED")
+
+    # Two locks
+    l1 = Event()
+    l2 = Event()
+
+    # Two task running
+    f1 = asyncio.create_task(update_root("1", l1))
+    f2 = asyncio.create_task(update_root("2", l2))
+
+    # Sleep a bit to get them to lock up
+    await asyncio.sleep(0.1)
+    # Unlock
+    l2.set()
+    l1.set()
+
+    # get results
+    r1 = await f1
+    r2 = await f2
+
+    # One should return true, the other false
+    print(r1, r2)
+    assert r1 + r2 == 1
