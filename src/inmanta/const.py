@@ -335,4 +335,4 @@ PG_ADVISORY_KEY_RELEASE_VERSION = 2
 MODULE_CHANGELOG_FILE = "CHANGELOG.md"
 
 
-DATETIME_MIN_UTC = datetime.datetime(datetime.MINYEAR, 1, 1, tzinfo=datetime.timezone.utc)
+DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
