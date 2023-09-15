@@ -5062,7 +5062,7 @@ class Resource(BaseDocument):
            WHERE new_resource.model=$1
            AND new_resource.environment=$2
            AND new_resource.last_produced_events is null"""
-        await cls._execute_query(query, to_version, environment, from_version, now, connection=connection)
+        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()

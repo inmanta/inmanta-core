@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import datetime
 import logging
 
 import pytest
 
-from inmanta.agent import Agent
+import inmanta.data as data
 from inmanta.const import AgentTriggerMethod
 from test_data_concurrency import slowdown_queries
 
@@ -29,7 +30,7 @@ LOGGER = logging.getLogger("test")
 
 @pytest.mark.slowtest
 async def test_6475_deploy_with_failure_masking(
-    server, agent: Agent, environment, resource_container, clienthelper, client, monkeypatch
+    server, agent, environment, resource_container, clienthelper, client, monkeypatch
 ):
     """
     Consider:
@@ -136,3 +137,18 @@ async def test_6475_deploy_with_failure_masking(
     # 2 times for v1
     # 1 time for v2
     assert resource_container.Provider.readcount("agent1", "key2") == 3
+
+    result = await client.resource_logs(environment, "test::Resource[agent1,key=key2]", filter={"action": ["deploy"]})
+    assert result.code == 200
+    stale_notification = None
+    for line in result.result["data"]:
+        LOGGER.info("Final logs: %s | %s", line["msg"], line)
+        if "stale" in line["msg"]:
+            stale_notification = line
+
+    resources = await data.Resource.get_resources(environment, ["test::Resource[agent1,key=key2],v=2"])
+    assert len(resources) == 1
+    resource = resources[0]
+
+    time_of_failure = datetime.datetime.fromisoformat(stale_notification["timestamp"])
+    assert resource.last_produced_events == time_of_failure
