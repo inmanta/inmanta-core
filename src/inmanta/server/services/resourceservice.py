@@ -695,7 +695,7 @@ class ResourceService(protocol.ServerSlice):
                             )
                         if propagate_last_produced_events:
                             await data.Resource.update_last_produced_events_if_newer(
-                                env, resource_id.resource_str(), latest_version, finished, connection=connection
+                                env.id, resource_id.resource_str(), latest_version, finished, connection=connection
                             )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))

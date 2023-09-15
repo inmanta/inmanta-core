@@ -11,8 +11,6 @@
     limitations under the License.
     Contact: code@inmanta.com
 """
-import datetime
-
 from asyncpg import Connection
 
 

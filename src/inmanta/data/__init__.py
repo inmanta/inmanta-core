@@ -4498,7 +4498,7 @@ class Resource(BaseDocument):
         last_produced_events: datetime.datetime,
         *,
         connection: Optional[Connection] = None,
-    ):
+    ) -> None:
         query = f"""
                 UPDATE {cls.table_name()} as resource
                 SET
@@ -4506,7 +4506,7 @@ class Resource(BaseDocument):
                 WHERE resource.model=$2
                 AND resource.environment=$1
                 AND resource.resource_id=$3  """
-        await cls._execute_query(query, environment, version, resource_ids, last_produced_events, connection=connection)
+        await cls._execute_query(query, environment, version, resource_id, last_produced_events, connection=connection)
 
     def make_hash(self) -> None:
         character = json.dumps(
@@ -5628,15 +5628,19 @@ class ConfigurationModel(BaseDocument):
         for resource in work:
             in_increment = False
             last_success = resource["last_success"] or DATETIME_MIN_UTC
-            for req in resource["attributes"]["requires"]:
+            attributes = resource["attributes"]
+            assert isinstance(attributes, dict)  # mypy
+            for req in attributes["requires"]:
                 req_res = id_to_resource[req]
                 assert req_res is not None  # todo
+                req_res_attributes = req_res["attributes"]
+                assert isinstance(req_res_attributes, dict)  # mypy
                 last_produced_events = req_res["last_produced_events"]
                 if (
                     last_produced_events is not None
                     and last_produced_events > last_success
-                    and "send_event" in req_res["attributes"]
-                    and req_res["attributes"]["send_event"]
+                    and "send_event" in req_res_attributes
+                    and req_res_attributes["send_event"]
                 ):
                     in_increment = True
                     break
@@ -5655,7 +5659,7 @@ class ConfigurationModel(BaseDocument):
 
         for version in versions:
             # todo in next version
-            next: list[abc.Mapping[str, object]] = []
+            next = []
 
             vresources = await Resource.get_resources_for_version_raw(environment, version, projection, connection=connection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
