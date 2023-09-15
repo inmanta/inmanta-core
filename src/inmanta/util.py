@@ -45,6 +45,7 @@ from tornado import gen
 
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
+from inmanta.server.config import server_timezone, server_tz_aware_timestamps
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
@@ -406,6 +407,12 @@ def datetime_utc_isoformat(timestamp: datetime.datetime, *, naive_utc: bool = Fa
         if timestamp.tzinfo is None and naive_utc
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
+
+    if server_tz_aware_timestamps:
+        return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone))).isoformat(
+            timespec="microseconds"
+        )
+
     return naive_utc_timestamp.isoformat(timespec="microseconds")
 
 
