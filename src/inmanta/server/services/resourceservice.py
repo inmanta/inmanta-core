@@ -669,7 +669,7 @@ class ResourceService(protocol.ServerSlice):
                 propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
                 if propagate_deploy_state or propagate_last_produced_events:
                     # lock out release version
-                    await env.release_version_lock(connection=connection)
+                    await env.acquire_release_version_lock(connection=connection)
                     latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
 
                     if latest_version is not None and latest_version > resource_id.version:
@@ -916,7 +916,7 @@ class ResourceService(protocol.ServerSlice):
 
                         if status == ResourceState.failed or status == ResourceState.skipped:
                             # lock out release version
-                            await env.release_version_lock(connection=connection)
+                            await env.acquire_release_version_lock(connection=connection)
                             latest_version = await data.ConfigurationModel.get_version_nr_latest_version(
                                 env.id, connection=connection
                             )

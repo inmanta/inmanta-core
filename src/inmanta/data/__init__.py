@@ -2951,7 +2951,7 @@ RETURNING last_version;
             return result[0]
         return None
 
-    async def release_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+    async def acquire_release_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
         """
         Acquires a transaction-level advisory lock for concurrency control between release_version and
         calls that need the latest version.
