@@ -47,7 +47,6 @@ from crontab import CronTab
 from inmanta import COMPILER_VERSION
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
-from inmanta.server.config import server_utc_timestamps
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -395,10 +394,9 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_isoformat(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
+def datetime_utc_isoformat(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
     """
-    Returns a timestamp ISO string. in implicit UTC.
-    :inmanta.config:option:`server.utc_timestamps`
+    Returns a timestamp ISO string in implicit UTC.
 
     :param timestamp: The timestamp to get the ISO string for.
     :param naive_utc: Whether to interpret naive timestamps as UTC. By default naive timestamps are assumed to be in local time.
@@ -447,7 +445,7 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
     """
     if isinstance(o, datetime.datetime):
         # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
-        return datetime_isoformat(o, naive_utc=True)
+        return datetime_utc_isoformat(o, naive_utc=True)
 
     return _custom_json_encoder(o)
 
