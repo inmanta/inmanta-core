@@ -1,0 +1,7 @@
+description: Ensure releasing a new version can not hide failures in ongoing deployments for older versions
+issue-nr: 6475
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"
+
