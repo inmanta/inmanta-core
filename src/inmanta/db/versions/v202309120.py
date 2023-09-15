@@ -21,7 +21,7 @@ from asyncpg import Connection
 
 async def update(connection: Connection) -> None:
     """
-    Add the indexes to make the joins done by a cascading delete perform well.
+    Add the file table.
     """
     schema = """
         CREATE TABLE public.file (
