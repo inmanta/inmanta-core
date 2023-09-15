@@ -118,6 +118,10 @@ def get_bind_port() -> int:
         )
         return Config.get("server_rest_transport", "port", 8888)
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",
@@ -125,11 +129,16 @@ server_tz_aware_timestamps = Option(
     "Whether the server should return timezone aware timestamps. "
     "If False the timestamps are in UTC (Time zone naive). "
     "If True the timestamps are in the time zone set by the server.timezone config option.",
+<<<<<<< HEAD
     is_bool,
+=======
+    is_bool
+>>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 )
 
 
 server_timezone = Option(
+<<<<<<< HEAD
     "server",
     "timezone",
     0,
@@ -138,6 +147,13 @@ server_timezone = Option(
     is_int,
 )
 
+=======
+    "server", "timezone", 0,
+    "Used in combination with the server.tz_aware_timestamps when it is set to true, ignored otherwise. "
+    "Integer offset with relation to UTC.",
+    is_int
+)
+>>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
 server_auth_method = Option("server", "auth_method", None, "The authentication method to use: oidc or database", is_str_opt)
 

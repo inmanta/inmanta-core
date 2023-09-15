@@ -792,7 +792,11 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
+<<<<<<< HEAD
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_utc_isoformat(datetime.now())}
+=======
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_iso_format(datetime.now())}
+>>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 
     @handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
