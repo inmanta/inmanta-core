@@ -28,7 +28,7 @@ from pytest import fixture
 from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
-from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, TResource, provider
+from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -334,7 +334,7 @@ def resource_container():
             _RELOAD_COUNT.clear()
 
     @provider("test::Resource", name="test_resource")
-    class ResourceProvider(Provider[MyResource]):
+    class ResourceProvider(Provider):
         pass
 
     @provider("test::Fail", name="test_fail")
@@ -535,7 +535,7 @@ def resource_container():
             await asyncio.sleep(0.1)
 
     @provider("test::Wait", name="test_wait")
-    class Wait(ResourceHandler):
+    class Wait(Provider):
         def __init__(self, agent, io=None):
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()
