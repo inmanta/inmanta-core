@@ -326,6 +326,9 @@ class NotificationSeverity(str, Enum):
 CF_CACHE_DIR = ".cfcache"
 
 PG_ADVISORY_KEY_PUT_VERSION = 1
+PG_ADVISORY_KEY_RELEASE_VERSION = 2
+""" lock against releasing a version in an environment, to prevent release races"""
+
 
 # The filename of the changelog file in an Inmanta module
 MODULE_CHANGELOG_FILE = "CHANGELOG.md"

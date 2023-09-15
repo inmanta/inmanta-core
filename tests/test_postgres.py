@@ -176,6 +176,8 @@ async def test_postgres_cascade_locking_order_siblings(
 async def test_postgres_transaction_re_entry(postgresql_pool) -> None:
     """
     When do transaction lock each other out?
+
+    More specifically, how to make the release_version method lock itself out.
     """
 
     # Make a table
