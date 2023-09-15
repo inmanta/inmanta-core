@@ -394,11 +394,7 @@ class ResourceService(protocol.ServerSlice):
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-<<<<<<< HEAD
-            "timestamp": util.datetime_utc_isoformat(timestamp),
-=======
             "timestamp": util.datetime_iso_format(timestamp),
->>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
             "args": [],
         }
         await self.resource_action_update(

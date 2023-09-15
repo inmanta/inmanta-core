@@ -49,10 +49,7 @@ from inmanta import COMPILER_VERSION
 from inmanta.server.config import server_timezone, server_tz_aware_timestamps
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
-<<<<<<< HEAD
-=======
 from inmanta.server.config import server_tz_aware_timestamps, server_timezone
->>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -400,18 +397,12 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-<<<<<<< HEAD
-def datetime_utc_isoformat(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
-    """
-    Returns a timestamp ISO string in implicit UTC.
-=======
 def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
     """
     Returns a timestamp ISO string. The :inmanta.config:option:`server.tz_aware_timestamps` config
     option determines whether this timestamp is time-zone aware (in the time-zone configured in
     :inmanta.config:option:`server.timezone`) or in UTC.
 
->>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 
     :param timestamp: The timestamp to get the ISO string for.
     :param naive_utc: Whether to interpret naive timestamps as UTC. By default naive timestamps are assumed to be in local time.
@@ -421,16 +412,8 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
         if timestamp.tzinfo is None and naive_utc
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
-<<<<<<< HEAD
-
-    if server_tz_aware_timestamps:
-        return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone))).isoformat(
-            timespec="microseconds"
-        )
-=======
     if server_tz_aware_timestamps:
         return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone))).isoformat(timespec="microseconds")
->>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
 
     return naive_utc_timestamp.isoformat(timespec="microseconds")
 

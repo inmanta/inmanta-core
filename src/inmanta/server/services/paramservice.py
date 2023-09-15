@@ -282,11 +282,7 @@ class ParameterService(protocol.ServerSlice):
                 "parameters": params,
                 "expire": self._fact_expire,
                 # Return datetime in UTC without explicit timezone offset
-<<<<<<< HEAD
-                "now": util.datetime_utc_isoformat(datetime.datetime.now()),
-=======
                 "now": util.datetime_iso_format(datetime.datetime.now()),
->>>>>>> 851ca785 ([WIP] add options to make the server return timezone aware timestamps)
             },
         )
 
