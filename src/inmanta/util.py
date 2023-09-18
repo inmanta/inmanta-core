@@ -411,8 +411,8 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
         if timestamp.tzinfo is None and naive_utc
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
-    if server_tz_aware_timestamps:
-        return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone))).isoformat(
+    if server_tz_aware_timestamps.get():
+        return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone.get()))).isoformat(
             timespec="microseconds"
         )
 
