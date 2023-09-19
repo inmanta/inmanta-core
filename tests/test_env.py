@@ -543,7 +543,7 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     with pytest.raises(env.ConflictingRequirements) as excinfo:
         tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
     match = re.search(
-        r"Cannot install inmanta-core==4\.0\.0 and inmanta-core=.* because these "
+        r"Cannot install (inmanta-core==4\.0\.0 and inmanta-core=.*|inmanta-core=.* and inmanta-core==4\.0\.0) because these "
         r"package versions have conflicting dependencies",
         excinfo.value.msg,
     )
