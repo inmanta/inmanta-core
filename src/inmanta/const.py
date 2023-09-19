@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import datetime
 from enum import Enum
 
 from inmanta.stable_api import stable_api
@@ -332,3 +333,6 @@ PG_ADVISORY_KEY_RELEASE_VERSION = 2
 
 # The filename of the changelog file in an Inmanta module
 MODULE_CHANGELOG_FILE = "CHANGELOG.md"
+
+
+DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
