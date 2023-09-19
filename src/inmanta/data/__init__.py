@@ -67,7 +67,7 @@ import inmanta.db.versions
 import inmanta.resources as resources
 import inmanta.util as util
 from crontab import CronTab
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
+from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
@@ -4428,6 +4428,7 @@ class Resource(BaseDocument):
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
     last_success: Optional[datetime.datetime] = None
+    last_produced_events: Optional[datetime.datetime] = None
 
     # State related
     attributes: Dict[str, Any] = {}
@@ -4496,6 +4497,25 @@ class Resource(BaseDocument):
         ]
         result = await cls._fetch_query(query, *values, connection=connection)
         return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
+
+    @classmethod
+    async def update_last_produced_events_if_newer(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        version: int,
+        last_produced_events: datetime.datetime,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+                UPDATE {cls.table_name()} as resource
+                SET
+                    last_produced_events = GREATEST($4, last_produced_events)
+                WHERE resource.model=$2
+                AND resource.environment=$1
+                AND resource.resource_id=$3  """
+        await cls._execute_query(query, environment, version, resource_id, last_produced_events, connection=connection)
 
     def make_hash(self) -> None:
         character = json.dumps(
@@ -5103,14 +5123,11 @@ class Resource(BaseDocument):
     async def copy_last_success(
         cls,
         environment: uuid.UUID,
-        version: int,
+        from_version: int,
+        to_version: int,
         *,
         connection: Optional[Connection] = None,
     ) -> None:
-        last_released = await ConfigurationModel.get_latest_version(environment, connection=connection)
-        if not last_released:
-            return
-        previous_version = last_released.version
         query = f"""
         UPDATE {cls.table_name()} as new_resource
         SET
@@ -5123,7 +5140,34 @@ class Resource(BaseDocument):
         WHERE new_resource.model=$1
         AND new_resource.environment=$2
         AND new_resource.last_success is null"""
-        await cls._execute_query(query, version, environment, previous_version, connection=connection)
+        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
+
+    @classmethod
+    async def copy_last_produced_events(
+        cls,
+        environment: uuid.UUID,
+        from_version: int,
+        to_version: int,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """
+        Copy the value of last_produced events for every resource in the to_version from the from_version
+        """
+        query = f"""
+           UPDATE {cls.table_name()} as new_resource
+           SET
+               last_produced_events = (
+                   SELECT old_resource.last_produced_events
+                   FROM {cls.table_name()} as old_resource
+                   WHERE old_resource.model=$3
+                   AND old_resource.environment=$2
+                   AND old_resource.resource_id=new_resource.resource_id
+               )
+           WHERE new_resource.model=$1
+           AND new_resource.environment=$2
+           AND new_resource.last_produced_events is null"""
+        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
@@ -5671,7 +5715,7 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
         """
-        projection_a = ["resource_id", "status", "attribute_hash", "attributes"]
+        projection_a = ["resource_id", "status", "attribute_hash", "attributes", "last_success", "last_produced_events"]
         projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
@@ -5683,6 +5727,34 @@ class ConfigurationModel(BaseDocument):
         # todo in this version
         work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
+        # start with outstanding events
+        id_to_resource = {r["resource_id"]: r for r in resources}
+        next: list[abc.Mapping[str, object]] = []
+        for resource in work:
+            in_increment = False
+            last_success = resource["last_success"] or DATETIME_MIN_UTC
+            attributes = resource["attributes"]
+            assert isinstance(attributes, dict)  # mypy
+            for req in attributes["requires"]:
+                req_res = id_to_resource[req]
+                assert req_res is not None  # todo
+                req_res_attributes = req_res["attributes"]
+                assert isinstance(req_res_attributes, dict)  # mypy
+                last_produced_events = req_res["last_produced_events"]
+                if (
+                    last_produced_events is not None
+                    and last_produced_events > last_success
+                    and "send_event" in req_res_attributes
+                    and req_res_attributes["send_event"]
+                ):
+                    in_increment = True
+                    break
+            if in_increment:
+                increment.append(resource)
+            else:
+                next.append(resource)
+        work = next
+
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
         values = [cls._get_value(environment)]
@@ -5692,7 +5764,7 @@ class ConfigurationModel(BaseDocument):
 
         for version in versions:
             # todo in next version
-            next: list[abc.Mapping[str, object]] = []
+            next = []
 
             vresources = await Resource.get_resources_for_version_raw(environment, version, projection, connection=connection)
             id_to_resource = {r["resource_id"]: r for r in vresources}

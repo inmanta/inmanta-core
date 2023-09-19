@@ -551,34 +551,6 @@ def resource_container():
             logger.info("Releasing waiter %s", self.traceid)
             super().deploy(ctx, resource, requires)
 
-        def check_resource(self, ctx, resource):
-            self.read(resource.id.get_agent_name(), resource.key)
-            current = resource.clone()
-            current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
-
-            if not current.purged:
-                current.value = self.get(resource.id.get_agent_name(), resource.key)
-            else:
-                current.value = None
-
-            return current
-
-        def do_changes(self, ctx, resource, changes):
-            if self.fail(resource.id.get_agent_name(), resource.key):
-                raise Exception("Failed")
-
-            if "purged" in changes:
-                if changes["purged"]["desired"]:
-                    self.delete(resource.id.get_agent_name(), resource.key)
-                    ctx.set_purged()
-                else:
-                    self.set(resource.id.get_agent_name(), resource.key, resource.value)
-                    ctx.set_created()
-
-            elif "value" in changes:
-                self.set(resource.id.get_agent_name(), resource.key, resource.value)
-                ctx.set_updated()
-
     @provider("test::Deploy", name="test_wait")
     class Deploy(Provider):
         def deploy(

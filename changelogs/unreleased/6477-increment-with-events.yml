@@ -1,0 +1,7 @@
+description: Ensure that resources that will receive events are in the increment.
+issue-nr: 6477
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}. Any deployment with a status other than nochange is considered to be an event. "
+

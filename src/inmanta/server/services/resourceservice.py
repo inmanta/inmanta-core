@@ -643,6 +643,14 @@ class ResourceService(protocol.ServerSlice):
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
 
+                propagate_last_produced_events = False
+                # keep track IF we need to propagate if we are stale
+                # but only do it at the end of the transaction
+                if change != Change.nochange:
+                    # We are producing an event
+                    extra_fields["last_produced_events"] = finished
+                    propagate_last_produced_events = True
+
                 await resource.update_fields(
                     last_deploy=finished,
                     status=status,
@@ -658,30 +666,10 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-                if status == ResourceState.failed or status == ResourceState.skipped:
-                    # lock out release version
-                    await env.acquire_release_version_lock(connection=connection)
-                    latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
-                    if latest_version is not None and latest_version > resource_id.version:
-                        # we are stale, forward propagate our status
-                        # this is required because:
-                        # upon release of the newer version our old status may have been copied over into the new version
-                        # (by the increment calculation)
-                        # the new version may thus hide this failure
-                        # issue #6475
-                        # the release_version_lock above ensure we can not race with release itself
-                        # this is at the end of the transaction to not block release too long
-                        # and vice versa
-                        await self._update_deploy_state(
-                            env,
-                            resource_id.resource_str(),
-                            finished,
-                            latest_version,
-                            status,
-                            f"update on stale version {resource_id.version}",
-                            fail_on_error=False,
-                            connection=connection,
-                        )
+                propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
+                await self.propagate_resource_state_if_stale(
+                    connection, env, [resource_id], finished, status, propagate_last_produced_events, propagate_deploy_state
+                )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
@@ -700,6 +688,48 @@ class ResourceService(protocol.ServerSlice):
                     change=change,
                     changes=changes_with_rvid,
                 )
+
+    async def propagate_resource_state_if_stale(
+        self,
+        connection: Connection,
+        env: data.Environment,
+        resource_ids: list[Id],
+        last_produced_events: datetime.datetime,
+        deploy_state: ResourceState,
+        propagate_last_produced_events: bool,
+        propagate_deploy_state: bool,
+    ) -> None:
+        if propagate_deploy_state or propagate_last_produced_events:
+            # lock out release version
+            await env.acquire_release_version_lock(connection=connection)
+            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+
+            for resource_id in resource_ids:
+                if latest_version is not None and latest_version > resource_id.version:
+                    # we are stale, forward propagate our status
+                    # this is required because:
+                    # upon release of the newer version our old status may have been copied over into the new version
+                    # (by the increment calculation)
+                    # the new version may thus hide this failure
+                    # issue #6475
+                    # the release_version_lock above ensure we can not race with release itself
+                    # this is at the end of the transaction to not block release too long
+                    # and vice versa
+                    if propagate_deploy_state:
+                        await self._update_deploy_state(
+                            env,
+                            resource_id.resource_str(),
+                            last_produced_events,
+                            latest_version,
+                            deploy_state,
+                            f"update on stale version {resource_id.version}",
+                            fail_on_error=False,
+                            connection=connection,
+                        )
+                    if propagate_last_produced_events:
+                        await data.Resource.update_last_produced_events_if_newer(
+                            env.id, resource_id.resource_str(), latest_version, last_produced_events, connection=connection
+                        )
 
     @handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
@@ -899,41 +929,25 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        if status == ResourceState.failed or status == ResourceState.skipped:
-                            # lock out release version
-                            await env.acquire_release_version_lock(connection=connection)
-                            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(
-                                env.id, connection=connection
-                            )
+                        propagate_last_produced_events = change != Change.nochange
 
-                            for res in resources:
-                                if latest_version is not None and latest_version > res.model:
-                                    # we are stale, forward propagate our status
-                                    # this is required because:
-                                    # upon release of the newer version our old status
-                                    # may have been copied over into the new version
-                                    # (by the increment calculation)
-                                    # the new version may thus hide this failure
-                                    # issue #6475
-                                    # the release_version_lock above ensure we can not race with release itself
-                                    # this is at the end of the transaction to not block release too long
-                                    # and vice versa
-                                    await self._update_deploy_state(
-                                        env,
-                                        res.resource_id,
-                                        finished,
-                                        latest_version,
-                                        status,
-                                        f"update on stale version {res.model}",
-                                        fail_on_error=False,
-                                        connection=connection,
-                                    )
+                        await self.propagate_resource_state_if_stale(
+                            connection,
+                            env,
+                            [Id.parse_id(res) for res in resource_ids],
+                            finished,
+                            status,  # mypy can't figure out this is never None here
+                            propagate_last_produced_events,
+                            status == ResourceState.failed or status == ResourceState.skipped,
+                        )
 
                         model_version = None
                         for res in resources:
                             extra_fields = {}
                             if status == ResourceState.deployed and not is_increment_notification:
                                 extra_fields["last_success"] = resource_action.started
+                            if propagate_last_produced_events:
+                                extra_fields["last_produced_events"] = finished
                             await update_fields_resource(
                                 res, last_deploy=finished, status=status, **extra_fields, connection=connection
                             )
