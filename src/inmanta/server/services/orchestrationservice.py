@@ -1082,17 +1082,24 @@ class OrchestrationService(protocol.ServerSlice):
                             connection=connection,
                         )
 
-                increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.resource_service.get_increment(
-                    env,
-                    version_id,
-                    connection=connection,
-                )
+                if latest_version:
+                    # Set the updated field:
+                    # BE VERY CAREFUL
+                    # All state copied here has a race with stale deploy
+                    # This is handled in propagate_resource_state_if_stale
+                    await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
+                    await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
 
-                increment_ids, neg_increment = increments
-                await self.resource_service.mark_deployed(env, neg_increment, now, version_id, connection=connection)
+                    increments: tuple[
+                        abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]
+                    ] = await self.resource_service.get_increment(
+                        env,
+                        version_id,
+                        connection=connection,
+                    )
 
-                # Set the updated field:
-                await data.Resource.copy_last_success(env.id, version_id, connection=connection)
+                    increment_ids, neg_increment = increments
+                    await self.resource_service.mark_deployed(env, neg_increment, now, version_id, connection=connection)
 
                 # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
                 # This has to be done after the resources outside of the increment have been marked as deployed.

@@ -37,6 +37,7 @@ import build
 import build.env
 from _pytest.mark import MarkDecorator
 from inmanta import const, data, env, module, util
+from inmanta.data import ResourceIdStr
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -46,6 +47,8 @@ from libpip2pi.commands import dir2pi
 from packaging import version
 
 T = TypeVar("T")
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_all_subclasses(cls: Type[T]) -> set[Type[T]]:
@@ -306,6 +309,19 @@ async def _wait_until_deployment_finishes(client: Client, environment: str, vers
         result = await client.get_version(environment, version)
         print(version, result.result)
         return result.result["model"]["deployed"]
+
+    await retry_limited(is_deployment_finished, timeout)
+
+
+async def _wait_for_resource_actions(
+    client: Client, environment: str, rid: ResourceIdStr, deploy_count: int, timeout: int = 10
+) -> None:
+    async def is_deployment_finished() -> bool:
+        result = await client.resource_logs(environment, rid, filter={"action": ["deploy"]})
+        assert result.code == 200
+        end_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
+        LOGGER.info("Deploys done: %s", end_lines)
+        return len(end_lines) >= deploy_count
 
     await retry_limited(is_deployment_finished, timeout)
 
