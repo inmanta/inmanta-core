@@ -28,6 +28,7 @@ import pytest
 
 import inmanta.util
 from inmanta import const
+from inmanta.app import CompileSummaryReporter
 
 
 def get_command(
@@ -558,3 +559,62 @@ def test_init_project(tmpdir):
     (stdout, stderr, return_code) = run_without_tty(args, killtime=15, termtime=10)
     assert return_code != 0
     assert any("already exists" in error for error in stderr)
+
+
+def test_compiler_summary_reporter(monkeypatch, capsys) -> None:
+    """
+    Test the CompileSummaryReporter class
+    """
+
+    def success():
+        pass
+
+    def compilation_failure():
+        raise Exception("This is a compilation failure")
+
+    def export_failure():
+        raise Exception("This is an export failure")
+
+    # Test success
+    summary_reporter = CompileSummaryReporter()
+    summary_reporter.run_compile_stage(compile_logic=success, re_raise_exceptions=False)
+    summary_reporter.run_export_stage(export_logic=success)
+    assert not summary_reporter.is_failure()
+    summary_reporter.print_summary(show_stack_traces=False)
+    output = capsys.readouterr().err
+    assert re.match(r"\n=+ SUCCESS =+\n", output)
+
+    # Test compilation failure
+    for export_logic in [export_failure, success]:
+        summary_reporter = CompileSummaryReporter()
+        summary_reporter.run_compile_stage(compile_logic=compilation_failure, re_raise_exceptions=False)
+        summary_reporter.run_export_stage(export_logic=export_logic)
+        assert summary_reporter.is_failure()
+        summary_reporter.print_summary(show_stack_traces=False)
+        output = capsys.readouterr().err
+        assert re.match(r"\n=+ COMPILATION FAILURE =+\nError: This is a compilation failure\n", output)
+        assert "= EXCEPTION TRACE =" not in output
+        summary_reporter.print_summary(show_stack_traces=True)
+        output = capsys.readouterr().err
+        assert re.match(
+            r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ COMPILATION FAILURE =+\nError: This is a compilation failure\n",
+            output,
+        )
+
+    # Test re_raise_exceptions option
+    summary_reporter = CompileSummaryReporter()
+    with pytest.raises(Exception):
+        summary_reporter.run_compile_stage(compile_logic=compilation_failure, re_raise_exceptions=True)
+
+    # Test export failure
+    summary_reporter = CompileSummaryReporter()
+    summary_reporter.run_compile_stage(compile_logic=success, re_raise_exceptions=False)
+    summary_reporter.run_export_stage(export_logic=export_failure)
+    assert summary_reporter.is_failure()
+    summary_reporter.print_summary(show_stack_traces=False)
+    output = capsys.readouterr().err
+    assert re.match(r"\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)
+    assert "= EXCEPTION TRACE =" not in output
+    summary_reporter.print_summary(show_stack_traces=True)
+    output = capsys.readouterr().err
+    assert re.match(r"\n=+ EXCEPTION TRACE =+\n(.|\n)*\n=+ EXPORT FAILURE =+\nError: This is an export failure\n", output)
