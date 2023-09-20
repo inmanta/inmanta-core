@@ -1,0 +1,8 @@
+description: the `release_version`, `/version/<id>` api endpoint will now return a 409 when called twice on the same version
+issue-nr: 6349
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"
+  upgrade-note: "{{description}}"
+

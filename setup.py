@@ -3,6 +3,7 @@ from os import path
 
 requires = [
     "asyncpg~=0.25",
+    "build~=1.0",
     "click-plugins~=1.0",
     # click has been known to publish non-backwards compatible minors in the past (removed deprecated code in 8.1.0)
     "click>=8.0,<8.2",
@@ -34,7 +35,6 @@ requires = [
     "tornado~=6.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
-    "build~=0.7",
     "ruamel.yaml~=0.17",
     "toml~=0.10 ",
 ]
@@ -45,7 +45,7 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "9.3.1"
+version = "10.0.0"
 
 setup(
     version=version,

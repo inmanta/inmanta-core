@@ -1,0 +1,10 @@
+---
+description: "Files handled by the file API are now stored in the database instead of on the file system of the Inmanta server."
+issue-nr: 6441
+issue-repo: inmanta-core
+change-type: major
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"
+  upgrade-note: "A full recompile is required after upgrading the Inmanta server to re-publish all required files to the file API. After the upgrade, the Inmanta server will no longer have access to files uploaded using the old version of the Inmanta server."
+  deprecation-note: "The `server.delete-currupt-files` config option was removed."

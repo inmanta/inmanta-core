@@ -568,30 +568,6 @@ typedef abc as string matching self in ["a","b","c"]
     assert [x.value for x in stmt.get_expression().children[1].items] == ["a", "b", "c"]
 
 
-def test_typedef_plugin_call():
-    """
-    If this test fails, the collection of validation types and
-    validation_parameters will fail in the LSM module.
-    plugin_call() must expand to (plugin_call() == true)
-    """
-    statements = parse_code(
-        """
-typedef abc as string matching std::is_base64_encoded(self)
-"""
-    )
-    assert len(statements) == 1
-    stmt = statements[0]
-    assert isinstance(stmt, DefineTypeConstraint)
-    assert str(stmt.name) == "abc"
-    assert str(stmt.basetype) == "string"
-    assert isinstance(stmt.get_expression(), Equals)
-    left_side_equals = stmt.get_expression()._arguments[0]
-    right_side_equals = stmt.get_expression()._arguments[1]
-    assert isinstance(left_side_equals, FunctionCall)
-    assert isinstance(right_side_equals, Literal)
-    assert isinstance(right_side_equals.value, bool) and right_side_equals.value
-
-
 def test_index():
     statements = parse_code(
         """

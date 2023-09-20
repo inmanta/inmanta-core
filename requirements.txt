@@ -4,7 +4,7 @@ click==8.1.7
 colorlog==6.7.0
 cookiecutter==2.3.0
 crontab==1.0.1
-cryptography==41.0.3
+cryptography==41.0.4
 docstring-parser==0.15
 email-validator==2.0.0.post2
 execnet==1.9.0
@@ -21,12 +21,12 @@ PyJWT==2.8.0
 pynacl==1.5.0
 python-dateutil==2.8.2
 pyyaml==6.0.1
-setuptools==68.1.2
+setuptools==68.2.2
 texttable==1.6.7
 tornado==6.3.3
 toml==0.10.2
 typing_inspect==0.9.0
-build==0.10.0
+build==1.0.3
 ruamel.yaml==0.17.32
 
 # Optional import in code
