@@ -1365,6 +1365,12 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     def _raw_parser_parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
         return YamlParser.parse(source)
 
+    @field_validator("compiler_version", mode="before")
+    @classmethod
+    def convert_to_string(cls, v: Union[str, int, float]) -> str:
+        """ Make sure versions that are also numbers become an actual string, even if yaml loads them as int or float"""
+        return str(v)
+
     @field_validator("compiler_version")
     @classmethod
     def is_pep440_version_v1(cls, v: str) -> str:
