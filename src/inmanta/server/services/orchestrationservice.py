@@ -1021,7 +1021,7 @@ class OrchestrationService(protocol.ServerSlice):
                 # (locks out patching stage of deploy_done to avoid races)
                 await env.acquire_release_version_lock(connection=connection)
                 model = await data.ConfigurationModel.get_version_internal(
-                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_UPDATE
+                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
                 )
                 if model is None:
                     return 404, {"message": "The request version does not exist."}
