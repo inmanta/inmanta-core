@@ -161,4 +161,8 @@ because of strict mode which is now enabled by default which disables auto casti
 
 same for std: -> ugly hacked directly in core module.py Metadata.parse
 
+## unions and strict mode 
 
+Strict mode does no longer evaluate left to right which is actually what we want. However, in some places we rely on this
+fact. For example the protocol test case. We pass an integer and we expect an integer back. However, when it is used in a get
+call the value is passed as a string in the url, which per definition is a string.

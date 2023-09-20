@@ -59,7 +59,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def rename_fields(env: model.Environment) -> JsonType:
-    env_dict = env.dict()
+    env_dict = env.model_dump()
     env_dict["project"] = env_dict["project_id"]
     del env_dict["project_id"]
     return env_dict
@@ -193,7 +193,7 @@ class EnvironmentService(protocol.ServerSlice):
             metadata = model.ModelMetadata(
                 message="Recompile for modified setting", type="setting", extra_data={"setting": key}
             )
-            warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.dict())
+            warnings = await self.server_slice._async_recompile(env, setting.update, metadata=metadata.model_dump())
 
         if setting.agent_restart:
             if key == data.AUTOSTART_AGENT_MAP:

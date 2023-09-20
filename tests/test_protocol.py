@@ -36,7 +36,7 @@ from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
 
-from inmanta import config, const, protocol
+from inmanta import config, const, protocol, types
 from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode
@@ -415,10 +415,7 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
 
     class Project(BaseModel):
         source: str
-        validate_: bool
-
-        class Config:
-            fields = {"validate_": {"alias": "validate"}}
+        validate_: bool = pydantic.Field(..., alias="validate")
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
@@ -1052,17 +1049,19 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
     result = await client.test_method(data=5, version=3)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert 5 == result.result["data"][0]
+    # The integer is passed as a string in the url of the get call. This causes it to become a string. To prevent this
+    # the argument needs to be typed as an int
+    assert "5" == result.result["data"][0]
 
     result = await client.test_method(data=5)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert 5 == result.result["data"][0]
+    assert "5" == result.result["data"][0]
 
     result = await client.test_method(data=5, version=7)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert 5 == result.result["data"][0]
+    assert "5" == result.result["data"][0]
 
 
 async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name, async_finalizer):
@@ -1102,8 +1101,8 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name,
     name = [d for d in details if d["loc"] == ["data", "name"]][0]
     value = [d for d in details if d["loc"] == ["data", "value"]][0]
 
-    assert name["msg"] == "field required"
-    assert value["msg"] == "field required"
+    assert name["msg"].lower() == "field required"
+    assert value["msg"].lower() == "field required"
 
     # Check the validation of the return value
     result = await client.test_method(data={"name": "X", "value": "Y"})

@@ -145,7 +145,7 @@ class Schema(BaseModel):
         return duplicate
 
 
-Schema.update_forward_refs()
+Schema.model_rebuild()
 
 
 class Example(BaseModel):

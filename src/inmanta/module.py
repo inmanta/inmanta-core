@@ -1270,9 +1270,17 @@ class ModuleMetadata(ABC, Metadata):
     license: str
     deprecated: Optional[bool] = None
 
+    @field_validator("version", mode="before")
+    @classmethod
+    def convert_to_string(cls, v: Union[str, float, int]) -> str:
+        """ When reading a string like 0.1 from yaml it will become a float. This method ensure
+        that we always get a string.
+        """
+        return str(v)
+
     @field_validator("version")
     @classmethod
-    def is_pep440_version(cls, v: str) -> str:
+    def is_pep440_version(cls, v: Union[str, float]) -> str:
         try:
             version.Version(v)
         except version.InvalidVersion as e:

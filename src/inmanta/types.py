@@ -22,6 +22,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
+import pydantic
 import typing_inspect
 from pydantic import errors, types
 
@@ -42,7 +43,7 @@ class StrictNonIntBool(object):
         yield cls.validate
 
     @classmethod
-    def validate(cls, value: Any) -> bool:
+    def validate(cls, value: Any, info: pydantic.ValidationInfo) -> bool:
         """
         Ensure that we only allow bools.
         """

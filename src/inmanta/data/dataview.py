@@ -678,7 +678,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                 do_export=compile["do_export"],
                 force_update=compile["force_update"],
                 metadata=json.loads(compile["metadata"]) if compile["metadata"] else {},
-                environment_variables=json.loads(compile["environment_variables"]) if compile["environment_variables"] else {},
+                environment_variables={k: str(v) for k, v in (json.loads(compile["environment_variables"]) if compile["environment_variables"] else {}).items()},
                 partial=compile["partial"],
                 removed_resource_sets=compile["removed_resource_sets"],
                 exporter_plugin=compile["exporter_plugin"],
