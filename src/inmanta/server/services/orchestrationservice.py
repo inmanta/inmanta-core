@@ -885,7 +885,9 @@ class OrchestrationService(protocol.ServerSlice):
                 await self._trigger_auto_deploy(env, version, connection=con)
             except Conflict as e:
                 # this should be an api warning, but this is not supported here
-                LOGGER.warning("Could not perform auto deploy on version %d, because %s", version, e.log_message)
+                LOGGER.warning(
+                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
+                )
 
         return 200
 
@@ -1019,7 +1021,9 @@ class OrchestrationService(protocol.ServerSlice):
                 await self._trigger_auto_deploy(env, version, connection=con)
             except Conflict as e:
                 # It is unclear if this condition can ever happen
-                LOGGER.warning("Could not perform auto deploy on version %d, because %s", version, e.log_message)
+                LOGGER.warning(
+                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
+                )
                 returnvalue.add_warnings([f"Could not perform auto deploy: {e.log_message} {e.details}"])
 
         return returnvalue

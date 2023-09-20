@@ -1682,6 +1682,7 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
         caplog,
         "inmanta",
         logging.WARNING,
-        f"Could not perform auto deploy on version 2, because Request conflicts with the current state of the resource: "
+        f"Could not perform auto deploy on version 2 in environment {environment}, "
+        f"because Request conflicts with the current state of the resource: "
         f"The version 2 on environment {environment} is older then the latest released version",
     )
