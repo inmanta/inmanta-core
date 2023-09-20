@@ -1723,7 +1723,7 @@ async def test_resource_copy_last_success(init_dataclasses_and_load_schema):
     await res4.insert()
     await side_res.insert()
 
-    await data.Resource.copy_last_success(env.id, 3)
+    await data.Resource.copy_last_success(env.id, 2, 3)
 
     readres = await data.Resource.get(env.id, res3.resource_version_id)
     assert readres.last_success == marker_date

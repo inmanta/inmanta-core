@@ -244,16 +244,6 @@ server_wait_after_param = Option(
 
 agent_timeout = Option("server", "agent-timeout", 30, "Time before an agent is considered to be offline", is_time)
 
-server_delete_currupt_files = Option(
-    "server",
-    "delete_currupt_files",
-    True,
-    "The server logs an error when it detects a file got corrupted. When set to true, the "
-    "server will also delete the file, so on subsequent compiles the missing file will be "
-    "recreated.",
-    is_bool,
-)
-
 server_purge_resource_action_logs_interval = Option(
     "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log purging", is_time
 )
