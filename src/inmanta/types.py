@@ -43,7 +43,7 @@ class StrictNonIntBool(object):
         yield cls.validate
 
     @classmethod
-    def validate(cls, value: Any, info: pydantic.ValidationInfo) -> bool:
+    def validate(cls, value: Any, info: Any) -> bool:
         """
         Ensure that we only allow bools.
         """
