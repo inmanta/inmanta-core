@@ -25,6 +25,8 @@ import operator
 import os
 import re
 import subprocess
+
+import pydantic
 import sys
 import tempfile
 import textwrap
@@ -1232,10 +1234,9 @@ class Metadata(BaseModel):
     @classmethod
     def parse(cls: Type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
         raw: Mapping[str, object] = cls._raw_parser_parse(source)
-        module_name = raw.get("name", None)
-        if module_name == "std":
-            raw["compiler_version"] = "2020.8"  # ugly hack to get the tests to pass
         try:
+            if "version" in raw:
+                raw["version"] = str(raw["version"]) # TODO: for some reason the before validator is not always called
             return cls(**raw)
         except ValidationError as e:
             if isinstance(source, TextIOBase):

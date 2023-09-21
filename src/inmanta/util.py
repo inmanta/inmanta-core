@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
+from pydantic_core import Url
 
 import asyncpg
 from tornado import gen
@@ -477,6 +478,9 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
     if isinstance(o, BaseModel):
         return o.model_dump(by_alias=True)
+
+    if isinstance(o, Url):
+        return str(o)
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
