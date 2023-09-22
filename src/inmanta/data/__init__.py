@@ -3451,7 +3451,7 @@ class Agent(BaseDocument):
             async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
                     # lock FOR UPDATE to avoid deadlocks: next query in this transaction updates the row
-                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR UPDATE",
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR NO KEY UPDATE",
                     cls._get_value(env),
                     connection=con,
                 )
@@ -3519,7 +3519,7 @@ class Agent(BaseDocument):
         for endpoint, sid in endpoints_with_new_primary:
             # Lock mode is required because we will update in this transaction
             # Deadlocks with cleanup otherwise
-            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
+            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE)
             if agent is None:
                 continue
 

@@ -25,6 +25,7 @@ import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
+from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.const import ResourceState
@@ -795,6 +796,8 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
+        *,
+        connection: Optional[Connection],
     ) -> None:
         """
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
@@ -807,7 +810,9 @@ class OrchestrationService(protocol.ServerSlice):
             push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
+            await self.release_version(
+                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection
+            )
 
     def _create_unknown_parameter_daos_from_api_unknowns(
         self, env_id: uuid.UUID, version: int, unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None
@@ -868,6 +873,7 @@ class OrchestrationService(protocol.ServerSlice):
             resource_state=resource_state,
             resource_sets=resource_sets,
         )
+
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
@@ -875,7 +881,14 @@ class OrchestrationService(protocol.ServerSlice):
                 await self._put_version(
                     env, version, rid_to_resource, unknowns_objs, version_info, resource_sets, connection=con
                 )
-        await self._trigger_auto_deploy(env, version)
+            try:
+                await self._trigger_auto_deploy(env, version, connection=con)
+            except Conflict as e:
+                # this should be an api warning, but this is not supported here
+                LOGGER.warning(
+                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
+                )
+
         return 200
 
     @handle(methods_v2.put_partial, env="tid")
@@ -888,7 +901,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[List[str]] = None,
-    ) -> int:
+    ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
                     {
@@ -1002,8 +1015,18 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     connection=con,
                 )
-        await self._trigger_auto_deploy(env, version)
-        return version
+
+            returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
+            try:
+                await self._trigger_auto_deploy(env, version, connection=con)
+            except Conflict as e:
+                # It is unclear if this condition can ever happen
+                LOGGER.warning(
+                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
+                )
+                returnvalue.add_warnings([f"Could not perform auto deploy: {e.log_message} {e.details}"])
+
+        return returnvalue
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
@@ -1021,13 +1044,13 @@ class OrchestrationService(protocol.ServerSlice):
                 # (locks out patching stage of deploy_done to avoid races)
                 await env.acquire_release_version_lock(connection=connection)
                 model = await data.ConfigurationModel.get_version_internal(
-                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_UPDATE
+                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
                 )
                 if model is None:
                     return 404, {"message": "The request version does not exist."}
 
                 if model.released:
-                    raise Conflict(f"The version {version_id} on environment {env} is already released.")
+                    raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
 
                 latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
 
@@ -1037,7 +1060,7 @@ class OrchestrationService(protocol.ServerSlice):
                 # We could lock the get_version_nr_latest_version for update to prevent this
                 if model.version < (latest_version or -1):
                     raise Conflict(
-                        f"The version {version_id} on environment {env} "
+                        f"The version {version_id} on environment {env.id} "
                         f"is older then the latest released version {latest_version}."
                     )
 
