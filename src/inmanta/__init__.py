@@ -23,6 +23,8 @@ RUNNING_TESTS = False
     This variable is used to disable certain features that shouldn't run during tests.
 """
 
+# dummy change
+
 if __name__ == "__main__":
     import inmanta.app
 
