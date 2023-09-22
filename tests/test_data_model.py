@@ -19,6 +19,7 @@ import datetime
 import json
 import sys
 import typing
+from datetime import timedelta
 from enum import Enum
 
 import pydantic
@@ -27,7 +28,7 @@ import pytest
 from inmanta import const, types
 from inmanta.data.model import BaseModel, LogLine
 from inmanta.protocol.common import json_encode
-
+from inmanta.server import config
 
 def test_model_inheritance():
     """Test if config classes inheritance"""
@@ -76,7 +77,16 @@ def test_log_line_serialization():
     Ensure that the level field of a LogLine serializes and deserializes correctly
     using the name of the enum instead of the value.
     """
-    log_line = LogLine(level=const.LogLevel.DEBUG, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
+
+    # tz_aware_timestamps: bool = config.Config.get("server", "tz_aware_timestamps")
+    timezone_offset: int = int(config.Config.get("server", "timezone"))
+
+    # timezone_format: str = "%z" if tz_aware_timestamps else ""
+    # timezone_info = f"+{timezone_offset:0>2}:00" if tz_aware_timestamps else ""
+
+    server_tz = datetime.timezone(timedelta(hours=timezone_offset))
+
+    log_line = LogLine(level=const.LogLevel.DEBUG, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now(tz=server_tz))
     serializes_log_line = json_encode(log_line)
     deserialized_log_line_dct = json.loads(serializes_log_line)
     assert deserialized_log_line_dct["level"] == const.LogLevel.DEBUG.name

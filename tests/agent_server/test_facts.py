@@ -428,6 +428,9 @@ async def test_get_fact_no_code(resource_container, client, clienthelper, enviro
     result = response.result
     assert result["resource"]["status"] == "deployed"
     log_entry = result["logs"][0]
+    # Note: log entry are sorted by DESC timestamp
+    # Before, everything was in UTC, and the "getfact" log entry was last chronologically
+    # But now it seems to be first
     assert log_entry["action"] == "getfact"
     assert log_entry["status"] == "unavailable"
     assert "Failed to load" in log_entry["messages"][0]["msg"]

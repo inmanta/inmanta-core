@@ -408,7 +408,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     """
     naive_utc_timestamp: datetime.datetime = (
         timestamp
-        if timestamp.tzinfo is None and naive_utc
+        if (timestamp.tzinfo is None or timestamp.tzinfo == datetime.timezone.utc) and naive_utc
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
     if server_tz_aware_timestamps.get():
