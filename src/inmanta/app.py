@@ -770,7 +770,7 @@ class CompileSummaryReporter:
 
     def print_summary_and_exit(self, show_stack_traces: bool) -> None:
         """
-        Print the compile summary and exit with a 0 status code in case success or 1 in case of failure.
+        Print the compile summary and exit with a 0 status code in case of success or 1 in case of failure.
         """
         self.print_summary(show_stack_traces)
         exit(1 if self.is_failure() else 0)
