@@ -422,7 +422,7 @@ class Session(object):
         self._interval = hang_interval
         self._timeout = timout
         self._sessionstore: SessionManager = sessionstore
-        self._seen: float = time.time()
+        self._seen: float = time.monotonic()
         self._callhandle: Optional[asyncio.TimerHandle] = None
         self.expired: bool = False
 
@@ -442,9 +442,10 @@ class Session(object):
     def check_expire(self) -> None:
         if self.expired:
             LOGGER.exception("Tried to expire session already expired")
-        ttw = self._timeout + self._seen - time.time()
+        now = time.monotonic()
+        ttw = self._timeout + self._seen - now
         if ttw < 0:
-            expire_coroutine = self.expire(self._seen - time.time())
+            expire_coroutine = self.expire(self._seen - now)
             self._sessionstore.add_background_task(expire_coroutine)
         else:
             self._callhandle = asyncio.get_running_loop().call_later(ttw, self.check_expire)
