@@ -401,7 +401,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     :param timestamp: The timestamp to get the ISO string for.
     :param naive_utc: Whether to interpret naive timestamps as UTC. By default, naive timestamps are assumed to
     be in local time.
-    :param in_local_tz: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp
+    :param in_local_tz: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
     """
     naive_utc_timestamp: datetime.datetime = (
         timestamp
@@ -448,8 +448,7 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
     encoder is meant to be used for API boundaries.
     """
     if isinstance(o, datetime.datetime):
-        # Accross API boundaries, all naive datetime instances are assumed UTC.
-        # Returns ISO timestamp in UTC by default or using the system's timezone if in_local_tz is set .
+        # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
         return datetime_iso_format(o, naive_utc=True)
 
     return _custom_json_encoder(o)
