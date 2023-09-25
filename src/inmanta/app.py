@@ -714,6 +714,7 @@ class CompileSummaryReporter:
         """
         assert self.is_failure()
         if self.compiler_exception.has_exception():
+            assert self.compiler_exception.exception is not None
             return self.compiler_exception.exception
         else:
             assert self.exporter_exception.exception is not None
