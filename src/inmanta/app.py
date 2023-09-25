@@ -668,7 +668,7 @@ class ExceptionCollector:
 
 class CompileSummaryReporter:
     """
-    Contains the logic to print a summary at the end of the `inmanta compile` of `inmanta export`
+    Contains the logic to print a summary at the end of the `inmanta compile` or `inmanta export`
     command that provides an overview on whether the command was successful or not.
     """
 
