@@ -656,7 +656,7 @@ class ExceptionCollector:
         return self.exception is not None
 
     @contextlib.contextmanager
-    def capture(self) -> abc.Iterator[None]:
+    def capture(self) -> abc.Iterator["ExceptionCollector"]:
         """
         Record any exceptions raised within the context manager. The exception will not be re-raised.
         """
@@ -716,13 +716,13 @@ class CompileSummaryReporter:
         if self.compiler_exception.has_exception():
             return self.compiler_exception.exception
         else:
+            assert self.exporter_exception.exception is not None
             return self.exporter_exception.exception
 
     def _get_error_message(self) -> str:
         """
         Return the error message associated with `self._get_exception_to_report()`.
         """
-        assert self.is_failure()
         exc = self._get_exception_to_report()
         if isinstance(exc, CompilerException):
             error_message = exc.format_trace(indent="  ").strip("\n")
@@ -741,7 +741,6 @@ class CompileSummaryReporter:
         """
         Return the stack trace associated with `self._get_exception_to_report()`.
         """
-        assert self.is_failure()
         exc = self._get_exception_to_report()
         return "".join(traceback.format_exception(exc)).strip("\n")
 
