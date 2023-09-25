@@ -30,6 +30,8 @@
     @command annotation to register new command
 """
 import argparse
+import dataclasses
+import contextlib
 import asyncio
 import enum
 import json
@@ -371,13 +373,14 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.profile:
         import cProfile
         import pstats
-
-        summary_reporter.run_compile_stage(compile_logic=lambda: cProfile.runctx("do_compile()", globals(), {}, "run.profile"))
+        with summary_reporter.compiler_exception.capture():
+            cProfile.runctx("do_compile()", globals(), {}, "run.profile")
         p = pstats.Stats("run.profile")
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
         t1 = time.time()
-        summary_reporter.run_compile_stage(compile_logic=lambda: do_compile())
+        with summary_reporter.compiler_exception.capture():
+            do_compile()
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
 
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
@@ -601,17 +604,20 @@ def export(options: argparse.Namespace) -> None:
 
     types: Optional[Dict[str, inmanta_type.Type]]
     scopes: Optional[Namespace]
-    try:
-        (types, scopes) = summary_reporter.run_compile_stage(compile_logic=lambda: do_compile(), re_raise_exceptions=True)
-    except Exception:
-        types, scopes = (None, None)
+
+    with summary_reporter.compiler_exception.capture():
+        try:
+            (types, scopes) = do_compile()
+        except Exception:
+            types, scopes = (None, None)
+            raise
 
     # Even if the compile failed we might have collected additional data such as unknowns. So
     # continue the export
 
     export = Exporter(options)
-    results = summary_reporter.run_export_stage(
-        export_logic=lambda: export.run(
+    with summary_reporter.exporter_exception.capture():
+        results = export.run(
             types,
             scopes,
             metadata=metadata,
@@ -619,8 +625,7 @@ def export(options: argparse.Namespace) -> None:
             export_plugin=options.export_plugin,
             partial_compile=options.partial_compile,
             resource_sets_to_remove=options.delete_resource_set,
-        ),
-    )
+        )
 
     if not summary_reporter.is_failure() and options.deploy:
         version = results[0]
@@ -638,6 +643,27 @@ class Color(enum.Enum):
     GREEN = "green"
 
 
+@dataclasses.dataclass
+class ExceptionCollector:
+    """
+    This class defines a context manager that captures any unhandled exception raised within the context.
+    """
+    exception: Optional[Exception] = None
+
+    def has_exception(self) -> bool:
+        return self.exception is not None
+
+    @contextlib.contextmanager
+    def capture(self) -> abc.Iterator[None]:
+        """
+        Record any exceptions raised within the context manager. The exception will not be re-raised.
+        """
+        try:
+            yield self
+        except Exception as e:
+            self.exception = e
+
+
 class CompileSummaryReporter:
     """
     Contains the logic to print a summary at the end of the `inmanta compile` of `inmanta export`
@@ -645,48 +671,22 @@ class CompileSummaryReporter:
     """
 
     def __init__(self) -> None:
-        self._compiler_exception: Optional[Exception] = None
-        self._exporter_exception: Optional[Exception] = None
-
-    def run_compile_stage(self, compile_logic: Callable[[], object], re_raise_exceptions: bool = False) -> object:
-        """
-        Run the compile stage and record any exceptions raised by compile_logic.
-
-        :attr compile_logic: A callable that runs the logic for the compile stage.
-        :attr re_raise_exceptions: True iff exceptions raised by compile_logic will be re-raised by this method.
-        """
-        try:
-            return compile_logic()
-        except Exception as e:
-            self._compiler_exception = e
-            if re_raise_exceptions:
-                raise e
-
-    def run_export_stage(self, export_logic: Callable[[], object]) -> object:
-        """
-        Run the export stage and record any exceptions raised by export_logic. This method does not
-        re-raise any exception raised by export_logic.
-
-        :attr export_logic: A callable that runs the logic for the compile stage.
-        """
-        try:
-            return export_logic()
-        except Exception as e:
-            self._exporter_exception = e
+        self.compiler_exception: ExceptionCollector = ExceptionCollector()
+        self.exporter_exception: ExceptionCollector = ExceptionCollector()
 
     def is_failure(self) -> bool:
         """
         Return iff an exception has occurred during the compile or export stage.
         """
-        return self._compiler_exception is not None or self._exporter_exception is not None
+        return self.compiler_exception.has_exception() or self.exporter_exception.has_exception()
 
     def _get_global_status(self) -> str:
         """
         Return the global status of the run.
         """
-        if self._compiler_exception:
+        if self.compiler_exception.has_exception():
             return "COMPILATION FAILURE"
-        elif self._exporter_exception:
+        elif self.exporter_exception.has_exception():
             return "EXPORT FAILURE"
         else:
             return "SUCCESS"
@@ -711,10 +711,10 @@ class CompileSummaryReporter:
         over exporter exceptions because they happen first.
         """
         assert self.is_failure()
-        if self._compiler_exception:
-            return self._compiler_exception
+        if self.compiler_exception.has_exception():
+            return self.compiler_exception.exception
         else:
-            return self._exporter_exception
+            return self.exporter_exception.exception
 
     def _get_error_message(self) -> str:
         """
