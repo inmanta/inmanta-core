@@ -26,7 +26,7 @@ from typing import List, Tuple
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import const, data, config
+from inmanta import config, const, data
 from inmanta.server.config import get_bind_port
 
 # This resource ID has some garbage characters, to make sure the queries are good
@@ -45,7 +45,9 @@ async def env_with_logs(client, server, environment: str):
     timezone_info = f"+{timezone_offset:0>2}:00" if tz_aware_timestamps else ""
 
     for i in range(1, 10):
-        cm_times.append(datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}"))
+        cm_times.append(
+            datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}")
+        )
     cm_time_idx = 0
     for i in range(1, 10):
         cm = data.ConfigurationModel(

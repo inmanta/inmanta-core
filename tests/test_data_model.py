@@ -30,6 +30,7 @@ from inmanta.data.model import BaseModel, LogLine
 from inmanta.protocol.common import json_encode
 from inmanta.server import config
 
+
 def test_model_inheritance():
     """Test if config classes inheritance"""
 
@@ -86,7 +87,9 @@ def test_log_line_serialization():
 
     server_tz = datetime.timezone(timedelta(hours=timezone_offset))
 
-    log_line = LogLine(level=const.LogLevel.DEBUG, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now(tz=server_tz))
+    log_line = LogLine(
+        level=const.LogLevel.DEBUG, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now(tz=server_tz)
+    )
     serializes_log_line = json_encode(log_line)
     deserialized_log_line_dct = json.loads(serializes_log_line)
     assert deserialized_log_line_dct["level"] == const.LogLevel.DEBUG.name

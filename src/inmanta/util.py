@@ -36,7 +36,6 @@ from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import timedelta
 from logging import Logger
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
@@ -46,7 +45,6 @@ from tornado import gen
 
 from crontab import CronTab
 from inmanta import COMPILER_VERSION
-from inmanta.server.config import server_timezone, server_tz_aware_timestamps
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
@@ -396,7 +394,7 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, use_system_tz: bool = False) -> str:
     """
     Returns a timestamp ISO string. The :inmanta.config:option:`server.tz_aware_timestamps` config
     option determines whether this timestamp is time-zone aware (in the time-zone configured in
@@ -411,11 +409,9 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
         if (timestamp.tzinfo is None or timestamp.tzinfo == datetime.timezone.utc) and naive_utc
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
-    if server_tz_aware_timestamps.get():
-        return naive_utc_timestamp.astimezone(datetime.timezone(timedelta(hours=server_timezone.get()))).isoformat(
-            timespec="microseconds"
-        )
-
+    # if server_tz_aware_timestamps.get():
+    if use_system_tz:
+        return naive_utc_timestamp.astimezone().isoformat(timespec="microseconds")
     return naive_utc_timestamp.isoformat(timespec="microseconds")
 
 
@@ -454,7 +450,8 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
     encoder is meant to be used for API boundaries.
     """
     if isinstance(o, datetime.datetime):
-        # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
+        # Accross API boundaries, all naive datetime instances are assumed UTC.
+        # Returns ISO timestamp in UTC by default or using the system's timezone if use_system_tz is set .
         return datetime_iso_format(o, naive_utc=True)
 
     return _custom_json_encoder(o)

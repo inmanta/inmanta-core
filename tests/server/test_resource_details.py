@@ -23,7 +23,7 @@ from uuid import UUID
 
 import pytest
 
-from inmanta import data, config
+from inmanta import config, data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 
@@ -42,7 +42,6 @@ async def env_with_resources(server, client):
     env3 = data.Environment(name="dev3", project=project.id, repo_url="", repo_branch="")
     await env3.insert()
 
-
     tz_aware_timestamps: bool = config.Config.get("server", "tz_aware_timestamps")
     timezone_offset: int = int(config.Config.get("server", "timezone"))
 
@@ -52,11 +51,15 @@ async def env_with_resources(server, client):
     server_tz = datetime.timezone(timedelta(hours=timezone_offset))
     cm_times = []
     for i in range(1, 10):
-        cm_times.append(datetime.datetime.strptime(f"2021-07-07T1{i}:00:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}"))
+        cm_times.append(
+            datetime.datetime.strptime(f"2021-07-07T1{i}:00:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}")
+        )
     cm_time_idx = 0
     resource_deploy_times = []
     for i in range(30):
-        resource_deploy_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}"))
+        resource_deploy_times.append(
+            datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}")
+        )
 
     # Add multiple versions of model, with 2 of them released
     for i in range(1, 6):

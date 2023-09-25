@@ -395,7 +395,7 @@ class ResourceService(protocol.ServerSlice):
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_iso_format(timestamp),
+            "timestamp": util.datetime_iso_format(timestamp, use_system_tz=opt.server_tz_aware_timestamps.get()),
             "args": [],
         }
         await self.resource_action_update(
