@@ -22,10 +22,11 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 from inmanta import config, const, module, postgresproc, protocol
 from inmanta.config import Config
+from inmanta.protocol import Result
 from inmanta.types import JsonType
 from inmanta.util import get_free_tcp_port
 
@@ -208,16 +209,16 @@ host=localhost
 
         return env_id
 
-    def _latest_version(self, environment_id: str) -> Optional[int]:
-        result = self._client.list_versions(tid=environment_id)
+    def _latest_version_instance(self, environment_id: str) -> Optional[JsonType]:
+        result: Result = self._client.list_versions(tid=environment_id)
         if result.code != 200:
             LOGGER.error("Unable to get all version of environment %s", environment_id)
             return None
 
-        if "versions" in result.result and len(result.result["versions"]) > 0:
-            versions: List[int] = [x["version"] for x in result.result["versions"]]
-            sorted(versions)
-            return versions[0]
+        if result.result and "versions" in result.result and len(result.result["versions"]) > 0:
+            version = result.result["versions"][0]
+            assert isinstance(version, dict)  # mypy
+            return version
 
         return None
 
@@ -353,21 +354,32 @@ host=localhost
         return True
 
     def deploy(self, dry_run: bool, report: bool = True) -> None:
-        version = self._latest_version(self._environment_id)
-        LOGGER.info("Latest version for created environment is %s", version)
-        if version is None:
+        version_instance = self._latest_version_instance(self._environment_id)
+
+        if version_instance is None:
             return
+
+        version: int = version_instance["version"]
+        LOGGER.info("Latest version for created environment is %s", version)
 
         # release the version!
         if not dry_run:
-            self._check_result(
-                self._client.release_version(
-                    tid=self._environment_id,
-                    id=version,
-                    push=True,
-                    agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+            if not version_instance["released"]:
+                self._check_result(
+                    self._client.release_version(
+                        tid=self._environment_id,
+                        id=version,
+                        push=True,
+                        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+                    )
                 )
-            )
+            else:
+                self._check_result(
+                    self._client.deploy(
+                        tid=self._environment_id,
+                        agent_trigger_method=const.AgentTriggerMethod.push_full_deploy,
+                    )
+                )
             if report:
                 self.progress_deploy_report(version)
 

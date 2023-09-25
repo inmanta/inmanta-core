@@ -67,7 +67,7 @@ import inmanta.db.versions
 import inmanta.resources as resources
 import inmanta.util as util
 from crontab import CronTab
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
+from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
@@ -1620,6 +1620,30 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
 
+    async def _xact_lock(
+        self, lock_key: int, instance_key: uuid.UUID, *, shared: bool = False, connection: asyncpg.Connection
+    ) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control
+
+        :param lock_key: the key identifying this lock (32 bit signed int)
+        :param instance_key: the key identifying the instance to lock.
+        We only use the lower 32 bits, so it can collide.
+
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        lock: str = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        await connection.execute(
+            # Advisory lock keys are only 32 bit (or a single 64 bit key), while a full uuid is 128 bit.
+            # Since locking slightly too strictly at extremely low odds is acceptable, we only use a 32 bit subvalue
+            # of the uuid. For uuid4, time_low is (despite the name) randomly generated. Since it is an unsigned
+            # integer while Postgres expects a signed one, we shift it by 2**31.
+            f"SELECT {lock}($1, $2)",
+            lock_key,
+            instance_key.time_low - 2**31,
+        )
+
     @classmethod
     async def insert_many(
         cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
@@ -2936,6 +2960,27 @@ RETURNING last_version;
             return result[0]
         return None
 
+    async def acquire_release_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control between release_version and
+        calls that need the latest version.
+
+        :param env: The environment to acquire the lock for.
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        await self._xact_lock(const.PG_ADVISORY_KEY_RELEASE_VERSION, self.id, shared=shared, connection=connection)
+
+    async def put_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control between put_version and put_partial.
+
+        :param env: The environment to acquire the lock for.
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        await self._xact_lock(const.PG_ADVISORY_KEY_PUT_VERSION, self.id, shared=shared, connection=connection)
+
 
 class Parameter(BaseDocument):
     """
@@ -3415,7 +3460,7 @@ class Agent(BaseDocument):
             async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
                     # lock FOR UPDATE to avoid deadlocks: next query in this transaction updates the row
-                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR UPDATE",
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR NO KEY UPDATE",
                     cls._get_value(env),
                     connection=con,
                 )
@@ -3483,7 +3528,7 @@ class Agent(BaseDocument):
         for endpoint, sid in endpoints_with_new_primary:
             # Lock mode is required because we will update in this transaction
             # Deadlocks with cleanup otherwise
-            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
+            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE)
             if agent is None:
                 continue
 
@@ -4383,6 +4428,7 @@ class Resource(BaseDocument):
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
     last_success: Optional[datetime.datetime] = None
+    last_produced_events: Optional[datetime.datetime] = None
 
     # State related
     attributes: Dict[str, Any] = {}
@@ -4451,6 +4497,25 @@ class Resource(BaseDocument):
         ]
         result = await cls._fetch_query(query, *values, connection=connection)
         return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
+
+    @classmethod
+    async def update_last_produced_events_if_newer(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        version: int,
+        last_produced_events: datetime.datetime,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+                UPDATE {cls.table_name()} as resource
+                SET
+                    last_produced_events = GREATEST($4, last_produced_events)
+                WHERE resource.model=$2
+                AND resource.environment=$1
+                AND resource.resource_id=$3  """
+        await cls._execute_query(query, environment, version, resource_id, last_produced_events, connection=connection)
 
     def make_hash(self) -> None:
         character = json.dumps(
@@ -4669,7 +4734,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(
-        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]]
+        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]], *, connection: Optional[Connection] = None
     ) -> List[Dict[str, Any]]:
         if not projection:
             projection = "*"
@@ -4677,7 +4742,7 @@ class Resource(BaseDocument):
             projection = ",".join(projection)
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
-        resource_records = await cls._fetch_query(query, *values)
+        resource_records = await cls._fetch_query(query, *values, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
             if "attributes" in res:
@@ -5058,12 +5123,11 @@ class Resource(BaseDocument):
     async def copy_last_success(
         cls,
         environment: uuid.UUID,
-        version: int,
+        from_version: int,
+        to_version: int,
+        *,
+        connection: Optional[Connection] = None,
     ) -> None:
-        last_released = await ConfigurationModel.get_latest_version(environment)
-        if not last_released:
-            return
-        previous_version = last_released.version
         query = f"""
         UPDATE {cls.table_name()} as new_resource
         SET
@@ -5076,7 +5140,34 @@ class Resource(BaseDocument):
         WHERE new_resource.model=$1
         AND new_resource.environment=$2
         AND new_resource.last_success is null"""
-        await cls._execute_query(query, version, environment, previous_version)
+        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
+
+    @classmethod
+    async def copy_last_produced_events(
+        cls,
+        environment: uuid.UUID,
+        from_version: int,
+        to_version: int,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """
+        Copy the value of last_produced events for every resource in the to_version from the from_version
+        """
+        query = f"""
+           UPDATE {cls.table_name()} as new_resource
+           SET
+               last_produced_events = (
+                   SELECT old_resource.last_produced_events
+                   FROM {cls.table_name()} as old_resource
+                   WHERE old_resource.model=$3
+                   AND old_resource.environment=$2
+                   AND old_resource.resource_id=new_resource.resource_id
+               )
+           WHERE new_resource.model=$1
+           AND new_resource.environment=$2
+           AND new_resource.last_produced_events is null"""
+        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
 
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
@@ -5420,26 +5511,57 @@ class ConfigurationModel(BaseDocument):
         version: int,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
     ) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
         """
-        result = await cls.get_one(environment=environment, version=version, connection=connection)
+        result = await cls.get_one(environment=environment, version=version, connection=connection, lock=lock)
         return result
 
     @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:
+    async def get_version_internal(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+    ) -> Optional["ConfigurationModel"]:
+        """Return a version, but don't populate the status and done fields, which are expensive to construct"""
+        query = f"""SELECT *
+                          FROM {ConfigurationModel.table_name()}
+                          WHERE environment=$1 AND version=$2 {lock.value};
+                          """
+        result = await cls.select_query(query, [environment, version], connection=connection)
+        if not result:
+            return None
+        return result[0]
+
+    @classmethod
+    async def get_latest_version(
+        cls,
+        environment: uuid.UUID,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> Optional["ConfigurationModel"]:
         """
         Get the latest released (most recent) version for the given environment
         """
-        versions = await cls.get_list(order_by_column="version", order="DESC", limit=1, environment=environment, released=True)
+        versions = await cls.get_list(
+            order_by_column="version", order="DESC", limit=1, environment=environment, released=True, connection=connection
+        )
         if len(versions) == 0:
             return None
 
         return versions[0]
 
     @classmethod
-    async def get_version_nr_latest_version(cls, environment: uuid.UUID) -> Optional[int]:
+    async def get_version_nr_latest_version(
+        cls,
+        environment: uuid.UUID,
+        connection: Optional[Connection] = None,
+    ) -> Optional[int]:
         """
         Get the version number of the latest released version in the given environment.
         """
@@ -5449,7 +5571,7 @@ class ConfigurationModel(BaseDocument):
                     ORDER BY version DESC
                     LIMIT 1
                     """
-        result = await cls._fetchrow(query, cls._get_value(environment))
+        result = await cls._fetchrow(query, cls._get_value(environment), connection=connection)
         if not result:
             return None
         return int(result["version"])
@@ -5506,13 +5628,13 @@ class ConfigurationModel(BaseDocument):
                 self.environment,
             )
 
-    async def get_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    async def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids)
         of resources which should get a skipped_for_undeployable state
@@ -5579,7 +5701,9 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
+    async def get_increment(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
+    ) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5591,11 +5715,11 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
         """
-        projection_a = ["resource_id", "status", "attribute_hash", "attributes"]
+        projection_a = ["resource_id", "status", "attribute_hash", "attributes", "last_success", "last_produced_events"]
         projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
-        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
+        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a, connection=connection)
 
         # to increment
         increment: list[abc.Mapping[str, Any]] = []
@@ -5603,18 +5727,46 @@ class ConfigurationModel(BaseDocument):
         # todo in this version
         work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
+        # start with outstanding events
+        id_to_resource = {r["resource_id"]: r for r in resources}
+        next: list[abc.Mapping[str, object]] = []
+        for resource in work:
+            in_increment = False
+            last_success = resource["last_success"] or DATETIME_MIN_UTC
+            attributes = resource["attributes"]
+            assert isinstance(attributes, dict)  # mypy
+            for req in attributes["requires"]:
+                req_res = id_to_resource[req]
+                assert req_res is not None  # todo
+                req_res_attributes = req_res["attributes"]
+                assert isinstance(req_res_attributes, dict)  # mypy
+                last_produced_events = req_res["last_produced_events"]
+                if (
+                    last_produced_events is not None
+                    and last_produced_events > last_success
+                    and "send_event" in req_res_attributes
+                    and req_res_attributes["send_event"]
+                ):
+                    in_increment = True
+                    break
+            if in_increment:
+                increment.append(resource)
+            else:
+                next.append(resource)
+        work = next
+
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
         values = [cls._get_value(environment)]
-        version_records = await cls._fetch_query(query, *values)
+        version_records = await cls._fetch_query(query, *values, connection=connection)
 
         versions = [record["version"] for record in version_records]
 
         for version in versions:
             # todo in next version
-            next: list[abc.Mapping[str, object]] = []
+            next = []
 
-            vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
+            vresources = await Resource.get_resources_for_version_raw(environment, version, projection, connection=connection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:

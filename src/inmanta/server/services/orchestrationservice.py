@@ -25,10 +25,18 @@ import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
+from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, PURGE_ON_DELETE, InvalidSort
+from inmanta.data import (
+    APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    PURGE_ON_DELETE,
+    InvalidSort,
+    RowLockMode,
+)
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -40,7 +48,7 @@ from inmanta.data.model import (
 )
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
-from inmanta.protocol.exceptions import BadRequest, BaseHttpException, NotFound, ServerError
+from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
 from inmanta.resources import Id
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
@@ -891,6 +899,8 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
+        *,
+        connection: Optional[Connection],
     ) -> None:
         """
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
@@ -903,7 +913,9 @@ class OrchestrationService(protocol.ServerSlice):
             push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
+            await self.release_version(
+                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection
+            )
 
     def _create_unknown_parameter_daos_from_api_unknowns(
         self, env_id: uuid.UUID, version: int, unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None
@@ -930,23 +942,6 @@ class OrchestrationService(protocol.ServerSlice):
             )
             result.append(unknown_parameter)
         return result
-
-    async def _put_version_lock(self, env: data.Environment, *, shared: bool = False, connection: asyncpg.Connection) -> None:
-        """
-        Acquires a transaction-level advisory lock for concurrency control between put_version and put_partial.
-
-        :param env: The environment to acquire the lock for.
-        :param shared: If true, doesn't conflict with other shared locks, only with non-shared once.
-        :param connection: The connection hosting the transaction for which to acquire a lock.
-        """
-        lock: str = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
-        await connection.execute(
-            # Advisory lock keys are only 32 bit (or a single 64 bit key), while a full uuid is 128 bit.
-            # Since locking slightly too strictly at extremely low odds is acceptable, we only use a 32 bit subvalue
-            # of the uuid. For uuid4, time_low is (despite the name) randomly generated. Since it is an unsigned
-            # integer while Postgres expects a signed one, we shift it by 2**31.
-            f"SELECT {lock}({const.PG_ADVISORY_KEY_PUT_VERSION}, {env.id.time_low - 2**31})"
-        )
 
     @handle(methods.put_version, env="tid")
     async def put_version(
@@ -981,14 +976,22 @@ class OrchestrationService(protocol.ServerSlice):
             resource_state=resource_state,
             resource_sets=resource_sets,
         )
+
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
-                await self._put_version_lock(env, shared=True, connection=con)
+                await env.put_version_lock(shared=True, connection=con)
                 await self._put_version(
                     env, version, rid_to_resource, unknowns_objs, version_info, resource_sets, connection=con
                 )
-        await self._trigger_auto_deploy(env, version)
+            try:
+                await self._trigger_auto_deploy(env, version, connection=con)
+            except Conflict as e:
+                # this should be an api warning, but this is not supported here
+                LOGGER.warning(
+                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
+                )
+
         return 200
 
     @handle(methods_v2.put_partial, env="tid")
@@ -1001,7 +1004,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[List[str]] = None,
-    ) -> int:
+    ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
                     {
@@ -1046,7 +1049,7 @@ class OrchestrationService(protocol.ServerSlice):
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with itself and with the lock acquired by put_version
-                await self._put_version_lock(env, shared=False, connection=con)
+                await env.put_version_lock(shared=False, connection=con)
 
                 # Only request a new version once the resource lock has been acquired to ensure a monotonic version history
                 version: int = await env.get_next_version(connection=con)
@@ -1115,8 +1118,18 @@ class OrchestrationService(protocol.ServerSlice):
                     removed_resource_sets=removed_resource_sets,
                     connection=con,
                 )
-        await self._trigger_auto_deploy(env, version)
-        return version
+
+            returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
+            try:
+                await self._trigger_auto_deploy(env, version, connection=con)
+            except Conflict as e:
+                # It is unclear if this condition can ever happen
+                LOGGER.warning(
+                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
+                )
+                returnvalue.add_warnings([f"Could not perform auto deploy: {e.log_message} {e.details}"])
+
+        return returnvalue
 
     @handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
@@ -1128,87 +1141,123 @@ class OrchestrationService(protocol.ServerSlice):
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> Apireturn:
-        model = await data.ConfigurationModel.get_version(env.id, version_id, connection=connection)
-        if model is None:
-            return 404, {"message": "The request version does not exist."}
-
-        # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-        undep = await model.get_undeployable()
-        now = datetime.datetime.now().astimezone()
-
-        if undep:
-            undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-            # not checking error conditions
-            await self.resource_service.resource_action_update(
-                env,
-                undep_ids,
-                action_id=uuid.uuid4(),
-                started=now,
-                finished=now,
-                status=const.ResourceState.undefined,
-                action=const.ResourceAction.deploy,
-                changes={},
-                messages=[],
-                change=const.Change.nochange,
-                send_events=False,
-                connection=connection,
-            )
-
-            skippable = await model.get_skipped_for_undeployable()
-            if skippable:
-                skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
-                # not checking error conditions
-                await self.resource_service.resource_action_update(
-                    env,
-                    skippable_ids,
-                    action_id=uuid.uuid4(),
-                    started=now,
-                    finished=now,
-                    status=const.ResourceState.skipped_for_undefined,
-                    action=const.ResourceAction.deploy,
-                    changes={},
-                    messages=[],
-                    change=const.Change.nochange,
-                    send_events=False,
-                    connection=connection,
+        async with data.ConfigurationModel.get_connection(connection) as connection:
+            async with connection.transaction():
+                # explicit lock to allow patching of increments for stale failures
+                # (locks out patching stage of deploy_done to avoid races)
+                await env.acquire_release_version_lock(connection=connection)
+                model = await data.ConfigurationModel.get_version_internal(
+                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
                 )
+                if model is None:
+                    return 404, {"message": "The request version does not exist."}
 
-        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.resource_service.get_increment(
-            env, version_id
-        )
+                if model.released:
+                    raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
 
-        increment_ids, neg_increment = increments
-        await self.resource_service.mark_deployed(env, neg_increment, now, version_id)
+                latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
 
-        # Set the updated field:
-        await data.Resource.copy_last_success(env.id, version_id)
+                # ensure we are the latest version
+                # this is required for the subsequent increment calculation to make sense
+                # this does introduce a race condition, with any OTHER release running concurrently on this environment
+                # We could lock the get_version_nr_latest_version for update to prevent this
+                if model.version < (latest_version or -1):
+                    raise Conflict(
+                        f"The version {version_id} on environment {env.id} "
+                        f"is older then the latest released version {latest_version}."
+                    )
 
-        # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
-        # This has to be done after the resources outside of the increment have been marked as deployed.
-        await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+                # Already mark undeployable resources as deployed to create a better UX (change the version counters)
+                undep = model.get_undeployable()
+                now = datetime.datetime.now().astimezone()
 
-        if model.total == 0:
-            await model.mark_done(connection=connection)
-            return 200, {"model": model}
+                if undep:
+                    undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
+                    # not checking error conditions
+                    await self.resource_service.resource_action_update(
+                        env,
+                        undep_ids,
+                        action_id=uuid.uuid4(),
+                        started=now,
+                        finished=now,
+                        status=const.ResourceState.undefined,
+                        action=const.ResourceAction.deploy,
+                        changes={},
+                        messages=[],
+                        change=const.Change.nochange,
+                        send_events=False,
+                        connection=connection,
+                    )
 
-        if push:
-            # fetch all resource in this cm and create a list of distinct agents
-            agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
-            await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
+                    skippable = model.get_skipped_for_undeployable()
+                    if skippable:
+                        skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
+                        # not checking error conditions
+                        await self.resource_service.resource_action_update(
+                            env,
+                            skippable_ids,
+                            action_id=uuid.uuid4(),
+                            started=now,
+                            finished=now,
+                            status=const.ResourceState.skipped_for_undefined,
+                            action=const.ResourceAction.deploy,
+                            changes={},
+                            messages=[],
+                            change=const.Change.nochange,
+                            send_events=False,
+                            connection=connection,
+                        )
 
-            for agent in agents:
-                client = self.agentmanager_service.get_agent_client(env.id, agent)
-                if client is not None:
-                    if not agent_trigger_method:
-                        env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
-                        incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
+                if latest_version:
+                    # Set the updated field:
+                    # BE VERY CAREFUL
+                    # All state copied here has a race with stale deploy
+                    # This is handled in propagate_resource_state_if_stale
+                    await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
+                    await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
+
+                    increments: tuple[
+                        abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]
+                    ] = await self.resource_service.get_increment(
+                        env,
+                        version_id,
+                        connection=connection,
+                    )
+
+                    increment_ids, neg_increment = increments
+                    await self.resource_service.mark_deployed(env, neg_increment, now, version_id, connection=connection)
+
+                # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
+                # This has to be done after the resources outside of the increment have been marked as deployed.
+                await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+
+            if model.total == 0:
+                await model.mark_done(connection=connection)
+                return 200, {"model": model}
+
+            if push:
+                # We can't be in a transaction here, or the agent will not see the data that as committed
+                # This assert prevents anyone from wrapping this method in a transaction by accident
+                assert not connection.is_in_transaction()
+                # fetch all resource in this cm and create a list of distinct agents
+                agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
+                await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
+
+                for agent in agents:
+                    client = self.agentmanager_service.get_agent_client(env.id, agent)
+                    if client is not None:
+                        if not agent_trigger_method:
+                            env_agent_trigger_method = await env.get(ENVIRONMENT_AGENT_TRIGGER_METHOD, connection=connection)
+                            incremental_deploy = env_agent_trigger_method == const.AgentTriggerMethod.push_incremental_deploy
+                        else:
+                            incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+                        self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
                     else:
-                        incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                    self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
-                else:
-                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
+                        LOGGER.warning(
+                            "Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id
+                        )
 
-        return 200, {"model": model}
+            return 200, {"model": model}
 
     @handle(methods.deploy, env="tid")
     async def deploy(
