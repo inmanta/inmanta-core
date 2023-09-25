@@ -169,11 +169,11 @@ async def test_diff(client):
     assert diff.code == 200
     assert len(diff.result["diff"]) == 5
 
-    diff = await client.diff(0, hb)
+    diff = await client.diff("0", hb)
     assert diff.code == 200
     assert len(diff.result["diff"]) == 4
 
-    diff = await client.diff(ha, 0)
+    diff = await client.diff(ha, "0")
     assert diff.code == 200
     assert len(diff.result["diff"]) == 4
 
