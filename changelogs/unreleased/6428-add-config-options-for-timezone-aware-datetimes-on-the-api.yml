@@ -1,5 +1,5 @@
-description: Add server config options server.tz_aware_timestamps and server.timezone to make the server return time-zone
-  aware timestamps and set the server's timezone, respectively.
+description: Add server config option server.tz_aware_timestamps to make the server return time-zone
+  aware timestamps.
 issue-nr: 6428
 change-type: major
 destination-branches: [iso7, master]
