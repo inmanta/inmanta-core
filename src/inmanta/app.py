@@ -30,9 +30,9 @@
     @command annotation to register new command
 """
 import argparse
-import dataclasses
-import contextlib
 import asyncio
+import contextlib
+import dataclasses
 import enum
 import json
 import logging
@@ -373,6 +373,7 @@ def compile_project(options: argparse.Namespace) -> None:
     if options.profile:
         import cProfile
         import pstats
+
         with summary_reporter.compiler_exception.capture():
             cProfile.runctx("do_compile()", globals(), {}, "run.profile")
         p = pstats.Stats("run.profile")
@@ -648,6 +649,7 @@ class ExceptionCollector:
     """
     This class defines a context manager that captures any unhandled exception raised within the context.
     """
+
     exception: Optional[Exception] = None
 
     def has_exception(self) -> bool:
