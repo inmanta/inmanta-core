@@ -394,23 +394,21 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, use_system_tz: bool = False) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, in_local_tz: bool = False) -> str:
     """
-    Returns a timestamp ISO string. The :inmanta.config:option:`server.tz_aware_timestamps` config
-    option determines whether this timestamp is time-zone aware (in the time-zone configured in
-    :inmanta.config:option:`server.timezone`) or in UTC.
-
+    Returns a timestamp ISO string.
 
     :param timestamp: The timestamp to get the ISO string for.
-    :param naive_utc: Whether to interpret naive timestamps as UTC. By default naive timestamps are assumed to be in local time.
+    :param naive_utc: Whether to interpret naive timestamps as UTC. By default, naive timestamps are assumed to
+    be in local time.
+    :param in_local_tz: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp
     """
     naive_utc_timestamp: datetime.datetime = (
         timestamp
         if timestamp.tzinfo is None and naive_utc
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
-    # if server_tz_aware_timestamps.get():
-    if use_system_tz:
+    if in_local_tz:
         return naive_utc_timestamp.astimezone().isoformat(timespec="microseconds")
     return naive_utc_timestamp.isoformat(timespec="microseconds")
 
@@ -451,7 +449,7 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
     """
     if isinstance(o, datetime.datetime):
         # Accross API boundaries, all naive datetime instances are assumed UTC.
-        # Returns ISO timestamp in UTC by default or using the system's timezone if use_system_tz is set .
+        # Returns ISO timestamp in UTC by default or using the system's timezone if in_local_tz is set .
         return datetime_iso_format(o, naive_utc=True)
 
     return _custom_json_encoder(o)

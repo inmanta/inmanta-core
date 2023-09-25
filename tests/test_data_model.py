@@ -29,7 +29,6 @@ from inmanta.data.model import BaseModel, LogLine
 from inmanta.protocol.common import json_encode
 
 
-
 def test_model_inheritance():
     """Test if config classes inheritance"""
 
