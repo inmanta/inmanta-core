@@ -678,7 +678,7 @@ class CompileSummaryReporter:
 
     def is_failure(self) -> bool:
         """
-        Return iff an exception has occurred during the compile or export stage.
+        Return true iff an exception has occurred during the compile or export stage.
         """
         return self.compiler_exception.has_exception() or self.exporter_exception.has_exception()
 
