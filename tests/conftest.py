@@ -176,13 +176,13 @@ def pytest_configure(config: "pytest.Config") -> None:
         _pytest_configure_plugin_mode(config)
 
 
-# def pytest_addoption(parser):
-#     parser.addoption(
-#         "--fast",
-#         action="store_true",
-#         help="Don't run all test, but a representative set",
-#     )
-#
+def pytest_addoption(parser):
+    parser.addoption(
+        "--fast",
+        action="store_true",
+        help="Don't run all test, but a representative set",
+    )
+
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_generate_tests(metafunc: "pytest.Metafunc") -> None:
