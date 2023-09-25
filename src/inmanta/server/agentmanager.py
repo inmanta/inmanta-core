@@ -792,7 +792,10 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_iso_format(datetime.now())}
+        return 200, {
+            "agents": [a.to_dict() for a in ags],
+            "servertime": util.datetime_iso_format(datetime.now(), use_system_tz=opt.server_tz_aware_timestamps.get()),
+        }
 
     @handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:

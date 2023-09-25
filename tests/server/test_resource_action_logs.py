@@ -37,6 +37,7 @@ async def env_with_logs(client, server, environment: str):
     cm_times = []
     for i in range(1, 10):
         cm_times.append(datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
+
     cm_time_idx = 0
     for i in range(1, 10):
         cm = data.ConfigurationModel(
