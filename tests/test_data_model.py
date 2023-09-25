@@ -31,6 +31,7 @@ from inmanta.protocol.common import json_encode
 from inmanta.server import config
 
 
+
 def test_model_inheritance():
     """Test if config classes inheritance"""
 
