@@ -794,7 +794,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return 200, {
             "agents": [a.to_dict() for a in ags],
-            "servertime": util.datetime_iso_format(datetime.now(), use_system_tz=opt.server_tz_aware_timestamps.get()),
+            "servertime": util.datetime_iso_format(datetime.now(), in_local_tz=opt.server_tz_aware_timestamps.get()),
         }
 
     @handle(methods.get_state, env="tid")
