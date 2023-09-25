@@ -464,7 +464,7 @@ class Session(object):
         await self._sessionstore.expire(self, timeout)
 
     def seen(self, endpoint_names: Set[str]) -> None:
-        self._seen = time.time()
+        self._seen = time.monotonic()
         self.endpoint_names = endpoint_names
 
     async def _handle_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
