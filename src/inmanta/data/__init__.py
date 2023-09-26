@@ -1001,7 +1001,9 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         """Set the order and limit of the query"""
         return dataclasses.replace(self, db_order=db_order, limit=limit, backward_paging=backward_paging)
 
-    def filter(self: TSimpleQueryBuilder, filter_statements: abc.Sequence[str], values: abc.Sequence[object]) -> TSimpleQueryBuilder:
+    def filter(
+        self: TSimpleQueryBuilder, filter_statements: abc.Sequence[str], values: abc.Sequence[object]
+    ) -> TSimpleQueryBuilder:
         return dataclasses.replace(
             self, filter_statements=self.filter_statements + filter_statements, values=self.values + values
         )
@@ -1027,7 +1029,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
 
         return full_query, self.values
-
 
 
 TPreludeFilterQueryBuilder = TypeVar("TPreludeFilterQueryBuilder", bound="PreludeFilterQueryBuilder")
