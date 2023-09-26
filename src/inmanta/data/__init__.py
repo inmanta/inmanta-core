@@ -5742,7 +5742,7 @@ class ConfigurationModel(BaseDocument):
             select_clause="""
             SELECT max(version)
             """,
-            from_clause=f" FROM {cls.table_name()} ",
+            from_clause_stmt=f" FROM {cls.table_name()} ",
             filter_statements=[" environment = $1 AND released = TRUE"],
             values=[cls._get_value(environment)],
         )
@@ -5762,7 +5762,7 @@ class ConfigurationModel(BaseDocument):
                                             WHEN cm.version < {active_version} AND cm.released=TRUE THEN 'retired'
                                             ELSE 'skipped_candidate'
                                         END) as status""",
-            from_clause=f" FROM {cls.table_name()} as cm",
+            from_clause_stmt=f" FROM {cls.table_name()} as cm",
             filter_statements=[" environment = $1 "],
             values=values,
         )

@@ -547,7 +547,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         query_builder = PreludeFilterQueryBuilder(
             prelude_subquery=cte_subquery_builder,
             select_clause="SELECT *",
-            from_clause="FROM cte r",
+            from_clause_stmt="FROM cte r",
             values=[self.environment.id],
         )
         return query_builder
@@ -606,7 +606,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT resource_id, attributes, resource_type, agent, resource_id_value, environment",
-            from_clause=f" FROM {data.Resource.table_name()}",
+            from_clause_stmt=f" FROM {data.Resource.table_name()}",
             filter_statements=["environment = $1", "model = $2"],
             values=[self.environment.id, self.version],
         )
@@ -666,7 +666,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
                             metadata, environment_variables, success, version,
                             partial, removed_resource_sets, exporter_plugin,
                             notify_failed_compile, failed_compile_message""",
-            from_clause=f" FROM {data.Compile.table_name()}",
+            from_clause_stmt=f" FROM {data.Compile.table_name()}",
             filter_statements=["environment = $1"],
             values=[self.environment.id],
         )
@@ -733,7 +733,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
         subquery, subquery_values = ConfigurationModel.desired_state_versions_subquery(self.environment.id)
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT *",
-            from_clause=f" FROM ({subquery}) as result",
+            from_clause_stmt=f" FROM ({subquery}) as result",
             values=subquery_values,
         )
         return query_builder
@@ -804,7 +804,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
                 )
             """,
             select_clause="SELECT attribute_hash, date, attributes, model",
-            from_clause="""
+            from_clause_stmt="""
             FROM (SELECT
                     attribute_hash,
                     min(date) as date,
@@ -908,7 +908,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
                 )
             """,
             select_clause="SELECT action_id, action, timestamp, unnested_message",
-            from_clause="""
+            from_clause_stmt="""
             FROM
                 (
                     SELECT action_id,
@@ -978,7 +978,7 @@ class FactsView(DataView[FactOrder, Fact]):
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT p.id, p.name, p.value, p.source, p.resource_id, p.updated, p.metadata, p.environment",
-            from_clause=f"FROM {Parameter.table_name()} as p",
+            from_clause_stmt=f"FROM {Parameter.table_name()} as p",
             filter_statements=["p.environment = $1 ", "p.source = 'fact'"],
             values=[self.environment.id],
         )
@@ -1039,7 +1039,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
     def get_base_query(self) -> SimpleQueryBuilder:
         return SimpleQueryBuilder(
             select_clause="""SELECT n.*""",
-            from_clause=f" FROM {Notification.table_name()} as n",
+            from_clause_stmt=f" FROM {Notification.table_name()} as n",
             filter_statements=[" environment = $1 "],
             values=[self.environment.id],
         )
@@ -1098,7 +1098,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
     def get_base_query(self) -> SimpleQueryBuilder:
         return SimpleQueryBuilder(
             select_clause="""SELECT p.id, p.name, p.value, p.source, p.updated, p.metadata, p.environment""",
-            from_clause=f"FROM {Parameter.table_name()} as p",
+            from_clause_stmt=f"FROM {Parameter.table_name()} as p",
             filter_statements=["environment = $1", "p.source != 'fact'"],
             values=[self.environment.id],
         )
@@ -1167,7 +1167,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
                                                 WHEN id_primary IS NOT NULL THEN 'up'
                                                 ELSE 'down'
                                             END) as status""",
-            from_clause=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
+            from_clause_stmt=f" FROM {Agent.table_name()} as a LEFT JOIN public.agentinstance ai ON a.id_primary=ai.id "
             " LEFT JOIN public.agentprocess ap ON ai.process = ap.sid",
             filter_statements=[" a.environment = $1 "],
             values=[self.environment.id],
@@ -1179,7 +1179,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             query, values = base.build()
             return SimpleQueryBuilder(
                 select_clause="select *",
-                from_clause=f"FROM ({query}) as a",
+                from_clause_stmt=f"FROM ({query}) as a",
                 values=values,
             )
         return base
@@ -1233,7 +1233,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
             select_clause="SELECT environment, discovered_resource_id, values",
-            from_clause=f" FROM {data.DiscoveredResource.table_name()}",
+            from_clause_stmt=f" FROM {data.DiscoveredResource.table_name()}",
             filter_statements=["environment = $1"],
             values=[self.environment.id],
         )
