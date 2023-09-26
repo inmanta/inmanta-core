@@ -46,6 +46,7 @@ from inmanta.data import (
     PagingOrder,
     Parameter,
     ParameterOrder,
+    PreludeFilterQueryBuilder,
     QueryFilter,
     Resource,
     ResourceAction,
@@ -513,15 +514,17 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 LIMIT 1
             """
 
-        query_builder = SimpleQueryBuilder(
-            select_clause="SELECT *",
-            prelude=f"""
+        def cte_subquery_builder(filters: abc.Sequence[str]) -> str:
+            filter_substatement: str = "" if not filters else " AND " + " AND ".join(filters)
+            return f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
                 /* The latest_version CTE finds the maximum released version number in the environment */
                 WITH RECURSIVE latest_version AS (
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released=TRUE AND environment=$1
+                    /* filter right at the start so we don't have to do the recursive expansion for parts we don't care about */
+                    {filter_substatement}
                 ),
                 /*
                 emulate a loose (or skip) index scan (https://wiki.postgresql.org/wiki/Loose_indexscan):
@@ -538,7 +541,11 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                         {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id")}
                     ) next_r
                 )
-            """,
+            """
+
+        query_builder = PreludeFilterQueryBuilder(
+            prelude_subquery=cte_subquery_builder,
+            select_clause="SELECT *",
             from_clause="FROM cte r",
             values=[self.environment.id],
         )

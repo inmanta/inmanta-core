@@ -17,6 +17,7 @@
 """
 import asyncio
 import copy
+import dataclasses
 import datetime
 import enum
 import hashlib
@@ -916,39 +917,37 @@ class DiscoveredResourceOrder(SingleDatabaseOrder):
         }
 
 
+TBaseQueryBuilder = TypeVar("TBaseQueryBuilder", bound="BaseQueryBuilder")
+
+
+@dataclasses.dataclass(frozen=True)
 class BaseQueryBuilder(ABC):
-    """Provides a way to build up a sql query from its parts.
-    Each method returns a new query builder instance, with the additional parameters processed"""
+    """
+    Provides a way to build up a sql query from its parts.
+    Each method returns a new query builder instance, with the additional parameters processed
 
-    def __init__(
-        self,
-        select_clause: Optional[str] = None,
-        from_clause: Optional[str] = None,
-        filter_statements: Optional[List[str]] = None,
-        values: Optional[List[object]] = None,
-    ) -> None:
-        """
-        The parameters are the parts of an sql query,
-        which can also be added to the builder with the appropriate methods
+    The parameters are the parts of an sql query,
+    which can also be added to the builder with the appropriate methods
 
-        :param select_clause: The select clause of the query
-        :param from_clause: From clause of the query
-        :param filter_statements: A list of filters for the query
-        :param values: The values to be used for the filter statements
-        """
-        self.select_clause = select_clause
-        self._from_clause = from_clause
-        self.filter_statements = filter_statements or []
-        self.values = values or []
+    :param select_clause: The select clause of the query
+    :param from_clause: From clause of the query
+    :param filter_statements: A list of filters for the query
+    :param values: The values to be used for the filter statements
+    """
 
-    def _join_filter_statements(self, filter_statements: List[str]) -> str:
+    select_clause: Optional[str] = None
+    from_clause: Optional[str] = None
+    filter_statements: Optional[str] = None
+    values: Optional[abc.Sequence[object]] = dataclasses.field(default_factory=list)
+
+    def _join_filter_statements(self, filter_statements: abc.Sequence[str]) -> str:
         """Join multiple filter statements"""
         if filter_statements:
             return "WHERE " + " AND ".join(filter_statements)
         return ""
 
     @abstractmethod
-    def from_clause(self, from_clause: str) -> "BaseQueryBuilder":
+    def from_clause(self: TBaseQueryBuilder, from_clause: str) -> TBaseQueryBuilder:
         """Set the from clause of the query"""
         raise NotImplementedError()
 
@@ -968,88 +967,43 @@ class BaseQueryBuilder(ABC):
         raise NotImplementedError()
 
 
+TSimpleQueryBuilder = TypeVar("TSimpleQueryBuilder", bound="SimpleQueryBuilder")
+
+
+@dataclasses.dataclass(frozen=True)
 class SimpleQueryBuilder(BaseQueryBuilder):
-    """A query builder suitable for most queries"""
+    """
+    A query builder suitable for most queries
 
-    def __init__(
-        self,
-        select_clause: Optional[str] = None,
-        from_clause: Optional[str] = None,
-        filter_statements: Optional[List[str]] = None,
-        values: Optional[List[object]] = None,
-        db_order: Optional[DatabaseOrderV2] = None,
-        limit: Optional[int] = None,
-        backward_paging: bool = False,
-        prelude: Optional[str] = None,
-    ) -> None:
-        """
-        :param select_clause: The select clause of the query
-        :param from_clause: The from clause of the query
-        :param filter_statements: A list of filters for the query
-        :param values: The values to be used for the filter statements
-        :param db_order: The DatabaseOrder describing how the results should be ordered
-        :param limit: Limit the results to this amount
-        :param backward_paging: Whether the ordering of the results should be inverted,
-                                used when going backward through the pages
-        :param prelude: part of the query preceding all else, for use with 'with' binding
-        """
-        super().__init__(select_clause, from_clause, filter_statements, values)
-        self.db_order = db_order
-        self.limit = limit
-        self.backward_paging = backward_paging
-        self.prelude = prelude
+    :param db_order: The DatabaseOrder describing how the results should be ordered
+    :param limit: Limit the results to this amount
+    :param backward_paging: Whether the ordering of the results should be inverted,
+                            used when going backward through the pages
+    :param prelude: part of the query preceding all else, e.g. a subquery with a 'with' binding
+    """
 
-    def select(self, select_clause: str) -> "SimpleQueryBuilder":
+    db_order: Optional[DatabaseOrderV2] = None
+    limit: Optional[int] = None
+    backward_paging: bool = False
+    prelude: Optional[str] = None
+
+    def select(self: TSimpleQueryBuilder, select_clause: str) -> TSimpleQueryBuilder:
         """Set the select clause of the query"""
-        return SimpleQueryBuilder(
-            select_clause,
-            self._from_clause,
-            self.filter_statements,
-            self.values,
-            self.db_order,
-            self.limit,
-            self.backward_paging,
-            self.prelude,
-        )
+        return dataclasses.replace(self, select_clause=select_clause)
 
-    def from_clause(self, from_clause: str) -> "SimpleQueryBuilder":
+    def from_clause(self: TSimpleQueryBuilder, from_clause: str) -> TSimpleQueryBuilder:
         """Set the from clause of the query"""
-        return SimpleQueryBuilder(
-            self.select_clause,
-            from_clause,
-            self.filter_statements,
-            self.values,
-            self.db_order,
-            self.limit,
-            self.backward_paging,
-            self.prelude,
-        )
+        return dataclasses.replace(self, from_clause=from_clause)
 
     def order_and_limit(
-        self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
-    ) -> "SimpleQueryBuilder":
+        self: TSimpleQueryBuilder, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
+    ) -> TSimpleQueryBuilder:
         """Set the order and limit of the query"""
-        return SimpleQueryBuilder(
-            self.select_clause,
-            self._from_clause,
-            self.filter_statements,
-            self.values,
-            db_order,
-            limit,
-            backward_paging,
-            self.prelude,
-        )
+        return dataclasses.replace(self, db_order=db_order, limit=limit, backward_paging=backward_paging)
 
-    def filter(self, filter_statements: List[str], values: List[object]) -> "SimpleQueryBuilder":
-        return SimpleQueryBuilder(
-            self.select_clause,
-            self._from_clause,
-            self.filter_statements + filter_statements,
-            self.values + values,
-            self.db_order,
-            self.limit,
-            self.backward_paging,
-            self.prelude,
+    def filter(self: TSimpleQueryBuilder, filter_statements: abc.Sequence[str], values: abc.Sequence[object]) -> TSimpleQueryBuilder:
+        return dataclasses.replace(
+            self, filter_statements=self.filter_statements + filter_statements, values=self.values + values
         )
 
     def build(self) -> Tuple[str, List[object]]:
@@ -1073,6 +1027,39 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
 
         return full_query, self.values
+
+
+
+TPreludeFilterQueryBuilder = TypeVar("TPreludeFilterQueryBuilder", bound="PreludeFilterQueryBuilder")
+
+
+@dataclasses.dataclass(frozen=True)
+class PreludeFilterQueryBuilder(SimpleQueryBuilder):
+    """
+    A query builder that applies any filters to the prelude query rather than the outer query. Should only be used
+    with preludes that remain relevant with filters applied to them.
+
+    :param prelude_subquery: Part of the query preceding all else, e.g. a subquery with a 'with' binding, expressed as a
+        nested query builder.
+    """
+
+    # TODO: validate that parent's prelude, filter_statements and values is None?
+    #   TODO: allow values to be set but only at construction time?
+    # TODO: docstring
+    # TODO: make this a separate type/protocol
+    prelude_subquery: Optional[abc.Callable[[abc.Sequence[str]], str]] = None
+
+    def build(self) -> Tuple[str, List[object]]:
+        delegate: SimpleQueryBuilder = SimpleQueryBuilder(
+            self.select_clause,
+            self._from_clause,
+            [] if self.prelude_subquery is not None else self.filter_statements,
+            self.values,
+            self.db_order,
+            self.limit,
+            self.prelude_subquery(self.filter_statements) if self.prelude_subquery is not None else None,
+        )
+        return delegate.build()
 
 
 def json_encode(value: object) -> str:
