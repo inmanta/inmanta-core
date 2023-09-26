@@ -1031,9 +1031,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         return full_query, self.values
 
 
-TPreludeFilterQueryBuilder = TypeVar("TPreludeFilterQueryBuilder", bound="PreludeFilterQueryBuilder")
-
-
 @dataclasses.dataclass(frozen=True)
 class PreludeFilterQueryBuilder(SimpleQueryBuilder):
     """
@@ -1054,8 +1051,8 @@ class PreludeFilterQueryBuilder(SimpleQueryBuilder):
         delegate: SimpleQueryBuilder = SimpleQueryBuilder(
             self.select_clause,
             self.from_clause_stmt,
-            [] if self.prelude_subquery is not None else self.filter_statements,
-            self.values,
+            self.filter_statements,
+            self.values + (self.values if self.prelude_subquery is not None else []),
             self.db_order,
             self.limit,
             self.prelude_subquery(self.filter_statements) if self.prelude_subquery is not None else None,
