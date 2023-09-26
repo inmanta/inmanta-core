@@ -516,6 +516,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
 
         def cte_subquery_builder(filters: abc.Sequence[str]) -> str:
             filter_substatement: str = "" if not filters else " AND " + " AND ".join(filters)
+            # TODO: this is not correct -> `<` filters should be applied on the outer query
             return f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
                 /* The latest_version CTE finds the maximum released version number in the environment */

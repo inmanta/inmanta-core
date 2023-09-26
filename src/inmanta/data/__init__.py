@@ -936,7 +936,7 @@ class BaseQueryBuilder(ABC):
     """
 
     select_clause: Optional[str] = None
-    from_clause: Optional[str] = None
+    from_clause_stmt: Optional[str] = None
     filter_statements: Optional[str] = None
     values: Optional[abc.Sequence[object]] = dataclasses.field(default_factory=list)
 
@@ -993,7 +993,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
 
     def from_clause(self: TSimpleQueryBuilder, from_clause: str) -> TSimpleQueryBuilder:
         """Set the from clause of the query"""
-        return dataclasses.replace(self, from_clause=from_clause)
+        return dataclasses.replace(self, from_clause_stmt=from_clause)
 
     def order_and_limit(
         self: TSimpleQueryBuilder, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
@@ -1009,10 +1009,10 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         )
 
     def build(self) -> Tuple[str, List[object]]:
-        if not self.select_clause or not self._from_clause:
+        if not self.select_clause or not self.from_clause_stmt:
             raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
         full_query = f"""{self.select_clause}
-                         {self._from_clause}
+                         {self.from_clause_stmt}
                          {self._join_filter_statements(self.filter_statements)}
                          """
         if self.prelude:
@@ -1053,7 +1053,7 @@ class PreludeFilterQueryBuilder(SimpleQueryBuilder):
     def build(self) -> Tuple[str, List[object]]:
         delegate: SimpleQueryBuilder = SimpleQueryBuilder(
             self.select_clause,
-            self._from_clause,
+            self.from_clause_stmt,
             [] if self.prelude_subquery is not None else self.filter_statements,
             self.values,
             self.db_order,
