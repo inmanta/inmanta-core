@@ -1,0 +1,8 @@
+---
+description: Improve the output of the `inmanta compile` and `inmanta export` commands to make it more clear to the end-user when the command failed.
+issue-nr: 5258
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
