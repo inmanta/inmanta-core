@@ -1033,6 +1033,11 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         return full_query, self.values
 
 
+class SubqueryBuilder(typing.Protocol):
+    def __call__(self, filters: abc.Sequence[str], limit: int) -> str:
+        ...
+
+
 @dataclasses.dataclass(frozen=True)
 class PreludeFilterQueryBuilder(SimpleQueryBuilder):
     """
@@ -1043,12 +1048,9 @@ class PreludeFilterQueryBuilder(SimpleQueryBuilder):
         nested query builder.
     """
 
-    # TODO: validate that parent's prelude, filter_statements and values is None?
-    #   TODO: allow values to be set but only at construction time?
+    # TODO: validate that parent's prelude is None?
     # TODO: docstring
-    # TODO: make this a separate type/protocol
-    # TODO: why is this Optional? Could give a NOOP default
-    prelude_subquery: Optional[abc.Callable[[abc.Sequence[str]], str]] = None
+    prelude_subquery: SubqueryBuilder = lambda filters, limit: ""
 
     def build(self) -> Tuple[str, List[object]]:
         delegate: SimpleQueryBuilder = SimpleQueryBuilder(
@@ -1059,7 +1061,11 @@ class PreludeFilterQueryBuilder(SimpleQueryBuilder):
             db_order=self.db_order,
             limit=self.limit,
             backward_paging=self.backward_paging,
-            prelude=self.prelude_subquery(self.filter_statements) if self.prelude_subquery is not None else None,
+            prelude=(
+                self.prelude_subquery(filters=self.filter_statements, limit=self.limit)
+                if self.prelude_subquery is not None
+                else None
+            ),
         )
         return delegate.build()
 

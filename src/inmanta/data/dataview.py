@@ -483,7 +483,11 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
 
     def get_base_query(self) -> SimpleQueryBuilder:
         def subquery_latest_version_for_single_resource(
-            higher_than: Optional[str], additional_filters: Optional[abc.Sequence[str]] = None
+            *,
+            curr_count: str,
+            higher_than: Optional[str] = None,
+            limit: Optional[int] = None,
+            additional_filters: Optional[abc.Sequence[str]] = None,
         ) -> str:
             """
             Returns a subquery to select a single row from a resource table:
@@ -494,13 +498,15 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 If not given, the subquery selects the first resource id, period.
             """
             higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
-            # TODO: clean up
+            lower_than_condition: str = f"AND {curr_count} < {limit}" if limit is not None else ""
+            # TODO: clean up + docstrings
             allowed_filters: abc.Sequence[str] = [
                 f for f in (additional_filters if additional_filters else []) if "status " not in f
             ]
             filter_substatement: str = "" if not allowed_filters else " AND " + " AND ".join(allowed_filters)
             return f"""
                 SELECT
+                    {curr_count} AS index,
                     r.resource_id,
                     r.attributes,
                     r.resource_type,
@@ -518,12 +524,13 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
                 WHERE r.environment = $1 AND cm.released = TRUE {higher_than_condition}
                 /* filter right at the start so we don't have to do the recursive expansion for parts we don't care about */
-                {filter_substatement}
+                {lower_than_condition}{filter_substatement}
                 ORDER BY resource_id, model DESC
                 LIMIT 1
             """
 
-        def cte_subquery_builder(filters: abc.Sequence[str]) -> str:
+        # TODO: keep track of index to enforce limit as well
+        def cte_subquery_builder(filters: abc.Sequence[str], limit: int) -> str:
             # TODO: this is not correct -> `<` filters should be applied on the outer query
             return f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
@@ -539,13 +546,13 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 */
                 cte AS (
                     /* Initial row for recursion: select relevant version for first resource */
-                    ( {subquery_latest_version_for_single_resource(higher_than=None, additional_filters=filters)} )
+                    ( {subquery_latest_version_for_single_resource(curr_count="0", limit=limit, additional_filters=filters)} )
                     UNION ALL
                     SELECT next_r.*
                     FROM cte curr_r
                     CROSS JOIN LATERAL (
                         /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
-                        {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id", additional_filters=filters)}
+                        {subquery_latest_version_for_single_resource(curr_count="curr_r.index + 1", higher_than="curr_r.resource_id", limit=limit)}
                     ) next_r
                 )
             """
