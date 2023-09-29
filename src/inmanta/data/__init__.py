@@ -938,7 +938,7 @@ class BaseQueryBuilder(ABC):
     select_clause: Optional[str] = None
     # TODO: name and/or docstring
     from_clause_stmt: Optional[str] = None
-    filter_statements: abc.Sequence[str] =  dataclasses.field(default_factory=list)
+    filter_statements: abc.Sequence[str] = dataclasses.field(default_factory=list)
     values: abc.Sequence[object] = dataclasses.field(default_factory=list)
 
     def _join_filter_statements(self, filter_statements: abc.Sequence[str]) -> str:

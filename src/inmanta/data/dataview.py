@@ -532,6 +532,12 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         # TODO: keep track of index to enforce limit as well
         def cte_subquery_builder(filters: abc.Sequence[str], limit: int) -> str:
             # TODO: this is not correct -> `<` filters should be applied on the outer query
+            initializer_query: str = subquery_latest_version_for_single_resource(
+                curr_count="0", limit=limit, additional_filters=filters
+            )
+            recurse_query: str = subquery_latest_version_for_single_resource(
+                curr_count="curr_r.index + 1", higher_than="curr_r.resource_id", limit=limit
+            )
             return f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
                 /* The latest_version CTE finds the maximum released version number in the environment */
@@ -546,13 +552,13 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 */
                 cte AS (
                     /* Initial row for recursion: select relevant version for first resource */
-                    ( {subquery_latest_version_for_single_resource(curr_count="0", limit=limit, additional_filters=filters)} )
+                    ( {initializer_query} )
                     UNION ALL
                     SELECT next_r.*
                     FROM cte curr_r
                     CROSS JOIN LATERAL (
                         /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
-                        {subquery_latest_version_for_single_resource(curr_count="curr_r.index + 1", higher_than="curr_r.resource_id", limit=limit)}
+                        {recurse_query}
                     ) next_r
                 )
             """
