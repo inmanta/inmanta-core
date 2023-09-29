@@ -3,6 +3,6 @@ description: Improve the output of the `inmanta compile` and `inmanta export` co
 issue-nr: 5258
 issue-repo: inmanta-core
 change-type: minor
-destination-branches: [master, iso6]
+destination-branches: [iso6]
 sections:
   minor-improvement: "{{description}}"
