@@ -495,9 +495,8 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             """
             higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
             # TODO: clean up
-            additional_filters = []
             allowed_filters: abc.Sequence[str] = [
-                f for f in (additional_filters if additional_filters else []) if "status " not in additional_filters
+                f for f in (additional_filters if additional_filters else []) if "status " not in f
             ]
             filter_substatement: str = "" if not allowed_filters else " AND " + " AND ".join(allowed_filters)
             return f"""
