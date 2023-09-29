@@ -1,5 +1,5 @@
-description: Changed default fact expiry time to one day
+description: Removed duplicate fact-expire from default config file
 destination-branches: [master, iso6]
+change-type: patch
 sections:
-  feature: "{{description}}"
-  bugfix: "Removed duplicate fact-expire from default config file"
+  bugfix: "{{description}}"
