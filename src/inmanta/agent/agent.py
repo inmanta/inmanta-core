@@ -211,6 +211,13 @@ class ResourceAction(ResourceActionBase):
             # Explicit cast is required because mypy has issues with * and generics
             results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
+            if self.undeployable:
+                self.status = self.undeployable
+                self.change = const.Change.nochange
+                self.changes = {}
+                self.future.set_result(ResourceActionResult(cancel=False))
+                return
+
             async with self.scheduler.ratelimiter:
                 ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
