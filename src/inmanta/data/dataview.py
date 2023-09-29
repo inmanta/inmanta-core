@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 
-import abc
 import json
-from abc import ABC
+from abc import ABC, abstractmethod
+from collections import abc
 from datetime import datetime
 from typing import Dict, Generic, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast
 from urllib import parse
@@ -173,7 +173,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
         self.requested_page_boundaries.validate()
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_base_url(self) -> str:
         """
         Return the base URL used to construct the paging links
@@ -212,14 +212,14 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             paging_boundaries = self.order.get_paging_boundaries(dict(records[0]), dict(records[-1]))
         return dtos, paging_boundaries
 
-    @abc.abstractmethod
+    @abstractmethod
     def construct_dtos(self, records: Sequence[Record]) -> Sequence[T_DTO]:
         """
         Convert the sequence of records into a sequence of DTO's
         """
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_base_query(self) -> SimpleQueryBuilder:
         """
         Return the base query to get the data.
@@ -229,7 +229,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         pass
 
     @property
-    @abc.abstractmethod
+    @abstractmethod
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
         """
         Return the specification of the allowed filters, see FilterValidator
@@ -482,7 +482,9 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
+        def subquery_latest_version_for_single_resource(
+            higher_than: Optional[str], additional_filters: Optional[abc.Sequence[str]] = None
+        ) -> str:
             """
             Returns a subquery to select a single row from a resource table:
                 - for the first resource id higher than the given boundary
@@ -492,6 +494,12 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 If not given, the subquery selects the first resource id, period.
             """
             higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
+            # TODO: clean up
+            additional_filters = []
+            allowed_filters: abc.Sequence[str] = [
+                f for f in (additional_filters if additional_filters else []) if "status " not in additional_filters
+            ]
+            filter_substatement: str = "" if not allowed_filters else " AND " + " AND ".join(allowed_filters)
             return f"""
                 SELECT
                     r.resource_id,
@@ -510,12 +518,13 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 FROM resource r
                 JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
                 WHERE r.environment = $1 AND cm.released = TRUE {higher_than_condition}
+                /* filter right at the start so we don't have to do the recursive expansion for parts we don't care about */
+                {filter_substatement}
                 ORDER BY resource_id, model DESC
                 LIMIT 1
             """
 
         def cte_subquery_builder(filters: abc.Sequence[str]) -> str:
-            filter_substatement: str = "" if not filters else " AND " + " AND ".join(filters)
             # TODO: this is not correct -> `<` filters should be applied on the outer query
             return f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
@@ -524,8 +533,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                     SELECT MAX(public.configurationmodel.version) as version
                     FROM public.configurationmodel
                     WHERE public.configurationmodel.released=TRUE AND environment=$1
-                    /* filter right at the start so we don't have to do the recursive expansion for parts we don't care about */
-                    {filter_substatement}
                 ),
                 /*
                 emulate a loose (or skip) index scan (https://wiki.postgresql.org/wiki/Loose_indexscan):
@@ -533,13 +540,13 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 */
                 cte AS (
                     /* Initial row for recursion: select relevant version for first resource */
-                    ( {subquery_latest_version_for_single_resource(higher_than=None)} )
+                    ( {subquery_latest_version_for_single_resource(higher_than=None, additional_filters=filters)} )
                     UNION ALL
                     SELECT next_r.*
                     FROM cte curr_r
                     CROSS JOIN LATERAL (
                         /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
-                        {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id")}
+                        {subquery_latest_version_for_single_resource(higher_than="curr_r.resource_id", additional_filters=filters)}
                     ) next_r
                 )
             """

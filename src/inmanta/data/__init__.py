@@ -936,9 +936,10 @@ class BaseQueryBuilder(ABC):
     """
 
     select_clause: Optional[str] = None
+    # TODO: name and/or docstring
     from_clause_stmt: Optional[str] = None
-    filter_statements: Optional[str] = None
-    values: Optional[abc.Sequence[object]] = dataclasses.field(default_factory=list)
+    filter_statements: abc.Sequence[str] =  dataclasses.field(default_factory=list)
+    values: abc.Sequence[object] = dataclasses.field(default_factory=list)
 
     def _join_filter_statements(self, filter_statements: abc.Sequence[str]) -> str:
         """Join multiple filter statements"""
@@ -1028,6 +1029,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             order_by = self.db_order.get_order_by_statement(table="matching_records")
             full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
 
+        print(full_query)
         return full_query, self.values
 
 
@@ -1045,17 +1047,19 @@ class PreludeFilterQueryBuilder(SimpleQueryBuilder):
     #   TODO: allow values to be set but only at construction time?
     # TODO: docstring
     # TODO: make this a separate type/protocol
+    # TODO: why is this Optional? Could give a NOOP default
     prelude_subquery: Optional[abc.Callable[[abc.Sequence[str]], str]] = None
 
     def build(self) -> Tuple[str, List[object]]:
         delegate: SimpleQueryBuilder = SimpleQueryBuilder(
-            self.select_clause,
-            self.from_clause_stmt,
-            self.filter_statements,
-            self.values + (self.values if self.prelude_subquery is not None else []),
-            self.db_order,
-            self.limit,
-            self.prelude_subquery(self.filter_statements) if self.prelude_subquery is not None else None,
+            select_clause=self.select_clause,
+            from_clause_stmt=self.from_clause_stmt,
+            filter_statements=self.filter_statements,
+            values=self.values,
+            db_order=self.db_order,
+            limit=self.limit,
+            backward_paging=self.backward_paging,
+            prelude=self.prelude_subquery(self.filter_statements) if self.prelude_subquery is not None else None,
         )
         return delegate.build()
 
