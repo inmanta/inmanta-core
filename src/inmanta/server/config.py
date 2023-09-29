@@ -141,7 +141,7 @@ server_ssl_ca_cert = Option(
 )
 
 server_fact_expire = Option(
-    "server", "fact-expire", 3600, "After how many seconds will discovered facts/parameters expire", is_time
+    "server", "fact-expire", 86400, "After how many seconds will discovered facts/parameters expire", is_time
 )
 
 
