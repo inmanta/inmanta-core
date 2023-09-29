@@ -1,5 +1,0 @@
-description: Changed default fact expiry time to one day
-destination-branches: [master, iso6]
-sections:
-  feature: "{{description}}"
-  bugfix: "Removed duplicate fact-expire from default config file"
