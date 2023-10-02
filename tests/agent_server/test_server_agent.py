@@ -3267,12 +3267,6 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     """
     Test retrieving facts from the agent when there is no handler code available. We use an autostarted agent, these
     do not have access to the handler code for the resource_container.
-
-    Expected logs:
-        * Deploy action: Start run/End run
-        * Deploy action: Failed to load handler code or install handler code
-        * Pull action
-        * Store action
     """
     resource_container.Provider.reset()
     resource_container.Provider.set("agent1", "key", "value")
@@ -3288,21 +3282,20 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 
     await _wait_until_deployment_finishes(client, environment, version)
     # The resource state and its logs are not set atomically. This call prevents a race condition.
-    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=4)
+    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=3)
 
     response = await client.get_resource(environment, resource_id, logs=True)
     assert response.code == 200
     result = response.result
-
     assert result["resource"]["status"] == "unavailable"
 
+    # Expected logs:
+    #   [0] Deploy action: Failed to load handler code or install handler code
+    #   [1] Pull action
+    #   [2] Store action
     assert result["logs"][0]["action"] == "deploy"
     assert result["logs"][0]["status"] == "unavailable"
-    assert "Start run for " in result["logs"][0]["messages"][0]["msg"]
-
-    assert result["logs"][1]["action"] == "deploy"
-    assert result["logs"][1]["status"] == "unavailable"
-    assert "Failed to load handler code " in result["logs"][1]["messages"][0]["msg"]
+    assert "Failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
