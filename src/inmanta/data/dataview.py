@@ -488,6 +488,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             higher_than: Optional[str] = None,
             limit: Optional[int] = None,
             additional_filters: Optional[abc.Sequence[str]] = None,
+            additional_filters: Optional[abc.Sequence[str]] = None,
         ) -> str:
             """
             Returns a subquery to select a single row from a resource table:
@@ -497,34 +498,45 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
             :param higher_than: If given, the subquery selects the first resource id higher than this value (may be a column).
                 If not given, the subquery selects the first resource id, period.
             """
-            higher_than_condition: str = f"AND r.resource_id > {higher_than}" if higher_than is not None else ""
-            lower_than_condition: str = f"AND {curr_count} < {limit}" if limit is not None else ""
-            # TODO: clean up + docstrings
-            allowed_filters: abc.Sequence[str] = [
-                f for f in (additional_filters if additional_filters else []) if "status " not in f
-            ]
-            filter_substatement: str = "" if not allowed_filters else " AND " + " AND ".join(allowed_filters)
+            # TODO: add comments for why these are split -> best-effort approach
+            base_filters: list[str] = [f"r.resource_id > {higher_than}"] if higher_than is not None else []
+            # TODO: this is broken because outer query may specify different ordering than inner query
+            transformed_field_filters: list[str] = [f"{curr_count} < {limit}"] if limit is not None else []
+            for f in (additional_filters if additional_filters else []):
+                # TODO: clean up + docstrings
+                if "status " in f:
+                    transformed_field_filters.append(f)
+                else:
+                    base_filters.append(f)
+            base_filter_substatement: str = "" if not base_filters else " AND " + " AND ".join(base_filters)
+            transformed_filter_substatement: str = (
+                "" if not transformed_field_filters else " WHERE " + " AND ".join(transformed_field_filters)
+            )
+            # TODO: move this comment to docstring/usage: /* filter right at the start so we don't have to do the recursive expansion for parts we don't care about */
             return f"""
                 SELECT
                     {curr_count} AS index,
-                    r.resource_id,
-                    r.attributes,
-                    r.resource_type,
-                    r.agent,
-                    r.resource_id_value,
-                    r.model,
-                    r.environment,
+                    next_r.resource_id,
+                    next_r.attributes,
+                    next_r.resource_type,
+                    next_r.agent,
+                    next_r.resource_id_value,
+                    next_r.model,
+                    next_r.environment,
                     (
-                        CASE WHEN (SELECT r.model < latest_version.version FROM latest_version)
+                        CASE WHEN (SELECT next_r.model < latest_version.version FROM latest_version)
                             THEN 'orphaned' -- use the CTE to check the status
-                            ELSE r.status::text
+                            ELSE next_r.status::text
                         END
                     ) as status
-                FROM resource r
-                JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-                WHERE r.environment = $1 AND cm.released = TRUE {higher_than_condition}
-                /* filter right at the start so we don't have to do the recursive expansion for parts we don't care about */
-                {lower_than_condition}{filter_substatement}
+                FROM (
+                    SELECT r.*
+                    FROM resource r
+                    JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
+                    WHERE r.environment = $1 AND cm.released = TRUE
+                    {base_filter_substatement}
+                ) next_r
+                {transformed_filter_substatement}
                 ORDER BY resource_id, model DESC
                 LIMIT 1
             """
@@ -536,7 +548,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
                 curr_count="0", limit=limit, additional_filters=filters
             )
             recurse_query: str = subquery_latest_version_for_single_resource(
-                curr_count="curr_r.index + 1", higher_than="curr_r.resource_id", limit=limit
+                curr_count="curr_r.index + 1", higher_than="curr_r.resource_id", limit=limit, additional_filters=filters
             )
             return f"""
                 /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
@@ -565,7 +577,17 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
 
         query_builder = PreludeFilterQueryBuilder(
             prelude_subquery=cte_subquery_builder,
-            select_clause="SELECT *",
+            select_clause="""
+                SELECT
+                    r.resource_id,
+                    r.attributes,
+                    r.resource_type,
+                    r.agent,
+                    r.resource_id_value,
+                    r.model,
+                    r.environment,
+                    r.status
+            """,
             from_clause_stmt="FROM cte r",
             values=[self.environment.id],
         )
