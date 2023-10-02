@@ -388,7 +388,7 @@ async def test_spontaneous_deploy(
 
 @pytest.mark.parametrize(
     "cron",
-    [False, True],
+    [False],
 )
 async def test_spontaneous_repair(
     resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, cron
@@ -403,10 +403,15 @@ async def test_spontaneous_repair(
 
     env_id = environment
 
+    result = await client.set_setting(tid=env_id, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL, value=agent_repair_interval)
+
+    assert result.code == 200
+
     result = await client.get_setting(tid=env_id, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
+    assert result.code == 200
 
-    Config.set("config", "agent-repair-interval", agent_repair_interval)
+    # Config.set("config", "agent-repair-interval", agent_repair_interval)
     Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 

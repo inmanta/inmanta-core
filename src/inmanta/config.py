@@ -284,7 +284,7 @@ class Option(Generic[T]):
     """
     Defines an option and exposes it for use
 
-    All config option should be define prior to use
+    All config option should be defined prior to use
     For the document generator to work properly, they should be defined at the module level.
 
     :param section: section in the config file

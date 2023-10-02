@@ -2376,6 +2376,11 @@ def convert_agent_trigger_method(value: object) -> str:
         raise ValueError("%s is not a valid agent trigger method. Valid value: %s" % (value, ",".join(valid_values)))
     return value
 
+def validate_cron_or_int(value: str) -> Union[int, str]:
+    try:
+        return validate_cron(value)
+    except ValueError:
+        return int(value)
 
 def validate_cron(value: str) -> str:
     if not value:
@@ -2587,11 +2592,11 @@ class Environment(BaseDocument):
         ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
-            typ="int",
+            typ="str",
             default=600,
             doc="The deployment interval of the autostarted agents."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
-            validator=convert_int,
+            validator=validate_cron_or_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
@@ -2605,11 +2610,14 @@ class Environment(BaseDocument):
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
-            typ="int",
+            typ="str",
             default=86400,
-            doc="The repair interval of the autostarted agents."
-            " See also: :inmanta.config:option:`config.agent-repair-interval`",
-            validator=convert_int,
+            doc=(
+                "The repair interval of the autostarted agents. Can be specified as a number of seconds"
+                "or as a cron-like expression."
+                " See also: :inmanta.config:option:`config.agent-repair-interval`"
+            ),
+            validator=validate_cron_or_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(

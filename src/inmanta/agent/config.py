@@ -95,8 +95,12 @@ agent_deploy_interval = Option(
     "config",
     "agent-deploy-interval",
     0,
-    "The number of seconds between two (incremental) deployment runs of the agent. Set this to 0 to disable the scheduled deploy runs.",
-    is_time,
+    "Either the number of seconds between two (incremental) deployment runs of the agent or a cron-like expression."
+    " If a cron-like expression is specified, a deploy will be run following a cron-like time-to-run specification,"
+    " interpreted in UTC (e.g. `min hour dom month dow`). A deploy will be requested at the scheduled time. Note that if a cron"
+    " expression is used the 'agent_deploy_splay_time' setting will be ignored."
+    " Set this to 0 to disable the scheduled deploy runs.",
+    is_time_or_cron,
     predecessor_option=agent_interval,
 )
 agent_deploy_splay_time = Option(
