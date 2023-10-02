@@ -726,7 +726,7 @@ class AgentInstance(object):
             )
 
         now = datetime.datetime.now().astimezone()
-        if self._deploy_interval > 0:
+        if isinstance(self._deploy_interval, int) and self._deploy_interval > 0:
             self.logger.info(
                 "Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
                 self._deploy_interval,
@@ -737,9 +737,13 @@ class AgentInstance(object):
                 interval=float(self._deploy_interval), initial_delay=float(self._deploy_splay_value)
             )
             self._enable_time_trigger(deploy_action, interval_schedule_deploy)
-        if isinstance(self._repair_interval, int):
-            if self._repair_interval <= 0:
-                return
+
+        if isinstance(self._deploy_interval, str):
+            self.logger.info("Scheduling deploy with cron expression '%s'", self._deploy_interval)
+            cron_schedule = CronSchedule(cron=self._deploy_interval)
+            self._enable_time_trigger(deploy_action, cron_schedule)
+
+        if isinstance(self._repair_interval, int) and self._repair_interval > 0:
             self.logger.info(
                 "Scheduling repair with interval %d and splay %d (first run at %s)",
                 self._repair_interval,

@@ -2376,7 +2376,9 @@ def convert_agent_trigger_method(value: object) -> str:
         raise ValueError("%s is not a valid agent trigger method. Valid value: %s" % (value, ",".join(valid_values)))
     return value
 
-def validate_cron_or_int(value: str) -> Union[int, str]:
+def validate_cron_or_int(value: Union[int, str]) -> Union[int, str]:
+    if isinstance(value, int):
+        return value
     try:
         return validate_cron(value)
     except ValueError:
