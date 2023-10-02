@@ -482,113 +482,47 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        def subquery_latest_version_for_single_resource(
-            *,
-            curr_count: str,
-            higher_than: Optional[str] = None,
-            limit: Optional[int] = None,
-            additional_filters: Optional[abc.Sequence[str]] = None,
-            additional_filters: Optional[abc.Sequence[str]] = None,
-        ) -> str:
-            """
-            Returns a subquery to select a single row from a resource table:
-                - for the first resource id higher than the given boundary
-                - the highest (released) version for which a resource with this id exists
-
-            :param higher_than: If given, the subquery selects the first resource id higher than this value (may be a column).
-                If not given, the subquery selects the first resource id, period.
-            """
-            # TODO: add comments for why these are split -> best-effort approach
-            base_filters: list[str] = [f"r.resource_id > {higher_than}"] if higher_than is not None else []
-            # TODO: this is broken because outer query may specify different ordering than inner query
-            transformed_field_filters: list[str] = [f"{curr_count} < {limit}"] if limit is not None else []
-            for f in (additional_filters if additional_filters else []):
-                # TODO: clean up + docstrings
-                if "status " in f:
-                    transformed_field_filters.append(f)
-                else:
-                    base_filters.append(f)
-            base_filter_substatement: str = "" if not base_filters else " AND " + " AND ".join(base_filters)
-            transformed_filter_substatement: str = (
-                "" if not transformed_field_filters else " WHERE " + " AND ".join(transformed_field_filters)
-            )
-            # TODO: move this comment to docstring/usage: /* filter right at the start so we don't have to do the recursive expansion for parts we don't care about */
-            return f"""
-                SELECT
-                    {curr_count} AS index,
-                    next_r.resource_id,
-                    next_r.attributes,
-                    next_r.resource_type,
-                    next_r.agent,
-                    next_r.resource_id_value,
-                    next_r.model,
-                    next_r.environment,
-                    (
-                        CASE WHEN (SELECT next_r.model < latest_version.version FROM latest_version)
-                            THEN 'orphaned' -- use the CTE to check the status
-                            ELSE next_r.status::text
-                        END
-                    ) as status
-                FROM (
-                    SELECT r.*
-                    FROM resource r
-                    JOIN configurationmodel cm ON r.model = cm.version AND r.environment = cm.environment
-                    WHERE r.environment = $1 AND cm.released = TRUE
-                    {base_filter_substatement}
-                ) next_r
-                {transformed_filter_substatement}
-                ORDER BY resource_id, model DESC
-                LIMIT 1
-            """
-
-        # TODO: keep track of index to enforce limit as well
-        def cte_subquery_builder(filters: abc.Sequence[str], limit: int) -> str:
-            # TODO: this is not correct -> `<` filters should be applied on the outer query
-            initializer_query: str = subquery_latest_version_for_single_resource(
-                curr_count="0", limit=limit, additional_filters=filters
-            )
-            recurse_query: str = subquery_latest_version_for_single_resource(
-                curr_count="curr_r.index + 1", higher_than="curr_r.resource_id", limit=limit, additional_filters=filters
-            )
-            return f"""
-                /* the recursive CTE is the second one, but it has to be specified after 'WITH' if any of them are recursive */
-                /* The latest_version CTE finds the maximum released version number in the environment */
-                WITH RECURSIVE latest_version AS (
-                    SELECT MAX(public.configurationmodel.version) as version
-                    FROM public.configurationmodel
-                    WHERE public.configurationmodel.released=TRUE AND environment=$1
+        prelude: str = """
+            WITH
+                latest_model_versions AS (
+                    SELECT MAX(cm.version) as version
+                    FROM configurationmodel cm
+                    WHERE cm.environment=$1 AND cm.released=TRUE
                 ),
-                /*
-                emulate a loose (or skip) index scan (https://wiki.postgresql.org/wiki/Loose_indexscan):
-                1 resource_id at a time, select the latest (released) version it exists in.
-                */
-                cte AS (
-                    /* Initial row for recursion: select relevant version for first resource */
-                    ( {initializer_query} )
-                    UNION ALL
-                    SELECT next_r.*
-                    FROM cte curr_r
-                    CROSS JOIN LATERAL (
-                        /* Recurse: select relevant version for next resource (one higher in the sort order than current) */
-                        {recurse_query}
-                    ) next_r
+                latest_resource_versions AS (
+                    SELECT r.resource_id, MAX(r.model) AS version
+                    FROM resource r
+                    INNER JOIN configurationmodel cm
+                    ON cm.environment = r.environment AND cm.version = r.model
+                    WHERE r.environment = $1 AND cm.released = TRUE
+                    GROUP BY r.resource_id
+                ),
+                latest_resources AS (
+                    SELECT
+                        r.resource_id,
+                        r.attributes,
+                        r.resource_type,
+                        r.agent,
+                        r.resource_id_value,
+                        r.model,
+                        r.environment,
+                        (
+                            CASE WHEN (SELECT r.model < latest_model_versions.version FROM latest_model_versions)
+                                THEN 'orphaned' -- use the CTE to check the status
+                                ELSE r.status::text
+                            END
+                        ) as status
+                    FROM resource r
+                    INNER JOIN latest_resource_versions
+                    ON r.resource_id = latest_resource_versions.resource_id AND r.model = latest_resource_versions.version
+                    WHERE r.environment = $1
                 )
-            """
+        """
 
-        query_builder = PreludeFilterQueryBuilder(
-            prelude_subquery=cte_subquery_builder,
-            select_clause="""
-                SELECT
-                    r.resource_id,
-                    r.attributes,
-                    r.resource_type,
-                    r.agent,
-                    r.resource_id_value,
-                    r.model,
-                    r.environment,
-                    r.status
-            """,
-            from_clause_stmt="FROM cte r",
+        query_builder = SimpleQueryBuilder(
+            prelude=prelude,
+            select_clause="SELECT *",
+            from_clause_stmt="FROM latest_resources r",
             values=[self.environment.id],
         )
         return query_builder
