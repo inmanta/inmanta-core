@@ -403,10 +403,14 @@ async def test_spontaneous_repair(
 
     env_id = environment
 
+    result = await client.get_setting(tid=env_id, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+
+
     Config.set("config", "agent-repair-interval", agent_repair_interval)
     Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 
+    result = await client.get_setting(tid=env_id, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
     agent = await get_agent(server, environment, "agent1", "node1")
     async_finalizer(agent.stop)
 
