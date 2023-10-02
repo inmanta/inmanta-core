@@ -743,7 +743,7 @@ class CompileSummaryReporter:
         Return the stack trace associated with `self._get_exception_to_report()`.
         """
         exc = self._get_exception_to_report()
-        return "".join(traceback.format_exception(exc)).strip("\n")
+        return "".join(traceback.format_exception(None, value=exc, tb=exc.__traceback__)).strip("\n")
 
     def _print_to_stderr(self, text: str = "", bold: bool = False, **kwargs: object) -> None:
         """
