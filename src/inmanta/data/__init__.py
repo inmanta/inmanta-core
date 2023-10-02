@@ -2612,14 +2612,16 @@ class Environment(BaseDocument):
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
-            typ="str",
+            # typ="str",
+            typ="int",
             default=86400,
             doc=(
                 "The repair interval of the autostarted agents. Can be specified as a number of seconds"
                 "or as a cron-like expression."
                 " See also: :inmanta.config:option:`config.agent-repair-interval`"
             ),
-            validator=validate_cron_or_int,
+            # validator=validate_cron_or_int,
+            validator=convert_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(
