@@ -2967,7 +2967,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         Load all plug-ins from a configuration module
         """
         for path_to_file, fq_mod_name in self.get_plugin_files():
-            LOGGER.debug("Loading module %s", fq_mod_name)
+            LOGGER.trace("Loading Python module %s", fq_mod_name)
             try:
                 importlib.import_module(fq_mod_name)
             except Exception as e:
