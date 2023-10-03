@@ -236,14 +236,14 @@ class ResourceAction(ResourceActionBase):
                         # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                         return
 
-                    try:
-                        requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
-                    except Exception:
-                        ctx.set_status(const.ResourceState.failed)
-                        ctx.exception("Failed to report the start of the deployment to the server")
+                    if self.undeployable is not None:
+                        ctx.set_status(self.undeployable)
                     else:
-                        if self.undeployable is not None:
-                            ctx.set_status(self.undeployable)
+                        try:
+                            requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
+                        except Exception:
+                            ctx.set_status(const.ResourceState.failed)
+                            ctx.exception("Failed to report the start of the deployment to the server")
                         else:
                             await self._execute(ctx=ctx, requires=requires)
 
