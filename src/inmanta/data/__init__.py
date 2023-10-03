@@ -2383,8 +2383,6 @@ def validate_cron_or_int(value: Union[int, str]) -> Union[int, str]:
         return validate_cron(cast_to_str)
     except ValueError:
         return cast_to_str
-    except Exception as e:
-        LOGGER.info(e)
 
 
 def validate_cron(value: str) -> str:
