@@ -41,6 +41,10 @@ async def test_6475_deploy_with_failure_masking(
     resource a[k=x],v=1 fails
 
     Now, the good state of v2 has masked the bad state of v1.
+
+    However, if the attribute hash changes between v1 and v2, failure masking can not happen,
+    so we don't need to prevent it
+    The change_state parameter ensure we support both cases
     """
 
     async def make_version() -> int:
@@ -59,6 +63,7 @@ async def test_6475_deploy_with_failure_masking(
             },
             {
                 "key": "key2",
+                # change the attribute hash in case we are testing that scenario
                 "value": "value1" if not change_state else "value" + str(version),
                 "id": rvid2,
                 "send_event": False,
