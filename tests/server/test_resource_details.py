@@ -17,7 +17,7 @@
 """
 import datetime
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Dict
 from uuid import UUID
 
 import pytest
@@ -41,7 +41,7 @@ async def env_with_resources(server, client):
     env3 = data.Environment(name="dev3", project=project.id, repo_url="", repo_branch="")
     await env3.insert()
 
-    cm_times: List[datetime] = []
+    cm_times = []
     for i in range(1, 10):
         cm_times.append(
             datetime.datetime.strptime(f"2021-07-07T1{i}:00:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(datetime.timezone.utc)

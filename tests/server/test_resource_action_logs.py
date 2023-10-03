@@ -35,7 +35,6 @@ resource_id_a = r"std::File[agent1,path=/tmp#/%%/\_file1.txt]"
 @pytest.fixture
 async def env_with_logs(client, server, environment: str):
     cm_times = []
-
     for i in range(1, 10):
         cm_times.append(
             datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(datetime.timezone.utc)
@@ -53,13 +52,12 @@ async def env_with_logs(client, server, environment: str):
         )
         cm_time_idx += 1
         await cm.insert()
-
     msg_timings = []
     for i in range(1, 30):
         msg_timings.append(
             datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
-            .astimezone(datetime.timezone.utc)
             .replace(minute=i)
+            .astimezone(datetime.timezone.utc)
         )
     msg_timings_idx = 0
     for i in range(1, 10):
@@ -178,14 +176,12 @@ def log_messages(resource_log_objects):
 @pytest.mark.parametrize(
     "order_by_column, order",
     [
-        # ("timestamp", "DESC"),
+        ("timestamp", "DESC"),
         ("timestamp", "ASC"),
     ],
 )
 async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs: Tuple[str, List[datetime.datetime]]):
     """Test querying resource logs with paging, using different sorting parameters."""
-    # opt.server_tz_aware_timestamps.set("False")
-
     environment, msg_timings = env_with_logs
 
     result = await client.resource_logs(
