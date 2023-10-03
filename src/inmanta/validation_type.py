@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import importlib
+from collections import abc
 from typing import Optional
 
 import pydantic
@@ -25,7 +26,9 @@ from inmanta.types import PrimitiveTypes
 
 
 @stable_api
-def validate_type(fq_type_name: str, value: PrimitiveTypes, validation_parameters: Optional[dict[str, object]] = None) -> None:
+def validate_type(
+    fq_type_name: str, value: PrimitiveTypes, validation_parameters: Optional[abc.Mapping[str, object]] = None
+) -> None:
     """
     Check whether `value` satisfies the constraints of type `fq_type_name`. When the given type (fq_type_name)
     requires validation_parameters, they can be provided using the optional `validation_parameters` argument.
