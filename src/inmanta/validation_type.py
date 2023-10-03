@@ -17,13 +17,15 @@
 """
 import importlib
 from typing import Optional
+
 import pydantic
 
 from inmanta.stable_api import stable_api
+from inmanta.types import PrimitiveTypes
 
 
 @stable_api
-def validate_type(fq_type_name: str, value: , validation_parameters: Optional[dict[str, object]] = None) -> None:
+def validate_type(fq_type_name: str, value: PrimitiveTypes, validation_parameters: Optional[dict[str, object]] = None) -> None:
     """
     Check whether `value` satisfies the constraints of type `fq_type_name`. When the given type (fq_type_name)
     requires validation_parameters, they can be provided using the optional `validation_parameters` argument.
