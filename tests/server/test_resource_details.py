@@ -17,13 +17,12 @@
 """
 import datetime
 from collections import defaultdict
-from datetime import timedelta
-from typing import Any, Dict
+from typing import Any, Dict, List
 from uuid import UUID
 
 import pytest
 
-from inmanta import config, data
+from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 
@@ -42,23 +41,17 @@ async def env_with_resources(server, client):
     env3 = data.Environment(name="dev3", project=project.id, repo_url="", repo_branch="")
     await env3.insert()
 
-    tz_aware_timestamps: bool = config.Config.get("server", "tz_aware_timestamps")
-    timezone_offset: int = int(config.Config.get("server", "timezone"))
-
-    timezone_format: str = "%z" if tz_aware_timestamps else ""
-    timezone_info = f"+{timezone_offset:0>2}:00" if tz_aware_timestamps else ""
-
-    server_tz = datetime.timezone(timedelta(hours=timezone_offset))
-    cm_times = []
+    cm_times: List[datetime] = []
     for i in range(1, 10):
         cm_times.append(
-            datetime.datetime.strptime(f"2021-07-07T1{i}:00:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}")
+            datetime.datetime.strptime(f"2021-07-07T1{i}:00:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(datetime.timezone.utc)
         )
+
     cm_time_idx = 0
     resource_deploy_times = []
     for i in range(30):
         resource_deploy_times.append(
-            datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}")
+            datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(datetime.timezone.utc)
         )
 
     # Add multiple versions of model, with 2 of them released
@@ -78,7 +71,7 @@ async def env_with_resources(server, client):
     cm = data.ConfigurationModel(
         environment=env2.id,
         version=4,
-        date=datetime.datetime.now(tz=server_tz),
+        date=datetime.datetime.now(),
         total=1,
         released=True,
         version_info={},
@@ -90,7 +83,7 @@ async def env_with_resources(server, client):
     cm = data.ConfigurationModel(
         environment=env3.id,
         version=6,
-        date=datetime.datetime.now(tz=server_tz),
+        date=datetime.datetime.now(),
         total=1,
         released=True,
         version_info={},

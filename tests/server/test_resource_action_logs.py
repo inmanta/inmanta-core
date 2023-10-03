@@ -19,14 +19,13 @@ import datetime
 import json
 import logging
 import uuid
-from datetime import timedelta
 from operator import itemgetter
 from typing import List, Tuple
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import config, const, data
+from inmanta import const, data
 from inmanta.server.config import get_bind_port
 
 # This resource ID has some garbage characters, to make sure the queries are good
@@ -36,17 +35,10 @@ resource_id_a = r"std::File[agent1,path=/tmp#/%%/\_file1.txt]"
 @pytest.fixture
 async def env_with_logs(client, server, environment: str):
     cm_times = []
-    tz_aware_timestamps = config.Config.get("server", "tz_aware_timestamps")
-    timezone_offset = int(config.Config.get("server", "timezone"))
-
-    # timezone_format: str = "%z" if tz_aware_timestamps else ""
-    # timezone_info = f"+{:0<{timezone_offset}}:00"
-    timezone_format: str = "%z" if tz_aware_timestamps else ""
-    timezone_info = f"+{timezone_offset:0>2}:00" if tz_aware_timestamps else ""
 
     for i in range(1, 10):
         cm_times.append(
-            datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}")
+            datetime.datetime.strptime(f"2021-07-07T10:1{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(datetime.timezone.utc)
         )
     cm_time_idx = 0
     for i in range(1, 10):
@@ -65,9 +57,9 @@ async def env_with_logs(client, server, environment: str):
     msg_timings = []
     for i in range(1, 30):
         msg_timings.append(
-            datetime.datetime.strptime(f"2021-07-07T10:10:00.0{timezone_info}", f"%Y-%m-%dT%H:%M:%S.%f{timezone_format}")
+            datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
+            .astimezone(datetime.timezone.utc)
             .replace(minute=i)
-            .astimezone(datetime.timezone(timedelta(hours=timezone_offset)))
         )
     msg_timings_idx = 0
     for i in range(1, 10):

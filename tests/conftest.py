@@ -783,7 +783,6 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
         config.Config.set("server", "agent-timeout", "2")
         config.Config.set("agent", "agent-repair-interval", "0")
         config.Config.set("server", "tz_aware_timestamps", "True")
-        config.Config.set("server", "timezone", "2")
         yield config
 
 
