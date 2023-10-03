@@ -409,7 +409,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
     if in_local_tz:
-        return naive_utc_timestamp.astimezone().isoformat(timespec="microseconds")
+        return naive_utc_timestamp.replace(tzinfo=datetime.timezone.utc).astimezone().isoformat(timespec="microseconds")
     return naive_utc_timestamp.isoformat(timespec="microseconds")
 
 
