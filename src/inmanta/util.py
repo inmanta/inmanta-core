@@ -394,22 +394,22 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, in_local_tz: bool = False) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, tz_aware: bool = False) -> str:
     """
     Returns a timestamp ISO string.
 
     :param timestamp: The timestamp to get the ISO string for.
     :param naive_utc: Whether to interpret naive timestamps as UTC. By default, naive timestamps are assumed to
     be in local time.
-    :param in_local_tz: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
+    :param tz_aware: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
     """
     naive_utc_timestamp: datetime.datetime = (
         timestamp
         if timestamp.tzinfo is None and naive_utc
         else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
     )
-    if in_local_tz:
-        return naive_utc_timestamp.astimezone().isoformat(timespec="microseconds")
+    if tz_aware:
+        return naive_utc_timestamp.replace(tzinfo=datetime.timezone.utc).astimezone().isoformat(timespec="microseconds")
     return naive_utc_timestamp.isoformat(timespec="microseconds")
 
 

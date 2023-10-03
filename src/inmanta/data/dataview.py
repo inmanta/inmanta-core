@@ -89,6 +89,8 @@ from inmanta.server.validate_filter import (
 from inmanta.types import JsonType, SimpleTypes
 from inmanta.util import datetime_iso_format
 
+from inmanta.server import config as opt
+
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
 T_DTO = TypeVar("T_DTO", bound=BaseModel)
 
@@ -391,7 +393,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 if isinstance(value, datetime):
                     # Accross API boundaries, all naive datetime instances are assumed UTC.
                     # Returns ISO timestamp implicitly in UTC.
-                    return datetime_iso_format(value, naive_utc=True)
+                    return datetime_iso_format(value, naive_utc=True, tz_aware=opt.server_tz_aware_timestamps.get())
                 return str(value)
 
             def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:

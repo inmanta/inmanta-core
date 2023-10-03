@@ -530,3 +530,15 @@ async def test_threadpool_join():
     # verify we are done
     tp.shutdown(wait=True)
     assert done.qsize() == 5
+
+
+def test_datetime_iso_format():
+
+    timestamp = datetime.datetime(2023, 10, 3, 9, 38, 32, 463444)
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+    assert timestamp_iso_str == '2023-10-03T11:38:32.463444+02:00'
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
+    assert timestamp_iso_str == '2023-10-03T09:38:32.463444'
+
