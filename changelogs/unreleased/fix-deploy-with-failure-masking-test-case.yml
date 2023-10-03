@@ -1,0 +1,4 @@
+---
+description: "Fix issue with the `test_6475_deploy_with_failure_masking` test case where it hits the max_client limit of Tornado."
+change-type: patch
+destination-branches: [iso6]
