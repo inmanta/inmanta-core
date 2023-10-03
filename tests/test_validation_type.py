@@ -16,8 +16,10 @@
     Contact: code@inmanta.com
 """
 from typing import Optional
-import pytest
+
 import pydantic
+import pytest
+
 from inmanta.validation_type import validate_type
 
 

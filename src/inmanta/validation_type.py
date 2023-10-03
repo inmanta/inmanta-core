@@ -15,15 +15,15 @@
 
     Contact: code@inmanta.com
 """
-import pydantic
 import importlib
+from typing import Optional
+import pydantic
+
 from inmanta.stable_api import stable_api
 
 
 @stable_api
-def validate_type(
-    fq_type_name: "string", value: "any", validation_parameters: "dict" = None
-) -> None:
+def validate_type(fq_type_name: str, value: , validation_parameters: Optional[dict[str, object]] = None) -> None:
     """
     Check whether `value` satisfies the constraints of type `fq_type_name`. When the given type (fq_type_name)
     requires validation_parameters, they can be provided using the optional `validation_parameters` argument.
@@ -70,9 +70,7 @@ def validate_type(
     t = getattr(module, type_name)
     # Construct pydantic model
     if validation_parameters is not None:
-        model = pydantic.create_model(
-            fq_type_name, value=(t(**validation_parameters), ...)
-        )
+        model = pydantic.create_model(fq_type_name, value=(t(**validation_parameters), ...))
     else:
         model = pydantic.create_model(fq_type_name, value=(t, ...))
     # Do validation
