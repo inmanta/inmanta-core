@@ -2377,12 +2377,11 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 def validate_cron_or_int(value: Union[int, str]) -> Union[int, str]:
-    if isinstance(value, int):
-        return value
+    cast_to_str = str(value)
     try:
-        return validate_cron(value)
+        return validate_cron(cast_to_str)
     except ValueError:
-        return int(value)
+        return cast_to_str
     except Exception as e:
         LOGGER.info(e)
 

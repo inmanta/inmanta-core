@@ -388,7 +388,7 @@ async def test_spontaneous_deploy(
 
 @pytest.mark.parametrize(
     "cron",
-    [False],
+    [False, True],
 )
 async def test_spontaneous_repair(
     resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, cron
@@ -409,8 +409,15 @@ async def test_spontaneous_repair(
     assert isinstance(agent_repair_interval, str)
 
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, agent_repair_interval)
-
     assert result.code == 200
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    # result = await client.get_environment(env_id)
+    env = await data.Environment.get_by_id(env_id)
+
+    # assert result.code == 200
+
+    await autostarted_agent_manager.restart_agents(env)
+
 
     result = await client.get_setting(tid=env_id, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
@@ -3365,7 +3372,7 @@ async def test_restart_agent_with_outdated_agent_map(server, client, environment
     await env.set(key=data.AUTOSTART_AGENT_MAP, value={"internal": ""})
     await agent_manager.ensure_agent_registered(env=env, nodename="internal")
     await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
-    await autostarted_agent_manager.restart_agents(env)
+    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     # Internal agent should have a session with the server
     await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == 1, 10)
 
