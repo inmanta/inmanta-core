@@ -405,6 +405,9 @@ async def test_spontaneous_repair(
 
     # result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
     # assert result.code == 200
+
+    assert isinstance(agent_repair_interval, str)
+
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, agent_repair_interval)
 
     assert result.code == 200
