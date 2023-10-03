@@ -2557,8 +2557,8 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     myagent_instance = agent._instances[agent_name]
 
     resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key2", "value1")
+    resource_container.Provider.set("agent1", "key3", "value1")
 
     def get_resources(version, value_resource_three):
         return [
