@@ -33,7 +33,6 @@ from agent_server.conftest import ResourceContainer, _deploy_resources, get_agen
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
-from inmanta.agent.config import agent_deploy_interval
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
@@ -304,8 +303,20 @@ async def test_server_restart(
     assert not resource_container.Provider.isset("agent1", "key3")
 
 
+@pytest.mark.parametrize(
+    "agent_deploy_interval",
+    ["2", "*/2 * * * * * *"],
+)
 async def test_spontaneous_deploy(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer, caplog
+    resource_container,
+    server,
+    client,
+    environment,
+    clienthelper,
+    no_agent_backoff,
+    async_finalizer,
+    caplog,
+    agent_deploy_interval,
 ):
     """
     dryrun and deploy a configuration model
@@ -316,7 +327,7 @@ async def test_spontaneous_deploy(
 
         env_id = environment
 
-        Config.set("config", "agent-deploy-interval", "2")
+        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
         Config.set("config", "agent-deploy-splay-time", "2")
         Config.set("config", "agent-repair-interval", "0")
 
@@ -388,19 +399,16 @@ async def test_spontaneous_deploy(
 
 
 @pytest.mark.parametrize(
-    "cron",
-    [False, True],
+    "agent_repair_interval",
+    ["2", "*/2 * * * * * *"],
 )
 async def test_spontaneous_repair(
-    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, cron
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, agent_repair_interval
 ):
     """
     Test that a repair run is executed every 2 seconds as specified in the agent_repair_interval (using a cron or not)
     """
     resource_container.Provider.reset()
-    agent_repair_interval = "2"
-    if cron:
-        agent_repair_interval = "*/2 * * * * * *"
 
     env_id = environment
 

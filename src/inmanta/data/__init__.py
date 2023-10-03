@@ -2376,6 +2376,7 @@ def convert_agent_trigger_method(value: object) -> str:
         raise ValueError("%s is not a valid agent trigger method. Valid value: %s" % (value, ",".join(valid_values)))
     return value
 
+
 def validate_cron_or_int(value: Union[int, str]) -> Union[int, str]:
     cast_to_str = str(value)
     try:
@@ -2384,6 +2385,7 @@ def validate_cron_or_int(value: Union[int, str]) -> Union[int, str]:
         return cast_to_str
     except Exception as e:
         LOGGER.info(e)
+
 
 def validate_cron(value: str) -> str:
     if not value:
