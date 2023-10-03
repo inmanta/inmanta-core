@@ -33,6 +33,7 @@ from agent_server.conftest import ResourceContainer, _deploy_resources, get_agen
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
 from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
+from inmanta.agent.config import agent_deploy_interval
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
@@ -403,32 +404,13 @@ async def test_spontaneous_repair(
 
     env_id = environment
 
-    # result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
-    # assert result.code == 200
-
-    assert isinstance(agent_repair_interval, str)
-
-    result = await client.set_setting(environment, data.AUTOSTART_AGENT_REPAIR_INTERVAL, agent_repair_interval)
-    assert result.code == 200
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-    # result = await client.get_environment(env_id)
-    env = await data.Environment.get_by_id(env_id)
-
-    # assert result.code == 200
-
-    await autostarted_agent_manager.restart_agents(env)
-
-
-    result = await client.get_setting(tid=env_id, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
-
-    assert result.code == 200
-
-    # Config.set("config", "agent-repair-interval", agent_repair_interval)
+    Config.set("config", "agent-repair-interval", agent_repair_interval)
     Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 
-    result = await client.get_setting(tid=env_id, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
     agent = await get_agent(server, environment, "agent1", "node1")
+    value_from_config = Config.get("config", "agent-repair-interval")
+    assert value_from_config == agent_repair_interval or value_from_config == int(agent_repair_interval)
     async_finalizer(agent.stop)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
@@ -3372,7 +3354,7 @@ async def test_restart_agent_with_outdated_agent_map(server, client, environment
     await env.set(key=data.AUTOSTART_AGENT_MAP, value={"internal": ""})
     await agent_manager.ensure_agent_registered(env=env, nodename="internal")
     await agent_manager.ensure_agent_registered(env=env, nodename="agent1")
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    await autostarted_agent_manager.restart_agents(env)
     # Internal agent should have a session with the server
     await retry_limited(lambda: len(agent_manager.tid_endpoint_to_session) == 1, 10)
 
