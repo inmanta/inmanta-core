@@ -462,7 +462,7 @@ class ResourceService(protocol.ServerSlice):
                     model=version,
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
-                    lock=data.RowLockMode.FOR_UPDATE,
+                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
                     connection=connection,
                 )
                 if not resource:
@@ -824,7 +824,7 @@ class ResourceService(protocol.ServerSlice):
                     resource_ids,
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
-                    lock=data.RowLockMode.FOR_UPDATE,
+                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
                     connection=connection,
                 )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
