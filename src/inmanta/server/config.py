@@ -125,7 +125,7 @@ server_tz_aware_timestamps = Option(
     False,
     "Whether the server should return timezone aware timestamps. "
     "If False, the server will serialize timestamps in a time zone naive way (in implicit UTC). "
-    "If True, timestamps are serialized as time zone aware objects in the server's time zone.",
+    "If True, timestamps are serialized as time zone aware objects.",
     is_bool,
 )
 
