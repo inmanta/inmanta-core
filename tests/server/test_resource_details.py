@@ -43,16 +43,13 @@ async def env_with_resources(server, client):
 
     cm_times = []
     for i in range(1, 10):
-        cm_times.append(
-            datetime.datetime.strptime(f"2021-07-07T1{i}:00:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(datetime.timezone.utc)
-        )
+        cm_times.append(datetime.datetime.strptime(f"2021-07-07T1{i}:00:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
 
     cm_time_idx = 0
     resource_deploy_times = []
     for i in range(30):
-        resource_deploy_times.append(
-            datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f").astimezone(datetime.timezone.utc)
-        )
+        resource_deploy_times.append(datetime.datetime.strptime(f"2021-07-07T11:{i}:00.0", "%Y-%m-%dT%H:%M:%S.%f"))
+
 
     # Add multiple versions of model, with 2 of them released
     for i in range(1, 6):
