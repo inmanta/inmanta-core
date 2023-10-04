@@ -5501,7 +5501,6 @@ class ConfigurationModel(BaseDocument):
 
     async def delete_cascade(self) -> None:
         await Compile.delete_all(environment=self.environment, version=self.version)  # Triggers cascading delete report table
-        await Parameter.delete_all(environment=self.environment)
         await Code.delete_all(environment=self.environment, version=self.version)
         await DryRun.delete_all(environment=self.environment, model=self.version)
         await UnknownParameter.delete_all(environment=self.environment, version=self.version)
