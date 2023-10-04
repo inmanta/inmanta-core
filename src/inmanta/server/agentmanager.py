@@ -1174,10 +1174,10 @@ class AutostartedAgentManager(ServerSlice):
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
         agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, connection=connection))
-        agent_deploy_interval: str = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
+        agent_deploy_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
 
         agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
-        agent_repair_interval: str = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
+        agent_repair_interval: str = cast(str, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
 
         # The internal agent always needs to have a session. Otherwise the agentmap update trigger doesn't work
         if "internal" not in agent_names:
