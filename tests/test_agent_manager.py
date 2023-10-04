@@ -1255,7 +1255,7 @@ async def test_dont_start_paused_agent(server, client, environment, caplog) -> N
     autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
     env = await data.Environment.get_by_id(env_id)
     assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
-    caplog.clear()
+    # caplog.clear()
     await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
     # Ensure we wait until a primary has been elected for agent1
     assert (env_id, agent_name) in agent_manager.tid_endpoint_to_session

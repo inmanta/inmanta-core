@@ -208,15 +208,16 @@ def is_time(value: str) -> int:
     return int(value)
 
 
-def is_time_or_cron(value: Union[int, str]) -> str:
+def is_time_or_cron(value: str) -> Union[int, str]:
     """Time, the number of seconds represented as an integer value or a cron-like expression"""
-    if isinstance(value, int):
-        return str(value)
     try:
-        CronTab(value)
-    except ValueError as e:
-        raise ValueError("Not an int or cron expression: %s" % value)
-    return value
+        return is_time(value)
+    except ValueError:
+        try:
+            CronTab(value)
+        except ValueError as e:
+            raise ValueError("Not an int or cron expression: %s" % value)
+        return value
 
 
 def is_bool(value: Union[bool, str]) -> bool:
