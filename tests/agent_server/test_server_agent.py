@@ -330,16 +330,12 @@ async def test_spontaneous_deploy(
 
         env_id = environment
 
-        version = await clienthelper.get_version()
-
         result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, agent_deploy_interval)
         assert result.code == 200,  result.result
 
         result = await client.get_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL)
         assert result.code == 200, result.result
         assert result.result["value"] == agent_deploy_interval, result.result
-
-        result = await client.release_version(environment, version, True)
         # Config.set("config", "agent-deploy-interval", agent_deploy_interval)
         Config.set("config", "agent-deploy-splay-time", "2")
         Config.set("config", "agent-repair-interval", "0")
