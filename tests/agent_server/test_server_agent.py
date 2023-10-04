@@ -313,7 +313,7 @@ async def test_server_restart(
 
 @pytest.mark.parametrize(
     "agent_deploy_interval",
-    [2, "*/2 * * * * * *"],
+    ["2", "*/2 * * * * * *"],
 )
 async def test_spontaneous_deploy(
     resource_container,
@@ -331,38 +331,19 @@ async def test_spontaneous_deploy(
     """
     start = time.time()
     with caplog.at_level(DEBUG):
-        # resource_container.Provider.reset()
+        resource_container.Provider.reset()
 
         env_id = UUID(environment)
 
-        result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, agent_deploy_interval)
-        assert result.code == 200
-        result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 2)
-        assert result.code == 200
-        result = await client.set_setting(environment, AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
-        assert result.code == 200
+        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
+        Config.set("config", "agent-deploy-splay-time", "2")
+        Config.set("config", "agent-repair-interval", "0")
 
-        # Use an autostarted agent so that it uses the configured environment settings.
-        agent_name = "agent1"
+        agent = await get_agent(server, environment, "agent1", "node1")
+        async_finalizer(agent.stop)
 
-        # Register agent in model
-        agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
-        env = await data.Environment.get_by_id(env_id)
-        await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
-
-        # Add agent1 to AUTOSTART_AGENT_MAP
-        result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent_name: ""})
-        assert result.code == 200, result.result
-
-        # Start agent1
-        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
-        env = await data.Environment.get_by_id(env_id)
-        assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
-        caplog.clear()
-        await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
-        # Ensure we wait until a primary has been elected for agent1
-        assert (env_id, agent_name) in agent_manager.tid_endpoint_to_session
-        assert len(autostarted_agent_manager._agent_procs) == 1
+        resource_container.Provider.set("agent1", "key2", "incorrect_value")
+        resource_container.Provider.set("agent1", "key3", "value")
 
         version = await clienthelper.get_version()
 
@@ -411,18 +392,10 @@ async def test_spontaneous_deploy(
         result = await client.get_version(env_id, version)
         assert result.result["model"]["done"] == len(resources)
 
-        # Check state
-        response = await client.get_resource(environment, "test::Resource[agent1,key=key1],v=%d" % version, logs=True)
-        assert response.code == 200
-        assert response.result["resource"]["attributes"]["value"] == "value1"
-
-        response = await client.get_resource(environment, "test::Resource[agent1,key=key2],v=%d" % version, logs=True)
-        assert response.code == 200
-        assert response.result["resource"]["attributes"]["value"] == "value2"
-
-        response = await client.get_resource(environment, "test::Resource[agent1,key=key3],v=%d" % version, logs=True)
-        assert response.code == 200
-        assert response.result["resource"]["attributes"]["value"] is None  # Purged resource
+        assert resource_container.Provider.isset("agent1", "key1")
+        assert resource_container.Provider.get("agent1", "key1") == "value1"
+        assert resource_container.Provider.get("agent1", "key2") == "value2"
+        assert not resource_container.Provider.isset("agent1", "key3")
 
     duration = time.time() - start
 

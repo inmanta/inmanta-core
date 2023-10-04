@@ -2599,7 +2599,6 @@ class Environment(BaseDocument):
             "or as a cron-like expression."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
             validator=validate_cron_or_int,
-            # validator=convert_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
@@ -2621,7 +2620,6 @@ class Environment(BaseDocument):
                 " See also: :inmanta.config:option:`config.agent-repair-interval`"
             ),
             validator=validate_cron_or_int,
-            # validator=convert_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(
