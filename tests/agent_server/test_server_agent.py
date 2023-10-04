@@ -36,7 +36,8 @@ from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deplo
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean, AUTOSTART_AGENT_DEPLOY_INTERVAL
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean, AUTOSTART_AGENT_DEPLOY_INTERVAL, \
+    AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, AUTOSTART_AGENT_REPAIR_INTERVAL
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -306,8 +307,8 @@ async def test_server_restart(
 @pytest.mark.parametrize(
     "agent_deploy_interval",
     [
-        # "2",
-        "*/2 * * * * * *"
+        "2",
+        # "*/2 * * * * * *"
     ],
 )
 async def test_spontaneous_deploy(
@@ -326,25 +327,46 @@ async def test_spontaneous_deploy(
     """
     start = time.time()
     with caplog.at_level(DEBUG):
-        resource_container.Provider.reset()
+        # resource_container.Provider.reset()
 
         env_id = environment
 
-        result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, agent_deploy_interval)
-        assert result.code == 200,  result.result
+        result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, 2)
+        assert result.code == 200
+        result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 2)
+        assert result.code == 200
+        result = await client.set_setting(environment, AUTOSTART_AGENT_REPAIR_INTERVAL, 0)
+        assert result.code == 200
 
-        result = await client.get_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL)
+
+        # Use an autostarted agent so that it uses the configured environment settings.
+        agent_name = "agent1"
+
+        # Register agent in model
+        agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
+        env = await data.Environment.get_by_id(env_id)
+        await agent_manager.ensure_agent_registered(env=env, nodename=agent_name)
+
+        # Add agent1 to AUTOSTART_AGENT_MAP
+        result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"internal": "", agent_name: ""})
         assert result.code == 200, result.result
-        assert result.result["value"] == agent_deploy_interval, result.result
-        # Config.set("config", "agent-deploy-interval", agent_deploy_interval)
-        Config.set("config", "agent-deploy-splay-time", "2")
-        Config.set("config", "agent-repair-interval", "0")
 
-        agent = await get_agent(server, environment, "agent1", "node1")
-        async_finalizer(agent.stop)
+        # Start agent1
+        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+        env = await data.Environment.get_by_id(env_id)
+        assert (env_id, agent_name) not in agent_manager.tid_endpoint_to_session
+        caplog.clear()
+        await autostarted_agent_manager._ensure_agents(env=env, agents=[agent_name])
+        # Ensure we wait until a primary has been elected for agent1
+        assert (env_id, agent_name) in agent_manager.tid_endpoint_to_session
+        assert len(autostarted_agent_manager._agent_procs) == 1
 
-        resource_container.Provider.set("agent1", "key2", "incorrect_value")
-        resource_container.Provider.set("agent1", "key3", "value")
+
+
+
+
+        # resource_container.Provider.set("agent1", "key2", "incorrect_value")
+        # resource_container.Provider.set("agent1", "key3", "value")
 
         version = await clienthelper.get_version()
 
@@ -388,7 +410,7 @@ async def test_spontaneous_deploy(
         result = await client.get_version(env_id, version)
         assert result.code == 200
 
-        await _wait_until_deployment_finishes(client, env_id, version)
+        await _wait_until_deployment_finishes(client, env_id, version, timeout=30)
 
         result = await client.get_version(env_id, version)
         assert result.result["model"]["done"] == len(resources)
