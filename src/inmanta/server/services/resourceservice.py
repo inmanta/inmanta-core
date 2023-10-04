@@ -426,6 +426,7 @@ class ResourceService(protocol.ServerSlice):
         message: str,
         fail_on_error: bool,
         connection: Optional[Connection] = None,
+        can_overwrite_available: bool = True,
     ) -> None:
         """
         Set the status of the provided resources as to skipped or failed
@@ -442,6 +443,8 @@ class ResourceService(protocol.ServerSlice):
         :param status: status to set
         :param message: reason to log on the transfer
         :param fail_on_error: When encountering an undeployable state: fail or do nothing?.
+        :param can_overwrite_available: can we overwrite available.
+            If set to false, we return without changes if the current state is available
         """
         resource_version_id = resource_id + ",v=" + str(version)
         logline = LogLine(
@@ -475,6 +478,9 @@ class ResourceService(protocol.ServerSlice):
                     else:
                         LOGGER.error("Attempting to set undeployable resource to deployable state")
                         raise AssertionError("Attempting to set undeployable resource to deployable state")
+
+                if resource.status == ResourceState.available and not can_overwrite_available:
+                    return
 
                 resource_action = data.ResourceAction(
                     environment=env.id,
@@ -725,6 +731,7 @@ class ResourceService(protocol.ServerSlice):
                             f"update on stale version {resource_id.version}",
                             fail_on_error=False,
                             connection=connection,
+                            can_overwrite_available=False,
                         )
                     if propagate_last_produced_events:
                         await data.Resource.update_last_produced_events_if_newer(
