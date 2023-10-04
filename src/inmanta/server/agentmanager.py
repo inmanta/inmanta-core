@@ -116,7 +116,7 @@ class SessionAction:
 
 # Internal tuning constants
 
-AUTO_STARTED_AGENT_WAIT = 50
+AUTO_STARTED_AGENT_WAIT = 5
 # How long (in seconds) do we wait for autostarted agents. The wait time is reset any time a new instance comes online
 AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL = 1
 # When waiting for an autostarted agent, how long (in seconds) do we wait before we log the wait status
@@ -1174,10 +1174,10 @@ class AutostartedAgentManager(ServerSlice):
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
         agent_deploy_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, connection=connection))
-        agent_deploy_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection))
+        agent_deploy_interval: str = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL, connection=connection)
 
         agent_repair_splay: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME, connection=connection))
-        agent_repair_interval: int = cast(int, await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection))
+        agent_repair_interval: str = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL, connection=connection)
 
         # The internal agent always needs to have a session. Otherwise the agentmap update trigger doesn't work
         if "internal" not in agent_names:
@@ -1192,9 +1192,9 @@ agent-names = %(agents)s
 environment=%(env_id)s
 
 agent-deploy-splay-time=%(agent_deploy_splay)d
-agent-deploy-interval=%(agent_deploy_interval)d
+agent-deploy-interval=%(agent_deploy_interval)s
 agent-repair-splay-time=%(agent_repair_splay)d
-agent-repair-interval=%(agent_repair_interval)d
+agent-repair-interval=%(agent_repair_interval)s
 
 agent-get-resource-backoff=%(agent_get_resource_backoff)f
 
