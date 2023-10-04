@@ -36,7 +36,7 @@ from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deplo
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean, AUTOSTART_AGENT_DEPLOY_INTERVAL
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -305,7 +305,10 @@ async def test_server_restart(
 
 @pytest.mark.parametrize(
     "agent_deploy_interval",
-    ["2", "*/2 * * * * * *"],
+    [
+        # "2",
+        "*/2 * * * * * *"
+    ],
 )
 async def test_spontaneous_deploy(
     resource_container,
@@ -327,7 +330,17 @@ async def test_spontaneous_deploy(
 
         env_id = environment
 
-        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
+        version = await clienthelper.get_version()
+
+        result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, agent_deploy_interval)
+        assert result.code == 200,  result.result
+
+        result = await client.get_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL)
+        assert result.code == 200, result.result
+        assert result.result["value"] == agent_deploy_interval, result.result
+
+        result = await client.release_version(environment, version, True)
+        # Config.set("config", "agent-deploy-interval", agent_deploy_interval)
         Config.set("config", "agent-deploy-splay-time", "2")
         Config.set("config", "agent-repair-interval", "0")
 

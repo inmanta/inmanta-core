@@ -2378,11 +2378,9 @@ def convert_agent_trigger_method(value: object) -> str:
 
 
 def validate_cron_or_int(value: Union[int, str]) -> Union[int, str]:
-    cast_to_str = str(value)
-    try:
-        return validate_cron(cast_to_str)
-    except ValueError:
-        return cast_to_str
+    if isinstance(value, int):
+        return value
+    return validate_cron(value)
 
 
 def validate_cron(value: str) -> str:
@@ -2596,7 +2594,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
             typ="str",
-            default=600,
+            default="600",
             doc="The deployment interval of the autostarted agents. Can be specified as a number of seconds"
             "or as a cron-like expression."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
