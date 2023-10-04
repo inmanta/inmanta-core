@@ -28,8 +28,17 @@ LOGGER = logging.getLogger("test")
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize("change_state", [False, True])
 async def test_6475_deploy_with_failure_masking(
-    server, agent: Agent, environment, resource_container, clienthelper, client, monkeypatch, no_agent_backoff
+    server,
+    agent: Agent,
+    environment,
+    resource_container,
+    clienthelper,
+    client,
+    monkeypatch,
+    no_agent_backoff,
+    change_state: bool,
 ):
     """
     Consider:
@@ -40,6 +49,10 @@ async def test_6475_deploy_with_failure_masking(
     resource a[k=x],v=1 fails
 
     Now, the good state of v2 has masked the bad state of v1.
+
+    However, if the attribute hash changes between v1 and v2, failure masking can not happen,
+    so we don't need to prevent it
+    The change_state parameter ensure we support both cases
     """
 
     async def make_version() -> int:
@@ -58,7 +71,8 @@ async def test_6475_deploy_with_failure_masking(
             },
             {
                 "key": "key2",
-                "value": "value1",
+                # change the attribute hash in case we are testing that scenario
+                "value": "value1" if not change_state else "value" + str(version),
                 "id": rvid2,
                 "send_event": False,
                 "purged": False,
@@ -132,6 +146,11 @@ async def test_6475_deploy_with_failure_masking(
     assert result.code == 200, result.result
     assert len(result.result["resources"]) == 1
     assert result.result["resources"][0]["resource_id"] == "test::Resource[agent1,key=key2]"
+    if not change_state:
+        assert result.result["resources"][0]["status"] == "failed"
+    else:
+        # issue 6563: don't overwrite available
+        assert result.result["resources"][0]["status"] == "available"
 
     result = await client.deploy(environment, agent_trigger_method=AgentTriggerMethod.push_incremental_deploy)
     assert result.code == 200
