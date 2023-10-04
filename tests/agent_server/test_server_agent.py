@@ -408,6 +408,19 @@ async def test_spontaneous_deploy(
         result = await client.get_version(env_id, version)
         assert result.result["model"]["done"] == len(resources)
 
+        # Check state
+        response = await client.get_resource(environment, "test::Resource[agent1,key=key1],v=%d" % version, logs=True)
+        assert response.code == 200
+        assert response.result["resource"]['attributes']['value'] == "value1"
+
+        response = await client.get_resource(environment, "test::Resource[agent1,key=key2],v=%d" % version, logs=True)
+        assert response.code == 200
+        assert response.result["resource"]['attributes']['value'] == "value2"
+
+        response = await client.get_resource(environment, "test::Resource[agent1,key=key3],v=%d" % version, logs=True)
+        assert response.code == 200
+        assert response.result["resource"]['attributes']['value'] is None  # Purged resource
+
     duration = time.time() - start
 
     # approximate check, the number of heartbeats can vary, but not by a factor of 10
@@ -511,21 +524,37 @@ async def test_spontaneous_repair(
         # A repair run may put one resource from the deployed state to the deploying state.
         assert len(resources) - 1 <= result.result["model"]["done"] <= len(resources)
 
-        # assert resource_container.Provider.isset("agent1", "key1")
-        # assert resource_container.Provider.get("agent1", "key1") == "value1"
-        # assert resource_container.Provider.get("agent1", "key2") == "value2"
-        # assert not resource_container.Provider.isset("agent1", "key3")
+        # Check state
+        response = await client.get_resource(environment, "test::Resource[agent1,key=key1],v=%d" % version, logs=True)
+        assert response.code == 200
+        assert response.result["resource"]['attributes']['value'] == "value1"
+
+        response = await client.get_resource(environment, "test::Resource[agent1,key=key2],v=%d" % version, logs=True)
+        assert response.code == 200
+        assert response.result["resource"]['attributes']['value'] == "value2"
+
+        response = await client.get_resource(environment, "test::Resource[agent1,key=key3],v=%d" % version, logs=True)
+        assert response.code == 200
+        assert response.result["resource"]['attributes']['value'] is None  # Purged resource
+
 
     await verify_deployment_result()
 
     # Manual change
-    resource_container.Provider.set("agent1", "key2", "another_value")
+    res = await data.Resource.get(environment, "test::Resource[agent1,key=key2],v=%d" % version)
+    await res.update(attributes={**res.attributes, "value": "another_value"})
+
+    async def check_resource_value() -> bool:
+        response = await client.get_resource(environment, "test::Resource[agent1,key=key2],v=%d" % version, logs=True)
+        assert response.code == 200
+        return response.result["resource"]['attributes']['value'] == "value2"
+
+    response = await client.get_resource(environment, "test::Resource[agent1,key=key2],v=%d" % version, logs=True)
+    assert response.code == 200
+    return response.result["resource"]['attributes']['value'] == "value2"
+
     # Wait until repair restores the state
-    now = time.time()
-    # while resource_container.Provider.get("agent1", "key2") != "value2":
-    #     if time.time() > now + 10:
-    #         raise Exception("Timeout occurred while waiting for repair run")
-    #     await asyncio.sleep(0.1)
+    await retry_limited(check_resource_value, 10)
 
     await verify_deployment_result()
     await resource_action_consistency_check()
