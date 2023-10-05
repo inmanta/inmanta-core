@@ -20,7 +20,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
-from inmanta import data, util
+from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import InvalidSort
 from inmanta.data.dataview import FactsView, ParameterView

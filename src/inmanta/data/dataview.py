@@ -72,6 +72,7 @@ from inmanta.data.model import (
 from inmanta.protocol.exceptions import BadRequest
 from inmanta.protocol.return_value_meta import ReturnValueWithMeta
 from inmanta.resources import Id
+from inmanta.server import config as opt
 from inmanta.server.validate_filter import (
     BooleanEqualityFilter,
     BooleanIsNotNullFilter,
@@ -88,8 +89,6 @@ from inmanta.server.validate_filter import (
 )
 from inmanta.types import JsonType, SimpleTypes
 from inmanta.util import datetime_iso_format
-
-from inmanta.server import config as opt
 
 T_ORDER = TypeVar("T_ORDER", bound=DatabaseOrderV2)
 T_DTO = TypeVar("T_DTO", bound=BaseModel)

@@ -449,7 +449,7 @@ def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable
     """
     if isinstance(o, datetime.datetime):
         # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
-        return datetime_iso_format(o, naive_utc=True)
+        return datetime_iso_format(o, naive_utc=True, tz_aware=True)
 
     return _custom_json_encoder(o)
 
