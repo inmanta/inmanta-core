@@ -61,7 +61,10 @@ class PythonRegex:
     regex: str
 
     def __get_pydantic_core_schema__(self, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        regex = re.compile(self.regex)
+        try:
+            regex = re.compile(self.regex)
+        except re.error as e:
+            raise ValueError(f"Unable to compile regex {self.regex}: {e}")
 
         def match(v: str) -> str:
             if not regex.match(v):

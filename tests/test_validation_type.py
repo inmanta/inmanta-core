@@ -34,6 +34,7 @@ from inmanta.validation_type import validate_type
         ("pydantic.conint", 4, {"ge": 5}, False),
         ("pydantic.constr", "test123", {"regex": "^test.*$"}, True),
         ("pydantic.constr", "test123", {"regex": "^tst.*$"}, False),
+        ("pydantic.constr", "test123", {"regex": "^(tst.*$"}, False),
         (
             "pydantic.stricturl",
             "http://test:8080",
