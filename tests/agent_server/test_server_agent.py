@@ -521,15 +521,16 @@ async def test_env_setting_wiring_to_autostarted_agent(
     result = await client.set_setting(environment, AUTOSTART_AGENT_REPAIR_INTERVAL, interval)
     assert result.code == expected_code
 
-    env = await data.Environment.get_by_id(env_id)
-    autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+    if expected_code == 200:
+        env = await data.Environment.get_by_id(env_id)
+        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
 
-    config = await autostarted_agent_manager._make_agent_config(
-        env, agent_names=[], agent_map={"internal": ""}, connection=None
-    )
+        config = await autostarted_agent_manager._make_agent_config(
+            env, agent_names=[], agent_map={"internal": ""}, connection=None
+        )
 
-    assert f"agent-deploy-interval={interval}" in config
-    assert f"agent-repair-interval={interval}" in config
+        assert f"agent-deploy-interval={interval}" in config
+        assert f"agent-repair-interval={interval}" in config
 
 
 async def test_failing_deploy_no_handler(

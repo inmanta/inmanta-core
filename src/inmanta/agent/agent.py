@@ -736,10 +736,10 @@ class AgentInstance(object):
                     splay_value,
                     (now + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
                 )
-                interval_schedule_deploy: IntervalSchedule = IntervalSchedule(
+                interval_schedule: IntervalSchedule = IntervalSchedule(
                     interval=float(interval), initial_delay=float(splay_value)
                 )
-                self._enable_time_trigger(action, interval_schedule_deploy)
+                self._enable_time_trigger(action, interval_schedule)
 
             if isinstance(interval, str):
                 self.logger.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
