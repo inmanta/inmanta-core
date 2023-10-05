@@ -101,6 +101,8 @@ def test_log_line_deserialization():
 
     LogLine(level=50, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
 
+    # TODO: This does not list what is possible? Removing the validator will
+
 
 def test_timezone_aware_fields_in_pydantic_object():
     """
