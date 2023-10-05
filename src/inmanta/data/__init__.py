@@ -1240,6 +1240,9 @@ class InvalidAttribute(Exception):
         super().__init__(message)
         self.message = message
 
+class EmptyCronExpression(Exception):
+    pass
+
 
 class DocumentMeta(type):
     def __new__(cls, class_name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
@@ -2380,12 +2383,19 @@ def convert_agent_trigger_method(value: object) -> str:
 def validate_cron_or_int(value: Union[int, str]) -> str:
     if isinstance(value, int):
         return str(value)
-    return validate_cron(value)
+    try:
+        return str(int(value))
+    except ValueError:
+        try:
+            return validate_cron(value, allow_empty=False)
+        except (EmptyCronExpression, ValueError) as e:
+            raise ValueError("'%s' is not a valid cron expression or int: %s" % (value, e))
 
-
-def validate_cron(value: str) -> str:
+def validate_cron(value: str, allow_empty: bool=True) -> str:
     if not value:
-        return ""
+        if allow_empty:
+            return ""
+        raise EmptyCronExpression()
     try:
         CronTab(value)
     except ValueError as e:
@@ -2668,8 +2678,9 @@ class Environment(BaseDocument):
             typ="str",
             validator=validate_cron,
             doc=(
-                "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
-                " (e.g. `min hour dom month dow`). A compile will be requested at the scheduled time. The actual"
+                "Periodically run a full compile following a cron-like time-to-run specification interpreted in UTC with format"
+                " `[sec] min hour dom month dow [year]` (If only 6 values are provided, they are interpreted as"
+                " `min hour dom month dow year`). A compile will be requested at the scheduled time. The actual"
                 " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
                 " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
             ),
