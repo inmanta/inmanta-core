@@ -726,7 +726,11 @@ class AgentInstance(object):
             )
 
         def periodic_schedule(
-            kind: str, action: Callable[[], Awaitable[object]], interval: Union[int, str], splay_value: int
+            kind: str,
+            action: Callable[[], Awaitable[object]],
+            interval: Union[int, str],
+            splay_value: int,
+            initial_time: datetime.datetime,
         ) -> None:
             if isinstance(interval, int) and interval > 0:
                 self.logger.info(
@@ -734,7 +738,7 @@ class AgentInstance(object):
                     kind,
                     interval,
                     splay_value,
-                    (now + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
+                    (initial_time + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
                 )
                 interval_schedule: IntervalSchedule = IntervalSchedule(
                     interval=float(interval), initial_delay=float(splay_value)
@@ -747,8 +751,8 @@ class AgentInstance(object):
                 self._enable_time_trigger(action, cron_schedule)
 
         now = datetime.datetime.now().astimezone()
-        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value)
-        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value)
+        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
+        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)

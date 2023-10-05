@@ -1241,10 +1241,6 @@ class InvalidAttribute(Exception):
         self.message = message
 
 
-class EmptyCronExpression(Exception):
-    pass
-
-
 class DocumentMeta(type):
     def __new__(cls, class_name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
         dct["_fields_metadata"] = {}
@@ -2382,14 +2378,12 @@ def convert_agent_trigger_method(value: object) -> str:
 
 
 def validate_cron_or_int(value: Union[int, str]) -> str:
-    if isinstance(value, int):
-        return str(value)
     try:
         return str(int(value))
     except ValueError:
         try:
             return validate_cron(value, allow_empty=False)
-        except (EmptyCronExpression, ValueError) as e:
+        except ValueError as e:
             raise ValueError("'%s' is not a valid cron expression or int: %s" % (value, e))
 
 
@@ -2397,7 +2391,7 @@ def validate_cron(value: str, allow_empty: bool = True) -> str:
     if not value:
         if allow_empty:
             return ""
-        raise EmptyCronExpression()
+        raise ValueError("The given cron expression is an empty string")
     try:
         CronTab(value)
     except ValueError as e:
