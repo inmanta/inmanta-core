@@ -1240,6 +1240,7 @@ class InvalidAttribute(Exception):
         super().__init__(message)
         self.message = message
 
+
 class EmptyCronExpression(Exception):
     pass
 
@@ -2391,7 +2392,8 @@ def validate_cron_or_int(value: Union[int, str]) -> str:
         except (EmptyCronExpression, ValueError) as e:
             raise ValueError("'%s' is not a valid cron expression or int: %s" % (value, e))
 
-def validate_cron(value: str, allow_empty: bool=True) -> str:
+
+def validate_cron(value: str, allow_empty: bool = True) -> str:
     if not value:
         if allow_empty:
             return ""

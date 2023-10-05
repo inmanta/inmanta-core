@@ -503,14 +503,10 @@ async def test_spontaneous_repair(
     await verify_deployment_result()
     await resource_action_consistency_check()
 
+
 @pytest.mark.parametrize(
     "interval_code",
-    [
-        (2, 200),
-        ("2", 200),
-        ("*/2 * * * * * *", 200),
-        ("", 400)
-    ],
+    [(2, 200), ("2", 200), ("*/2 * * * * * *", 200), ("", 400)],
 )
 async def test_env_setting_wiring_to_autostarted_agent(
     resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, interval_code

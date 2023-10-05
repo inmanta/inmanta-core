@@ -29,7 +29,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -725,7 +725,9 @@ class AgentInstance(object):
                 )
             )
 
-        def periodic_schedule(kind: str, action: Callable[[], Awaitable[object]], interval: Union[int, str], splay_value: int) -> None:
+        def periodic_schedule(
+            kind: str, action: Callable[[], Awaitable[object]], interval: Union[int, str], splay_value: int
+        ) -> None:
             if isinstance(interval, int) and interval > 0:
                 self.logger.info(
                     "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
@@ -740,14 +742,13 @@ class AgentInstance(object):
                 self._enable_time_trigger(action, interval_schedule_deploy)
 
             if isinstance(interval, str):
-                self.logger.info("Scheduling periodic %s with cron expression '%s'",kind, interval)
+                self.logger.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
                 cron_schedule = CronSchedule(cron=interval)
                 self._enable_time_trigger(action, cron_schedule)
 
         now = datetime.datetime.now().astimezone()
         periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value)
         periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value)
-
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
