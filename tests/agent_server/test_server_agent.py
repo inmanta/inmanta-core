@@ -39,7 +39,6 @@ from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
 from inmanta.data import (
     AUTOSTART_AGENT_DEPLOY_INTERVAL,
-    AUTOSTART_AGENT_DEPLOY_SPLAY_TIME,
     AUTOSTART_AGENT_REPAIR_INTERVAL,
     ENVIRONMENT_AGENT_TRIGGER_METHOD,
     Setting,
@@ -530,7 +529,7 @@ async def test_env_setting_wiring_to_autostarted_agent(
     )
 
     assert f"agent-deploy-interval={interval}" in config
-    # assert f"agent-repair-interval={interval}" in config
+    assert f"agent-repair-interval={interval}" in config
 
 
 async def test_failing_deploy_no_handler(
