@@ -369,6 +369,11 @@ class LogLine(BaseModel):
     kwargs: JsonType = {}
     timestamp: datetime.datetime
 
+    @field_validator("level", mode="before")
+    @classmethod
+    def convert_to_string(cls, value: Union[str, int]) -> const.LogLevel:
+        return const.LogLevel(value)
+
 
 class ResourceIdDetails(BaseModel):
     resource_type: ResourceType
