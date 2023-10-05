@@ -1,6 +1,6 @@
-description: Fix support for cron expressions for autostart_agent_deploy_interval and autostart_agent_repair_interval environment settings.
+description: Add support for cron expressions for autostart_agent_deploy_interval and autostart_agent_repair_interval environment settings.
 issue-nr: 6549
-change-type: patch
+change-type: minor
 destination-branches: [master, iso6]
 sections:
-  bugfix: "{{description}}"
+  minor-improvement: "{{description}}"
