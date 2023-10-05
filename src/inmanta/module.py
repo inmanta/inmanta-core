@@ -25,8 +25,6 @@ import operator
 import os
 import re
 import subprocess
-
-import pydantic
 import sys
 import tempfile
 import textwrap
@@ -67,6 +65,7 @@ from typing import (
 
 import more_itertools
 import pkg_resources
+import pydantic
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
@@ -1236,7 +1235,7 @@ class Metadata(BaseModel):
         raw: Mapping[str, object] = cls._raw_parser_parse(source)
         try:
             if "version" in raw:
-                raw["version"] = str(raw["version"]) # TODO: for some reason the before validator is not always called
+                raw["version"] = str(raw["version"])  # TODO: for some reason the before validator is not always called
             return cls(**raw)
         except ValidationError as e:
             if isinstance(source, TextIOBase):
@@ -1274,7 +1273,7 @@ class ModuleMetadata(ABC, Metadata):
     @field_validator("version", mode="before")
     @classmethod
     def convert_to_string(cls, v: Union[str, float, int]) -> str:
-        """ When reading a string like 0.1 from yaml it will become a float. This method ensure
+        """When reading a string like 0.1 from yaml it will become a float. This method ensure
         that we always get a string.
         """
         return str(v)
@@ -1369,7 +1368,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     @field_validator("compiler_version", mode="before")
     @classmethod
     def convert_to_string(cls, v: Union[str, int, float]) -> str:
-        """ Make sure versions that are also numbers become an actual string, even if yaml loads them as int or float"""
+        """Make sure versions that are also numbers become an actual string, even if yaml loads them as int or float"""
         return str(v)
 
     @field_validator("compiler_version")

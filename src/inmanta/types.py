@@ -20,9 +20,22 @@
 import builtins
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+)
 
-import pydantic
 import typing_inspect
 from pydantic import errors, types
 
@@ -30,6 +43,44 @@ if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
     from inmanta.data.model import BaseModel  # noqa: F401
     from inmanta.protocol.common import ReturnValue  # noqa: F401
+
+import re
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
+
+from pydantic_core import CoreSchema, PydanticCustomError, core_schema
+
+
+@dataclass
+class PythonRegex:
+    """A pydantic regex type use for constrained strings that use a regex instead of pattern"""
+
+    regex: str
+
+    def __get_pydantic_core_schema__(self, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+        regex = re.compile(self.regex)
+
+        def match(v: str) -> str:
+            if not regex.match(v):
+                raise PydanticCustomError(
+                    "string_pattern_mismatch",
+                    "String should match regex '{regex}'",
+                    {"regex": self.regex},
+                )
+            return v
+
+        return core_schema.no_info_after_validator_function(
+            match,
+            handler(source_type),
+        )
+
+    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        json_schema = handler(core_schema)
+        json_schema["pattern"] = self.regex
+        return json_schema
 
 
 class StrictNonIntBool(object):
@@ -52,13 +103,10 @@ class StrictNonIntBool(object):
 
         raise errors.StrictBoolError()
 
-    # @classmethod
-    # def __modify_schema__(cls, f_schema: Dict[str, Any]) -> Dict[str, Any]:
-    #     """
-    #     Should be handled as a boolean in OpenAPI schemas
-    #     """
-    #     f_schema["type"] = "boolean"
-    #     return f_schema
+    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        json_schema = handler(core_schema)
+        json_schema["type"] = "boolean"
+        return json_schema
 
 
 def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:

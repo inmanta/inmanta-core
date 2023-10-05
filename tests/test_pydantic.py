@@ -1,14 +1,14 @@
-
-import pydantic
-from typing import Union, Dict, Any
 import datetime
 import uuid
+from typing import Any, Dict, Union
+
+import pydantic
 
 from inmanta import types
 
+
 def test_method_validation() -> None:
-    """ Test how the method validation works using pydantic
-    """
+    """Test how the method validation works using pydantic"""
     validator = pydantic.create_model(
         "set_setting_arguments",
         a=(str, None),
@@ -17,7 +17,7 @@ def test_method_validation() -> None:
         __base__=pydantic.BaseModel,
     )
 
-    data = {'a': 'auto_deploy', 'b': '3f828d00-5dda-41f6-940c-9d72ae62b0a4', 'c': True}
+    data = {"a": "auto_deploy", "b": "3f828d00-5dda-41f6-940c-9d72ae62b0a4", "c": True}
 
     validator(**data)
 
@@ -26,8 +26,8 @@ def test_method_validation() -> None:
 
 
 def test_float_str() -> None:
-    """ Test parsing version numbers from yaml files
-    """
+    """Test parsing version numbers from yaml files"""
+
     class Value(pydantic.BaseModel):
         version: str
 

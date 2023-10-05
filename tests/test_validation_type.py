@@ -46,6 +46,12 @@ from inmanta.validation_type import validate_type
             {"tld_required": True},
             False,
         ),
+        (
+            "pydantic.stricturl",
+            "http://test:8080",
+            {"max_length": 2},
+            False,
+        ),
     ],
 )
 def test_type_validation(attr_type: str, value: str, validation_parameters: dict[str, object], is_valid: bool) -> None:
@@ -55,6 +61,6 @@ def test_type_validation(attr_type: str, value: str, validation_parameters: dict
     validation_error: Optional[pydantic.ValidationError] = None
     try:
         validate_type(attr_type, value, validation_parameters)
-    except pydantic.ValidationError as e:
+    except (pydantic.ValidationError, ValueError) as e:
         validation_error = e
     assert (validation_error is None) is is_valid, validation_error

@@ -39,7 +39,6 @@ from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
 from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
-from pydantic_core import Url
 
 import asyncpg
 from tornado import gen
@@ -48,6 +47,7 @@ from crontab import CronTab
 from inmanta import COMPILER_VERSION
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
+from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
