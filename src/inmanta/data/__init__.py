@@ -2382,6 +2382,7 @@ def validate_cron_or_int(value: Union[int, str]) -> str:
         return str(int(value))
     except ValueError:
         try:
+            assert isinstance(value, str)  # Make mypy happy
             return validate_cron(value, allow_empty=False)
         except ValueError as e:
             raise ValueError("'%s' is not a valid cron expression or int: %s" % (value, e))
