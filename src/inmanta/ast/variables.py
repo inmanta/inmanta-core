@@ -96,7 +96,7 @@ class Reference(ExpressionStatement):
     ) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         var: ResultVariable = resolver.lookup(self.full_name)
-        # TODO: cleanup
+        # TODO: cleanup + deduplicate from AttributeReference
         if isinstance(var, BaseListVariable):
             var.listener(resultcollector, self.location)
         else:
