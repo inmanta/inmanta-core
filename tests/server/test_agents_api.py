@@ -131,9 +131,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
         if not agent["last_failover"]:
             agent["last_failover"] = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
         else:
-            agent["last_failover"] = datetime.datetime.strptime(agent["last_failover"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-                tzinfo=datetime.timezone.utc
-            )
+            agent["last_failover"] = datetime.datetime.strptime(agent["last_failover"], "%Y-%m-%dT%H:%M:%S.%f%z")
     all_agents_in_expected_order = sorted(all_agents, key=itemgetter(order_by_column, "name"), reverse=order == "DESC")
     all_agent_names_in_expected_order = agent_names(all_agents_in_expected_order)
 
