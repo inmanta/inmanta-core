@@ -29,7 +29,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -725,36 +725,34 @@ class AgentInstance(object):
                 )
             )
 
-        now = datetime.datetime.now().astimezone()
-        if self._deploy_interval > 0:
-            self.logger.info(
-                "Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
-                self._deploy_interval,
-                self._deploy_splay_value,
-                (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT),
-            )
-            interval_schedule_deploy: IntervalSchedule = IntervalSchedule(
-                interval=float(self._deploy_interval), initial_delay=float(self._deploy_splay_value)
-            )
-            self._enable_time_trigger(deploy_action, interval_schedule_deploy)
-        if isinstance(self._repair_interval, int):
-            if self._repair_interval <= 0:
-                return
-            self.logger.info(
-                "Scheduling repair with interval %d and splay %d (first run at %s)",
-                self._repair_interval,
-                self._repair_splay_value,
-                (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT),
-            )
-            interval_schedule_repair: IntervalSchedule = IntervalSchedule(
-                interval=float(self._repair_interval), initial_delay=float(self._repair_splay_value)
-            )
-            self._enable_time_trigger(repair_action, interval_schedule_repair)
+        def periodic_schedule(
+            kind: str,
+            action: Callable[[], Awaitable[object]],
+            interval: Union[int, str],
+            splay_value: int,
+            initial_time: datetime.datetime,
+        ) -> None:
+            if isinstance(interval, int) and interval > 0:
+                self.logger.info(
+                    "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
+                    kind,
+                    interval,
+                    splay_value,
+                    (initial_time + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
+                )
+                interval_schedule: IntervalSchedule = IntervalSchedule(
+                    interval=float(interval), initial_delay=float(splay_value)
+                )
+                self._enable_time_trigger(action, interval_schedule)
 
-        if isinstance(self._repair_interval, str):
-            self.logger.info("Scheduling repair with cron expression '%s'", self._repair_interval)
-            cron_schedule = CronSchedule(cron=self._repair_interval)
-            self._enable_time_trigger(repair_action, cron_schedule)
+            if isinstance(interval, str):
+                self.logger.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
+                cron_schedule = CronSchedule(cron=interval)
+                self._enable_time_trigger(action, cron_schedule)
+
+        now = datetime.datetime.now().astimezone()
+        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
+        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
 
     def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)

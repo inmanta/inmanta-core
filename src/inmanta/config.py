@@ -208,15 +208,16 @@ def is_time(value: str) -> int:
     return int(value)
 
 
-def is_time_or_cron(value: Union[int, str]) -> Union[int, str]:
+def is_time_or_cron(value: str) -> Union[int, str]:
     """Time, the number of seconds represented as an integer value or a cron-like expression"""
-    if isinstance(value, int):
-        return value
     try:
-        CronTab(value)
-    except ValueError as e:
-        return int(value)
-    return value
+        return is_time(value)
+    except ValueError:
+        try:
+            CronTab(value)
+        except ValueError as e:
+            raise ValueError("Not an int or cron expression: %s" % value)
+        return value
 
 
 def is_bool(value: Union[bool, str]) -> bool:
@@ -277,7 +278,7 @@ class Option(Generic[T]):
     """
     Defines an option and exposes it for use
 
-    All config option should be define prior to use
+    All config option should be defined prior to use
     For the document generator to work properly, they should be defined at the module level.
 
     :param section: section in the config file
