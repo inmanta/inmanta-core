@@ -433,7 +433,6 @@ class ListComprehension(RawResumer, ExpressionStatement):
 class ListComprehensionGuard(Literal):
     __slots__ = ()
 
-
     GUARD = object()
     """
     Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
