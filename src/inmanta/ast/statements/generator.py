@@ -87,7 +87,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # TODO: this should really be a plain RequiresEmitStatement
-class SubConstructor(ExpressionStatement):
+class SubConstructor(RequiresEmitStatement):
     """
     This statement selects an implementation for a given object and
     imports the statements
@@ -135,7 +135,7 @@ class SubConstructor(ExpressionStatement):
         Evaluate this statement
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
-        RequiresEmitStatement.execute(self, requires, instance, queue)
+        super().execute(requires, instance, queue)
         # this assertion is because the typing of this method is not correct
         # it should logically always hold, but we can't express this as types yet
         assert isinstance(instance, Instance)
@@ -429,23 +429,20 @@ class ListComprehension(RawResumer, ExpressionStatement):
         )
 
 
-# TODO: is this still required? ListComprehensionGuard can just return None? Would simplify unrolling in LCCOllector as well.
-# TODO: move into class
-LIST_COMPREHENSION_GUARDED = object()
-"""
-Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
-expression for an element should not be executed because the element was filtered by the guard.
-"""
-
-
-# TODO: docstring
+# TODO: docstring + mention that this should never be used as a DSL expression because its return value is purely internal
 class ListComprehensionGuard(Literal):
     __slots__ = ()
 
-    def __init__(self) -> None:
-        super().__init__(LIST_COMPREHENSION_GUARDED)
 
-    # TODO: check if this is required
+    GUARD = object()
+    """
+    Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
+    expression for an element should not be executed because the element was filtered by the guard.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(self.GUARD)
+
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC[object]]:
@@ -515,8 +512,6 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             guarded_expression = self.statement.value_expression
         else:
             else_expression: ExpressionStatement = ListComprehensionGuard()
-            # TODO: is this sufficiently gradual?
-            # TODO: what if LIST_COMPREHENSION_GUARDED is passed through gradual execution? VERY IMPORTANT!!!!!
             guarded_expression = ConditionalExpression(
                 condition=self.statement.guard,
                 if_expression=self.statement.value_expression,
@@ -572,7 +567,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
         def get(variable: VariableABC[object]) -> Optional[abc.Sequence[object]]:
             value: object = variable.get_value()
-            return None if value is LIST_COMPREHENSION_GUARDED else value if isinstance(value, list) else [value]
+            return None if value is ListComprehensionGuard.GUARD else value if isinstance(value, list) else [value]
 
         # collect all element value expressions' results and write them to the final result variable
         self.final_result.set_value(
