@@ -98,8 +98,7 @@ class Reference(ExpressionStatement):
         requires[self.name] = var
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -285,8 +284,8 @@ class AttributeReference(Reference):
         resultcollector: Optional[ResultCollector],
         *,
         propagate_unset: bool = False,
-    ) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+    ) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # The tricky one!
 
@@ -307,8 +306,7 @@ class AttributeReference(Reference):
 
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        ExpressionStatement.execute(self, requires, resolver, queue)
+    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 

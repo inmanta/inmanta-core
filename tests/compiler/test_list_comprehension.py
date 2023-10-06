@@ -290,6 +290,7 @@ def test_list_comprehension_nested_tail(snippetcompiler) -> None:
     compiler.do_compile()
 
 
+# TODO: tests with constructor in comprehension expression
 def test_list_comprehension_gradual(snippetcompiler) -> None:
     """
     Verify that list comprehensions are executed gradually.
@@ -297,13 +298,15 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         textwrap.dedent(
             """
-            entity A: end
+            entity A:
+                string? name = null
+            end
             A.others [0:] -- A
             implement A using std::none
 
             # gradual execution of iterable
-            a = A()
-            b = A(others=[chained for chained in [other for other in a.others]])
+            a = A(name="a")
+            b = A(name="b", others=[chained for chained in [other for other in a.others]])
             a.others += A()
             if b.others is defined:
                 # this seems like bad practice, but it should work as long as the list comprehension is executed gradually.
@@ -311,17 +314,31 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             end
 
             # gradual execution of guard
-            x = A()
+            x = A(name="x")
             # again bad practice but asserts gradual execution of the `is defined`
-            y = A(others=[A(), c.others])
-            c = A(others=[candidate for candidate in [x, y] if candidate.others is defined])
+            y = A(name="y", others=[A(), c.others])
+            c = A(name="c", others=[candidate for candidate in [x, y] if candidate.others is defined])
 
             # gradual execution with nested lists in the iterable
-            u = A()
-            v = A(others=[candidate for candidate in [a, [b, c, [x, y, u], u, x], y]])
+            u = A(name="u")
+            v = A(name="v", others=[candidate for candidate in [a, [b, c, [x, y, u], u, x], y]])
             if v.others is defined:
                 # again bad practice but asserts gradual execution of the `is defined`
                 v.others += A()
+            end
+
+            # gradual execution with nested for
+            w = A(
+                name="w",
+                others=[
+                    o
+                    for base in v.others
+                    for o in base.others
+                ]
+            )
+            if w.others is defined:
+                # again bad practice but asserts gradual execution of the `is defined`
+                w.others += A()
             end
 
             count = 2
@@ -333,6 +350,10 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
 
             v_count = 7
             v_count = std::count(v.others)
+
+            # a/b's 2 children, c's 1 child, y's 1 extra child, w's 1 extra child
+            w_count = 5
+            w_count = std::count(w.others)
             """.strip(
                 "\n"
             )

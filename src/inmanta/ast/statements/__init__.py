@@ -47,6 +47,7 @@ from inmanta.execute.runtime import (
     VariableABC,
     WrappedValueVariable,
 )
+from inmanta.execute.util import NoneValue, Unknown
 
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
@@ -161,23 +162,13 @@ class RequiresEmitStatement(DynamicStatement):
         """
         return self._requires_emit_promises(resolver, queue)
 
-    def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
-    ) -> Dict[object, VariableABC]:
-        """
-        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
-        resultcollector as a listener to result variables.
-        When this method is called, the caller must make sure to eventually call `execute` as well.
-        """
-        return self.requires_emit(resolver, queue)
-
-    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         """
         Acquires eager promises this statement is responsible for and returns them, wrapped in a variable, in a requires dict.
         Returns an empty dict if no promises were acquired (for performance reasons).
         """
         promises: Sequence["EagerPromise"] = self.schedule_eager_promises(resolver, queue)
-        return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
+        return ({(self, EagerPromise): WrappedValueVariable(promises)} if promises else {})
 
     def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
         """
@@ -213,6 +204,7 @@ class AttributeAssignmentLHS:
     type_hint: Optional["Type"] = None
 
 
+# TODO: make generic in result type so it can be bound to resultcollector?
 class ExpressionStatement(RequiresEmitStatement):
     __slots__ = ()
 
@@ -230,6 +222,18 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
+    # TODO: document wiring semantics: composite statements should wire resultcollector rather than track it themselves
+    # TODO: check child implementations
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
+    ) -> dict[object, VariableABC]:
+        """
+        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
+        resultcollector as a listener to result variables.
+        When this method is called, the caller must make sure to eventually call `execute` as well.
+        """
+        return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
+
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         """
         :param lhs_attribute: The left hand side attribute if this expression is a right hand side in an attribute assignment.
@@ -238,6 +242,21 @@ class ExpressionStatement(RequiresEmitStatement):
             depends on this statement.
         """
         raise NotImplementedError()
+
+    # TODO: name
+    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        # TODO: docstring
+        raise NotImplementedError()
+
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
+        result: object = self._execute(requires, resolver, queue)
+        resultcollector: Optional[ResultCollector] = requires.get((self, ResultCollector), None)
+        if resultcollector is not None:
+            # TODO: in most cases, NoneValue should be ignored, but not for e.g. For's result collector. None always ignored?
+            if result is not None and not isinstance(result, (NoneValue, Unknown)):
+                resultcollector.receive_result(result, self.location)
+        return result
 
     def as_constant(self) -> object:
         """
@@ -569,8 +588,7 @@ class Literal(ExpressionStatement):
     def requires(self) -> List[str]:
         return []
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self.value
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
