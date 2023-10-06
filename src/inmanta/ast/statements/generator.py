@@ -63,7 +63,6 @@ from inmanta.execute.runtime import (
     ExecutionUnit,
     Instance,
     ListElementVariable,
-    ListLiteral,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -506,9 +505,6 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         )
 
         result_variable: ResultVariable[object] = ResultVariable(self.queue)
-        #result_variable: ListLiteral[object] = ListLiteral(self.queue)
-        #if self.lhs is not None:
-        #    result_variable.listener(self.lhs, self.location)
         self._results.append(result_variable)
 
         # execute the value expression and the guard
@@ -559,6 +555,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Mutually exclusive with `set_unknown`.
         """
         if self._results:
+            # TODO: finish this message
             # We should only have received previous results in gradual mode, if the
             if self.lhs is None:
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
