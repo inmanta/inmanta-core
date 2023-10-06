@@ -429,23 +429,23 @@ async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    for deprecated_option, new_option in [
-        (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL),
-        (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME),
+    for deprecated_option, new_option, old_value, new_value in [
+        (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 22, "23"),
+        (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 22, 23),
     ]:
-        await env.set(deprecated_option, 22)
+        await env.set(deprecated_option, old_value)
         caplog.clear()
-        assert (await env.get(new_option)) == 22
+        assert (await env.get(new_option)) == old_value
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) in caplog.text
 
-        await env.set(new_option, 23)
+        await env.set(new_option, new_value)
         caplog.clear()
-        assert (await env.get(new_option)) == 23
+        assert (await env.get(new_option)) == new_value
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
         await env.unset(deprecated_option)
         caplog.clear()
-        assert (await env.get(new_option)) == 23
+        assert (await env.get(new_option)) == new_value
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
 

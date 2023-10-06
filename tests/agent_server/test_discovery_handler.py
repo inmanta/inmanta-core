@@ -158,7 +158,7 @@ async def test_discovery_resource_handler_basic_test(
 
     assert sorted(discovered, key=sort_on_discovered_resource_id) == sorted(expected, key=sort_on_discovered_resource_id)
 
-    # Make sure that a get_facts call on a DiscoveryHandler doesn't fails
+    # Make sure that a get_facts call on a DiscoveryHandler doesn't fail
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     status_code, message = await agent_manager.request_parameter(env_id=uuid.UUID(environment), resource_id=resource_id)
     assert status_code == 503, message
