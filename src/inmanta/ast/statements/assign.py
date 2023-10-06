@@ -451,9 +451,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         requires[self] = temp
         return requires
 
-    def resume(
-        self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
-    ) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         self.type.lookup_index(
             list(
                 chain(

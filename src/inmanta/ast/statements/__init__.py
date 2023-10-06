@@ -255,7 +255,7 @@ class ExpressionStatement(RequiresEmitStatement):
         if resultcollector is not None:
             # TODO: in most cases, NoneValue should be ignored, but not for e.g. For's result collector. None always ignored?
             if result is not None and not isinstance(result, (NoneValue, Unknown)):
-                for value in (result if isinstance(result, abc.Sequence) else [result]):
+                for value in result if isinstance(result, abc.Sequence) else [result]:
                     resultcollector.receive_result(value, self.location)
         return result
 
