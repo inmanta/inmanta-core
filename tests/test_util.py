@@ -533,16 +533,35 @@ async def test_threadpool_join():
 
 
 def test_datetime_iso_format():
-    timestamp = datetime.datetime(2023, 11, 23, 9, 00, 00, 000000)
+    """
+    Unit test for the util.datetime_iso_format function
+    """
+    # Daylight saving time date
+    timestamp = datetime.datetime(2023, 10, 3, 9, 00, 00, 000000)
 
     timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
-    assert timestamp_iso_str == "2023-11-23T11:00:00.000000+02:00"
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+00:00"
 
     timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
-    assert timestamp_iso_str == "2023-11-23T09:00:00.000000"
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000"
 
     timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
-    assert timestamp_iso_str == "2023-11-23T09:00:00.000000+02:00"
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+02:00"
 
     timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
-    assert timestamp_iso_str == "2023-11-23T07:00:00.000000"
+    assert timestamp_iso_str == "2023-10-03T07:00:00.000000"
+
+    # Non-daylight saving time date
+    timestamp = datetime.datetime(2023, 11, 3, 9, 00, 00, 000000)
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000+00:00"
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000"
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000+01:00"
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
+    assert timestamp_iso_str == "2023-11-03T08:00:00.000000"

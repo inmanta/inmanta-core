@@ -403,14 +403,27 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     be in local time.
     :param tz_aware: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
     """
-    naive_utc_timestamp: datetime.datetime = (
-        timestamp
-        if timestamp.tzinfo is None and naive_utc
-        else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-    )
+    # naive_utc_timestamp: datetime.datetime = (
+    #     timestamp
+    #     if timestamp.tzinfo is None and naive_utc
+    #     else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    # )
+    # if tz_aware:
+    #     return naive_utc_timestamp.replace(tzinfo=datetime.timezone.utc).astimezone().isoformat(timespec="microseconds")
+    # return naive_utc_timestamp.isoformat(timespec="microseconds")
+    #
+
     if tz_aware:
-        return naive_utc_timestamp.replace(tzinfo=datetime.timezone.utc).astimezone().isoformat(timespec="microseconds")
-    return naive_utc_timestamp.isoformat(timespec="microseconds")
+        if timestamp.tzinfo:
+            return timestamp.isoformat(timespec="microseconds")
+        if naive_utc:
+            return timestamp.replace(tzinfo=datetime.timezone.utc).isoformat(timespec="microseconds")
+        return timestamp.astimezone().isoformat(timespec="microseconds")
+
+    if not timestamp.tzinfo:
+        if naive_utc:
+            return timestamp.replace(tzinfo=None).isoformat(timespec="microseconds")
+        return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")
 
 
 class JSONSerializable(ABC):
