@@ -34,6 +34,7 @@ from inmanta.ast.statements import (
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
+    BaseListVariable,
     QueueScheduler,
     RawUnit,
     Resolver,
@@ -41,6 +42,7 @@ from inmanta.execute.runtime import (
     ResultVariable,
     ResultVariableProxy,
     VariableABC,
+    WrappedValueVariable,
 )
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
@@ -94,7 +96,11 @@ class Reference(ExpressionStatement):
     ) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         var: ResultVariable = resolver.lookup(self.full_name)
-        var.listener(resultcollector, self.location)
+        # TODO: cleanup
+        if isinstance(var, BaseListVariable):
+            var.listener(resultcollector, self.location)
+        else:
+            requires[(self, ResultCollector)] = WrappedValueVariable(resultcollector)
         requires[self.name] = var
         return requires
 
