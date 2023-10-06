@@ -442,7 +442,6 @@ expression for an element should not be executed because the element was filtere
 class ListComprehensionGuard(Literal):
     __slots__ = ()
 
-
     def __init__(self) -> None:
         super().__init__(LIST_COMPREHENSION_GUARDED)
 

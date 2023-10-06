@@ -47,7 +47,7 @@ from inmanta.execute.runtime import (
     VariableABC,
     WrappedValueVariable,
 )
-from inmanta.execute.util import NoneValue, Unknown
+from inmanta.execute.util import Unknown
 
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
@@ -254,9 +254,10 @@ class ExpressionStatement(RequiresEmitStatement):
         resultcollector: Optional[ResultCollector] = requires.get((self, ResultCollector), None)
         if resultcollector is not None:
             # TODO: in most cases, NoneValue should be ignored, but not for e.g. For's result collector. None always ignored?
-            if result is not None and not isinstance(result, (NoneValue, Unknown)):
+            if result is not None:  # None represents the absence of a result, not the `null` DSL value
                 for value in result if isinstance(result, abc.Sequence) else [result]:
-                    resultcollector.receive_result(value, self.location)
+                    if not isinstance(result, Unknown):
+                        resultcollector.receive_result(value, self.location)
         return result
 
     def as_constant(self) -> object:
