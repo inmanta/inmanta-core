@@ -2210,8 +2210,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
-    async def delete_cascade(self) -> None:
-        await self.delete()
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        await self.delete(connection=connection)
 
     @classmethod
     @overload
@@ -2312,11 +2312,16 @@ class Project(BaseDocument):
     def to_dto(self) -> m.Project:
         return m.Project(id=self.id, name=self.name, environments=[])
 
-    async def delete_cascade(self) -> None:
-        envs_in_project: abc.Sequence[Environment] = await Environment.get_list(project=self.id)
-        for env in envs_in_project:
-            await env.delete_cascade()
-        await self.delete()
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
+        As such, we perform the deletes on each table in a separate transaction.
+        """
+        async with self.get_connection(connection=connection) as con:
+            envs_in_project: abc.Sequence[Environment] = await Environment.get_list(project=self.id, connection=con)
+            for env in envs_in_project:
+                await env.delete_cascade(connection=con)
+            await self.delete(connection=con)
 
 
 def convert_boolean(value: Union[bool, str]) -> bool:
@@ -2818,24 +2823,34 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(self, only_content: bool = False) -> None:
-        await Agent.delete_all(environment=self.id)
-        await AgentProcess.delete_all(environment=self.id)  # This triggers a cascading delete on the agentinstance table
-        await Compile.delete_all(environment=self.id)  # This triggers a cascading delete on the report table
-        await Parameter.delete_all(environment=self.id)
-        await Notification.delete_all(environment=self.id)
-        await Code.delete_all(environment=self.id)
-        await DiscoveredResource.delete_all(environment=self.id)
-        await EnvironmentMetricsGauge.delete_all(environment=self.id)
-        await EnvironmentMetricsTimer.delete_all(environment=self.id)
-        await DryRun.delete_all(environment=self.id)
-        await UnknownParameter.delete_all(environment=self.id)
-        await self._execute_query("DELETE FROM public.resourceaction_resource WHERE environment=$1", self.id)
-        await ResourceAction.delete_all(environment=self.id)
-        await Resource.delete_all(environment=self.id)
-        await ConfigurationModel.delete_all(environment=self.id)
-        if not only_content:
-            await self.delete()
+    async def delete_cascade(
+        self, only_content: bool = False, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
+        This is especially true for the tables resourceaction_resource, resource and resourceaction, because they
+        have a high read/write load. As such, we perform the deletes on each table in a separate transaction.
+        """
+        async with self.get_connection(connection=connection) as con:
+            await Agent.delete_all(environment=self.id, connection=con)
+            await AgentProcess.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on agentinstance
+            await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
+            await Parameter.delete_all(environment=self.id, connection=con)
+            await Notification.delete_all(environment=self.id, connection=con)
+            await Code.delete_all(environment=self.id, connection=con)
+            await DiscoveredResource.delete_all(environment=self.id, connection=con)
+            await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
+            await EnvironmentMetricsTimer.delete_all(environment=self.id, connection=con)
+            await DryRun.delete_all(environment=self.id, connection=con)
+            await UnknownParameter.delete_all(environment=self.id, connection=con)
+            await self._execute_query(
+                "DELETE FROM public.resourceaction_resource WHERE environment=$1", self.id, connection=con
+            )
+            await ResourceAction.delete_all(environment=self.id, connection=con)
+            await Resource.delete_all(environment=self.id, connection=con)
+            await ConfigurationModel.delete_all(environment=self.id, connection=con)
+            if not only_content:
+                await self.delete(connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
@@ -5499,23 +5514,29 @@ class ConfigurationModel(BaseDocument):
         )
         return versions
 
-    async def delete_cascade(self) -> None:
-        await Compile.delete_all(environment=self.environment, version=self.version)  # Triggers cascading delete report table
-        await Code.delete_all(environment=self.environment, version=self.version)
-        await DryRun.delete_all(environment=self.environment, model=self.version)
-        await UnknownParameter.delete_all(environment=self.environment, version=self.version)
-        await self._execute_query(
-            "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",
-            self.environment,
-            self.version,
-        )
-        await ResourceAction.delete_all(environment=self.environment, version=self.version)
-        await Resource.delete_all(environment=self.environment, model=self.version)
-        await self.delete()
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
+        As such, we perform the deletes on each table in a separate transaction.
+        """
+        async with self.get_connection(connection=connection) as con:
+            # Delete of compile record triggers cascading delete report table
+            await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
+            await Code.delete_all(environment=self.environment, version=self.version, connection=con)
+            await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
+            await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
+            await self._execute_query(
+                "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",
+                self.environment,
+                self.version,
+                connection=con,
+            )
+            await ResourceAction.delete_all(environment=self.environment, version=self.version, connection=con)
+            await Resource.delete_all(environment=self.environment, model=self.version, connection=con)
+            await self.delete(connection=con)
 
-        async with self.get_connection() as con:
             # Delete facts when the resources in this version are the only
-            await con.execute(
+            await self._execute_query(
                 f"""
                 DELETE FROM {Parameter.table_name()} p
                 WHERE(
@@ -5529,6 +5550,7 @@ class ConfigurationModel(BaseDocument):
                 )
                 """,
                 self.environment,
+                connection=con,
             )
 
     def get_undeployable(self) -> List[m.ResourceIdStr]:
