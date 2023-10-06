@@ -2377,9 +2377,22 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
-def validate_cron(value: str) -> str:
+def validate_cron_or_int(value: Union[int, str]) -> str:
+    try:
+        return str(int(value))
+    except ValueError:
+        try:
+            assert isinstance(value, str)  # Make mypy happy
+            return validate_cron(value, allow_empty=False)
+        except ValueError as e:
+            raise ValueError("'%s' is not a valid cron expression or int: %s" % (value, e))
+
+
+def validate_cron(value: str, allow_empty: bool = True) -> str:
     if not value:
-        return ""
+        if allow_empty:
+            return ""
+        raise ValueError("The given cron expression is an empty string")
     try:
         CronTab(value)
     except ValueError as e:
@@ -2588,11 +2601,12 @@ class Environment(BaseDocument):
         ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
-            typ="int",
-            default=600,
-            doc="The deployment interval of the autostarted agents."
+            typ="str",
+            default="600",
+            doc="The deployment interval of the autostarted agents. Can be specified as a number of seconds"
+            " or as a cron-like expression."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
-            validator=convert_int,
+            validator=validate_cron_or_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
@@ -2606,11 +2620,14 @@ class Environment(BaseDocument):
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
-            typ="int",
-            default=86400,
-            doc="The repair interval of the autostarted agents."
-            " See also: :inmanta.config:option:`config.agent-repair-interval`",
-            validator=convert_int,
+            typ="str",
+            default="86400",
+            doc=(
+                "The repair interval of the autostarted agents. Can be specified as a number of seconds"
+                " or as a cron-like expression."
+                " See also: :inmanta.config:option:`config.agent-repair-interval`"
+            ),
+            validator=validate_cron_or_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(
@@ -2659,8 +2676,9 @@ class Environment(BaseDocument):
             typ="str",
             validator=validate_cron,
             doc=(
-                "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
-                " (e.g. `min hour dom month dow`). A compile will be requested at the scheduled time. The actual"
+                "Periodically run a full compile following a cron-like time-to-run specification interpreted in UTC with format"
+                " `[sec] min hour dom month dow [year]` (If only 6 values are provided, they are interpreted as"
+                " `min hour dom month dow year`). A compile will be requested at the scheduled time. The actual"
                 " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
                 " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
             ),
