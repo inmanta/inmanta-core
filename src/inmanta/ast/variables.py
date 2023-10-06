@@ -91,19 +91,6 @@ class Reference(ExpressionStatement):
         requires[self.name] = resolver.lookup(self.full_name)
         return requires
 
-    def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector, *, propagate_unset: bool = False
-    ) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
-        var: ResultVariable = resolver.lookup(self.full_name)
-        # TODO: cleanup
-        if isinstance(var, BaseListVariable):
-            var.listener(resultcollector, self.location)
-        else:
-            requires[(self, ResultCollector)] = WrappedValueVariable(resultcollector)
-        requires[self.name] = var
-        return requires
-
     def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
 
