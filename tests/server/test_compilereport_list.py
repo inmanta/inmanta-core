@@ -212,14 +212,14 @@ async def test_compile_reports_filters(server, client, env_with_compile_reports)
     )
     assert result.code == 200
     assert len(result.result["data"]) == 3
-    assert datetime.datetime.strptime(
-        result.result["data"][0]["requested"], "%Y-%m-%dT%H:%M:%S.%f%z"
+    assert datetime.datetime.strptime(result.result["data"][0]["requested"], "%Y-%m-%dT%H:%M:%S.%f").replace(
+        tzinfo=datetime.timezone.utc
     ) == compile_requested_timestamps[4].astimezone(datetime.timezone.utc)
-    assert datetime.datetime.strptime(
-        result.result["data"][1]["requested"], "%Y-%m-%dT%H:%M:%S.%f%z"
+    assert datetime.datetime.strptime(result.result["data"][1]["requested"], "%Y-%m-%dT%H:%M:%S.%f").replace(
+        tzinfo=datetime.timezone.utc
     ) == compile_requested_timestamps[5].astimezone(datetime.timezone.utc)
-    assert datetime.datetime.strptime(
-        result.result["data"][2]["requested"], "%Y-%m-%dT%H:%M:%S.%f%z"
+    assert datetime.datetime.strptime(result.result["data"][2]["requested"], "%Y-%m-%dT%H:%M:%S.%f").replace(
+        tzinfo=datetime.timezone.utc
     ) == compile_requested_timestamps[6].astimezone(datetime.timezone.utc)
 
 

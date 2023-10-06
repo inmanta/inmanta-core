@@ -456,14 +456,14 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
 
 @stable_api
-def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+def api_boundary_json_encoder(o: object, tz_aware: bool = False) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
     encoder is meant to be used for API boundaries.
     """
     if isinstance(o, datetime.datetime):
         # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
-        return datetime_iso_format(o, naive_utc=True, tz_aware=True)
+        return datetime_iso_format(o, naive_utc=True, tz_aware=tz_aware)
 
     return _custom_json_encoder(o)
 
