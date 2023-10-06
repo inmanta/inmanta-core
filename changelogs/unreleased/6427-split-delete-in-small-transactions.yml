@@ -1,0 +1,8 @@
+---
+description: Split deletes of projects, environments and configurationmodels into small transactions to prevent deadlocks.
+issue-nr: 6427
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
