@@ -423,7 +423,8 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     if not timestamp.tzinfo:
         if naive_utc:
             return timestamp.replace(tzinfo=None).isoformat(timespec="microseconds")
-        return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")
+
+    return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")
 
 
 class JSONSerializable(ABC):
