@@ -104,8 +104,7 @@ class IsDefined(ReferenceStatement):
         requires[self] = temp
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 
@@ -156,8 +155,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     def get_name(self) -> str:
         return self.__name
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -292,10 +290,13 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
             self._validate_value(rhs, 1)
             return rhs
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        # no need to fulfill promises, already done in resume
+    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
+
+    def _fulfill_promises(self, requires: Dict[object, object]) -> None:
+        # no need to fulfill promises, already done in resume
+        pass
 
     def _is_final(self, result: bool) -> bool:
         raise NotImplementedError()

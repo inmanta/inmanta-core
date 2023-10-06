@@ -101,8 +101,7 @@ class FunctionCall(ReferenceStatement):
         requires[self] = temp
         return requires
 
-    def execute(self, requires, resolver, queue):
-        super().execute(requires, resolver, queue)
+    def _execute(self, requires, resolver, queue):
         return requires[self]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:

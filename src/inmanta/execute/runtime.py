@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
@@ -1061,6 +1062,21 @@ class RawUnit(Waiter):
                 e.location = self.resumer.location
             raise e
         self.done = True
+
+
+# TODO: don't implement this now: make a ticket for it
+# TODO: slotted class probably better than dataclass? Does slotted dataclass exist?
+#@dataclass(frozen=True)
+#class DynamicContext:
+#    parent: Optional["DynamicContext"]
+#    # TODO: parametrize with bottom type
+#    resultcollectors: abc.Mapping[RequiresEmitStatement, ResultCollector]
+#
+#    # TODO: should we allow any RequiresEmitStatement?
+#    # TODO: parametrize ResultCollector with bottom type?
+#    def result_collector_for_expression(self, expression: ExpressionStatement) -> Optional[ResultCollector]:
+#        # TODO
+#        return None
 
 
 """
