@@ -430,6 +430,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         )
 
 
+# TODO: is this still required? ListComprehensionGuard can just return None? Would simplify unrolling in LCCOllector as well.
 # TODO: move into class
 LIST_COMPREHENSION_GUARDED = object()
 """
@@ -562,7 +563,6 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             if self.lhs is None:
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
             if len(self._results) != len(all_values):
-                print(len(self._results), len(all_values))
                 raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
         else:
             for value in all_values:
