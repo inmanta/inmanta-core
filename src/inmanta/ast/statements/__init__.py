@@ -168,7 +168,7 @@ class RequiresEmitStatement(DynamicStatement):
         Returns an empty dict if no promises were acquired (for performance reasons).
         """
         promises: Sequence["EagerPromise"] = self.schedule_eager_promises(resolver, queue)
-        return ({(self, EagerPromise): WrappedValueVariable(promises)} if promises else {})
+        return {(self, EagerPromise): WrappedValueVariable(promises)} if promises else {}
 
     def schedule_eager_promises(self, resolver: Resolver, queue: QueueScheduler) -> Sequence["EagerPromise"]:
         """
@@ -196,6 +196,18 @@ class RequiresEmitStatement(DynamicStatement):
         for promise in promises:
             promise.fulfill()
 
+    # TODO: document wiring semantics: composite statements should wire resultcollector rather than track it themselves
+    # TODO: check child implementations
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
+    ) -> dict[object, VariableABC]:
+        """
+        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
+        resultcollector as a listener to result variables.
+        When this method is called, the caller must make sure to eventually call `execute` as well.
+        """
+        return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
+
 
 @dataclass(frozen=True)
 class AttributeAssignmentLHS:
@@ -221,18 +233,6 @@ class ExpressionStatement(RequiresEmitStatement):
         :param requires: A dictionary mapping names to values.
         """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
-
-    # TODO: document wiring semantics: composite statements should wire resultcollector rather than track it themselves
-    # TODO: check child implementations
-    def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
-    ) -> dict[object, VariableABC]:
-        """
-        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
-        resultcollector as a listener to result variables.
-        When this method is called, the caller must make sure to eventually call `execute` as well.
-        """
-        return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         """
