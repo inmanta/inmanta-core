@@ -243,7 +243,7 @@ class For(RequiresEmitStatement):
 
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Evaluate this statement.
         """
@@ -430,11 +430,25 @@ class ListComprehension(RawResumer, ExpressionStatement):
         )
 
 
+# TODO: move into class
 LIST_COMPREHENSION_GUARDED = object()
 """
 Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
 expression for an element should not be executed because the element was filtered by the guard.
 """
+
+
+# TODO: docstring
+class ListComprehensionGuard(Literal):
+    def __init__(self) -> None:
+        super().__init__(LIST_COMPREHENSION_GUARDED)
+
+    # TODO: check if this is required
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
+    ) -> dict[object, VariableABC[object]]:
+        # this statement represents the absence of a result => don't pass on resultcollector
+        return self.requires_emit(resolver, queue)
 
 
 class ListComprehensionCollector(RawResumer, ResultCollector[object]):
@@ -501,13 +515,13 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         if self.statement.guard is None:
             guarded_expression = self.statement.value_expression
         else:
-            else_expression: ExpressionStatement = Literal(LIST_COMPREHENSION_GUARDED)
+            else_expression: ExpressionStatement = ListComprehensionGuard()
             # TODO: is this sufficiently gradual?
             # TODO: what if LIST_COMPREHENSION_GUARDED is passed through gradual execution? VERY IMPORTANT!!!!!
             guarded_expression = ConditionalExpression(
                 condition=self.statement.guard,
                 if_expression=self.statement.value_expression,
-                else_expression=Literal(LIST_COMPREHENSION_GUARDED),
+                else_expression=else_expression,
             )
             self.statement.copy_location(else_expression)
             self.statement.copy_location(guarded_expression)
