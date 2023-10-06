@@ -204,7 +204,6 @@ class AttributeAssignmentLHS:
     type_hint: Optional["Type"] = None
 
 
-# TODO: make generic in result type so it can be bound to resultcollector?
 class ExpressionStatement(RequiresEmitStatement):
     __slots__ = ()
 
@@ -223,7 +222,6 @@ class ExpressionStatement(RequiresEmitStatement):
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
     # TODO: document wiring semantics: composite statements should wire resultcollector rather than track it themselves
-    # TODO: check child implementations
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
@@ -253,7 +251,6 @@ class ExpressionStatement(RequiresEmitStatement):
         result: object = self._execute(requires, resolver, queue)
         resultcollector: Optional[ResultCollector] = requires.get((self, ResultCollector), None)
         if resultcollector is not None:
-            # TODO: in most cases, NoneValue should be ignored, but not for e.g. For's result collector. None always ignored?
             if result is not None:  # None represents the absence of a result, not the `null` DSL value
                 for value in result if isinstance(result, abc.Sequence) else [result]:
                     if not isinstance(result, Unknown):
