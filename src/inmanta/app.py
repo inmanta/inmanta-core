@@ -31,9 +31,13 @@
 """
 import argparse
 import asyncio
+import contextlib
+import dataclasses
+import enum
 import json
 import logging
 import os
+import shutil
 import signal
 import socket
 import sys
@@ -48,6 +52,7 @@ from threading import Timer
 from types import FrameType
 from typing import Any, Callable, Coroutine, Dict, Optional
 
+import click
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
@@ -356,17 +361,22 @@ def compile_project(options: argparse.Namespace) -> None:
     )
     module.Project.get(options.main_file, strict_deps_check=strict_deps_check)
 
+    summary_reporter = CompileSummaryReporter()
     if options.profile:
         import cProfile
         import pstats
 
-        cProfile.runctx("do_compile()", globals(), {}, "run.profile")
+        with summary_reporter.compiler_exception.capture():
+            cProfile.runctx("do_compile()", globals(), {}, "run.profile")
         p = pstats.Stats("run.profile")
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
         t1 = time.time()
-        do_compile()
+        with summary_reporter.compiler_exception.capture():
+            do_compile()
         LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
+
+    summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
 
 @command("list-commands", help_msg="Print out an overview of all commands", add_verbose_flag=False)
@@ -583,39 +593,179 @@ def export(options: argparse.Namespace) -> None:
 
     from inmanta.export import Exporter  # noqa: H307
 
-    exp = None
+    summary_reporter = CompileSummaryReporter()
+
     types: Optional[Dict[str, inmanta_type.Type]]
     scopes: Optional[Namespace]
-    try:
-        (types, scopes) = do_compile()
-    except Exception as e:
-        exp = e
-        types, scopes = (None, None)
+
+    with summary_reporter.compiler_exception.capture():
+        try:
+            (types, scopes) = do_compile()
+        except Exception:
+            types, scopes = (None, None)
+            raise
 
     # Even if the compile failed we might have collected additional data such as unknowns. So
     # continue the export
 
     export = Exporter(options)
-    results = export.run(
-        types,
-        scopes,
-        metadata=metadata,
-        model_export=options.model_export,
-        export_plugin=options.export_plugin,
-        partial_compile=options.partial_compile,
-        resource_sets_to_remove=options.delete_resource_set,
-    )
-    version = results[0]
+    with summary_reporter.exporter_exception.capture():
+        results = export.run(
+            types,
+            scopes,
+            metadata=metadata,
+            model_export=options.model_export,
+            export_plugin=options.export_plugin,
+            partial_compile=options.partial_compile,
+            resource_sets_to_remove=options.delete_resource_set,
+        )
 
-    if exp is not None:
-        raise exp
-
-    if options.deploy:
+    if not summary_reporter.is_failure() and options.deploy:
+        version = results[0]
         conn = protocol.SyncClient("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = cfg_env.get()
         agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
         conn.release_version(tid, version, True, agent_trigger_method)
+
+    summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+
+
+class Color(enum.Enum):
+    RED = "red"
+    GREEN = "green"
+
+
+@dataclasses.dataclass
+class ExceptionCollector:
+    """
+    This class defines a context manager that captures any unhandled exception raised within the context.
+    """
+
+    exception: Optional[Exception] = None
+
+    def has_exception(self) -> bool:
+        return self.exception is not None
+
+    @contextlib.contextmanager
+    def capture(self) -> abc.Iterator["ExceptionCollector"]:
+        """
+        Record any exceptions raised within the context manager. The exception will not be re-raised.
+        """
+        try:
+            yield self
+        except Exception as e:
+            self.exception = e
+
+
+class CompileSummaryReporter:
+    """
+    Contains the logic to print a summary at the end of the `inmanta compile` or `inmanta export`
+    command that provides an overview on whether the command was successful or not.
+    """
+
+    def __init__(self) -> None:
+        self.compiler_exception: ExceptionCollector = ExceptionCollector()
+        self.exporter_exception: ExceptionCollector = ExceptionCollector()
+
+    def is_failure(self) -> bool:
+        """
+        Return true iff an exception has occurred during the compile or export stage.
+        """
+        return self.compiler_exception.has_exception() or self.exporter_exception.has_exception()
+
+    def _get_global_status(self) -> str:
+        """
+        Return the global status of the run.
+        """
+        if self.compiler_exception.has_exception():
+            return "COMPILATION FAILURE"
+        elif self.exporter_exception.has_exception():
+            return "EXPORT FAILURE"
+        else:
+            return "SUCCESS"
+
+    def _get_header(self, header_text: str) -> str:
+        """
+        Return a header for the summary with the given header_text.
+        """
+        terminal_width = shutil.get_terminal_size()[0]
+        minimal_header = f"= {header_text.upper()} ="
+        length_minimal_header = len(minimal_header)
+        if terminal_width <= length_minimal_header:
+            return minimal_header
+        else:
+            nr_equals_signs_to_add_each_side = int((terminal_width - length_minimal_header) / 2)
+            extra_equals_signs_each_side = "=" * nr_equals_signs_to_add_each_side
+            return f"{extra_equals_signs_each_side}{minimal_header}{extra_equals_signs_each_side}"
+
+    def _get_exception_to_report(self) -> Exception:
+        """
+        Return the exception that should be reported in the summary. Compiler exceptions take precedence
+        over exporter exceptions because they happen first.
+        """
+        assert self.is_failure()
+        if self.compiler_exception.has_exception():
+            assert self.compiler_exception.exception is not None
+            return self.compiler_exception.exception
+        else:
+            assert self.exporter_exception.exception is not None
+            return self.exporter_exception.exception
+
+    def _get_error_message(self) -> str:
+        """
+        Return the error message associated with `self._get_exception_to_report()`.
+        """
+        exc = self._get_exception_to_report()
+        if isinstance(exc, CompilerException):
+            error_message = exc.format_trace(indent="  ").strip("\n")
+            # Add explainer text if any
+            from inmanta.compiler.help.explainer import ExplainerFactory
+
+            helpmsg = ExplainerFactory().explain_and_format(exc, plain=not _is_on_tty())
+            if helpmsg is not None:
+                helpmsg = helpmsg.strip("\n")
+                return f"{error_message}\n\n{helpmsg}"
+        else:
+            error_message = str(exc).strip("\n")
+        return f"Error: {error_message}"
+
+    def _get_stack_trace(self) -> str:
+        """
+        Return the stack trace associated with `self._get_exception_to_report()`.
+        """
+        exc = self._get_exception_to_report()
+        return "".join(traceback.format_exception(None, value=exc, tb=exc.__traceback__)).strip("\n")
+
+    def _print_to_stderr(self, text: str = "", bold: bool = False, **kwargs: object) -> None:
+        """
+        Prints the given text to stderr with the given styling requirements. On a tty the text
+        is printed in green in case of success and in red in case of a failure.
+        """
+        if _is_on_tty():
+            color = Color.RED if self.is_failure() else Color.GREEN
+            text = click.style(text, fg=color.value, bold=bold)
+        print(text, file=sys.stderr, **kwargs)
+
+    def print_summary(self, show_stack_traces: bool) -> None:
+        """
+        Print the summary of the compile run.
+        """
+        self._print_to_stderr()
+        if show_stack_traces and self.is_failure():
+            self._print_to_stderr(text=self._get_header(header_text="EXCEPTION TRACE"))
+            self._print_to_stderr(text=self._get_stack_trace(), end="\n\n")
+
+        self._print_to_stderr(text=self._get_header(header_text=self._get_global_status()))
+        if self.is_failure():
+            self._print_to_stderr(text=self._get_error_message())
+
+    def print_summary_and_exit(self, show_stack_traces: bool) -> None:
+        """
+        Print the compile summary and exit with a 0 status code in case of success or 1 in case of failure.
+        """
+        self.print_summary(show_stack_traces)
+        exit(1 if self.is_failure() else 0)
 
 
 def cmd_parser() -> argparse.ArgumentParser:

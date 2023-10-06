@@ -26,7 +26,7 @@ from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import PrimitiveTypes
 
-from ..data.model import DiscoveredResource, ResourceIdStr
+from ..data.model import ResourceIdStr
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
@@ -1392,88 +1392,4 @@ def set_password(username: str, password: str) -> None:
     :param password: The password of this new user. The password should be at least 8 characters long.
     :raises NotFound: Raised when the user does not exist
     :raises BadRequest: Raised when server authentication is not enabled
-    """
-
-
-@typedmethod(
-    path="/discovered/<discovered_resource_id>",
-    operation="POST",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-    varkw=True,
-)
-def discovered_resource_create(
-    tid: uuid.UUID, discovered_resource_id: str, **kwargs: object  # bypass the type checking for the values
-) -> None:
-    """
-    create a discovered resource.
-
-    :param tid: The id of the environment this resource belongs to
-    :param discovered_resource_id: The id of the discovered_resource
-    :param **kwargs: The following arguments are supported:
-           values: The values associated with the discovered_resource
-    """
-
-
-@typedmethod(
-    path="/discovered/",
-    operation="POST",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: List[DiscoveredResource]) -> None:
-    """
-    create multiple discovered resource in the DB
-    :param tid: The id of the environment this resource belongs to
-    :param discovered_resources: List of discovered_resources containing the discovered_resource_id and values for each resource
-    """
-
-
-@typedmethod(
-    path="/discovered/<discovered_resource_id>",
-    operation="GET",
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
-    api_version=2,
-)
-def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
-    """
-    Get a single discovered resource.
-
-    :param tid: the id of the environment in which to get the discovered resource.
-    :param discovered_resource_id: The id of the discovered resource
-    """
-
-
-@typedmethod(
-    path="/discovered",
-    operation="GET",
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
-    api_version=2,
-)
-def discovered_resources_get_batch(
-    tid: uuid.UUID,
-    limit: Optional[int] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    sort: str = "discovered_resource_id.asc",
-) -> List[model.DiscoveredResource]:
-    """
-    :param tid: The id of the environment this resource belongs to
-    :param limit: Limit the number of instances that are returned
-    :param start: The lower limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
-    :param end: The upper limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
-    :param sort: Return the results sorted according to the parameter value.
-            The following sorting attributes are supported: 'discovered_resource_id'.
-            The following orders are supported: 'asc', 'desc'
-    :return: A list of all matching released resources
-    :raise NotFound: This exception is raised when the referenced environment is not found
-    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """

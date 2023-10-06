@@ -24,6 +24,7 @@ from functools import partial
 from itertools import groupby
 from logging import DEBUG
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID
 
 import psutil
 import pytest
@@ -36,7 +37,13 @@ from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deplo
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.data import (
+    AUTOSTART_AGENT_DEPLOY_INTERVAL,
+    AUTOSTART_AGENT_REPAIR_INTERVAL,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    Setting,
+    convert_boolean,
+)
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -303,8 +310,20 @@ async def test_server_restart(
     assert not resource_container.Provider.isset("agent1", "key3")
 
 
+@pytest.mark.parametrize(
+    "agent_deploy_interval",
+    ["2", "*/2 * * * * * *"],
+)
 async def test_spontaneous_deploy(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer, caplog
+    resource_container,
+    server,
+    client,
+    environment,
+    clienthelper,
+    no_agent_backoff,
+    async_finalizer,
+    caplog,
+    agent_deploy_interval,
 ):
     """
     dryrun and deploy a configuration model
@@ -313,9 +332,9 @@ async def test_spontaneous_deploy(
     with caplog.at_level(DEBUG):
         resource_container.Provider.reset()
 
-        env_id = environment
+        env_id = UUID(environment)
 
-        Config.set("config", "agent-deploy-interval", "2")
+        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
         Config.set("config", "agent-deploy-splay-time", "2")
         Config.set("config", "agent-repair-interval", "0")
 
@@ -387,20 +406,19 @@ async def test_spontaneous_deploy(
 
 
 @pytest.mark.parametrize(
-    "cron",
-    [False, True],
+    "agent_repair_interval",
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
 )
 async def test_spontaneous_repair(
-    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, cron
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, agent_repair_interval
 ):
     """
     Test that a repair run is executed every 2 seconds as specified in the agent_repair_interval (using a cron or not)
     """
     resource_container.Provider.reset()
-    agent_repair_interval = "2"
-    if cron:
-        agent_repair_interval = "*/2 * * * * * *"
-
     env_id = environment
 
     Config.set("config", "agent-repair-interval", agent_repair_interval)
@@ -483,6 +501,36 @@ async def test_spontaneous_repair(
 
     await verify_deployment_result()
     await resource_action_consistency_check()
+
+
+@pytest.mark.parametrize(
+    "interval_code",
+    [(2, 200), ("2", 200), ("*/2 * * * * * *", 200), ("", 400)],
+)
+async def test_env_setting_wiring_to_autostarted_agent(
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, interval_code
+):
+    """
+    Test that the AUTOSTART_AGENT_DEPLOY_INTERVAL and AUTOSTART_AGENT_REPAIR_INTERVAL
+    env settings are properly wired through to auto-started agents.
+    """
+    env_id = UUID(environment)
+    interval, expected_code = interval_code
+    result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, interval)
+    assert result.code == expected_code
+    result = await client.set_setting(environment, AUTOSTART_AGENT_REPAIR_INTERVAL, interval)
+    assert result.code == expected_code
+
+    if expected_code == 200:
+        env = await data.Environment.get_by_id(env_id)
+        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+        config = await autostarted_agent_manager._make_agent_config(
+            env, agent_names=[], agent_map={"internal": ""}, connection=None
+        )
+
+        assert f"agent-deploy-interval={interval}" in config
+        assert f"agent-repair-interval={interval}" in config
 
 
 async def test_failing_deploy_no_handler(
@@ -2557,8 +2605,8 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     myagent_instance = agent._instances[agent_name]
 
     resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key2", "value1")
+    resource_container.Provider.set("agent1", "key3", "value1")
 
     def get_resources(version, value_resource_three):
         return [
@@ -2609,7 +2657,17 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
         DeployRequest(reason="Second Deploy", is_full_deploy=False, is_periodic=False)
     )
 
-    await resource_container.wait_for_done_with_waiters(client, environment, version2)
+    async def resume_waiters_and_wait_until_deploy_finishes() -> bool:
+        # Try to resume the waiters on each call to this method. The resources for the resumed deployment
+        # are only created when the incremental deploy finished. This ensures we resume it.
+        await resource_container.wait_for_done_with_waiters(client, environment, version2)
+        result = await client.resource_logs(environment, "test::Resource[agent1,key=key3]", filter={"action": ["deploy"]})
+        assert result.code == 200
+        end_run_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
+        # incremental deploy + full deploy resumed
+        return len(end_run_lines) >= 2
+
+    await retry_limited(resume_waiters_and_wait_until_deploy_finishes, timeout=10)
 
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Initial Deploy' for 'Second Deploy'")
 
@@ -3256,12 +3314,6 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     """
     Test retrieving facts from the agent when there is no handler code available. We use an autostarted agent, these
     do not have access to the handler code for the resource_container.
-
-    Expected logs:
-        * Deploy action: Start run/End run
-        * Deploy action: Failed to load handler code or install handler code
-        * Pull action
-        * Store action
     """
     resource_container.Provider.reset()
     resource_container.Provider.set("agent1", "key", "value")
@@ -3277,21 +3329,20 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 
     await _wait_until_deployment_finishes(client, environment, version)
     # The resource state and its logs are not set atomically. This call prevents a race condition.
-    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=4)
+    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=3)
 
     response = await client.get_resource(environment, resource_id, logs=True)
     assert response.code == 200
     result = response.result
-
     assert result["resource"]["status"] == "unavailable"
 
+    # Expected logs:
+    #   [0] Deploy action: Failed to load handler code or install handler code
+    #   [1] Pull action
+    #   [2] Store action
     assert result["logs"][0]["action"] == "deploy"
     assert result["logs"][0]["status"] == "unavailable"
-    assert "Start run for " in result["logs"][0]["messages"][0]["msg"]
-
-    assert result["logs"][1]["action"] == "deploy"
-    assert result["logs"][1]["status"] == "unavailable"
-    assert "Failed to load handler code " in result["logs"][1]["messages"][0]["msg"]
+    assert "Failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
