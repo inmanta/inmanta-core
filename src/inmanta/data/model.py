@@ -25,7 +25,7 @@ import pydantic
 import pydantic.schema
 from pydantic import Extra, root_validator, validator
 from pydantic.fields import ModelField
-from pydantic.types import StrictInt, StrictFloat, StrictStr
+from pydantic.types import StrictFloat, StrictInt, StrictStr
 
 import inmanta
 import inmanta.ast.export as ast_export
