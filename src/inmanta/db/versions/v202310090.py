@@ -21,7 +21,7 @@ from asyncpg import Connection
 def convert_setting_to_str(setting: str) -> str:
     return f"""
     UPDATE environment
-    SET settings=jsonb_set(settings, '{{setting}}'::TEXT[], to_jsonb(settings->>'{setting}'), FALSE)
+    SET settings=jsonb_set(settings, '{{{setting}}}'::TEXT[], to_jsonb(settings->>'{setting}'), FALSE)
     WHERE settings ? '{setting}'
     """
 
