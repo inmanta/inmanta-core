@@ -15,27 +15,24 @@
 
     Contact: code@inmanta.com
 """
+import json
 import os
 from collections import abc
 
 import asyncpg
 import pytest
-import json
-
-from inmanta.data import Environment
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202310040.sql"))
 async def test_type_change(
-    postgresql_client: asyncpg.Connection,
-    migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_tables_in_db
+    postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
 ) -> None:
     result = await postgresql_client.fetch(
         """
             SELECT * FROM public.environment WHERE name='dev-1';
         """
     )
-    settings = json.loads(result[0]['settings'])
+    settings = json.loads(result[0]["settings"])
     assert isinstance(settings["autostart_agent_deploy_interval"], int)
     assert isinstance(settings["autostart_agent_repair_interval"], int)
 
@@ -46,6 +43,6 @@ async def test_type_change(
             SELECT * FROM public.environment WHERE name='dev-1';
         """
     )
-    settings = json.loads(result[0]['settings'])
+    settings = json.loads(result[0]["settings"])
     assert isinstance(settings["autostart_agent_deploy_interval"], str)
     assert isinstance(settings["autostart_agent_repair_interval"], str)
