@@ -17,15 +17,18 @@
 """
 import os
 from collections import abc
-from inmanta.data import Environment
 
 import pytest
 
+from inmanta.data import Environment
+
+
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202310040.sql"))
-async def test_type_change(migrate_db_from: abc.Callable[[], abc.Awaitable[None]],  get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]]) -> None:
+async def test_type_change(
+    migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_tables_in_db: abc.Callable[[], abc.Awaitable[list[str]]]
+) -> None:
     await migrate_db_from()
 
     env = await Environment.get_one(name="dev-1")
     assert isinstance(env.settings["autostart_agent_deploy_interval"], str)
     assert isinstance(env.settings["autostart_agent_repair_interval"], str)
-

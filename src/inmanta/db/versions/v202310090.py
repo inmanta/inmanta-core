@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from asyncpg import Connection
-import json
+
 
 def convert_setting_to_str(setting: str) -> str:
     return f"""
@@ -33,4 +33,3 @@ async def update(connection: Connection) -> None:
     async with (connection.transaction()):
         await connection.execute(convert_setting_to_str("autostart_agent_repair_interval"))
         await connection.execute(convert_setting_to_str("autostart_agent_deploy_interval"))
-
