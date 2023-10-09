@@ -22,6 +22,8 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta import data
+
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202310040.sql"))
 async def test_type_change(
@@ -33,8 +35,8 @@ async def test_type_change(
         """
     )
     settings = json.loads(result[0]["settings"])
-    assert isinstance(settings["autostart_agent_deploy_interval"], int)
-    assert isinstance(settings["autostart_agent_repair_interval"], int)
+    assert isinstance(settings[data.AUTOSTART_AGENT_DEPLOY_INTERVAL], int)
+    assert isinstance(settings[data.AUTOSTART_AGENT_REPAIR_INTERVAL], int)
 
     await migrate_db_from()
 
@@ -44,5 +46,5 @@ async def test_type_change(
         """
     )
     settings = json.loads(result[0]["settings"])
-    assert isinstance(settings["autostart_agent_deploy_interval"], str)
-    assert isinstance(settings["autostart_agent_repair_interval"], str)
+    assert isinstance(settings[data.AUTOSTART_AGENT_DEPLOY_INTERVAL], str)
+    assert isinstance(settings[data.AUTOSTART_AGENT_REPAIR_INTERVAL], str)
