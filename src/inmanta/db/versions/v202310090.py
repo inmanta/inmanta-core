@@ -19,6 +19,7 @@ from asyncpg import Connection
 
 
 def convert_setting_to_str(setting: str) -> str:
+    # The ->> operator gets the JSON object field as text
     return f"""
     UPDATE environment
     SET settings=jsonb_set(settings, '{{{setting}}}'::TEXT[], to_jsonb(settings->>'{setting}'), FALSE)
@@ -30,6 +31,5 @@ async def update(connection: Connection) -> None:
     """
     Update the type of the autostart_agent_repair_interval and autostart_agent_deploy_interval from int to str
     """
-    async with (connection.transaction()):
-        await connection.execute(convert_setting_to_str("autostart_agent_repair_interval"))
-        await connection.execute(convert_setting_to_str("autostart_agent_deploy_interval"))
+    await connection.execute(convert_setting_to_str("autostart_agent_repair_interval"))
+    await connection.execute(convert_setting_to_str("autostart_agent_deploy_interval"))
