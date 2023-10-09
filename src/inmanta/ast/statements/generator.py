@@ -86,7 +86,6 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-# TODO: this should really be a plain RequiresEmitStatement
 class SubConstructor(RequiresEmitStatement):
     """
     This statement selects an implementation for a given object and
@@ -365,7 +364,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         else:
             collector_helper.complete(iterable, resolver, queue)
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # at this point the resumer signalled the helper we were done and the helper waited for all value expressions
         # => just fetch the result
         return requires[self]
@@ -429,8 +428,13 @@ class ListComprehension(RawResumer, ExpressionStatement):
         )
 
 
-# TODO: docstring + mention that this should never be used as a DSL expression because its return value is purely internal
 class ListComprehensionGuard(Literal):
+    """
+    Representation of the else expression for a list comprehension guard. This statement is an expression in the sense that
+    it behaves like one but its return value represents that a subexpression should be filtered out rather than an actual
+    DSL-compatible value. This special value must always be caught by the statement that creates the guard. This expression
+    must never be exposed directly in the DSL.
+    """
     __slots__ = ()
 
     GUARD = object()
@@ -502,7 +506,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
             variable=value_wrapper,
         )
 
-        result_variable: ResultVariable[object] = ResultVariable(self.queue)
+        result_variable: ResultVariable[object] = ResultVariable()
         self._results.append(result_variable)
 
         # execute the value expression and the guard
@@ -551,9 +555,9 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Mutually exclusive with `set_unknown`.
         """
         if self._results:
-            # TODO: finish this message
-            # We should only have received previous results in gradual mode, if the
             if self.lhs is None:
+                # We should only have received previous results in gradual mode, if any gradual results were received in
+                # non-gradual mode, this indicates a bug in the compiler, likely in this class
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
             if len(self._results) != len(all_values):
                 raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
@@ -691,7 +695,7 @@ class ConditionalExpression(ExpressionStatement):
     ) -> dict[object, VariableABC[object]]:
         return self.requires_emit(resolver, queue, lhs=resultcollector)
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -1065,7 +1069,7 @@ class Constructor(ExpressionStatement):
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
         return late_args
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
         """
         Evaluate this statement.
         """
@@ -1247,7 +1251,7 @@ class WrappedKwargs(ExpressionStatement):
         requires.update(self.dictionary.requires_emit(resolver, queue))
         return requires
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")

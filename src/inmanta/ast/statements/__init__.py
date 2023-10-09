@@ -221,7 +221,6 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
-    # TODO: document wiring semantics: composite statements should wire resultcollector rather than track it themselves
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
     ) -> dict[object, VariableABC]:
@@ -229,6 +228,9 @@ class ExpressionStatement(RequiresEmitStatement):
         Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
         resultcollector as a listener to result variables.
         When this method is called, the caller must make sure to eventually call `execute` as well.
+
+        Composite statements (e.g. conditional expression) will pass result collectors to their children rather than
+        report to them themselves.
         """
         return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
 
@@ -241,20 +243,27 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise NotImplementedError()
 
-    # TODO: name
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        # TODO: docstring
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+        Execute the expression and return the value it resolves to without performing any of the associated steps like
+        fulfilling promises or notifying result collectors.
+        """
         raise NotImplementedError()
 
     def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+        Execute the expression and return the value it resolves to.
+        The requires dict contains the resolved values of the variables that were requested via requires_emit.
+        """
         super().execute(requires, resolver, queue)
-        result: object = self._execute(requires, resolver, queue)
+        # resolve expression, then notify result collectors before returning
+        result: object = self._resolve(requires, resolver, queue)
         resultcollector: Optional[ResultCollector] = requires.get((self, ResultCollector), None)
-        if resultcollector is not None:
-            if result is not None:  # None represents the absence of a result, not the `null` DSL value
-                for value in result if isinstance(result, abc.Sequence) else [result]:
-                    if not isinstance(result, Unknown):
-                        resultcollector.receive_result(value, self.location)
+        # `result is None` represents the absence of a result, not the `null` DSL value
+        if result is not None and resultcollector is not None:
+            for value in result if isinstance(result, list) else [result]:
+                if not isinstance(result, Unknown):
+                    resultcollector.receive_result(value, self.location)
         return result
 
     def as_constant(self) -> object:
@@ -587,7 +596,7 @@ class Literal(ExpressionStatement):
     def requires(self) -> List[str]:
         return []
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self.value
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:

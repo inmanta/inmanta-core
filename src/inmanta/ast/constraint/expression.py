@@ -104,7 +104,7 @@ class IsDefined(ReferenceStatement):
         requires[self] = temp
         return requires
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 
@@ -155,7 +155,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     def get_name(self) -> str:
         return self.__name
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -290,7 +290,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
             self._validate_value(rhs, 1)
             return rhs
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 

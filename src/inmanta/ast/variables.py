@@ -104,7 +104,7 @@ class Reference(ExpressionStatement):
         requires[self.name] = var
         return requires
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -312,7 +312,7 @@ class AttributeReference(Reference):
 
         return requires
 
-    def _execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 
