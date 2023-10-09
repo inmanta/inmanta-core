@@ -2816,7 +2816,6 @@ class Environment(BaseDocument):
                 RETURNING settings
         """
         values = [allow_override, self._get_value(key), self._get_value([key]), self._get_value(value)] + values
-
         new_value = await self._fetchval(query, *values, connection=connection)
         new_value_parsed = cast(
             Dict[str, m.EnvSettingType], self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)

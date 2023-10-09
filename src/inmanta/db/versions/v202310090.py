@@ -17,6 +17,8 @@
 """
 from asyncpg import Connection
 
+from inmanta import data
+
 
 def convert_setting_to_str(setting: str) -> str:
     # The ->> operator gets the JSON object field as text
@@ -31,5 +33,5 @@ async def update(connection: Connection) -> None:
     """
     Update the type of the autostart_agent_repair_interval and autostart_agent_deploy_interval from int to str
     """
-    await connection.execute(convert_setting_to_str("autostart_agent_repair_interval"))
-    await connection.execute(convert_setting_to_str("autostart_agent_deploy_interval"))
+    await connection.execute(convert_setting_to_str(data.AUTOSTART_AGENT_REPAIR_INTERVAL))
+    await connection.execute(convert_setting_to_str(data.AUTOSTART_AGENT_DEPLOY_INTERVAL))
