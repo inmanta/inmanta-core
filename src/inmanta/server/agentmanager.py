@@ -29,7 +29,7 @@ from uuid import UUID
 
 import asyncpg.connection
 
-from inmanta import const, data, util
+from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
@@ -792,7 +792,10 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_utc_isoformat(datetime.now())}
+        return 200, {
+            "agents": [a.to_dict() for a in ags],
+            "servertime": datetime.now(),
+        }
 
     @handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:

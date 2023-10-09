@@ -530,3 +530,65 @@ async def test_threadpool_join():
     # verify we are done
     tp.shutdown(wait=True)
     assert done.qsize() == 5
+
+
+def test_datetime_iso_format():
+    """
+    Unit test for the util.datetime_iso_format function
+    """
+
+    # Check that when using naive timestamps as input only the output format changes (depending on the tz_aware param)
+
+    # Naive Daylight saving time date
+    timestamp = datetime.datetime(2023, 10, 3, 9, 00, 00, 000000)
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+00:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000"
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+02:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
+    assert timestamp_iso_str == "2023-10-03T07:00:00.000000"
+
+    # Naive Non-daylight saving time date
+    timestamp = datetime.datetime(2023, 11, 3, 9, 00, 00, 000000)
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000+00:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000"
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000+01:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
+    assert timestamp_iso_str == "2023-11-03T08:00:00.000000"
+
+    # Check that when using aware timestamps as input only the output format changes (depending on the tz_aware param)
+
+    # Aware Daylight saving time date
+    timestamp = datetime.datetime(2023, 10, 3, 9, 00, 00, 000000, tzinfo=datetime.timezone.utc)
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+00:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000+00:00"
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
+    assert timestamp_iso_str == "2023-10-03T09:00:00.000000"
+
+    # Aware Non-daylight saving time date
+    timestamp = datetime.datetime(2023, 11, 3, 9, 00, 00, 000000, tzinfo=datetime.timezone.utc)
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000+00:00"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000+00:00"
+
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000"
+    timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
+    assert timestamp_iso_str == "2023-11-03T09:00:00.000000"
