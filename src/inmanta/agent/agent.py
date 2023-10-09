@@ -211,6 +211,25 @@ class ResourceAction(ResourceActionBase):
             # Explicit cast is required because mypy has issues with * and generics
             results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
+            if self.undeployable:
+                self.running = True
+                try:
+                    if self.is_done():
+                        # Action is cancelled
+                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
+                        return
+                    result = sum(results, ResourceActionResult(cancel=False))
+                    if result.cancel:
+                        # self.running will be set to false when self.cancel is called
+                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                        return
+                    self.status = self.undeployable
+                    self.change = const.Change.nochange
+                    self.changes = {}
+                    self.future.set_result(ResourceActionResult(cancel=False))
+                finally:
+                    self.running = False
+
             async with self.scheduler.ratelimiter:
                 ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
@@ -236,16 +255,13 @@ class ResourceAction(ResourceActionBase):
                         # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                         return
 
-                    if self.undeployable is not None:
-                        ctx.set_status(self.undeployable)
+                    try:
+                        requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
+                    except Exception:
+                        ctx.set_status(const.ResourceState.failed)
+                        ctx.exception("Failed to report the start of the deployment to the server")
                     else:
-                        try:
-                            requires: Dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
-                        except Exception:
-                            ctx.set_status(const.ResourceState.failed)
-                            ctx.exception("Failed to report the start of the deployment to the server")
-                        else:
-                            await self._execute(ctx=ctx, requires=requires)
+                        await self._execute(ctx=ctx, requires=requires)
 
                     ctx.debug(
                         "End run for resource %(resource)s in deploy %(deploy_id)s",
