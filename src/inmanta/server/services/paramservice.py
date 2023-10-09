@@ -50,7 +50,6 @@ class ParameterService(protocol.ServerSlice):
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
-        self._server_tz_aware_timestamps = opt.server_tz_aware_timestamps.get()
 
     def get_dependencies(self) -> List[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
