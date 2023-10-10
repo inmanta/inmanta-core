@@ -34,7 +34,6 @@ from inmanta.ast.statements import (
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import (
-    BaseListVariable,
     QueueScheduler,
     RawUnit,
     Resolver,

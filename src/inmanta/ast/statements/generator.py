@@ -435,6 +435,7 @@ class ListComprehensionGuard(Literal):
     DSL-compatible value. This special value must always be caught by the statement that creates the guard. This expression
     must never be exposed directly in the DSL.
     """
+
     __slots__ = ()
 
     GUARD = object()
