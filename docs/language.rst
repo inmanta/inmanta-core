@@ -217,9 +217,6 @@ The ``in`` and ``not in`` operators can be used to check if a value is present i
     condition6 = not "/a/b/d" in myfiles # evaluates to True
 
 
-
-
-
 The ``is defined`` keyword checks if a value was assigned to an attribute or a relation of a certain entity. The following
 example sets the monitoring configuration on a certain host when it has a monitoring server associated:
 
