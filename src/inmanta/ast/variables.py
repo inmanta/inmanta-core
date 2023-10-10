@@ -291,7 +291,7 @@ class AttributeReference(Reference):
         # The tricky one!
 
         # introduce proxy variable to point to the eventual result of this stmt
-        proxy = ResultVariableProxy()
+        proxy: ResultVariableProxy[object] = ResultVariableProxy()
         if resultcollector is not None:
             proxy.listener(resultcollector, self.location)
         # construct waiter
