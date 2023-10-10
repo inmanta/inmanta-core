@@ -47,7 +47,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, parse_timestamp
 from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -1217,7 +1217,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     caplog.clear()
     with caplog.at_level(logging.DEBUG):
         # Mark deployment as done
-        now = datetime.now()
+        now = datetime.now().astimezone()
         if endpoint_to_use == "resource_deploy_done":
             result = await agent._client.resource_deploy_done(
                 tid=env_id,
@@ -1266,7 +1266,25 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is not None
-    assert resource_action["messages"] == [
+
+    def check_messages(actual_result, expected_result):
+        """
+        Check that the returned message is as expected. This is necessary over a simple equality check because
+        of the timestamp field being of type str. e.g. The following strings represent the same timestamp but aren't equal:
+        s1 = 2023-10-10T12:50:52.847044+02:00
+        s2 = 2023-10-10T10:50:52.847044+00:00
+        """
+        keys = ["level", "msg", "args", "kwargs", "timestamp"]
+        for actual_message, expected_message in zip(actual_result, expected_result):
+            for key in keys:
+                actual_value = actual_message.get(key)
+                expected_value = expected_message.get(key)
+                if key == "timestampS":
+                    assert parse_timestamp(actual_value) == parse_timestamp(expected_value)
+                else:
+                    assert actual_value == expected_value
+
+    expected_resource_action_messages = [
         {
             "level": const.LogLevel.DEBUG.name,
             "msg": "message",
@@ -1282,6 +1300,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
             "timestamp": now.isoformat(timespec="microseconds"),
         },
     ]
+    check_messages(resource_action["messages"], expected_resource_action_messages)
     assert resource_action["status"] == const.ResourceState.deployed
     assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
     assert resource_action["change"] == const.Change.purged.value

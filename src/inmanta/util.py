@@ -44,7 +44,7 @@ import asyncpg
 from tornado import gen
 
 from crontab import CronTab
-from inmanta import COMPILER_VERSION
+from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
@@ -416,6 +416,14 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
             return timestamp.replace(tzinfo=None).isoformat(timespec="microseconds")
 
     return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")
+
+
+def parse_timestamp(timestamp: str) -> datetime.datetime:
+    try:
+        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
+    except ValueError:
+        # interpret naive datetimes as UTC
+        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
 
 class JSONSerializable(ABC):
