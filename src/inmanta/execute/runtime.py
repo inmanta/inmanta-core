@@ -1081,21 +1081,6 @@ class RawUnit(Waiter):
         self.done = True
 
 
-# TODO: don't implement this now: make a ticket for it
-# TODO: slotted class probably better than dataclass? Does slotted dataclass exist?
-# @dataclass(frozen=True)
-# class DynamicContext:
-#    parent: Optional["DynamicContext"]
-#    # TODO: parametrize with bottom type
-#    resultcollectors: abc.Mapping[RequiresEmitStatement, ResultCollector]
-#
-#    # TODO: should we allow any RequiresEmitStatement?
-#    # TODO: parametrize ResultCollector with bottom type?
-#    def result_collector_for_expression(self, expression: ExpressionStatement) -> Optional[ResultCollector]:
-#        # TODO
-#        return None
-
-
 """
 Resolution
 
