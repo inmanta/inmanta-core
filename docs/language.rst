@@ -208,13 +208,13 @@ The ``in`` and ``not in`` operators can be used to check if a value is present i
     myfiles = ["/a/b/c", "/c/d/e", "x/y/z/u/v/w"]
 
     condition1 = "/a/b/c" in myfiles # evaluates to True
-    condition2 = "/a/b/d" in myfiles # evaluates to False
+    condition2 = "/f/g/h" in myfiles # evaluates to False
 
     condition3 = "/a/b/c" not in myfiles # evaluates to False
-    condition4 = "/a/b/d" not in myfiles # evaluates to True
+    condition4 = "/f/g/h" not in myfiles # evaluates to True
 
     condition5 = not "/a/b/c" in myfiles # evaluates to False
-    condition6 = not "/a/b/d" in myfiles # evaluates to True
+    condition6 = not "/f/g/h" in myfiles # evaluates to True
 
 
 The ``is defined`` keyword checks if a value was assigned to an attribute or a relation of a certain entity. The following
