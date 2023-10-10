@@ -67,9 +67,9 @@ async def test_dump_db(server, client, postgres_db, database_name):
     shutil.copytree(project_source, project_dir)
 
     check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_splay_time", 0))
-    check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_interval", 0))
+    check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_interval", "0"))
     check_result(await client.set_setting(env_id_1, "autostart_agent_repair_splay_time", 0))
-    check_result(await client.set_setting(env_id_1, "autostart_agent_repair_interval", 600))
+    check_result(await client.set_setting(env_id_1, "autostart_agent_repair_interval", "600"))
     check_result(await client.set_setting(env_id_1, "auto_deploy", False))
 
     await client.notify_change(id=env_id_1)
