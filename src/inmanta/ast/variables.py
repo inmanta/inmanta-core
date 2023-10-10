@@ -290,9 +290,9 @@ class AttributeReference(Reference):
         # The tricky one!
 
         # introduce proxy variable to point to the eventual result of this stmt
-        proxy: ResultVariableProxy[object] = ResultVariableProxy()
-        if resultcollector is not None:
-            proxy.listener(resultcollector, self.location)
+        proxy: ResultVariableProxy[object] = ResultVariableProxy(
+            listener=(resultcollector, self.location) if resultcollector is not None else None,
+        )
         # construct waiter
         reader: VariableReader = VariableReader(target=proxy)
         hook: VariableReferenceHook = VariableReferenceHook(

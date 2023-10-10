@@ -324,20 +324,24 @@ class ListElementVariable(ResultVariable[T]):
         return True
 
 
-# TODO: add to docstring that this class will always implement listener interface
 class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
-    variables without resolving the right hand side at the time of assignment.
+    variables without resolving the right hand side at the time of assignment. Supports a single listener to be registered
+    at construction. This class will ensure that the connected variable's value(s) is (are) reported to the listener, even if
+    the variable itself does not support listeners.
     This class does not support setting values or related operations such as acquiring progression promises.
     """
 
-    __slots__ = ("variable", "_listeners", "_waiters", "_notify_listeners")
+    __slots__ = ("variable", "_listener", "_waiters", "_notify_listeners")
 
-    def __init__(self, variable: Optional[VariableABC[T]] = None) -> None:
+    def __init__(
+        self, variable: Optional[VariableABC[T]] = None, listener: Optional[tuple[ResultCollector[T], Location]] = None
+    ) -> None:
         self.variable: Optional[VariableABC[T]] = variable
-        self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
+        self._listener: Optional[tuple[ResultCollector[T], Location]] = listener
         self._waiters: Optional[list["Waiter"]] = []
+        # are we responsible for notifying listeners ourselves?
         self._notify_listeners: bool = False
 
     def connect(self, variable: VariableABC[T]) -> None:
@@ -347,20 +351,18 @@ class ResultVariableProxy(VariableABC[T]):
         if self.variable is not None and self.variable != variable:
             raise Exception("Trying to connect a variable to a proxy that is already connected to another variable.")
         self.variable = variable
-        assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
         assert self._waiters is not None  # only set to None after a variable is connected to prevent data leaks
-        for listener in self._listeners:
-            registered_listener: bool = self.variable.listener(*listener)
-            if not registered_listener:
+        if self._listener is not None:
+            registered_listener: bool = self.variable.listener(*self._listener)
+            if registered_listener:
+                # clear listener to prevent data leaks
+                self._listener = None
+            else:
+                # variable does not support listeners, we'll have to notify the listener ourselves
                 self._notify_listeners = True
-                break
         for waiter in self._waiters:
             self.variable.waitfor(waiter)
-        # TODO: if simplified, this can go?
-        # clear listeners to prevent data leaks, unless we need to notify them ourselves or if none have been set, in which
-        # case we may or may not have to notify any future listeners so we need to keep them.
-        if self._listeners and not self._notify_listeners:
-            self._listeners = None
+        # clear waiters to prevent data leaks
         self._waiters = None
 
     def is_ready(self) -> bool:
@@ -376,29 +378,20 @@ class ResultVariableProxy(VariableABC[T]):
             )
         value: T = self.variable.get_value()
         if self._notify_listeners:
-            # TODO: comments
-            assert self._listeners is not None
-            for listener, location in self._listeners:
+            assert self._listener is not None
+            listener, location = self._listener
+            # simple case: single value. Multi-value variables implement their own listener functionality
+            if not isinstance(value, NoneValue):
                 listener.receive_result(value, location)
-            self._listeners = None
+            # clean up: prevent data leaks and ensure listener is only notified once
+            self._listener = None
             self._notify_listeners = False
         return value
 
-    # TODO: simplify by requiring listeners to be registered at construction?
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
-        if self.variable is None:
-            assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
-            self._listeners.append((resultcollector, location))
-        else:
-            registered_listener: bool = self.variable.listener(resultcollector, location)
-            if not registered_listener:
-                if self.is_ready():
-                    resultcollector.receive_result(self.get_value(), location)
-                else:
-                    assert self._listeners is not None
-                    self._listeners.append((resultcollector, location))
-                    self._notify_listeners = True
-        return True
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[False]:
+        # no need for this right now and implementing it greatly complicates the logic of this class
+        # a single listener can be registered at construction time
+        return False
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
