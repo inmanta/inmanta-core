@@ -1279,7 +1279,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
             for key in keys:
                 actual_value = actual_message.get(key)
                 expected_value = expected_message.get(key)
-                if key == "timestampS":
+                if key == "timestamp":
                     assert parse_timestamp(actual_value) == parse_timestamp(expected_value)
                 else:
                     assert actual_value == expected_value
