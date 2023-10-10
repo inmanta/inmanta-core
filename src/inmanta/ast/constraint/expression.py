@@ -294,7 +294,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
         # helper returned: return result
         return requires[self]
 
-    def _fulfill_promises(self, requires: Dict[object, object]) -> None:
+    def _fulfill_promises(self, requires: dict[object, object]) -> None:
         # no need to fulfill promises, already done in resume
         pass
 

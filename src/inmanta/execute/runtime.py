@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Literal, Optional, Set, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
@@ -143,7 +143,7 @@ class VariableABC(Generic[T_co]):
         """
         raise NotImplementedError()
 
-    def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> bool:
         """
         Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
         assignments of `null` will not be reported.
@@ -153,8 +153,10 @@ class VariableABC(Generic[T_co]):
 
         :param resultcollector: The collector for the values of this variable.
         :param location: The location associated with this listener.
+        :return: True iff this variable will report values to the listener. Simple variables may not implement the listen
+            capability and will return False. A variable will always return the same value regardless of the parameters.
         """
-        raise NotImplementedError()
+        return False
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
@@ -195,9 +197,10 @@ class WrappedValueVariable(VariableABC[T]):
     def get_value(self) -> T:
         return self.value
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
         if not isinstance(self.value, NoneValue):
             resultcollector.receive_result(self.value, location)
+        return True
 
     def waitfor(self, waiter: "Waiter") -> None:
         waiter.ready(self)
@@ -291,12 +294,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     def receive_result(self, value: T, location: Location) -> bool:
         return True
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
-        """
-        Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
-        """
-        pass
-
     def is_multi(self) -> bool:
         return False
 
@@ -320,12 +317,14 @@ class ListElementVariable(ResultVariable[T]):
         super().__init__()
         self.set_value(value, location)
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
         assert self.value is not None
         if not isinstance(self.value, NoneValue):
             resultcollector.receive_result(self.value, location)
+        return True
 
 
+# TODO: add to docstring that this class will always implement listener interface
 class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
@@ -333,12 +332,13 @@ class ResultVariableProxy(VariableABC[T]):
     This class does not support setting values or related operations such as acquiring progression promises.
     """
 
-    __slots__ = ("variable", "_listeners", "_waiters")
+    __slots__ = ("variable", "_listeners", "_waiters", "_notify_listeners")
 
     def __init__(self, variable: Optional[VariableABC[T]] = None) -> None:
         self.variable: Optional[VariableABC[T]] = variable
         self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
         self._waiters: Optional[list["Waiter"]] = []
+        self._notify_listeners: bool = False
 
     def connect(self, variable: VariableABC[T]) -> None:
         """
@@ -350,10 +350,17 @@ class ResultVariableProxy(VariableABC[T]):
         assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
         assert self._waiters is not None  # only set to None after a variable is connected to prevent data leaks
         for listener in self._listeners:
-            self.variable.listener(*listener)
+            registered_listener: bool = self.variable.listener(*listener)
+            if not registered_listener:
+                self._notify_listeners = True
+                break
         for waiter in self._waiters:
             self.variable.waitfor(waiter)
-        self._listeners = None
+        # TODO: if simplified, this can go?
+        # clear listeners to prevent data leaks, unless we need to notify them ourselves or if none have been set, in which
+        # case we may or may not have to notify any future listeners so we need to keep them.
+        if self._listeners and not self._notify_listeners:
+            self._listeners = None
         self._waiters = None
 
     def is_ready(self) -> bool:
@@ -367,14 +374,31 @@ class ResultVariableProxy(VariableABC[T]):
             raise Exception(
                 "Trying to get value for proxy variable that has not been connected yet. Use `waitfor` to wait for a value."
             )
-        return self.variable.get_value()
+        value: T = self.variable.get_value()
+        if self._notify_listeners:
+            # TODO: comments
+            assert self._listeners is not None
+            for listener, location in self._listeners:
+                listener.receive_result(value, location)
+            self._listeners = None
+            self._notify_listeners = False
+        return value
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    # TODO: simplify by requiring listeners to be registered at construction?
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
         if self.variable is None:
             assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
             self._listeners.append((resultcollector, location))
         else:
-            self.variable.listener(resultcollector, location)
+            registered_listener: bool = self.variable.listener(resultcollector, location)
+            if not registered_listener:
+                if self.is_ready():
+                    resultcollector.receive_result(self.get_value(), location)
+                else:
+                    assert self._listeners is not None
+                    self._listeners.append((resultcollector, location))
+                    self._notify_listeners = True
+        return True
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
@@ -636,7 +660,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         self.set_value(value, location)
         return False
 
-    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> Literal[True]:
         for value in self.value:
             resultcollector.receive_result(value, location)
         if not self.hasValue:
@@ -645,10 +669,11 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
                 # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
                 # consider the new one to have no progress potential because we don't track it separately
                 self._nb_gradual_waiters += 1
-                return
+                return True
             self._listeners[resultcollector] = None
             if resultcollector.pure_gradual():
                 self._nb_gradual_waiters += 1
+        return True
 
     def is_multi(self) -> bool:
         return True

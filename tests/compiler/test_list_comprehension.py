@@ -290,7 +290,7 @@ def test_list_comprehension_nested_tail(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-# TODO: tests with constructor in comprehension expression
+# TODO: tests failures for new tests on master
 def test_list_comprehension_gradual(snippetcompiler) -> None:
     """
     Verify that list comprehensions are executed gradually.
@@ -301,6 +301,7 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             entity A:
                 string? name = null
             end
+            A.opt [0:1] -- A
             A.others [0:] -- A
             implement A using std::none
 
@@ -341,9 +342,64 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
                 w.others += A()
             end
 
-            count = 2
-            count = std::count(a.others)
-            count = std::count(b.others)
+            # verify that a constructor expression does not block gradual execution,
+            # which would result in a list modified after freeze
+            d = A(
+                name="d",
+                others=[
+                    A()
+                    for _ in [1, 2, 3]
+                ],
+            )
+
+            # verify that attribute references report values correctly and gradually,
+            # both for explicit attribute references and implicit self
+            entity E extends A: end
+            f = A()
+            g = A()
+            h = A()
+            i = A()
+            j = A()
+            k = A()
+            implementation e for E:
+                # implicit relation access (Reference) for optional
+                for x in [opt for _ in [1, 2, 3]]:
+                    # verify that optional relation reference correctly reports to for loop's result collector
+                    f.others += x
+                end
+                # explicit relation access through self (AttributeReference) for optional
+                for x in [self.opt for _ in [1, 2, 3]]:
+                    # verify that optional relation reference correctly reports to for loop's result collector
+                    g.others += x
+                end
+
+                # implicit relation access (Reference) for list relation
+                ha = A()
+                for x in [others for _ in [1, 2, 3]]:
+                    h.others += x
+                    # this only works if the for loop receives its values gradually from the list comprehension
+                    self.others += ha
+                end
+                # explicit relation access through self (AttributeReference) for list relation
+                ia = A()
+                for x in [self.others for _ in [1, 2, 3]]:
+                    i.others += x
+                    # this only works if the for loop receives its values gradually from the list comprehension
+                    self.others += ia
+                end
+            end
+            implement E using e
+            e = E()
+            e.opt = A()
+            e.others = [A()]
+
+            ##############
+            # assertions #
+            ##############
+
+            a_count = 2
+            a_count = std::count(a.others)
+            a_count = std::count(b.others)
 
             c_count = 1
             c_count = std::count(c.others)
@@ -351,9 +407,19 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             v_count = 7
             v_count = std::count(v.others)
 
-            # a/b's 2 children, c's 1 child, y's 1 extra child, w's 1 extra child
-            w_count = 5
+            w_count = 5  # a/b's 2 children, c's 1 child, y's 1 extra child, w's 1 extra child
             w_count = std::count(w.others)
+
+            d_count = 3
+            d_count = std::count(d.others)
+
+            f_count = 1
+            f_count = std::count(f.others)
+            f_count = std::count(g.others)
+
+            h_count = 3  # initial value + ha + ia
+            h_count = std::count(h.others)
+            h_count = std::count(i.others)
             """.strip(
                 "\n"
             )

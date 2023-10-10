@@ -85,7 +85,7 @@ class Reference(ExpressionStatement):
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
-    ) -> Dict[object, VariableABC]:
+    ) -> dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
         requires[self.name] = resolver.lookup(self.full_name)
@@ -93,16 +93,15 @@ class Reference(ExpressionStatement):
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector, *, propagate_unset: bool = False
-    ) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
-        var: ResultVariable = resolver.lookup(self.full_name)
-        # TODO: cleanup + deduplicate from AttributeReference
-        if isinstance(var, BaseListVariable):
-            var.listener(resultcollector, self.location)
-        else:
-            requires[(self, ResultCollector)] = WrappedValueVariable(resultcollector)
-        requires[self.name] = var
-        return requires
+    ) -> dict[object, VariableABC]:
+        result: dict[object, VariableABC] = self.requires_emit(resolver, queue, propagate_unset=propagate_unset)
+        var: VariableABC = result[self.name]
+        assert isinstance(var, ResultVariable)
+        listener_registered: bool = var.listener(resultcollector, self.location)
+        if not listener_registered:
+            # pass on resultcollector for explicit reporting in execute
+            result[(self, ResultCollector)] = WrappedValueVariable(resultcollector)
+        return result
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
@@ -169,13 +168,11 @@ class VariableReader(VariableResumer, Generic[T]):
     Optionally subscribes a result collector to intermediate values.
     """
 
-    __slots__ = ("owner", "target", "resultcollector")
+    __slots__ = ("target",)
 
-    def __init__(self, owner: Statement, target: ResultVariableProxy[T], resultcollector: Optional[ResultCollector[T]]) -> None:
+    def __init__(self, target: ResultVariableProxy[T]) -> None:
         super().__init__()
-        self.owner: Statement = owner
         self.target: ResultVariableProxy[T] = target
-        self.resultcollector: Optional[ResultCollector[T]] = resultcollector
 
     def variable_resume(
         self,
@@ -183,8 +180,6 @@ class VariableReader(VariableResumer, Generic[T]):
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
-        if self.resultcollector:
-            variable.listener(self.resultcollector, self.owner.location)
         self.target.connect(variable)
 
 
@@ -295,10 +290,12 @@ class AttributeReference(Reference):
 
         # The tricky one!
 
-        # introduce temp variable to contain the eventual result of this stmt
-        temp = ResultVariableProxy()
+        # introduce proxy variable to point to the eventual result of this stmt
+        proxy = ResultVariableProxy()
+        if resultcollector is not None:
+            proxy.listener(resultcollector, self.location)
         # construct waiter
-        reader: VariableReader = VariableReader(owner=self, target=temp, resultcollector=resultcollector)
+        reader: VariableReader = VariableReader(target=proxy)
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             str(self.attribute),
@@ -308,7 +305,7 @@ class AttributeReference(Reference):
         self.copy_location(hook)
         hook.schedule(resolver, queue)
         # wait for the attribute value
-        requires[self] = temp
+        requires[self] = proxy
 
         return requires
 

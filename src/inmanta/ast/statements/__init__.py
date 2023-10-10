@@ -184,7 +184,7 @@ class RequiresEmitStatement(DynamicStatement):
         self._fulfill_promises(requires)
         return None
 
-    def _fulfill_promises(self, requires: Dict[object, object]) -> None:
+    def _fulfill_promises(self, requires: dict[object, object]) -> None:
         """
         Given a requires dict, fulfills this statements dynamic promises
         """
