@@ -142,6 +142,7 @@ class ResourceNotFoundExcpetion(Exception):
 class IgnoreResourceException(Exception):
     """
     Throw this exception when a resource should not be included by the exported.
+    Typically resources use this to indicate that they are not managed by the orchestrator.
     """
 
 
