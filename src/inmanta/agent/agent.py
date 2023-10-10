@@ -227,6 +227,7 @@ class ResourceAction(ResourceActionBase):
                     self.change = const.Change.nochange
                     self.changes = {}
                     self.future.set_result(ResourceActionResult(cancel=False))
+                    return
                 finally:
                     self.running = False
 
