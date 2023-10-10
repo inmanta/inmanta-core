@@ -38,12 +38,12 @@ def check_only_contains_default_setting(settings_dict: Dict[str, object]) -> Non
         assert setting_value == get_environment_setting_default(setting_name)
 
 
-async def test_api_return_type(client, server, environment_default):
+async def test_api_return_type(client, server, environment):
     """
     https://github.com/inmanta/inmanta-core/pull/6574 changed the type of AUTOSTART_AGENT_REPAIR_INTERVAL and
     AUTOSTART_AGENT_DEPLOY_INTERVAL from int to str. This test makes sure the type returned by the api is correct
     """
-    result = await client.get_setting(tid=environment_default, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+    result = await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
     assert result.code == 200
     assert result.result["value"] == "86400"
