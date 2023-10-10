@@ -54,6 +54,9 @@ class Server(protocol.ServerSlice):
     compiler: "CompilerService"
     _server: protocol.Server
 
+    # The number of seconds after which the call to the get_status() endpoint of a server slice should time out.
+    GET_SERVER_STATUS_TIMEOUT: int = 1
+
     def __init__(self) -> None:
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
@@ -130,7 +133,10 @@ class Server(protocol.ServerSlice):
 
         async def collect_for_slice(slice_name: str, slice: protocol.ServerSlice) -> SliceStatus:
             try:
-                return SliceStatus(name=slice_name, status=await asyncio.wait_for(slice.get_status(), 0.1))
+                return SliceStatus(
+                    name=slice_name,
+                    status=await asyncio.wait_for(slice.get_status(), self.GET_SERVER_STATUS_TIMEOUT),
+                )
             except asyncio.TimeoutError:
                 return SliceStatus(
                     name=slice_name,
@@ -141,7 +147,7 @@ class Server(protocol.ServerSlice):
                 )
             except Exception:
                 LOGGER.error(
-                    f"The following error occured while trying to determine the status of slice {slice_name}",
+                    f"The following error occurred while trying to determine the status of slice {slice_name}",
                     exc_info=True,
                 )
                 return SliceStatus(name=slice_name, status={"error": "An unexpected error occurred, reported to server log"})

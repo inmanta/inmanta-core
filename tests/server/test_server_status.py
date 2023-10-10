@@ -18,6 +18,7 @@
 import asyncio
 
 from inmanta import data
+from inmanta.server.server import Server
 from inmanta.server.services.compilerservice import CompilerService
 
 
@@ -53,6 +54,8 @@ async def test_server_status_database_unreachable(server, client):
 
 
 async def test_server_status_timeout(server, client, monkeypatch):
+    monkeypatch.setattr(Server, "GET_SERVER_STATUS_TIMEOUT", 0.1)
+
     async def hang(self):
         await asyncio.sleep(0.2)
         return {}
