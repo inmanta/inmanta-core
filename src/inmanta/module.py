@@ -1985,7 +1985,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         else:
             self.strict_deps_check = self._metadata.strict_deps_check
 
-        self._complete_ast: Optional[Tuple[List[Statement], List[BasicBlock]]]= None
+        self._complete_ast: Optional[Tuple[List[Statement], List[BasicBlock]]] = None
         # Cache for the complete ast
 
     def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
@@ -2119,7 +2119,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.verify()
             self.load_plugins()
             end = time()
-            LOGGER.debug("Module loading took %f seconds", end - start)
+            LOGGER.debug("Module loading took %0.03f seconds", end - start)
 
     def invalidate_state(self, module: Optional[str] = None) -> None:
         """
@@ -2163,7 +2163,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             blocks.append(nb)
 
         end = time()
-        LOGGER.info("Parsing took %f seconds", end - start)
+        LOGGER.info("Parsing took %0.03f seconds", end - start)
         cache_manager.log_stats()
         self._complete_ast = (statements, blocks)
         return self._complete_ast

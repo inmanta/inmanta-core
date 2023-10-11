@@ -641,7 +641,6 @@ def export(options: argparse.Namespace) -> None:
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
 
-
 class Color(enum.Enum):
     RED = "red"
     GREEN = "green"

@@ -493,7 +493,7 @@ class Scheduler(object):
 
         now = time.time()
         LOGGER.info(
-            "Compilation took %f seconds",
+            "Compilation took %0.03f seconds",
             now - start,
         )
 
