@@ -290,7 +290,6 @@ def test_list_comprehension_nested_tail(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-# TODO: tests failures for new tests on master
 def test_list_comprehension_gradual(snippetcompiler) -> None:
     """
     Verify that list comprehensions are executed gradually.
