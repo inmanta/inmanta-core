@@ -295,7 +295,7 @@ class SessionEndpoint(Endpoint, CallTarget):
             LOGGER.error(msg)
             if method_call.reply_id is not None:
                 await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
-                return
+            return
 
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query
