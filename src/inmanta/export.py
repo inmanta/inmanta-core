@@ -361,6 +361,7 @@ class Exporter(object):
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
         """
+        start = time()
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
         resource_sets_to_remove_all: List[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
@@ -396,6 +397,9 @@ class Exporter(object):
 
         resources = self.resources_to_list()
 
+        export_done = time.time()
+        LOGGER.info("Exporter took: %0.03f seconds", export_done - start)
+
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
@@ -411,6 +415,9 @@ class Exporter(object):
         exported_version: int = self._version
         if include_status:
             return exported_version, self._resources, self._resource_state
+
+        LOGGER.info("Put version took: %0.03f seconds", time.time() - export_done)
+
         return exported_version, self._resources
 
     def add_resource(self, resource: Resource) -> None:

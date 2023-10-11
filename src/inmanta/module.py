@@ -2112,8 +2112,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 self.install_modules()
             self.get_complete_ast()
             self.loaded = True
+            start = time()
             self.verify()
             self.load_plugins()
+            end = time()
+            LOGGER.debug("Module loading took %f seconds", end - start)
 
     def invalidate_state(self, module: Optional[str] = None) -> None:
         """

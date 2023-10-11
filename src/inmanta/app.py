@@ -606,6 +606,7 @@ def export(options: argparse.Namespace) -> None:
     types: Optional[Dict[str, inmanta_type.Type]]
     scopes: Optional[Namespace]
 
+    t1 = time()
     with summary_reporter.compiler_exception.capture():
         try:
             (types, scopes) = do_compile()
@@ -637,6 +638,7 @@ def export(options: argparse.Namespace) -> None:
         conn.release_version(tid, version, True, agent_trigger_method)
 
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+    LOGGER.info("Total export time: %0.03f seconds", time.time() - t1)
 
 
 class Color(enum.Enum):
