@@ -25,7 +25,7 @@ async def update(connection: Connection) -> None:
     """
     schema = """
         -- Foreign key resourceaction_resource(resource_action_id) --> resource(action_id)
-        CREATE INDEX resourceaction_resource_resource_action_id_index ON resourceaction_resource(resource_action_id);
+        CREATE INDEX resourceaction_resource_resource_action_id_index ON resourceaction_resource(resource_action_id) IF NOT EXISTS;
 
         -- Required by query done in the ConfigurationModel.delete_cascade() method that deletes
         -- facts for resources that don't exist anymore.
