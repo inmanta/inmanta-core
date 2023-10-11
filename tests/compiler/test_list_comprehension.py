@@ -344,11 +344,12 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
 
             # verify that a constructor expression does not block gradual execution,
             # which would result in a list modified after freeze
+            dd = A(name="dd", others=[A(), A()])
             d = A(
                 name="d",
                 others=[
                     A()
-                    for _ in [1, 2, 3]
+                    for _ in dd.others
                 ],
             )
 
@@ -410,7 +411,7 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             w_count = 5  # a/b's 2 children, c's 1 child, y's 1 extra child, w's 1 extra child
             w_count = std::count(w.others)
 
-            d_count = 3
+            d_count = 2
             d_count = std::count(d.others)
 
             f_count = 1
