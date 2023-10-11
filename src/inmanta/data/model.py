@@ -25,6 +25,7 @@ import pydantic
 import pydantic.schema
 from pydantic import Extra, root_validator, validator
 from pydantic.fields import ModelField
+from pydantic.types import StrictFloat, StrictInt, StrictStr
 
 import inmanta
 import inmanta.ast.export as ast_export
@@ -234,7 +235,7 @@ class AttributeStateChange(BaseModel):
         return v
 
 
-EnvSettingType = Union[StrictNonIntBool, int, float, str, Dict[str, Union[str, int, StrictNonIntBool]]]
+EnvSettingType = Union[StrictNonIntBool, StrictInt, StrictFloat, StrictStr, Dict[str, Union[str, int, StrictNonIntBool]]]
 
 
 class Environment(BaseModel):
