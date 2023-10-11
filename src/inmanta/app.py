@@ -382,7 +382,7 @@ def compile_project(options: argparse.Namespace) -> None:
         t1 = time.time()
         with summary_reporter.compiler_exception.capture():
             do_compile()
-        LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
+        LOGGER.info("The entire compile command took: %0.03f seconds", time.time() - t1)
 
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
@@ -637,8 +637,9 @@ def export(options: argparse.Namespace) -> None:
         agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
         conn.release_version(tid, version, True, agent_trigger_method)
 
+    LOGGER.info("The entire export command took: %0.03f seconds", time.time() - t1)
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
-    LOGGER.info("Total export time: %0.03f seconds", time.time() - t1)
+
 
 
 class Color(enum.Enum):
