@@ -80,11 +80,14 @@ class ReturnClient(Client):
         self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
     ) -> common.Result:
         call_spec = method_properties.build_call(args, kwargs)
+        expect_reply = method_properties.reply
         try:
             if method_properties.timeout:
-                return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
+                return_value = await self.session.put_call(
+                    call_spec, timeout=method_properties.timeout, expect_reply=expect_reply
+                )
             else:
-                return_value = await self.session.put_call(call_spec)
+                return_value = await self.session.put_call(call_spec, expect_reply=expect_reply)
         except asyncio.CancelledError:
             return common.Result(code=500, result={"message": "Call timed out"})
 
@@ -426,6 +429,9 @@ class Session(object):
         self._callhandle: Optional[asyncio.TimerHandle] = None
         self.expired: bool = False
 
+        self.last_dispatched_call: float = time.monotonic()
+        self.dispatch_delay = 0.1  # keep at least 100 ms between dispatches
+
         self.tid: uuid.UUID = tid
         self.endpoint_names: Set[str] = endpoint_names
         self.nodename: str = nodename
@@ -479,23 +485,25 @@ class Session(object):
         except asyncio.TimeoutError:
             LOGGER.warning(log_message)
 
-    def put_call(self, call_spec: common.Request, timeout: int = 10) -> asyncio.Future:
-        future = asyncio.Future()
-
+    def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
         reply_id = uuid.uuid4()
+        future = asyncio.Future()
 
         LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec.method, call_spec.url, self._sid)
 
-        call_spec.reply_id = reply_id
-        self._queue.put(call_spec)
-        self._sessionstore.add_background_task(
-            self._handle_timeout(
-                future,
-                timeout,
-                "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid),
+        if expect_reply:
+            call_spec.reply_id = reply_id
+            self._sessionstore.add_background_task(
+                self._handle_timeout(
+                    future,
+                    timeout,
+                    "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid),
+                )
             )
-        )
-        self._replies[reply_id] = future
+            self._replies[reply_id] = future
+        else:
+            future.set_result({"code": 200, "result": None})
+        self._queue.put(call_spec)
 
         return future
 
@@ -726,7 +734,15 @@ class SessionManager(ServerSlice):
         session: Session = await self.get_or_create_session(sid, env.id, set(endpoint_names), nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
+
+        # keep a minimal timeout between sending out calls to allow them to batch up
+        now = time.monotonic()
+        wait_time = session.dispatch_delay - (now - session.last_dispatched_call)
+        if wait_time > 0:
+            await asyncio.sleep(wait_time)
+
         call_list = await session.get_calls(no_hang=no_hang)
+
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
             return 200, {"method_calls": call_list}

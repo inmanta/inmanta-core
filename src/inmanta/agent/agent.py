@@ -311,43 +311,49 @@ class RemoteResourceAction(ResourceActionBase):
         self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
         await dummy.future
-        try:
-            result = await self.scheduler.get_client().get_resource(
-                self.scheduler.agent._env_id,
-                self.resource_id.resource_version_str(),
-                logs=True,
-                log_action=const.ResourceAction.deploy,
-                log_limit=1,
-            )
-            if result.code != 200 or result.result is None:
-                LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
-                return
+        async with self.scheduler.agent.process.cad_ratelimiter:
+            try:
+                # got event or cancel first
+                if self.is_done():
+                    return
 
-            status = const.ResourceState[result.result["resource"]["status"]]
-            self.running = True
-            if status in const.TRANSIENT_STATES or self.future.done():
-                # wait for event
-                pass
-            else:
-                if "logs" in result.result and len(result.result["logs"]) > 0:
-                    log = result.result["logs"][0]
+                self.running = True
+                result = await self.scheduler.get_client().get_resource(
+                    self.scheduler.agent._env_id,
+                    self.resource_id.resource_version_str(),
+                    logs=True,
+                    log_action=const.ResourceAction.deploy,
+                    log_limit=1,
+                )
+                if result.code != 200 or result.result is None:
+                    LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
+                    return
 
-                    if "change" in log and log["change"] is not None:
-                        self.change = const.Change[log["change"]]
-                    else:
-                        self.change = const.Change.nochange
+                status = const.ResourceState[result.result["resource"]["status"]]
 
-                    if "changes" in log and log["changes"] is not None and str(self.resource_id) in log["changes"]:
-                        self.changes = log["changes"]
-                    else:
-                        self.changes = {}
-                    self.status = status
+                if status in const.TRANSIENT_STATES or self.future.done():
+                    # wait for event
+                    pass
+                else:
+                    if "logs" in result.result and len(result.result["logs"]) > 0:
+                        log = result.result["logs"][0]
 
-                self.future.set_result(ResourceActionResult(cancel=False))
-        except Exception:
-            LOGGER.exception("could not get status for remote resource")
-        finally:
-            self.running = False
+                        if "change" in log and log["change"] is not None:
+                            self.change = const.Change[log["change"]]
+                        else:
+                            self.change = const.Change.nochange
+
+                        if "changes" in log and log["changes"] is not None and str(self.resource_id) in log["changes"]:
+                            self.changes = log["changes"]
+                        else:
+                            self.changes = {}
+                        self.status = status
+
+                    self.future.set_result(ResourceActionResult(cancel=False))
+            except Exception:
+                LOGGER.exception("could not get status for remote resource")
+            finally:
+                self.running = False
 
     def notify(
         self,
@@ -1103,6 +1109,8 @@ class Agent(SessionEndpoint):
         self.hostname = hostname
         self.poolsize = poolsize
         self.ratelimiter = asyncio.Semaphore(poolsize)
+        # Number of in flight requests for resolving CAD's
+        self.cad_ratelimiter = asyncio.Semaphore(3)
         self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
         self._storage = self.check_storage()
