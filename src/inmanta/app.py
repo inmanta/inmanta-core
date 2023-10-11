@@ -606,7 +606,7 @@ def export(options: argparse.Namespace) -> None:
     types: Optional[Dict[str, inmanta_type.Type]]
     scopes: Optional[Namespace]
 
-    t1 = time()
+    t1 = time.time()
     with summary_reporter.compiler_exception.capture():
         try:
             (types, scopes) = do_compile()

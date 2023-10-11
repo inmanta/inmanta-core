@@ -361,7 +361,7 @@ class Exporter(object):
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
         """
-        start = time()
+        start = time.time()
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
         resource_sets_to_remove_all: List[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
