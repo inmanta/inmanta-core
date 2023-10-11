@@ -1985,6 +1985,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         else:
             self.strict_deps_check = self._metadata.strict_deps_check
 
+        self._complete_ast: Optional[Tuple[List[Statement], List[BasicBlock]]]= None
+        # Cache for the complete ast
+
     def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
@@ -2147,6 +2150,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return imports
 
     def get_complete_ast(self) -> Tuple[List[Statement], List[BasicBlock]]:
+        if self._complete_ast is not None:
+            return self._complete_ast
         start = time()
         # load ast
         (statements, block) = self.get_ast()
@@ -2160,7 +2165,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         end = time()
         LOGGER.info("Parsing took %f seconds", end - start)
         cache_manager.log_stats()
-        return (statements, blocks)
+        self._complete_ast = (statements, blocks)
+        return self._complete_ast
 
     def __load_ast(self) -> Tuple[List[Statement], BasicBlock]:
         main_ns = Namespace("__config__", self.root_ns)
