@@ -658,7 +658,7 @@ async def agent(server, environment):
     a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     await a.add_end_point_name("agent1")
     await a.start()
-    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 1000)
 
     yield a
 

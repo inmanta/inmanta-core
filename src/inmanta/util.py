@@ -404,21 +404,27 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     :param tz_aware: Whether to return timezone aware timestamps or naive, implicit UTC timestamp.
     """
 
-    if tz_aware:
-        if timestamp.tzinfo:
-            return timestamp.isoformat(timespec="microseconds")
-        if naive_utc:
-            return timestamp.replace(tzinfo=datetime.timezone.utc).isoformat(timespec="microseconds")
-        return timestamp.astimezone().isoformat(timespec="microseconds")
+    def convert_timestamp(timestamp, naive_utc, tz_aware) -> datetime.datetime:
+        if tz_aware:
+            if timestamp.tzinfo:
+                return timestamp
+            if naive_utc:
+                return timestamp.replace(tzinfo=datetime.timezone.utc)
+            return timestamp.astimezone()
 
-    if not timestamp.tzinfo:
-        if naive_utc:
-            return timestamp.replace(tzinfo=None).isoformat(timespec="microseconds")
+        if not timestamp.tzinfo:
+            if naive_utc:
+                return timestamp.replace(tzinfo=None)
 
-    return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")
+        return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+    return convert_timestamp(timestamp, naive_utc, tz_aware).isoformat(timespec="microseconds")
 
 
 def parse_timestamp(timestamp: str) -> datetime.datetime:
+    """
+    Parse a timestamp into a timezone aware object. Naive timestamps are assumed to be UTC.
+    """
     try:
         return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
     except ValueError:

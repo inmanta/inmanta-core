@@ -30,6 +30,7 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
+from functools import partial
 from itertools import chain
 from typing import (
     Any,
@@ -4554,7 +4555,7 @@ class Resource(BaseDocument):
     def make_hash(self) -> None:
         character = json.dumps(
             {k: v for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]},
-            default=custom_json_encoder,
+            default=partial(custom_json_encoder, config.server_tz_aware_timestamps.get()),
             sort_keys=True,  # sort the keys for stable hashes when using dicts, see #5306
         )
         m = hashlib.md5()
