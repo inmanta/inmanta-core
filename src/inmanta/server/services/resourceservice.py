@@ -875,7 +875,6 @@ class ResourceService(protocol.ServerSlice):
 
                 for msg in messages:
                     # All other data is stored in the database. The msg was already formatted at the client side.
-                    # raise Exception(f'{msg["timestamp"]}')
                     self.log_resource_action(
                         env.id,
                         resource_ids,

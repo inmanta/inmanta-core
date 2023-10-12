@@ -1170,7 +1170,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
 @pytest.mark.parametrize(
     "endpoint_to_use",
     [
-        # "resource_deploy_done",
+        "resource_deploy_done",
         "resource_action_update"
     ],
 )
@@ -1293,22 +1293,28 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["started"] is not None
     assert resource_action["finished"] is not None
 
+
+    # TODO fix this test case for both values of server_tz_aware_timestamps
+    expected_timestamp: str
+    if opt.server_tz_aware_timestamps.get():
+        expected_timestamp = now.astimezone().isoformat(timespec="microseconds")
+    else:
+        expected_timestamp = now.astimezone(timezone.utc).isoformat(timespec="microseconds")
+
     expected_resource_action_messages = [
         {
             "level": const.LogLevel.DEBUG.name,
             "msg": "message",
             "args": [],
             "kwargs": {"keyword": 123, "none": None},
-            "timestamp": now.astimezone(timezone.utc).isoformat(
-                timespec="microseconds"
-            ),  # Messages timestamps are always serial
+            "timestamp": expected_timestamp,
         },
         {
             "level": const.LogLevel.INFO.name,
             "msg": "test",
             "args": [],
             "kwargs": {},
-            "timestamp": now.astimezone(timezone.utc).isoformat(timespec="microseconds"),
+            "timestamp": expected_timestamp,
         },
     ]
     assert resource_action["messages"] == expected_resource_action_messages
