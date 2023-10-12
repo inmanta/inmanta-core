@@ -398,7 +398,7 @@ class Exporter(object):
         resources = self.resources_to_list()
 
         export_done = time.time()
-        LOGGER.info("Exporter took: %0.03f seconds", export_done - start)
+        LOGGER.debug("Exporter took %0.03f seconds", export_done - start)
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
@@ -410,13 +410,13 @@ class Exporter(object):
             self._version = self.commit_resources(
                 self._version, resources, metadata, partial_compile, resource_sets_to_remove_all
             )
-            LOGGER.info("Committed resources with version %d" % self._version)
+            LOGGER.debug("Committed resources with version %d" % self._version)
 
         exported_version: int = self._version
         if include_status:
             return exported_version, self._resources, self._resource_state
 
-        LOGGER.info("Put version took: %0.03f seconds", time.time() - export_done)
+        LOGGER.debug("Committing resources took %0.03f seconds", time.time() - export_done)
 
         return exported_version, self._resources
 

@@ -492,7 +492,7 @@ class Scheduler(object):
         self.freeze_all(excns)
 
         now = time.time()
-        LOGGER.info(
+        LOGGER.debug(
             "Compilation took %0.03f seconds",
             now - start,
         )

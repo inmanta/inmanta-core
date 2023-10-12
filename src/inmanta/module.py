@@ -2163,7 +2163,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             blocks.append(nb)
 
         end = time()
-        LOGGER.info("Parsing took %0.03f seconds", end - start)
+        LOGGER.debug("Parsing took %0.03f seconds", end - start)
         cache_manager.log_stats()
         self._complete_ast = (statements, blocks)
         return self._complete_ast
