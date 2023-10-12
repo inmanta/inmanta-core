@@ -401,7 +401,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     :param timestamp: The timestamp to get the ISO string for.
     :param naive_utc: Whether to interpret naive timestamps as UTC. By default, naive timestamps are assumed to
     be in local time.
-    :param tz_aware: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
+    :param tz_aware: Whether to return timezone aware timestamps or naive, implicit UTC timestamp.
     """
 
     if tz_aware:
