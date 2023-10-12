@@ -2119,7 +2119,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             self.verify()
             self.load_plugins()
             end = time()
-            LOGGER.debug("Module loading took %0.03f seconds", end - start)
+            LOGGER.debug("Plugin loading took %0.03f seconds", end - start)
 
     def invalidate_state(self, module: Optional[str] = None) -> None:
         """
