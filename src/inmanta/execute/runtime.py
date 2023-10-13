@@ -382,6 +382,7 @@ class ResultVariableProxy(VariableABC[T]):
             listener, location = self._listener
             # simple case: single value. Multi-value variables implement their own listener functionality
             for subvalue in value if isinstance(value, list) else [value]:
+                # TOOD: add test cases
                 # TOOD: should we exclude NoneValue?
                 # TOOD: should we exclude Unknown? Both here and in ExpressionStatement
                 if not isinstance(subvalue, Unknown):
