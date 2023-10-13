@@ -86,7 +86,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class SubConstructor(RequiresEmitStatement):
+class SubConstructor(ExpressionStatement):
     """
     This statement selects an implementation for a given object and
     imports the statements
@@ -129,7 +129,7 @@ class SubConstructor(RequiresEmitStatement):
             e.set_statement(self.implements)
             raise e
 
-    def execute(self, requires: dict[object, object], instance: Instance, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], instance: Instance, queue: QueueScheduler) -> object:
         """
         Evaluate this statement
         """
@@ -241,17 +241,26 @@ class For(RequiresEmitStatement):
 
         return requires
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Evaluate this statement.
         """
         super().execute(requires, resolver, queue)
         var = self.base.execute(requires, resolver, queue)
 
-        if not isinstance(var, (list, Unknown)):
+        if isinstance(var, Unknown):
+            return None
+
+        if not isinstance(var, list):
             raise TypingException(self, "A for loop can only be applied to lists and relations")
 
-        # we're done here: base's execute has reported results to helper
+        helper = requires[self]
+        assert isinstance(helper, GradualFor)
+
+        for loop_var in var:
+            # generate a subscope/namespace for each loop
+            helper.receive_result(loop_var, self.location)
+
         return None
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
@@ -364,7 +373,8 @@ class ListComprehension(RawResumer, ExpressionStatement):
         else:
             collector_helper.complete(iterable, resolver, queue)
 
-    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         # at this point the resumer signalled the helper we were done and the helper waited for all value expressions
         # => just fetch the result
         return requires[self]
@@ -428,30 +438,11 @@ class ListComprehension(RawResumer, ExpressionStatement):
         )
 
 
-class ListComprehensionGuard(Literal):
-    """
-    Representation of the else expression for a list comprehension guard. This statement is an expression in the sense that
-    it behaves like one but its return value represents that a subexpression should be filtered out rather than an actual
-    DSL-compatible value. This special value must always be caught by the statement that creates the guard. This expression
-    must never be exposed directly in the DSL.
-    """
-
-    __slots__ = ()
-
-    GUARD = object()
-    """
-    Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
-    expression for an element should not be executed because the element was filtered by the guard.
-    """
-
-    def __init__(self) -> None:
-        super().__init__(self.GUARD)
-
-    def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
-    ) -> dict[object, VariableABC[object]]:
-        # this statement represents the absence of a result => don't pass on resultcollector
-        return self.requires_emit(resolver, queue)
+LIST_COMPREHENSION_GUARDED = object()
+"""
+Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
+expression for an element should not be executed because the element was filtered by the guard.
+"""
 
 
 class ListComprehensionCollector(RawResumer, ResultCollector[object]):
@@ -515,11 +506,11 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         if self.statement.guard is None:
             guarded_expression = self.statement.value_expression
         else:
-            else_expression: ExpressionStatement = ListComprehensionGuard()
+            else_expression: ExpressionStatement = Literal(LIST_COMPREHENSION_GUARDED)
             guarded_expression = ConditionalExpression(
                 condition=self.statement.guard,
                 if_expression=self.statement.value_expression,
-                else_expression=else_expression,
+                else_expression=Literal(LIST_COMPREHENSION_GUARDED),
             )
             self.statement.copy_location(else_expression)
             self.statement.copy_location(guarded_expression)
@@ -556,9 +547,8 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Mutually exclusive with `set_unknown`.
         """
         if self._results:
+            # We should only have received previous results in gradual mode, if the
             if self.lhs is None:
-                # We should only have received previous results in gradual mode, if any gradual results were received in
-                # non-gradual mode, this indicates a bug in the compiler, likely in this class
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
             if len(self._results) != len(all_values):
                 raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
@@ -571,7 +561,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
         def get(variable: VariableABC[object]) -> Optional[abc.Sequence[object]]:
             value: object = variable.get_value()
-            return None if value is ListComprehensionGuard.GUARD else value if isinstance(value, list) else [value]
+            return None if value is LIST_COMPREHENSION_GUARDED else value if isinstance(value, list) else [value]
 
         # collect all element value expressions' results and write them to the final result variable
         self.final_result.set_value(
@@ -696,7 +686,8 @@ class ConditionalExpression(ExpressionStatement):
     ) -> dict[object, VariableABC[object]]:
         return self.requires_emit(resolver, queue, lhs=resultcollector)
 
-    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         return requires[self]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -1070,11 +1061,12 @@ class Constructor(ExpressionStatement):
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
         return late_args
 
-    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
         """
         Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
+        super().execute(requires, resolver, queue)
 
         # the type to construct
         type_class = self.type
@@ -1252,7 +1244,8 @@ class WrappedKwargs(ExpressionStatement):
         requires.update(self.dictionary.requires_emit(resolver, queue))
         return requires
 
-    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
+        super().execute(requires, resolver, queue)
         dct: object = self.dictionary.execute(requires, resolver, queue)
         if not isinstance(dct, Dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
