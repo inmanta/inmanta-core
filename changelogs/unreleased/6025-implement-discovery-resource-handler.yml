@@ -1,0 +1,6 @@
+description: "Add handler (DiscoveryHandler) to discover unmanaged resources."
+issue-nr: 6025
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"

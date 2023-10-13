@@ -142,6 +142,7 @@ class ResourceNotFoundExcpetion(Exception):
 class IgnoreResourceException(Exception):
     """
     Throw this exception when a resource should not be included by the exported.
+    Typically resources use this to indicate that they are not managed by the orchestrator.
     """
 
 
@@ -293,7 +294,7 @@ class Resource(metaclass=ResourceMeta):
             )
 
         # agent_value is no longer a proxy.DynamicProxy here, force this for mypy validation
-        return Id(entity_name, str(agent_value), attribute_name, attribute_value)
+        return Id(entity_name, str(agent_value), attribute_name, str(attribute_value))
 
     @classmethod
     def map_field(
@@ -422,7 +423,7 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self, **kwargs: Any) -> "Resource":
+    def clone(self: T, **kwargs: Any) -> T:
         """
         Create a clone of this resource. The given kwargs can be used to override attributes.
 
@@ -465,6 +466,15 @@ class PurgeableResource(Resource):
 
 
 @stable_api
+class DiscoveryResource(Resource):
+    """
+    See :inmanta:entity:`std::DiscoveryResource` for more information.
+    """
+
+    fields = ()
+
+
+@stable_api
 class ManagedResource(Resource):
     """
     See :inmanta:entity:`std::ManagedResource` for more information.
@@ -499,6 +509,13 @@ class Id(object):
     """
 
     def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
+        """
+        :attr entity_type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+        :attr agent_name: The agent responsible for this resource.
+        :attr attribute: The key attribute that uniquely identifies this resource on the agent
+        :attr attribute_value: The corresponding value for this key attribute.
+        :attr version: The version number for this resource.
+        """
         self._entity_type = entity_type
         self._agent_name = agent_name
         self._attribute = attribute
@@ -550,9 +567,18 @@ class Id(object):
         return hash(str(self))
 
     def __eq__(self, other: object) -> bool:
-        return str(self) == str(other) and type(self) == type(other)
+        return str(self) == str(other) and type(self) is type(other)
 
     def resource_str(self) -> ResourceIdStr:
+        """
+        String representation for this resource id with the following format:
+            <type>[<agent>,<attribute>=<value>]
+            - type: The resource type, as defined in the configuration model. For example :inmanta:entity:`std::File`.
+            - agent: The agent responsible for this resource.
+            - attribute: The key attribute that uniquely identifies this resource on the agent
+            - value: The corresponding value for this key attribute.
+        :return: Returns a :py:class:`inmanta.data.model.ResourceIdStr`
+        """
         return cast(
             ResourceIdStr,
             "%(type)s[%(agent)s,%(attribute)s=%(value)s]"

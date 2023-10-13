@@ -22,8 +22,9 @@ import traceback
 import typing
 import uuid
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import abc, defaultdict
 from concurrent.futures import Future
+from functools import partial
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
 from tornado import concurrent
@@ -33,7 +34,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -47,7 +48,12 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+# A resource present in the model that describes the resources that should be discovered
+TDiscovery = TypeVar("TDiscovery", bound=resources.DiscoveryResource)
+# The type of elements produced by the resource discovery process.
+TDiscovered = TypeVar("TDiscovered")
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
+TResource = TypeVar("TResource", bound=resources.Resource)
 
 
 @stable_api
@@ -55,7 +61,7 @@ class provider(object):  # noqa: N801
     """
     A decorator that registers a new handler.
 
-    :param resource_type: The type of the resource this handler provides an implementation for.
+    :param resource_type: The type of the resource this handler is responsible for.
                           For example, :inmanta:entity:`std::File`
     :param name: A name to reference this provider.
     """
@@ -418,174 +424,55 @@ class HandlerContext(LoggerABC):
         self._logs.append(log)
 
 
-@stable_api
-class ResourceHandler(object):
+# Explicitly not yet part of the stable API until the interface has had some time to mature.
+class HandlerAPI(ABC, Generic[TResource]):
     """
-    A baseclass for classes that handle resources. New handler are registered with the
-    :func:`~inmanta.agent.handler.provider` decorator.
+    Base class describing the interface between the agent and the handler. This class first defines the interface.
+    At the end, it also defines a number of utility methods.
 
+    New handlers are registered with the :func:`~inmanta.agent.handler.provider` decorator.
     The implementation of a handler should use the ``self._io`` instance to execute io operations. This io objects
     makes abstraction of local or remote operations. See :class:`~inmanta.agent.io.local.LocalIO` for the available
     operations.
-
-    :param agent: The agent that is executing this handler.
-    :param io: The io object to use.
     """
 
     def __init__(self, agent: "inmanta.agent.agent.AgentInstance", io: Optional["IOBase"] = None) -> None:
+        """
+        :param agent: The agent that is executing this handler.
+        :param io: The io object to use.
+        """
         self._agent = agent
-
         if io is None:
             raise Exception("Unsupported: no resource mgmt in RH")
         else:
             self._io = io
-
         self._client: Optional[protocol.SessionClient] = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
-    def run_sync(self, func: typing.Callable[[], typing.Awaitable[T]]) -> T:
-        """
-        Run a the given async function on the ioloop of the agent. It will block the current thread until the future
-        resolves.
-
-        :param func: A function that returns a yieldable future.
-        :return: The result of the async function.
-        """
-        f: Future[T] = Future()
-
-        # This function is not typed because of generics, the used methods and currying
-        def run() -> None:
-            try:
-                result = func()
-                if result is not None:
-                    from tornado.gen import convert_yielded
-
-                    result = convert_yielded(result)
-                    concurrent.chain_future(result, f)
-            except Exception as e:
-                f.set_exception(e)
-
-        self._ioloop.call_soon_threadsafe(run)
-
-        return f.result()
-
-    def set_cache(self, cache: AgentCache) -> None:
-        self.cache = cache
-
-    def get_client(self) -> protocol.SessionClient:
-        """
-        Get the client instance that identifies itself with the agent session.
-
-        :return: A client that is associated with the session of the agent that executes this handler.
-        """
-        if self._client is None:
-            self._client = protocol.SessionClient("agent", self._agent.sessionid)
-        return self._client
-
-    def can_reload(self) -> bool:
-        """
-        Can this handler reload?
-
-        :return: Return true if this handler needs to reload on requires changes.
-        """
-        return False
-
-    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Perform a reload of this resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to reload.
-        """
-
-    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
-        to run before an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
-
-    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
-        """
-        Method executed after an operation. Override this method to run after an operation.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        """
+    # Interface
 
     def close(self) -> None:
+        """
+        Override this method to implement custom logic called by the agent on handler deactivation. i.e. when the
+        instantiated handler will no longer be used by the agent.
+        """
         pass
-
-    def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        """
-        Calculate the diff between the current and desired resource state.
-
-        :param current: The current state of the resource
-        :param desired: The desired state of the resource
-        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
-                 fields that require changes.
-        """
-        changes = {}
-
-        # check attributes
-        for field in current.__class__.fields:
-            current_value = getattr(current, field)
-            desired_value = getattr(desired, field)
-
-            if current_value != desired_value and desired_value is not None:
-                changes[field] = {"current": current_value, "desired": desired_value}
-
-        return changes
-
-    def check_resource(self, ctx: HandlerContext, resource: resources.Resource) -> resources.Resource:
-        """
-        Check the current state of a resource
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :return: A resource to represents the current state. Use the :func:`~inmanta.resources.Resource.clone` to create
-                 clone of the given resource that can be modified.
-        """
-        raise NotImplementedError()
-
-    def list_changes(self, ctx: HandlerContext, resource: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        """
-        Returns the changes required to bring the resource on this system in the state described in the resource entry.
-        This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
-                 fields that require changes.
-        """
-        current = self.check_resource(ctx, resource)
-        return self._diff(current, resource)
-
-    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: Dict[str, Dict[str, object]]) -> None:
-        """
-        Do the changes required to bring the resource on this system in the state of the given resource.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param changes: The changes that need to occur as reported by
-                        :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
-        """
-        raise NotImplementedError()
 
     def deploy(
         self,
         ctx: HandlerContext,
-        resource: resources.Resource,
-        requires: Dict[ResourceIdStr, ResourceState],
+        resource: TResource,
+        requires: abc.Mapping[ResourceIdStr, ResourceState],
     ) -> None:
         """
-        This method is always be called by the agent, even when one of the requires of the given resource
-        failed to deploy. The default implementation of this method will deploy the given resource when all its
-        requires were deployed successfully. Override this method if a different condition determines whether the
-        resource should deploy.
+        Main entrypoint of the handler that will be called by the agent to deploy a resource on the server.
+        The agent calls this method for a given resource as soon as all its dependencies (`requires` relation) are ready.
+        It is always called, even when one of the dependencies failed to deploy.
+
+        Takes appropriate action based on the state of its dependencies. Calls `execute` iff the handler should actually
+        execute, i.e. enforce the intent represented by the resource. A handler may choose not to proceed to this execution
+        stage, e.g. when one of the resource's dependencies failed.
 
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to deploy
@@ -610,8 +497,8 @@ class ResourceHandler(object):
             return result.result["data"]
 
         def filter_resources_in_unexpected_state(
-            reqs: Dict[ResourceIdStr, ResourceState]
-        ) -> Dict[ResourceIdStr, ResourceState]:
+            reqs: abc.Mapping[ResourceIdStr, ResourceState]
+        ) -> abc.Mapping[ResourceIdStr, ResourceState]:
             """
             Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
             """
@@ -647,55 +534,90 @@ class ResourceHandler(object):
                 failed=str(failed_dependencies),
             )
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: bool = False) -> None:
+    @abstractmethod
+    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
         """
-        Update the given resource. This method is called by the agent. Most handlers will not override this method
-        and will only override :func:`~inmanta.agent.handler.ResourceHandler.check_resource`, optionally
-        :func:`~inmanta.agent.handler.ResourceHandler.list_changes` and
-        :func:`~inmanta.agent.handler.ResourceHandler.do_changes`
+        Enforce a resource's intent and inform the handler context of any relevant changes (e.g. set deployed status,
+        report attribute changes). Called only when all of its dependencies have successfully deployed.
 
         :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param dry_run: True will only determine the required changes but will not execute them.
+        :param resource: The resource to deploy.
+        :param dry_run: If set to true, the intent is not enforced, only the set of changes it would bring is computed.
         """
-        try:
-            self.pre(ctx, resource)
+        pass
 
-            changes = self.list_changes(ctx, resource)
-            ctx.update_changes(changes)
+    def available(self, resource: TResource) -> bool:
+        """
+        Kept for backwards compatibility, new handler implementations should never override this.
 
-            if not dry_run:
-                self.do_changes(ctx, resource, changes)
-                ctx.set_status(const.ResourceState.deployed)
-            else:
-                ctx.set_status(const.ResourceState.dry)
-        except SkipResource as e:
-            ctx.set_status(const.ResourceState.skipped)
-            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+        :param resource: Resource for which to check whether this handler is available.
+        """
+        return True
 
-        except Exception as e:
-            ctx.set_status(const.ResourceState.failed)
-            ctx.exception(
-                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                resource_id=resource.id,
-                exception=f"{e.__class__.__name__}('{e}')",
-            )
-        finally:
-            try:
-                self.post(ctx, resource)
-            except Exception as e:
-                ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
+    @abstractmethod
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
+        """
+        This method is called by the agent to query for facts.
 
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        raise NotImplementedError()
+
+    def set_cache(self, cache: AgentCache) -> None:
+        """
+        The agent calls this method when it has deemed this handler suitable for a given resource. This cache will be
+        used for methods decorated with @cache.
+
+        :param cache: The AgentCache to use.
+        """
+        self.cache = cache
+
+    # Utility methods
+
+    def can_reload(self) -> bool:
+        """
+        Can this handler reload?
+
+        :return: Return true if this handler needs to reload on requires changes.
+        """
+        return False
+
+    def do_reload(self, ctx: HandlerContext, resource: TResource) -> None:
+        """
+        Perform a reload of this resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to reload.
+        """
+        pass
+
+    def pre(self, ctx: HandlerContext, resource: TResource) -> None:
+        """
+        Method executed before a handler operation (Facts, dryrun, real deployment, ...) is executed. Override this method
+        to run before an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource being handled.
+        """
+        pass
+
+    def post(self, ctx: HandlerContext, resource: TResource) -> None:
+        """
+        Method executed after a handler operation. Override this method to run after an operation.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource being handled.
+        """
+        pass
+
+    def facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
         either via the return value of this method or by adding the fact to the HandlerContext via the
-        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post` are called before and after this method.
+        :func:`~inmanta.agent.handler.HandlerContext.set_fact` method. :func:`~inmanta.agent.handler.HandlerAPI.pre`
+        and :func:`~inmanta.agent.handler.HandlerAPI.post` are called before and after this method.
 
         :param ctx: Context object to report changes, logs and facts to the agent and server.
         :param resource: The resource to query facts for.
@@ -703,50 +625,51 @@ class ResourceHandler(object):
         """
         return {}
 
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+    def run_sync(self, func: typing.Callable[[], abc.Awaitable[T]]) -> T:
         """
-        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
-        and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
-        :func:`~inmanta.agent.handler.ResourceHandler.facts` to do the actually querying.
+        Run the given async function on the ioloop of the agent. It will block the current thread until the future
+        resolves.
 
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to query facts for.
-        :return: A dict with fact names as keys and facts values.
+        :param func: A function that returns a yieldable future.
+        :return: The result of the async function.
         """
-        try:
-            self.pre(ctx, resource)
-            facts = self.facts(ctx, resource)
-        finally:
+        f: Future[T] = Future()
+
+        # This function is not typed because of generics, the used methods and currying
+        def run() -> None:
             try:
-                self.post(ctx, resource)
+                result = func()
+                if result is not None:
+                    from tornado.gen import convert_yielded
+
+                    result = convert_yielded(result)
+                    concurrent.chain_future(result, f)
             except Exception as e:
-                ctx.exception(
-                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
-                    resource_id=resource.id,
-                    exception=f"{e.__class__.__name__}('{e}')",
-                )
+                f.set_exception(e)
 
-        return facts
+        self._ioloop.call_soon_threadsafe(run)
 
-    def available(self, resource: resources.Resource) -> bool:
+        return f.result()
+
+    def get_client(self) -> protocol.SessionClient:
         """
-        Returns true if this handler is available for the given resource
+        Get the client instance that identifies itself with the agent session.
 
-        :param resource: Is this handler available for the given resource?
-        :return: Available or not?
+        :return: A client that is associated with the session of the agent that executes this handler.
         """
-        return True
+        if self._client is None:
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
+        return self._client
 
     def get_file(self, hash_id: str) -> Optional[bytes]:
         """
-        Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the
-        content to identify it.
+        Retrieve a file from the fileserver identified with the given id.
 
         :param hash_id: The id of the content/file to retrieve from the server.
         :return: The content in the form of a bytestring or none is the content does not exist.
         """
 
-        def call() -> typing.Awaitable[Result]:
+        def call() -> abc.Awaitable[Result]:
             return self.get_client().get_file(hash_id)
 
         result = self.run_sync(call)
@@ -763,7 +686,7 @@ class ResourceHandler(object):
 
     def stat_file(self, hash_id: str) -> bool:
         """
-        Check if a file exists on the server. This method does and async call to the server and blocks on the result.
+        Check if a file exists on the server.
 
         :param hash_id: The id of the file on the server. The convention is the use the sha1sum of the content as id.
         :return: True if the file is available on the server.
@@ -783,7 +706,7 @@ class ResourceHandler(object):
         :param content: A byte string with the content
         """
 
-        def call() -> typing.Awaitable[Result]:
+        def call() -> abc.Awaitable[Result]:
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
@@ -793,13 +716,137 @@ class ResourceHandler(object):
 
 
 @stable_api
-class CRUDHandler(ResourceHandler):
+class ResourceHandler(HandlerAPI[TResource]):
+    """
+    A class that handles resources.
+    """
+
+    def _diff(self, current: TResource, desired: TResource) -> dict[str, dict[str, typing.Any]]:
+        """
+        Calculate the diff between the current and desired resource state.
+
+        :param current: The current state of the resource
+        :param desired: The desired state of the resource
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
+        """
+        changes = {}
+
+        # check attributes
+        for field in current.__class__.fields:
+            current_value = getattr(current, field)
+            desired_value = getattr(desired, field)
+
+            if current_value != desired_value and desired_value is not None:
+                changes[field] = {"current": current_value, "desired": desired_value}
+
+        return changes
+
+    def check_resource(self, ctx: HandlerContext, resource: TResource) -> TResource:
+        """
+        Check the current state of a resource
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :return: A resource to represents the current state. Use the :func:`~inmanta.resources.Resource.clone` to create
+                 clone of the given resource that can be modified.
+        """
+        raise NotImplementedError()
+
+    def list_changes(self, ctx: HandlerContext, resource: TResource) -> dict[str, dict[str, typing.Any]]:
+        """
+        Returns the changes required to bring the resource on this system in the state described in the resource entry.
+        This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :return: A dict with key the name of the field and value another dict with "current" and "desired" as keys for
+                 fields that require changes.
+        """
+        current = self.check_resource(ctx, resource)
+        return self._diff(current, resource)
+
+    def do_changes(self, ctx: HandlerContext, resource: TResource, changes: abc.Mapping[str, abc.Mapping[str, object]]) -> None:
+        """
+        Do the changes required to bring the resource on this system in the state of the given resource.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to check the current state of.
+        :param changes: The changes that need to occur as reported by
+                        :func:`~inmanta.agent.handler.ResourceHandler.list_changes`
+        """
+        raise NotImplementedError()
+
+    def execute(self, ctx: HandlerContext, resource: TResource, dry_run: bool = False) -> None:
+        try:
+            self.pre(ctx, resource)
+
+            changes = self.list_changes(ctx, resource)
+            ctx.update_changes(changes)
+
+            if not dry_run:
+                self.do_changes(ctx, resource, changes)
+                ctx.set_status(const.ResourceState.deployed)
+            else:
+                ctx.set_status(const.ResourceState.dry)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
+
+    def check_facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
+        """
+        This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.HandlerAPI.pre`
+        and :func:`~inmanta.agent.handler.HandlerAPI.post`. This method calls
+        :func:`~inmanta.agent.handler.HandlerAPI.facts` to do the actual querying.
+
+        :param ctx: Context object to report changes and logs to the agent and server.
+        :param resource: The resource to query facts for.
+        :return: A dict with fact names as keys and facts values.
+        """
+        facts = {}
+        try:
+            self.pre(ctx, resource)
+            facts = self.facts(ctx, resource)
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after getting facts about %(resource_id)s (exception: %(exception)s)",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
+
+        return facts
+
+
+TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
+
+
+@stable_api
+class CRUDHandler(ResourceHandler[TPurgeableResource]):
     """
     This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
     only works on purgeable resources.
     """
 
-    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
         the method implementation should modify the attributes of this resource to the current state.
@@ -811,7 +858,7 @@ class CRUDHandler(ResourceHandler):
         :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
 
-    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be created.
 
@@ -821,7 +868,7 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
+    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be deleted.
 
@@ -831,9 +878,7 @@ class CRUDHandler(ResourceHandler):
         :param resource: The desired resource state.
         """
 
-    def update_resource(
-        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
-    ) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
@@ -846,7 +891,7 @@ class CRUDHandler(ResourceHandler):
         """
 
     def calculate_diff(
-        self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
+        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
     ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
@@ -861,23 +906,14 @@ class CRUDHandler(ResourceHandler):
         """
         return self._diff(current, desired)
 
-    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run: Optional[bool] = None) -> None:
-        """
-        Update the given resource. This method is called by the agent. Override the CRUD methods of this class.
-
-        :param ctx: Context object to report changes and logs to the agent and server.
-        :param resource: The resource to check the current state of.
-        :param dry_run: True will only determine the required changes but will not execute them.
-        """
+    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         try:
             self.pre(ctx, resource)
 
             # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
             # state defines purged=true but the read_resource fails to set it to false if the resource does exist
             desired = resource
-            assert isinstance(desired, resources.PurgeableResource)
-            current = desired.clone(purged=False)
-            assert isinstance(current, resources.PurgeableResource)
+            current: TPurgeableResource = desired.clone(purged=False)
             changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
             try:
                 ctx.debug("Calling read_resource")
@@ -925,40 +961,100 @@ class CRUDHandler(ResourceHandler):
                 self.post(ctx, resource)
             except Exception as e:
                 ctx.exception(
-                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
                     resource_id=resource.id,
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
 
-TPurgeableResource = TypeVar("TPurgeableResource", bound=resources.PurgeableResource)
+# This is kept for backwards compatibility with versions explicitly importing CRUDHandlerGeneric
+CRUDHandlerGeneric = CRUDHandler
 
 
 @stable_api
-class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
+class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered]):
     """
-    This class offers the same functionality as the CRUDHandler class, but was made generic on the type of PurgeableResource.
+    The DiscoveryHandler is generic with regard to two resource types:
+        - TDiscovery denotes the handler's Discovery Resource type, used to drive resource discovery. This is not a
+          conventional resource type expected to be deployed on a network, but rather a way to express
+          the intent to discover resources of the second type TDiscovered already present on the network.
+        - TDiscovered denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
+          discovered and reported to the server. Objects of this type must be either:
+             1. A pydantic object
+             2. An object that has a `to_dict()` method that returns a serializable dictionary
+             3. A serializable dictionary
     """
 
-    def read_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
-        pass
+    def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> Dict[str, object]:
+        return {}
 
-    def create_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
-        pass
+    @abstractmethod
+    def discover_resources(
+        self, ctx: HandlerContext, discovery_resource: TDiscovery
+    ) -> abc.Mapping[ResourceIdStr, TDiscovered]:
+        """
+        This method implements the resource discovery logic. This method will be called
+        by the handler during deployment of the corresponding discovery resource.
+        """
+        raise NotImplementedError()
 
-    def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
-        pass
+    def execute(self, ctx: HandlerContext, resource: TDiscovery, dry_run: bool = False) -> None:
+        """
+        Logic to perform during resource discovery. This method is called when the agent wants
+        to deploy the corresponding discovery resource. The default behaviour of this method is to call
+        the `discover_resources` method, serialize the returned values and report them to the server.
+        """
+        if dry_run:
+            return
 
-    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
-        pass
+        try:
+            self.pre(ctx, resource)
 
-    def calculate_diff(
-        self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
-    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        return super().calculate_diff(ctx, current, desired)
+            def _call_discovered_resource_create_batch(
+                discovered_resources: abc.Sequence[DiscoveredResource],
+            ) -> typing.Awaitable[Result]:
+                return self.get_client().discovered_resource_create_batch(
+                    tid=self._agent.environment, discovered_resources=discovered_resources
+                )
 
-    def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
-        super().execute(ctx, resource, dry_run)
+            discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
+            discovered_resources: abc.Sequence[DiscoveredResource] = [
+                DiscoveredResource(discovered_resource_id=resource_id, values=values)
+                for resource_id, values in discovered_resources_raw.items()
+            ]
+            result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))
+
+            if result.code != 200:
+                assert result.result is not None  # Make mypy happy
+                ctx.set_status(const.ResourceState.failed)
+                error_msg_from_server = f": {result.result['message']}" if "message" in result.result else ""
+                ctx.error(
+                    "Failed to report discovered resources to the server (status code: %(code)s)%(error_msg_from_server)s",
+                    code=result.code,
+                    error_msg_from_server=error_msg_from_server,
+                )
+            else:
+                ctx.set_status(const.ResourceState.deployed)
+        except SkipResource as e:
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+        except Exception as e:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception(
+                "An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                resource_id=resource.id,
+                exception=f"{e.__class__.__name__}('{e}')",
+                traceback=traceback.format_exc(),
+            )
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception(
+                    "An error occurred after deployment of %(resource_id)s (exception: %(exception)s)",
+                    resource_id=resource.id,
+                    exception=f"{e.__class__.__name__}('{e}')",
+                )
 
 
 class Commander(object):
@@ -966,10 +1062,10 @@ class Commander(object):
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
+    __command_functions: dict[str, dict[str, Type[ResourceHandler[Any]]]] = defaultdict(dict)
 
     @classmethod
-    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
+    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler[Any]]]]:
         return cls.__command_functions
 
     @classmethod
@@ -982,15 +1078,15 @@ class Commander(object):
 
     @classmethod
     def _get_instance(
-        cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
-    ) -> ResourceHandler:
+        cls, handler_class: Type[ResourceHandler[Any]], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+    ) -> ResourceHandler[Any]:
         new_instance = handler_class(agent, io)
         return new_instance
 
     @classmethod
     def get_provider(
         cls, cache: AgentCache, agent: "inmanta.agent.agent.AgentInstance", resource: resources.Resource
-    ) -> ResourceHandler:
+    ) -> HandlerAPI[Any]:
         """
         Return a provider to handle the given resource
         """
@@ -1028,7 +1124,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: Type["ResourceHandler"]) -> None:
+    def add_provider(cls, resource: str, name: str, provider: Type[ResourceHandler[Any]]) -> None:
         """
         Register a new provider
 
@@ -1042,14 +1138,14 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
+    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type[ResourceHandler[Any]]]]:
         """Return an iterator over resource type, handler definition"""
         for resource_type, handler_map in cls.__command_functions.items():
             for handle_name, handler_class in handler_map.items():
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["ResourceHandler"]]:
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type[ResourceHandler[Any]]]:
         """
         Return the class of the handler for the given type and with the given name
         """

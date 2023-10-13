@@ -1335,17 +1335,6 @@ class Instance(ExecutionContext):
                             )
                         )
 
-    def dump(self) -> None:
-        print("------------ ")
-        print(str(self))
-        print("------------ ")
-        for n, v in self.slots.items():
-            if v.can_get():
-                value = v.value
-                print("%s\t\t%s" % (n, value))
-            else:
-                print("BAD: %s\t\t%s" % (n, ", ".join(repr(prom) for prom in v.promises)))
-
     def verify_done(self) -> bool:
         for v in self.slots.values():
             if not v.can_get():

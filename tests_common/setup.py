@@ -19,12 +19,12 @@ from os import path
 
 from setuptools import find_namespace_packages, setup
 
-version = "9.3.0"
+version = "10.0.0"
 
 requires = [
     "asyncpg",
     "click",
-    f"inmanta-core~={version}.dev",
+    f"inmanta-core~={version}.0.dev",
     "pip2pi",
     "pyformance",
     "pytest-asyncio",

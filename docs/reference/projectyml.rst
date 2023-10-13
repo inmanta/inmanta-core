@@ -54,6 +54,63 @@ The code snippet below provides an example of a complete ``project.yml`` file:
       index_urls:
         - https://pypi.org/simple/
 
+
+.. _specify_location_pip:
+
+
+Specify locations from where V2 modules will be installed
+---------------------------------------------------------
+This section explains how to configure your project in order to download v2 modules from any python package repository.
+By default, a project created using the :ref:`project-creation-guide` is configured to install packages from ``https://pypi.org/simple/``. There are multiple ways
+to change this behaviour.
+
+Using pip config file
+"""""""""""""""""""""
+
+By setting the ``use_config_file`` option of the pip section to ``True``, the project will use the pip config files.
+
+.. code-block:: yaml
+
+    pip:
+      use_config_file: True
+
+To specify the url of a pip repository, add the following to the pip config file of the ``inmanta`` user, located at ``/var/lib/inmanta/.config/pip/pip.conf``:
+
+.. code-block:: text
+
+  [global]
+  timeout = 60
+  index-url = <url of a python package repository>
+
+
+Alternatively, a pip config file can be used at a custom location.
+The ``index-url`` can be specified in this file as explained in the previous section.
+To make this work, the ``PIP_CONFIG_FILE`` environment variable needs to be set to the path of the newly created file (See: :ref:`env_vars`).
+For more information see the `Pip documentation <https://pip.pypa.io/en/stable/topics/configuration/>`_.
+
+Specify the index-urls in the project.yml file
+""""""""""""""""""""""""""""""""""""""""""""""
+
+Another option is to use the  ``index_urls`` option in the ``pip`` section of the ``project.yml`` file:
+
+.. code-block:: yaml
+
+    pip:
+      use_config_file: False
+      index_urls:
+        - <url of a python package repository>
+
+
+.. note::
+    The pip config file can also be used in combination with ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file:
+
+    * If the pip config is used (by setting ``use_config_file`` to ``true``), the ``index-url`` specified in the pip config file will take precedence and the ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file will be used as ``extra-index-urls`` when installing with pip.
+    * If the pip config is not used (by setting ``use_config_file`` to ``False``), then the first ``index_url`` specified in the project.yml will be used as an ``index_url`` and all the following ones will be used as ``extra-index-urls`` when installing with pip.
+
+
+
+
+
 Module metadata files
 #####################
 

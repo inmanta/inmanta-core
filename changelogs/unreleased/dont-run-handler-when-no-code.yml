@@ -1,0 +1,6 @@
+---
+description: Don't set a resource to the deploying state if that resource is undeployable.
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

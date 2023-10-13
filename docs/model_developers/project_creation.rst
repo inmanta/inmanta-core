@@ -44,13 +44,18 @@ An example ``project.yml`` could be:
   repo:
       - url: https://github.com/inmanta/
         type: git
-      - url: https://pypi.org/simple
-        type: package
   install_mode: release
   requires:
   pip:
       use_config_file: False
+      index_urls:
+          - https://pypi.org/simple
 
+.. warning::
+    Using more than one Python package index in the project config is discouraged.
+    It is a security risk and using more than one should be done with extreme care.
+    Only proceed if you are aware of dependency confusion attacks.
+    For more information see the `pip documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and the draft `PEP 708  <https://peps.python.org/pep-0708/#motivation>`_
 
 The main file
 -------------
