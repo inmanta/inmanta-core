@@ -55,7 +55,7 @@ import docstring_parser
 import jwt
 import pydantic
 import typing_inspect
-from pydantic.error_wrappers import ValidationError
+from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 

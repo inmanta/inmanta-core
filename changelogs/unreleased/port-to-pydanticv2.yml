@@ -1,0 +1,10 @@
+description: Port inmanta to pydantic v2
+change-type: major
+destination-branches: [master]
+sections:
+  bugfix: "{{description}}"
+
+""" Release notes
+
+- stricturl is no longer supported. This has been dropped by pydantic
+"""

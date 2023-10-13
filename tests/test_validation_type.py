@@ -35,24 +35,6 @@ from inmanta.validation_type import validate_type
         ("pydantic.constr", "test123", {"regex": "^test.*$"}, True),
         ("pydantic.constr", "test123", {"regex": "^tst.*$"}, False),
         ("pydantic.constr", "test123", {"regex": "^(tst.*$"}, False),
-        (
-            "pydantic.stricturl",
-            "http://test:8080",
-            {"tld_required": False},
-            True,
-        ),
-        (
-            "pydantic.stricturl",
-            "http://test:8080",
-            {"tld_required": True},
-            False,
-        ),
-        (
-            "pydantic.stricturl",
-            "http://test:8080",
-            {"max_length": 2},
-            False,
-        ),
     ],
 )
 def test_type_validation(attr_type: str, value: str, validation_parameters: dict[str, object], is_valid: bool) -> None:

@@ -23,7 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator, StrictInt, StrictFloat, StrictStr
 
 import inmanta
 import inmanta.ast.export as ast_export

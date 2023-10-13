@@ -76,22 +76,6 @@ def validate_type(
     if fq_type_name == "pydantic.constr":
         t = Annotated[str, PythonRegex(str(validation_parameters["regex"]))]
         validation_parameters = None
-    elif fq_type_name == "pydantic.stricturl":
-        if "min_length" in validation_parameters and len(value) < int(validation_parameters["min_length"]):
-            raise ValueError(f"value does not match the minimal length {validation_parameters['min_length']}")
-        if "tld_required" in validation_parameters and bool(validation_parameters["tld_required"]):
-            # check if there is a . in the hostname, not if it is an existing tld
-            if "." not in pydantic.AnyUrl(value).host:
-                raise ValueError(f"value does not have a tld in host part")
-
-        t = Annotated[
-            pydantic.AnyUrl,
-            pydantic.UrlConstraints(
-                max_length=validation_parameters.get("max_length", None),
-                allowed_schemes=validation_parameters.get("allowed_schemes", None),
-            ),
-        ]
-        validation_parameters = None
     else:
         module_name, type_name = fq_type_name.split(".", 1)
         module = importlib.import_module(module_name)
