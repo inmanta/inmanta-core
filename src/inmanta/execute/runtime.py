@@ -381,8 +381,11 @@ class ResultVariableProxy(VariableABC[T]):
             assert self._listener is not None
             listener, location = self._listener
             # simple case: single value. Multi-value variables implement their own listener functionality
-            if not isinstance(value, NoneValue):
-                listener.receive_result(value, location)
+            for subvalue in value if isinstance(value, list) else [value]:
+                # TOOD: should we exclude NoneValue?
+                # TOOD: should we exclude Unknown? Both here and in ExpressionStatement
+                if not isinstance(subvalue, Unknown):
+                    listener.receive_result(subvalue, location)
             # clean up: prevent data leaks and ensure listener is only notified once
             self._listener = None
             self._notify_listeners = False

@@ -262,7 +262,7 @@ class ExpressionStatement(RequiresEmitStatement):
         # `result is None` represents the absence of a result, not the `null` DSL value
         if result is not None and resultcollector is not None:
             for value in result if isinstance(result, list) else [result]:
-                if not isinstance(result, Unknown):
+                if not isinstance(value, Unknown):
                     resultcollector.receive_result(value, self.location)
         return result
 
