@@ -317,9 +317,27 @@ value. It can have the following forms
         | value
         | value ('>' | '>=' | '<' | '<=' | '==' | '!=') value
         | value 'in' value
+        | value 'not in' value
         | functioncall
         | value 'is' 'defined'
         ;
+
+
+The ``in`` and ``not in`` operators can be used to check if a value is present in a list:
+
+.. code-block:: inmanta
+
+    myfiles = ["/a/b/c", "/c/d/e", "x/y/z/u/v/w"]
+
+    condition1 = "/a/b/c" in myfiles # evaluates to True
+    condition2 = "/f/g/h" in myfiles # evaluates to False
+
+    condition3 = "/a/b/c" not in myfiles # evaluates to False
+    condition4 = "/f/g/h" not in myfiles # evaluates to True
+
+    condition5 = not "/a/b/c" in myfiles # evaluates to False
+    condition6 = not "/f/g/h" in myfiles # evaluates to True
+
 
 The ``is defined`` keyword checks if a value was assigned to an attribute or a relation of a certain entity. The following
 example sets the monitoring configuration on a certain host when it has a monitoring server associated:

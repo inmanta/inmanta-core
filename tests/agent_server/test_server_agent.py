@@ -24,6 +24,7 @@ from functools import partial
 from itertools import groupby
 from logging import DEBUG
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID
 
 import psutil
 import pytest
@@ -36,7 +37,13 @@ from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deplo
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.data import (
+    AUTOSTART_AGENT_DEPLOY_INTERVAL,
+    AUTOSTART_AGENT_REPAIR_INTERVAL,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    Setting,
+    convert_boolean,
+)
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -303,8 +310,20 @@ async def test_server_restart(
     assert not resource_container.Provider.isset("agent1", "key3")
 
 
+@pytest.mark.parametrize(
+    "agent_deploy_interval",
+    ["2", "*/2 * * * * * *"],
+)
 async def test_spontaneous_deploy(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer, caplog
+    resource_container,
+    server,
+    client,
+    environment,
+    clienthelper,
+    no_agent_backoff,
+    async_finalizer,
+    caplog,
+    agent_deploy_interval,
 ):
     """
     dryrun and deploy a configuration model
@@ -313,9 +332,9 @@ async def test_spontaneous_deploy(
     with caplog.at_level(DEBUG):
         resource_container.Provider.reset()
 
-        env_id = environment
+        env_id = UUID(environment)
 
-        Config.set("config", "agent-deploy-interval", "2")
+        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
         Config.set("config", "agent-deploy-splay-time", "2")
         Config.set("config", "agent-repair-interval", "0")
 
@@ -387,20 +406,19 @@ async def test_spontaneous_deploy(
 
 
 @pytest.mark.parametrize(
-    "cron",
-    [False, True],
+    "agent_repair_interval",
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
 )
 async def test_spontaneous_repair(
-    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, cron
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, agent_repair_interval
 ):
     """
     Test that a repair run is executed every 2 seconds as specified in the agent_repair_interval (using a cron or not)
     """
     resource_container.Provider.reset()
-    agent_repair_interval = "2"
-    if cron:
-        agent_repair_interval = "*/2 * * * * * *"
-
     env_id = environment
 
     Config.set("config", "agent-repair-interval", agent_repair_interval)
@@ -483,6 +501,36 @@ async def test_spontaneous_repair(
 
     await verify_deployment_result()
     await resource_action_consistency_check()
+
+
+@pytest.mark.parametrize(
+    "interval_code",
+    [(2, 200), ("2", 200), ("*/2 * * * * * *", 200), ("", 400)],
+)
+async def test_env_setting_wiring_to_autostarted_agent(
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, interval_code
+):
+    """
+    Test that the AUTOSTART_AGENT_DEPLOY_INTERVAL and AUTOSTART_AGENT_REPAIR_INTERVAL
+    env settings are properly wired through to auto-started agents.
+    """
+    env_id = UUID(environment)
+    interval, expected_code = interval_code
+    result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, interval)
+    assert result.code == expected_code
+    result = await client.set_setting(environment, AUTOSTART_AGENT_REPAIR_INTERVAL, interval)
+    assert result.code == expected_code
+
+    if expected_code == 200:
+        env = await data.Environment.get_by_id(env_id)
+        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+        config = await autostarted_agent_manager._make_agent_config(
+            env, agent_names=[], agent_map={"internal": ""}, connection=None
+        )
+
+        assert f"agent-deploy-interval={interval}" in config
+        assert f"agent-repair-interval={interval}" in config
 
 
 async def test_failing_deploy_no_handler(
