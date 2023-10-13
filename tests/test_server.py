@@ -1169,10 +1169,7 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
 
 @pytest.mark.parametrize(
     "endpoint_to_use",
-    [
-        "resource_deploy_done",
-        "resource_action_update"
-    ],
+    ["resource_deploy_done", "resource_action_update"],
 )
 async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
     """
@@ -1292,7 +1289,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is not None
-
 
     # TODO fix this test case for both values of server_tz_aware_timestamps
     expected_timestamp: str
