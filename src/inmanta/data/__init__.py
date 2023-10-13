@@ -67,7 +67,7 @@ import inmanta.db.versions
 import inmanta.resources as resources
 import inmanta.util as util
 from crontab import CronTab
-from inmanta.const import DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
+from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
 from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
@@ -125,6 +125,7 @@ class InvalidQueryType(Exception):
 class TableLockMode(enum.Enum):
     """
     Table level locks as defined in the PostgreSQL docs:
+
     https://www.postgresql.org/docs/13/explicit-locking.html#LOCKING-TABLES. When acquiring a lock, make sure to use the same
     locking order accross transactions (as described at the top of this module) to prevent deadlocks and to otherwise respect
     the consistency docs: https://www.postgresql.org/docs/13/applevel-consistency.html#NON-SERIALIZABLE-CONSISTENCY.
@@ -1619,6 +1620,30 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         await cls._execute_query(f"LOCK TABLE {cls.table_name()} IN {mode.value} MODE", connection=connection)
 
+    async def _xact_lock(
+        self, lock_key: int, instance_key: uuid.UUID, *, shared: bool = False, connection: asyncpg.Connection
+    ) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control
+
+        :param lock_key: the key identifying this lock (32 bit signed int)
+        :param instance_key: the key identifying the instance to lock.
+        We only use the lower 32 bits, so it can collide.
+
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        lock: str = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        await connection.execute(
+            # Advisory lock keys are only 32 bit (or a single 64 bit key), while a full uuid is 128 bit.
+            # Since locking slightly too strictly at extremely low odds is acceptable, we only use a 32 bit subvalue
+            # of the uuid. For uuid4, time_low is (despite the name) randomly generated. Since it is an unsigned
+            # integer while Postgres expects a signed one, we shift it by 2**31.
+            f"SELECT {lock}($1, $2)",
+            lock_key,
+            instance_key.time_low - 2**31,
+        )
+
     @classmethod
     async def insert_many(
         cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
@@ -2185,8 +2210,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
-    async def delete_cascade(self) -> None:
-        await self.delete()
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        await self.delete(connection=connection)
 
     @classmethod
     @overload
@@ -2287,6 +2312,17 @@ class Project(BaseDocument):
     def to_dto(self) -> m.Project:
         return m.Project(id=self.id, name=self.name, environments=[])
 
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
+        As such, we perform the deletes on each table in a separate transaction.
+        """
+        async with self.get_connection(connection=connection) as con:
+            envs_in_project: abc.Sequence[Environment] = await Environment.get_list(project=self.id, connection=con)
+            for env in envs_in_project:
+                await env.delete_cascade(connection=con)
+            await self.delete(connection=con)
+
 
 def convert_boolean(value: Union[bool, str]) -> bool:
     if isinstance(value, bool):
@@ -2352,9 +2388,22 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
-def validate_cron(value: str) -> str:
+def validate_cron_or_int(value: Union[int, str]) -> str:
+    try:
+        return str(int(value))
+    except ValueError:
+        try:
+            assert isinstance(value, str)  # Make mypy happy
+            return validate_cron(value, allow_empty=False)
+        except ValueError as e:
+            raise ValueError("'%s' is not a valid cron expression or int: %s" % (value, e))
+
+
+def validate_cron(value: str, allow_empty: bool = True) -> str:
     if not value:
-        return ""
+        if allow_empty:
+            return ""
+        raise ValueError("The given cron expression is an empty string")
     try:
         CronTab(value)
     except ValueError as e:
@@ -2475,15 +2524,20 @@ class Environment(BaseDocument):
     :param id: A unique, machine generated id
     :param name: The name of the deployment environment.
     :param project: The project this environment belongs to.
-    :param repo_url: The repository url that contains the configuration model code for this environment
-    :param repo_branch: The repository branch that contains the configuration model code for this environment
-    :param settings: Key/value settings for this environment. This dictionary does not necessarily contain a key
-                     for every environment setting known by the server. This is done for backwards compatibility reasons.
-                     When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
-                     account. The logic to decide that is the following:
-                        * When the name of the new setting is present in this settings dictionary or when the name of the old
-                          setting is not present in the settings dictionary, use the new setting.
-                        * Otherwise, use the setting with the old name.
+    :param repo_url: The repository url that contains the configuration model code for this environment.
+    :param repo_branch: The repository branch that contains the configuration model code for this environment.
+    :param settings:
+
+        Key/value settings for this environment. This dictionary does not necessarily contain a key
+        for every environment setting known by the server. This is done for backwards compatibility reasons.
+        When a setting was renamed, we need to determine whether the old or the new setting has to be taken into
+        account. The logic to decide that is the following:
+
+        * When the name of the new setting is present in this settings dictionary or when the name of the old
+          setting is not present in the settings dictionary, use the new setting.
+
+        * Otherwise, use the setting with the old name.
+
     :param last_version: The last version number that was reserved for this environment
     :param description: The description of the environment
     :param icon: An icon for the environment
@@ -2558,11 +2612,12 @@ class Environment(BaseDocument):
         ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
-            typ="int",
-            default=600,
-            doc="The deployment interval of the autostarted agents."
+            typ="str",
+            default="600",
+            doc="The deployment interval of the autostarted agents. Can be specified as a number of seconds"
+            " or as a cron-like expression."
             " See also: :inmanta.config:option:`config.agent-deploy-interval`",
-            validator=convert_int,
+            validator=validate_cron_or_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(
@@ -2576,11 +2631,14 @@ class Environment(BaseDocument):
         ),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(
             name=AUTOSTART_AGENT_REPAIR_INTERVAL,
-            typ="int",
-            default=86400,
-            doc="The repair interval of the autostarted agents."
-            " See also: :inmanta.config:option:`config.agent-repair-interval`",
-            validator=convert_int,
+            typ="str",
+            default="86400",
+            doc=(
+                "The repair interval of the autostarted agents. Can be specified as a number of seconds"
+                " or as a cron-like expression."
+                " See also: :inmanta.config:option:`config.agent-repair-interval`"
+            ),
+            validator=validate_cron_or_int,
             agent_restart=True,
         ),
         AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(
@@ -2629,8 +2687,9 @@ class Environment(BaseDocument):
             typ="str",
             validator=validate_cron,
             doc=(
-                "Periodically run a full compile following a cron-like time-to-run specification, interpreted in UTC"
-                " (e.g. `min hour dom month dow`). A compile will be requested at the scheduled time. The actual"
+                "Periodically run a full compile following a cron-like time-to-run specification interpreted in UTC with format"
+                " `[sec] min hour dom month dow [year]` (If only 6 values are provided, they are interpreted as"
+                " `min hour dom month dow year`). A compile will be requested at the scheduled time. The actual"
                 " compilation may have to wait in the compile queue for some time, depending on the size of the queue and the"
                 " RECOMPILE_BACKOFF environment setting. This setting has no effect when server_compile is disabled."
             ),
@@ -2766,7 +2825,6 @@ class Environment(BaseDocument):
                 RETURNING settings
         """
         values = [allow_override, self._get_value(key), self._get_value([key]), self._get_value(value)] + values
-
         new_value = await self._fetchval(query, *values, connection=connection)
         new_value_parsed = cast(
             Dict[str, m.EnvSettingType], self.get_field_metadata()["settings"].from_db(name="settings", value=new_value)
@@ -2791,28 +2849,34 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(self, only_content: bool = False) -> None:
-        if only_content:
-            await Agent.delete_all(environment=self.id)
-
-            procs = await AgentProcess.get_list(environment=self.id)
-            for proc in procs:
-                await proc.delete_cascade()
-
-            compile_list = await Compile.get_list(environment=self.id)
-            for cl in compile_list:
-                await cl.delete_cascade()
-
-            for model in await ConfigurationModel.get_list(environment=self.id):
-                await model.delete_cascade()
-
-            await Parameter.delete_all(environment=self.id)
-            await Resource.delete_all(environment=self.id)
-            await ResourceAction.delete_all(environment=self.id)
-            await Notification.delete_all(environment=self.id)
-        else:
-            # Cascade is done by PostgreSQL
-            await self.delete()
+    async def delete_cascade(
+        self, only_content: bool = False, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
+        """
+        This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
+        This is especially true for the tables resourceaction_resource, resource and resourceaction, because they
+        have a high read/write load. As such, we perform the deletes on each table in a separate transaction.
+        """
+        async with self.get_connection(connection=connection) as con:
+            await Agent.delete_all(environment=self.id, connection=con)
+            await AgentProcess.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on agentinstance
+            await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
+            await Parameter.delete_all(environment=self.id, connection=con)
+            await Notification.delete_all(environment=self.id, connection=con)
+            await Code.delete_all(environment=self.id, connection=con)
+            await DiscoveredResource.delete_all(environment=self.id, connection=con)
+            await EnvironmentMetricsGauge.delete_all(environment=self.id, connection=con)
+            await EnvironmentMetricsTimer.delete_all(environment=self.id, connection=con)
+            await DryRun.delete_all(environment=self.id, connection=con)
+            await UnknownParameter.delete_all(environment=self.id, connection=con)
+            await self._execute_query(
+                "DELETE FROM public.resourceaction_resource WHERE environment=$1", self.id, connection=con
+            )
+            await ResourceAction.delete_all(environment=self.id, connection=con)
+            await Resource.delete_all(environment=self.id, connection=con)
+            await ConfigurationModel.delete_all(environment=self.id, connection=con)
+            if not only_content:
+                await self.delete(connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
@@ -2929,6 +2993,27 @@ RETURNING last_version;
         if len(result) > 0:
             return result[0]
         return None
+
+    async def acquire_release_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control between release_version and
+        calls that need the latest version.
+
+        :param env: The environment to acquire the lock for.
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        await self._xact_lock(const.PG_ADVISORY_KEY_RELEASE_VERSION, self.id, shared=shared, connection=connection)
+
+    async def put_version_lock(self, *, shared: bool = False, connection: asyncpg.Connection) -> None:
+        """
+        Acquires a transaction-level advisory lock for concurrency control between put_version and put_partial.
+
+        :param env: The environment to acquire the lock for.
+        :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
+        :param connection: The connection hosting the transaction for which to acquire a lock.
+        """
+        await self._xact_lock(const.PG_ADVISORY_KEY_PUT_VERSION, self.id, shared=shared, connection=connection)
 
 
 class Parameter(BaseDocument):
@@ -3409,7 +3494,7 @@ class Agent(BaseDocument):
             async with con.transaction():
                 unpause_on_resume = await cls._fetch_query(
                     # lock FOR UPDATE to avoid deadlocks: next query in this transaction updates the row
-                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR UPDATE",
+                    f"SELECT name FROM {cls.table_name()} WHERE environment=$1 AND unpause_on_resume FOR NO KEY UPDATE",
                     cls._get_value(env),
                     connection=con,
                 )
@@ -3477,7 +3562,7 @@ class Agent(BaseDocument):
         for endpoint, sid in endpoints_with_new_primary:
             # Lock mode is required because we will update in this transaction
             # Deadlocks with cleanup otherwise
-            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_UPDATE)
+            agent = await cls.get(env, endpoint, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE)
             if agent is None:
                 continue
 
@@ -4160,6 +4245,7 @@ class ResourceAction(BaseDocument):
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
+        resource_id: Optional[ResourceIdStr] = None,
     ) -> List["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
@@ -4192,6 +4278,10 @@ class ResourceAction(BaseDocument):
         if resource_id_value:
             query += f" AND r.resource_id_value = ${parameter_index}::varchar"
             values.append(cls._get_value(resource_id_value))
+            parameter_index += 1
+        if resource_id:
+            query += f" AND r.resource_id = ${parameter_index}::varchar"
+            values.append(cls._get_value(resource_id))
             parameter_index += 1
         if log_severity:
             # <@ Is contained by
@@ -4259,66 +4349,41 @@ class ResourceAction(BaseDocument):
         # This is bang on the critical path for the agent
         # Squeeze out as much performance from postgresql as we can
 
-        # steps 1 and 2:
-        # find the interval between the current deploy and the previous successful deploy
-        # also check we are currently deploying
-        # do all of this in one query
         resource_version_id_str = resource_id.resource_version_str()
         resource_id_str = resource_id.resource_str()
 
         # These two variables are actually of type datetime.datetime
         # but mypy doesn't know as they come from the DB
         # mypy also doesn't care, because they go back into the DB
-        current_deploy_start: object
         last_deploy_start: Optional[object]
 
-        end_query = """
-        with
-            base_ra as (
-            SELECT ra.*
-                FROM public.resourceaction_resource as jt
-                    INNER JOIN public.resourceaction as ra
-                        ON ra.action_id = jt.resource_action_id
-                    WHERE jt.environment=$1 AND ra.environment=$1 AND jt.resource_id=$2::varchar AND ra.action='deploy'
-                    ORDER BY ra.started DESC
-            )
-        SELECT
-            (SELECT started from base_ra ORDER BY started DESC LIMIT 1) as begin_started,
-            (SELECT status from base_ra ORDER BY started DESC LIMIT 1) as begin_status,
-            COALESCE((SELECT started from base_ra where status='deployed' ORDER BY started DESC LIMIT 1), NULL) as started
-        """
-
         async with cls.get_connection() as connection:
-            result = await connection.fetchrow(end_query, env.id, resource_id_str)
-
-            if not result or result["begin_status"] is None:
-                raise BadRequest(
-                    "Fetching resource events only makes sense when the resource is currently deploying. Resource"
-                    f" {resource_version_id_str} has not started deploying yet."
-                )
-            if result["begin_status"] != const.ResourceState.deploying:
-                raise BadRequest(
-                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
-                    f" for resource {resource_version_id_str} is {result['begin_status']}."
-                )
-            current_deploy_start = result["begin_started"]
-            last_deploy_start = result["started"]
-
-            # Step3: Get the resource
+            # Step 1: Get the resource
+            # also check we are currently deploying
             resource: Optional[Resource] = await Resource.get_one(
                 environment=env.id, resource_id=resource_id_str, model=resource_id.version, connection=connection
             )
             if resource is None:
                 raise NotFound(f"Resource with id {resource_version_id_str} was not found in environment {env.id}")
 
-            # Step 4: get the relevant resource actions
+            if resource.status != const.ResourceState.deploying:
+                raise BadRequest(
+                    "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
+                    f" for resource {resource_version_id_str} is {resource.status}."
+                )
+
+            # Step 2:
+            # find the interval between the current deploy (now) and the previous successful deploy
+            last_deploy_start = resource.last_success
+
+            # Step 3: get the relevant resource actions
             # Do it in one query for all dependencies
 
             # Construct the query
             arg = ArgumentCollector(offset=2)
 
             # First make the filter
-            filter = f"AND ra.started<{arg(current_deploy_start)}"
+            filter = ""
             if last_deploy_start:
                 filter += f" AND ra.started > {arg(last_deploy_start)}"
             if exclude_change:
@@ -4379,6 +4444,7 @@ class Resource(BaseDocument):
                            used to determine if a resource describes the same state across versions
     :param resource_id_value: The attribute value from the resource id
     :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
+    :param last_success: The last time this resource (with this ID) was deployed successfully, across versions and hashes
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
@@ -4395,6 +4461,8 @@ class Resource(BaseDocument):
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
+    last_success: Optional[datetime.datetime] = None
+    last_produced_events: Optional[datetime.datetime] = None
 
     # State related
     attributes: Dict[str, Any] = {}
@@ -4463,6 +4531,25 @@ class Resource(BaseDocument):
         ]
         result = await cls._fetch_query(query, *values, connection=connection)
         return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
+
+    @classmethod
+    async def update_last_produced_events_if_newer(
+        cls,
+        environment: uuid.UUID,
+        resource_id: ResourceIdStr,
+        version: int,
+        last_produced_events: datetime.datetime,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+                UPDATE {cls.table_name()} as resource
+                SET
+                    last_produced_events = GREATEST($4, last_produced_events)
+                WHERE resource.model=$2
+                AND resource.environment=$1
+                AND resource.resource_id=$3  """
+        await cls._execute_query(query, environment, version, resource_id, last_produced_events, connection=connection)
 
     def make_hash(self) -> None:
         character = json.dumps(
@@ -4681,7 +4768,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(
-        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]]
+        cls, environment: uuid.UUID, version: int, projection: Optional[List[str]], *, connection: Optional[Connection] = None
     ) -> List[Dict[str, Any]]:
         if not projection:
             projection = "*"
@@ -4689,7 +4776,7 @@ class Resource(BaseDocument):
             projection = ",".join(projection)
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
-        resource_records = await cls._fetch_query(query, *values)
+        resource_records = await cls._fetch_query(query, *values, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
             if "attributes" in res:
@@ -5066,6 +5153,56 @@ class Resource(BaseDocument):
             result = await con.fetch(query, environment, version, resource_sets)
             return {record["resource_id"]: cls(from_postgres=True, **record) for record in result}
 
+    @classmethod
+    async def copy_last_success(
+        cls,
+        environment: uuid.UUID,
+        from_version: int,
+        to_version: int,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+        UPDATE {cls.table_name()} as new_resource
+        SET
+            last_success = (
+                SELECT last_success from {cls.table_name()} as old_resource
+                WHERE old_resource.model=$3
+                AND old_resource.environment=$2
+                AND old_resource.resource_id=new_resource.resource_id
+            )
+        WHERE new_resource.model=$1
+        AND new_resource.environment=$2
+        AND new_resource.last_success is null"""
+        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
+
+    @classmethod
+    async def copy_last_produced_events(
+        cls,
+        environment: uuid.UUID,
+        from_version: int,
+        to_version: int,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> None:
+        """
+        Copy the value of last_produced events for every resource in the to_version from the from_version
+        """
+        query = f"""
+           UPDATE {cls.table_name()} as new_resource
+           SET
+               last_produced_events = (
+                   SELECT old_resource.last_produced_events
+                   FROM {cls.table_name()} as old_resource
+                   WHERE old_resource.model=$3
+                   AND old_resource.environment=$2
+                   AND old_resource.resource_id=new_resource.resource_id
+               )
+           WHERE new_resource.model=$1
+           AND new_resource.environment=$2
+           AND new_resource.last_produced_events is null"""
+        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
+
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
@@ -5408,26 +5545,57 @@ class ConfigurationModel(BaseDocument):
         version: int,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
     ) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
         """
-        result = await cls.get_one(environment=environment, version=version, connection=connection)
+        result = await cls.get_one(environment=environment, version=version, connection=connection, lock=lock)
         return result
 
     @classmethod
-    async def get_latest_version(cls, environment: uuid.UUID) -> Optional["ConfigurationModel"]:
+    async def get_version_internal(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        *,
+        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: Optional[RowLockMode] = None,
+    ) -> Optional["ConfigurationModel"]:
+        """Return a version, but don't populate the status and done fields, which are expensive to construct"""
+        query = f"""SELECT *
+                          FROM {ConfigurationModel.table_name()}
+                          WHERE environment=$1 AND version=$2 {lock.value};
+                          """
+        result = await cls.select_query(query, [environment, version], connection=connection)
+        if not result:
+            return None
+        return result[0]
+
+    @classmethod
+    async def get_latest_version(
+        cls,
+        environment: uuid.UUID,
+        *,
+        connection: Optional[Connection] = None,
+    ) -> Optional["ConfigurationModel"]:
         """
         Get the latest released (most recent) version for the given environment
         """
-        versions = await cls.get_list(order_by_column="version", order="DESC", limit=1, environment=environment, released=True)
+        versions = await cls.get_list(
+            order_by_column="version", order="DESC", limit=1, environment=environment, released=True, connection=connection
+        )
         if len(versions) == 0:
             return None
 
         return versions[0]
 
     @classmethod
-    async def get_version_nr_latest_version(cls, environment: uuid.UUID) -> Optional[int]:
+    async def get_version_nr_latest_version(
+        cls,
+        environment: uuid.UUID,
+        connection: Optional[Connection] = None,
+    ) -> Optional[int]:
         """
         Get the version number of the latest released version in the given environment.
         """
@@ -5437,7 +5605,7 @@ class ConfigurationModel(BaseDocument):
                     ORDER BY version DESC
                     LIMIT 1
                     """
-        result = await cls._fetchrow(query, cls._get_value(environment))
+        result = await cls._fetchrow(query, cls._get_value(environment), connection=connection)
         if not result:
             return None
         return int(result["version"])
@@ -5468,17 +5636,29 @@ class ConfigurationModel(BaseDocument):
         )
         return versions
 
-    async def delete_cascade(self) -> None:
-        async with self.get_connection() as con:
-            async with con.transaction():
-                # Delete all code associated with this version
-                await Code.delete_all(connection=con, environment=self.environment, version=self.version)
-
-                # Delete ConfigurationModel and cascade delete on connected tables
-                await self.delete(connection=con)
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
+        As such, we perform the deletes on each table in a separate transaction.
+        """
+        async with self.get_connection(connection=connection) as con:
+            # Delete of compile record triggers cascading delete report table
+            await Compile.delete_all(environment=self.environment, version=self.version, connection=con)
+            await Code.delete_all(environment=self.environment, version=self.version, connection=con)
+            await DryRun.delete_all(environment=self.environment, model=self.version, connection=con)
+            await UnknownParameter.delete_all(environment=self.environment, version=self.version, connection=con)
+            await self._execute_query(
+                "DELETE FROM public.resourceaction_resource WHERE environment=$1 AND resource_version=$2",
+                self.environment,
+                self.version,
+                connection=con,
+            )
+            await ResourceAction.delete_all(environment=self.environment, version=self.version, connection=con)
+            await Resource.delete_all(environment=self.environment, model=self.version, connection=con)
+            await self.delete(connection=con)
 
             # Delete facts when the resources in this version are the only
-            await con.execute(
+            await self._execute_query(
                 f"""
                 DELETE FROM {Parameter.table_name()} p
                 WHERE(
@@ -5492,15 +5672,16 @@ class ConfigurationModel(BaseDocument):
                 )
                 """,
                 self.environment,
+                connection=con,
             )
 
-    async def get_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         return self.undeployable
 
-    async def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
+    def get_skipped_for_undeployable(self) -> List[m.ResourceIdStr]:
         """
         Returns a list of resource ids (NOT resource version ids)
         of resources which should get a skipped_for_undeployable state
@@ -5567,7 +5748,9 @@ class ConfigurationModel(BaseDocument):
                 await cls._execute_query(query, *values, connection=con)
 
     @classmethod
-    async def get_increment(cls, environment: uuid.UUID, version: int) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
+    async def get_increment(
+        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
+    ) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -5579,11 +5762,11 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
         """
-        projection_a = ["resource_id", "status", "attribute_hash", "attributes"]
+        projection_a = ["resource_id", "status", "attribute_hash", "attributes", "last_success", "last_produced_events"]
         projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
-        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a)
+        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a, connection=connection)
 
         # to increment
         increment: list[abc.Mapping[str, Any]] = []
@@ -5591,18 +5774,46 @@ class ConfigurationModel(BaseDocument):
         # todo in this version
         work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
+        # start with outstanding events
+        id_to_resource = {r["resource_id"]: r for r in resources}
+        next: list[abc.Mapping[str, object]] = []
+        for resource in work:
+            in_increment = False
+            last_success = resource["last_success"] or DATETIME_MIN_UTC
+            attributes = resource["attributes"]
+            assert isinstance(attributes, dict)  # mypy
+            for req in attributes["requires"]:
+                req_res = id_to_resource[req]
+                assert req_res is not None  # todo
+                req_res_attributes = req_res["attributes"]
+                assert isinstance(req_res_attributes, dict)  # mypy
+                last_produced_events = req_res["last_produced_events"]
+                if (
+                    last_produced_events is not None
+                    and last_produced_events > last_success
+                    and "send_event" in req_res_attributes
+                    and req_res_attributes["send_event"]
+                ):
+                    in_increment = True
+                    break
+            if in_increment:
+                increment.append(resource)
+            else:
+                next.append(resource)
+        work = next
+
         # get versions
         query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
         values = [cls._get_value(environment)]
-        version_records = await cls._fetch_query(query, *values)
+        version_records = await cls._fetch_query(query, *values, connection=connection)
 
         versions = [record["version"] for record in version_records]
 
         for version in versions:
             # todo in next version
-            next: list[abc.Mapping[str, object]] = []
+            next = []
 
-            vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
+            vresources = await Resource.get_resources_for_version_raw(environment, version, projection, connection=connection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:

@@ -142,6 +142,7 @@ class ResourceNotFoundExcpetion(Exception):
 class IgnoreResourceException(Exception):
     """
     Throw this exception when a resource should not be included by the exported.
+    Typically resources use this to indicate that they are not managed by the orchestrator.
     """
 
 
@@ -293,7 +294,7 @@ class Resource(metaclass=ResourceMeta):
             )
 
         # agent_value is no longer a proxy.DynamicProxy here, force this for mypy validation
-        return Id(entity_name, str(agent_value), attribute_name, attribute_value)
+        return Id(entity_name, str(agent_value), attribute_name, str(attribute_value))
 
     @classmethod
     def map_field(
@@ -550,7 +551,7 @@ class Id(object):
         return hash(str(self))
 
     def __eq__(self, other: object) -> bool:
-        return str(self) == str(other) and type(self) == type(other)
+        return str(self) == str(other) and type(self) is type(other)
 
     def resource_str(self) -> ResourceIdStr:
         return cast(

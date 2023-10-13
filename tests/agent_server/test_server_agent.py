@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import dataclasses
 import logging
 import time
 import uuid
@@ -23,6 +24,7 @@ from functools import partial
 from itertools import groupby
 from logging import DEBUG
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import UUID
 
 import psutil
 import pytest
@@ -31,11 +33,17 @@ from psutil import NoSuchProcess, Process
 from agent_server.conftest import ResourceContainer, _deploy_resources, get_agent, wait_for_n_deployed_resources
 from inmanta import agent, config, const, data, execute
 from inmanta.agent import config as agent_config
-from inmanta.agent.agent import Agent
+from inmanta.agent.agent import Agent, DeployRequest, DeployRequestAction, deploy_response_matrix
 from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus, ParameterSource, ResourceState
-from inmanta.data import ENVIRONMENT_AGENT_TRIGGER_METHOD, Setting, convert_boolean
+from inmanta.data import (
+    AUTOSTART_AGENT_DEPLOY_INTERVAL,
+    AUTOSTART_AGENT_REPAIR_INTERVAL,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    Setting,
+    convert_boolean,
+)
 from inmanta.server import (
     SLICE_AGENT_MANAGER,
     SLICE_AUTOSTARTED_AGENT_MANAGER,
@@ -302,8 +310,20 @@ async def test_server_restart(
     assert not resource_container.Provider.isset("agent1", "key3")
 
 
+@pytest.mark.parametrize(
+    "agent_deploy_interval",
+    ["2", "*/2 * * * * * *"],
+)
 async def test_spontaneous_deploy(
-    resource_container, server, client, environment, clienthelper, no_agent_backoff, async_finalizer, caplog
+    resource_container,
+    server,
+    client,
+    environment,
+    clienthelper,
+    no_agent_backoff,
+    async_finalizer,
+    caplog,
+    agent_deploy_interval,
 ):
     """
     dryrun and deploy a configuration model
@@ -312,9 +332,9 @@ async def test_spontaneous_deploy(
     with caplog.at_level(DEBUG):
         resource_container.Provider.reset()
 
-        env_id = environment
+        env_id = UUID(environment)
 
-        Config.set("config", "agent-deploy-interval", "2")
+        Config.set("config", "agent-deploy-interval", agent_deploy_interval)
         Config.set("config", "agent-deploy-splay-time", "2")
         Config.set("config", "agent-repair-interval", "0")
 
@@ -385,17 +405,23 @@ async def test_spontaneous_deploy(
     ), f"Sent {len(beats)} heartbeats over a time period of {duration} seconds, sleep mechanism is broken"
 
 
+@pytest.mark.parametrize(
+    "agent_repair_interval",
+    [
+        "2",
+        "*/2 * * * * * *",
+    ],
+)
 async def test_spontaneous_repair(
-    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, agent_repair_interval
 ):
     """
-    dryrun and deploy a configuration model
+    Test that a repair run is executed every 2 seconds as specified in the agent_repair_interval (using a cron or not)
     """
     resource_container.Provider.reset()
-
     env_id = environment
 
-    Config.set("config", "agent-repair-interval", "2")
+    Config.set("config", "agent-repair-interval", agent_repair_interval)
     Config.set("config", "agent-repair-splay-time", "2")
     Config.set("config", "agent-deploy-interval", "0")
 
@@ -475,6 +501,36 @@ async def test_spontaneous_repair(
 
     await verify_deployment_result()
     await resource_action_consistency_check()
+
+
+@pytest.mark.parametrize(
+    "interval_code",
+    [(2, 200), ("2", 200), ("*/2 * * * * * *", 200), ("", 400)],
+)
+async def test_env_setting_wiring_to_autostarted_agent(
+    resource_container, environment, client, clienthelper, no_agent_backoff, async_finalizer, server, interval_code
+):
+    """
+    Test that the AUTOSTART_AGENT_DEPLOY_INTERVAL and AUTOSTART_AGENT_REPAIR_INTERVAL
+    env settings are properly wired through to auto-started agents.
+    """
+    env_id = UUID(environment)
+    interval, expected_code = interval_code
+    result = await client.set_setting(environment, AUTOSTART_AGENT_DEPLOY_INTERVAL, interval)
+    assert result.code == expected_code
+    result = await client.set_setting(environment, AUTOSTART_AGENT_REPAIR_INTERVAL, interval)
+    assert result.code == expected_code
+
+    if expected_code == 200:
+        env = await data.Environment.get_by_id(env_id)
+        autostarted_agent_manager = server.get_slice(SLICE_AUTOSTARTED_AGENT_MANAGER)
+
+        config = await autostarted_agent_manager._make_agent_config(
+            env, agent_names=[], agent_map={"internal": ""}, connection=None
+        )
+
+        assert f"agent-deploy-interval={interval}" in config
+        assert f"agent-repair-interval={interval}" in config
 
 
 async def test_failing_deploy_no_handler(
@@ -1809,7 +1865,7 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=1)
 
     result = await client.delete_environment(id=env_id)
-    assert result.code == 200
+    assert result.code == 200, result.result
 
     # The autostarted agent should be terminated when its environment is deleted.
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=0)
@@ -1826,7 +1882,7 @@ async def test_stop_autostarted_agents_on_project_removal(server, client, resour
     ps_diff_inmanta_agent_processes(original=inmanta_agent_child_processes, current_process=current_process, diff=2)
 
     result = await client.delete_project(id=project1_id)
-    assert result.code == 200
+    assert result.code == 200, result.result
 
     # The autostarted agent of proj1 should be terminated when its project is deleted
     # The autostarted agent of proj2 keep running
@@ -2121,11 +2177,17 @@ async def test_s_repair_postponed_due_to_running_deploy(
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     # Make the agent pickup the new version
     # key3: Readcount=1; writecount=1
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(
+            reason="Deploy",
+            is_full_deploy=False,
+            is_periodic=False,
+        )
+    )
     # key3: Readcount=2; writecount=1
-    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+    await myagent_instance.get_latest_version_for_agent(DeployRequest(is_full_deploy=True, reason="Repair", is_periodic=False))
 
-    def wait_condition():
+    async def wait_condition():
         return not (
             resource_container.Provider.readcount(agent_name, "key3") == 2
             and resource_container.Provider.changecount(agent_name, "key3") == 1
@@ -2193,7 +2255,9 @@ async def test_s_repair_interrupted_by_deploy_request(
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy 1", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 1", is_full_deploy=False, is_periodic=False)
+    )
     await resource_container.wait_for_done_with_waiters(client, environment, version1, timeout=debug_timeout)
 
     # counts:  read/write
@@ -2202,7 +2266,7 @@ async def test_s_repair_interrupted_by_deploy_request(
 
     # Interrupt repair with deploy
     # Repair
-    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Repair", is_full_deploy=True, is_periodic=False))
 
     # wait for key1 to be deployed
     async def condition_x():
@@ -2223,9 +2287,13 @@ async def test_s_repair_interrupted_by_deploy_request(
     await _deploy_resources(client, environment, resources_version_2, version2, False)
 
     print("Interrupt")
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy 2", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 2", is_full_deploy=False, is_periodic=False)
+    )
     print("Deploy")
     await resource_container.wait_for_done_with_waiters(client, environment, version2, timeout=debug_timeout)
+
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Repair' for 'Deploy 2'")
 
     # counts:  read/write
     # key1: 2/1
@@ -2236,7 +2304,7 @@ async def test_s_repair_interrupted_by_deploy_request(
     assert resource_container.Provider.readcount(agent_name, "key3") >= 2
     assert resource_container.Provider.changecount(agent_name, "key3") >= 2
 
-    def wait_condition():
+    async def wait_condition():
         print(20 * "-")
         print("k1 R", resource_container.Provider.readcount(agent_name, "key1"))
         print("k1 C", resource_container.Provider.changecount(agent_name, "key1"))
@@ -2264,7 +2332,6 @@ async def test_s_repair_interrupted_by_deploy_request(
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
-    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Repair' for 'Deploy 2'")
     log_contains(
         caplog, "inmanta.agent.agent.agent1", logging.INFO, "for reason: Restarting run 'Repair', interrupted for 'Deploy 2'"
     )
@@ -2315,14 +2382,18 @@ async def test_s_repair_during_repair(resource_container, agent, client, clienth
 
     # Initial deploy
     await _deploy_resources(client, environment, resources, version, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(DeployRequest(reason="Deploy", is_full_deploy=False, is_periodic=False))
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
     # Interrupt repair with a repair
-    await myagent_instance.get_latest_version_for_agent(reason="Repair 1", incremental_deploy=False, is_repair_run=True)
-    await myagent_instance.get_latest_version_for_agent(reason="Repair 2", incremental_deploy=False, is_repair_run=True)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Repair 1", is_full_deploy=True, is_periodic=False)
+    )
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Repair 2", is_full_deploy=True, is_periodic=False)
+    )
 
-    def wait_condition():
+    async def wait_condition():
         return (
             resource_container.Provider.readcount(agent_name, "key1") != 3
             or resource_container.Provider.changecount(agent_name, "key1") != 1
@@ -2396,7 +2467,9 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy 1", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 1", is_full_deploy=False, is_periodic=False)
+    )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
     timeout_time = time.time() + 10
@@ -2406,7 +2479,9 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy 2", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Deploy 2", is_full_deploy=False, is_periodic=False)
+    )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
@@ -2428,7 +2503,7 @@ async def test_s_deploy_during_deploy(resource_container, agent, client, clienth
     log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Deploy 1' for 'Deploy 2'")
 
 
-async def test_s_full_deploy_interrupts_incremental_deploy(
+async def test_s_full_deploy_waits_for_incremental_deploy(
     resource_container, agent, client, clienthelper, environment, no_agent_backoff, caplog
 ):
     caplog.set_level(logging.INFO)
@@ -2476,7 +2551,9 @@ async def test_s_full_deploy_interrupts_incremental_deploy(
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Initial Deploy", is_full_deploy=False, is_periodic=False)
+    )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
     timeout_time = time.time() + 10
@@ -2489,7 +2566,9 @@ async def test_s_full_deploy_interrupts_incremental_deploy(
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=False, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Second Deploy", is_full_deploy=True, is_periodic=False)
+    )
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
@@ -2497,21 +2576,20 @@ async def test_s_full_deploy_interrupts_incremental_deploy(
     # for issue #1883
     assert not myagent_instance._cache.counterforVersion
 
-    # Incremental deploy:
-    #   * test::Resource[agent1,key=key1] is deployed successfully;
-    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled
+    # Incremental deploy
+    #   * All resources are deployed successfully:
     # Full deploy:
     #   * All resources are deployed successfully
     assert resource_container.Provider.readcount(agent_name, "key1") == 2
     assert resource_container.Provider.changecount(agent_name, "key1") == 1
-    assert resource_container.Provider.readcount(agent_name, "key3") == 1
-    assert resource_container.Provider.changecount(agent_name, "key3") == 1
+    assert resource_container.Provider.readcount(agent_name, "key3") == 2
+    assert resource_container.Provider.changecount(agent_name, "key3") == 2
 
     assert resource_container.Provider.get("agent1", "key1") == "value2"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
-    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Initial Deploy' for 'Second Deploy'")
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Deferring run 'Second Deploy' for 'Initial Deploy'")
 
 
 async def test_s_incremental_deploy_interrupts_full_deploy(
@@ -2527,8 +2605,8 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     myagent_instance = agent._instances[agent_name]
 
     resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
-    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key2", "value1")
+    resource_container.Provider.set("agent1", "key3", "value1")
 
     def get_resources(version, value_resource_three):
         return [
@@ -2563,7 +2641,9 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=False, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Initial Deploy", is_full_deploy=True, is_periodic=False)
+    )
 
     # Make sure that resource key1 is fully deployed before triggering the interrupt
     timeout_time = time.time() + 10
@@ -2573,26 +2653,188 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
     version2 = await clienthelper.get_version()
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Second Deploy", is_full_deploy=False, is_periodic=False)
+    )
 
-    await resource_container.wait_for_done_with_waiters(client, environment, version2)
+    async def resume_waiters_and_wait_until_deploy_finishes() -> bool:
+        # Try to resume the waiters on each call to this method. The resources for the resumed deployment
+        # are only created when the incremental deploy finished. This ensures we resume it.
+        await resource_container.wait_for_done_with_waiters(client, environment, version2)
+        result = await client.resource_logs(environment, "test::Resource[agent1,key=key3]", filter={"action": ["deploy"]})
+        assert result.code == 200
+        end_run_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
+        # incremental deploy + full deploy resumed
+        return len(end_run_lines) >= 2
+
+    await retry_limited(resume_waiters_and_wait_until_deploy_finishes, timeout=10)
+
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Interrupting run 'Initial Deploy' for 'Second Deploy'")
 
     # Full deploy:
     #   * test::Resource[agent1,key=key1] is deployed successfully;
-    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled
+    #   * test::Resource[agent1,key=key2] is cancelled after deploy
+    #   * test::Resource[agent1,key=key3] is cancelled
     # Incremental deploy:
-    #   * test::Resource[agent1,key=key2] is not included in the increment
+    #   * test::Resource[agent1,key=key1] is not included in the increment
     #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are deployed successfully
-    assert resource_container.Provider.readcount(agent_name, "key1") == 1
+    # Full deploy (resumed):
+    #     #   * test::Resource[agent1,key=key1] is deployed successfully;
+    #     #   * test::Resource[agent1,key=key2] is deployed successfully;
+    #     #   * test::Resource[agent1,key=key3] is deployed successfully;
+    assert resource_container.Provider.readcount(agent_name, "key1") == 2
     assert resource_container.Provider.changecount(agent_name, "key1") == 1
-    assert resource_container.Provider.readcount(agent_name, "key3") == 1
+    assert resource_container.Provider.readcount(agent_name, "key3") == 2
     assert resource_container.Provider.changecount(agent_name, "key3") == 1
 
     assert resource_container.Provider.get("agent1", "key1") == "value2"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
-    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Initial Deploy' for 'Second Deploy'")
+
+@dataclasses.dataclass
+class Result:
+    wait_for: int
+    values: Tuple[int, int, int]
+    msg: str
+
+
+ignore = Result(
+    wait_for=0,
+    values=("value2", "value2", "value2"),
+    msg="Ignoring new run 'Second Deploy' in favor of current 'Initial Deploy'",
+)
+terminate = Result(
+    wait_for=1, values=("value2", "value2", "value3"), msg="Terminating run 'Initial Deploy' for 'Second Deploy'"
+)
+interrupt = Result(
+    wait_for=1, values=("value2", "value2", "value3"), msg="Interrupting run 'Initial Deploy' for 'Second Deploy'"
+)
+defer = Result(wait_for=1, values=("value2", "value2", "value3"), msg="Deferring run 'Second Deploy' for 'Initial Deploy'")
+
+
+@pytest.mark.parametrize(
+    ["first_full", "first_periodic", "second_full", "second_periodic", "action", "deploy_counts"],
+    [
+        [True, True, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full periodic #6202
+        [True, False, True, True, ignore, (1, 1, 1, 1)],  # Full periodic ignored by full #6202
+        [True, True, True, False, terminate, (2, 1, 1, 1)],  # Full terminates full periodic
+        [True, False, True, False, terminate, (2, 1, 1, 1)],  # Full terminates full
+        [False, True, False, True, terminate, (1, 1, 1, 1)],  # Increment * terminates Increment *
+        [False, True, False, False, terminate, (1, 1, 1, 1)],
+        [False, False, False, True, terminate, (1, 1, 1, 1)],
+        [False, False, False, False, terminate, (1, 1, 1, 1)],
+        [True, True, False, True, ignore, (1, 1, 1, 1)],  # periodic increment ignored by periodic full  #6202
+        [True, False, False, True, ignore, (1, 1, 1, 1)],  # periodic increment ignored by full #6202
+        [False, True, True, True, terminate, (2, 1, 1, 1)],  # Incremental periodic terminated by full periodic
+        [False, True, True, False, terminate, (2, 1, 1, 1)],  # Incremental periodic terminated by full
+        [False, False, True, True, defer, (2, 1, 2, 2)],  # Incremental defers full periodic
+        [False, False, True, False, defer, (2, 1, 2, 2)],  # Incremental defers full
+        # requires more complex waiting see test_s_repair_interrupted_by_deploy_request
+        # [True, False, False, False, interrupt, (2,1,2,1)],  # full interrupted by increment
+        # [True, True, False, False, interrupt,(2,1,2,1)], # periodic full interrupted by increment
+    ],
+)
+async def test_s_periodic_Vs_full(
+    resource_container,
+    agent,
+    client,
+    clienthelper,
+    environment,
+    no_agent_backoff,
+    caplog,
+    first_full,
+    first_periodic,
+    second_full,
+    second_periodic,
+    action: Result,
+    deploy_counts,
+):
+    # ongoing periodic repair is not interrupted by periodic repair
+    caplog.set_level(logging.INFO)
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    agent_name = "agent1"
+
+    myagent_instance = agent._instances[agent_name]
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key2", "value1")
+    resource_container.Provider.set("agent1", "key3", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [
+            {
+                "key": "key1",
+                "value": "value2",
+                "id": "test::Resource[agent1,key=key1],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value2",
+                "id": "test::Wait[agent1,key=key2],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": ["test::Resource[agent1,key=key1],v=%d" % version],
+            },
+            {
+                "key": "key3",
+                "value": value_resource_three,
+                "id": "test::Resource[agent1,key=key3],v=%d" % version,
+                "send_event": False,
+                "purged": False,
+                "requires": ["test::Wait[agent1,key=key2],v=%d" % version],
+            },
+        ]
+
+    version1 = await clienthelper.get_version()
+    resources_version_1 = get_resources(version1, "value2")
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources_version_1, version1, push=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Initial Deploy", is_full_deploy=first_full, is_periodic=first_periodic)
+    )
+
+    # Make sure that resource key1 is fully deployed before triggering the interrupt
+    timeout_time = time.time() + 10
+    while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
+        await asyncio.sleep(0.1)
+
+    # cache has 1 version in flight
+    assert len(myagent_instance._cache.counterforVersion) == 1
+
+    version2 = await clienthelper.get_version()
+    resources_version_2 = get_resources(version2, "value3")
+    await _deploy_resources(client, environment, resources_version_2, version2, push=False)
+    await myagent_instance.get_latest_version_for_agent(
+        DeployRequest(reason="Second Deploy", is_full_deploy=second_full, is_periodic=second_periodic)
+    )
+
+    versions = [version1, version2]
+    await resource_container.wait_for_done_with_waiters(client, environment, versions[action.wait_for])
+    # cache has no versions in flight
+    # for issue #1883
+    assert not myagent_instance._cache.counterforVersion
+
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, action.msg)
+
+    # Full deploy
+    #   * All resources are deployed successfully:
+    # Full deploy:
+    #   * ignored
+    assert resource_container.Provider.readcount(agent_name, "key1") == deploy_counts[0]
+    assert resource_container.Provider.changecount(agent_name, "key1") == deploy_counts[1]
+    assert resource_container.Provider.readcount(agent_name, "key3") == deploy_counts[2]
+    assert resource_container.Provider.changecount(agent_name, "key3") == deploy_counts[3]
+
+    assert resource_container.Provider.get("agent1", "key1") == action.values[0]
+    assert resource_container.Provider.get("agent1", "key2") == action.values[1]
+    assert resource_container.Provider.get("agent1", "key3") == action.values[2]
 
 
 async def test_bad_post_get_facts(
@@ -2997,7 +3239,7 @@ async def test_1016_cache_invalidation(
 
     await _wait_until_deployment_finishes(client, environment, version)
 
-    await ai.get_latest_version_for_agent(reason="test deploy", incremental_deploy=True, is_repair_run=False)
+    await ai.get_latest_version_for_agent(DeployRequest(False, False, reason="test deploy"))
 
     await asyncio.gather(*(e.future for e in ai._nq.generation.values()))
 
@@ -3072,12 +3314,6 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
     """
     Test retrieving facts from the agent when there is no handler code available. We use an autostarted agent, these
     do not have access to the handler code for the resource_container.
-
-    Expected logs:
-        * Deploy action: Start run/End run
-        * Deploy action: Failed to load handler code or install handler code
-        * Pull action
-        * Store action
     """
     resource_container.Provider.reset()
     resource_container.Provider.set("agent1", "key", "value")
@@ -3093,21 +3329,20 @@ async def test_deploy_no_code(resource_container, client, clienthelper, environm
 
     await _wait_until_deployment_finishes(client, environment, version)
     # The resource state and its logs are not set atomically. This call prevents a race condition.
-    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=4)
+    await wait_until_logs_are_available(client, environment, resource_id, expect_nr_of_logs=3)
 
     response = await client.get_resource(environment, resource_id, logs=True)
     assert response.code == 200
     result = response.result
-
     assert result["resource"]["status"] == "unavailable"
 
+    # Expected logs:
+    #   [0] Deploy action: Failed to load handler code or install handler code
+    #   [1] Pull action
+    #   [2] Store action
     assert result["logs"][0]["action"] == "deploy"
     assert result["logs"][0]["status"] == "unavailable"
-    assert "Start run for " in result["logs"][0]["messages"][0]["msg"]
-
-    assert result["logs"][1]["action"] == "deploy"
-    assert result["logs"][1]["status"] == "unavailable"
-    assert "Failed to load handler code " in result["logs"][1]["messages"][0]["msg"]
+    assert "Failed to load handler code " in result["logs"][0]["messages"][0]["msg"]
 
 
 async def test_issue_1662(resource_container, server, client, clienthelper, environment, monkeypatch, async_finalizer):
@@ -3481,3 +3716,43 @@ async def test_deploy_handler_method(server, client, environment, agent, clienth
     # Exception is raised by handler
     resource_container.Provider.set_fail("agent1", "key1", 1)
     assert const.ResourceState.failed == await deploy_resource()
+
+
+def test_deploy_response_matrix_invariants():
+    """This testcase test a number of invariants of the deploy_response_matrix"""
+    # From the code
+    """
+# This matrix describes what do when a new DeployRequest enters before the old one is done
+# Format is (old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic)
+# The underlying idea is that
+# 1. periodic deploys have no time pressure, they can be delayed
+# 2. non-periodic deploy should run as soon as possible
+# 3. non-periodic incremental deploys take precedence over repairs (as they are smaller)
+# 4. Periodic repairs should not interrupt each other to prevent restart loops
+# 5. Periodic repairs take precedence over periodic incremental deploys.
+# These rules do not full specify the matrix! They are the rules we have to follow.
+# A subtle detail is that when we do defer or interrupt, we only over keep one.
+# So if a previous deferred run exists, it will be silently dropped
+# But, we only defer or interrupt full deploys
+# As such, we will always execute a full deploy
+# (it may oscillate between periodic and not, but it will execute)
+    """
+    # Testable invariants
+    # we only defer full compiles
+    for condition, reaction in deploy_response_matrix.items():
+        if reaction == DeployRequestAction.defer:
+            assert condition[1][0], "Invariant violation, the defer mechanism has to be redesigned"
+    # we only interrupt full compiles
+    for condition, reaction in deploy_response_matrix.items():
+        if reaction == DeployRequestAction.interrupt:
+            assert condition[0][0], "Invariant violation, the defer mechanism has to be redesigned"
+    # full deploy can only be ignored or terminated by a full deploy
+    for condition, reaction in deploy_response_matrix.items():
+        if reaction == DeployRequestAction.ignore and condition[1][0]:
+            assert condition[0][0], "Invariant violation: we are losing repairs"
+        if reaction == DeployRequestAction.terminate and condition[0][0]:
+            assert condition[1][0], "Invariant violation: we are losing repairs"
+    # full periodic deploy can not be interrupted/terminated by other periodic things
+    for condition, reaction in deploy_response_matrix.items():
+        if (reaction in [DeployRequestAction.interrupt, DeployRequestAction.terminate]) and condition[0][0] and condition[0][1]:
+            assert not condition[1][1], "Invariant violation, regression on #6202"

@@ -26,6 +26,8 @@ from inmanta import config, const, data
 from inmanta.agent.agent import Agent
 from inmanta.export import unknown_parameters
 from inmanta.main import Client
+from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server.agentmanager import AgentManager
 from inmanta.server.protocol import Server
 from inmanta.util import get_compiler_version
 from utils import ClientHelper, retry_limited
@@ -58,6 +60,9 @@ async def test_purge_on_delete_requires(
     async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
+
+    agentmanager: AgentManager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = await clienthelper.get_version()
 
@@ -143,7 +148,7 @@ async def test_purge_on_delete_requires(
     file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
 
     assert file2["id"] in file1["attributes"]["requires"]
-    assert type(file1["attributes"]["requires"]) == list
+    assert isinstance(file1["attributes"]["requires"], list)
     assert len(file1["provides"]) == 0
 
     assert len(file2["attributes"]["requires"]) == 0
@@ -193,6 +198,9 @@ async def test_purge_on_delete_compile_failed(
     async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
+
+    agentmanager: AgentManager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = await clienthelper.get_version()
 
@@ -303,6 +311,9 @@ async def test_purge_on_delete(client: Client, clienthelper: ClientHelper, serve
     async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
+
+    agentmanager: AgentManager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = await clienthelper.get_version()
 
@@ -441,6 +452,9 @@ async def test_purge_on_delete_ignore(
     await agent.start()
     aclient = agent._client
 
+    agentmanager: AgentManager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
     # Version 1 with purge_on_delete true
     version = await clienthelper.get_version()
 
@@ -577,6 +591,10 @@ async def test_disable_purge_on_delete(
     async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
+
+    agentmanager: AgentManager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
     env = await data.Environment.get_by_id(environment)
     await env.set(data.PURGE_ON_DELETE, False)
 

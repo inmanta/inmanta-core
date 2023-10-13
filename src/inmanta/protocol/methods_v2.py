@@ -26,7 +26,7 @@ from inmanta.data import model
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import PrimitiveTypes
 
-from ..data.model import DiscoveredResource, ResourceIdStr
+from ..data.model import ResourceIdStr
 from . import methods
 from .decorators import typedmethod
 from .openapi.model import OpenAPI
@@ -47,7 +47,7 @@ def put_partial(
     resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[List[str]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
-) -> int:
+) -> ReturnValue[int]:
     """
     Store a new version of the configuration model after a partial recompile. The partial is applied on top of the latest
     version. Dynamically acquires a new version and serializes concurrent calls. Python code for the new version is copied
@@ -129,7 +129,7 @@ def environment_create(
     Create a new environment
 
     :param project_id: The id of the project this environment belongs to
-    :param name: The name of the environment
+    :param name: The name of the environment. The name should be unique for each project.
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
     :param environment_id: A unique environment id, if none an id is allocated by the server
@@ -613,8 +613,8 @@ def get_resource_events(
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
-    deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in descending
-    order according to their started timestamp.
+    successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
+    descending order according to their started timestamp.
 
     This method searches through all versions of this resource.
     This method should only be called when a deploy is in progress.
@@ -1318,6 +1318,7 @@ def get_environment_metrics(
     start_interval: datetime.datetime,
     end_interval: datetime.datetime,
     nb_datapoints: int,
+    round_timestamps: bool = False,
 ) -> model.EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
@@ -1327,6 +1328,21 @@ def get_environment_metrics(
     :param start_interval: The start of the time window for which the metrics should be returned.
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
+    :param round_timestamps: If this parameter is set to True, the timestamps in the reply will be rounded to a full hour.
+        All time windows in the reply will have an equal size. To achieve this the start_interval, end_interval and
+        nb_datapoint in the reply may differ from the ones requested.
+
+            * The start_interval may be smaller than requested
+            * The end_interval may be larger than requested
+            * The nb_datapoints may be larger than requested
+
+    :raises BadRequest: start_interval >= end_interval
+    :raises BadRequest: nb_datapoints < 0
+    :raises BadRequest: The provided metrics list is an empty list.
+    :raises BadRequest: The start_interval and end_interval are not separated from each other by at least nb_datapoints minutes
+                        separated from each other.
+    :raises BadRequest: The round_timestamps parameter is set to True and the amount of hours between
+                        start_interval and end_interval is less than the requested number of datapoints.
     """
 
 
@@ -1376,87 +1392,4 @@ def set_password(username: str, password: str) -> None:
     :param password: The password of this new user. The password should be at least 8 characters long.
     :raises NotFound: Raised when the user does not exist
     :raises BadRequest: Raised when server authentication is not enabled
-    """
-
-
-@typedmethod(
-    path="/discovered/<discovered_resource_id>",
-    operation="POST",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-    varkw=True,
-)
-def discovered_resource_create(
-    tid: uuid.UUID, discovered_resource_id: str, **kwargs: object  # bypass the type checking for the values
-) -> None:
-    """
-    create a discovered resource.
-    :param tid: The id of the environment this resource belongs to
-    :param discovered_resource_id: The id of the discovered_resource
-    :param **kwargs: The following arguments are supported:
-           values: The values associated with the discovered_resource
-    """
-
-
-@typedmethod(
-    path="/discovered/",
-    operation="POST",
-    agent_server=True,
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
-    api_version=2,
-)
-def discovered_resource_create_batch(tid: uuid.UUID, discovered_resources: List[DiscoveredResource]) -> None:
-    """
-    create multiple discovered resource in the DB
-    :param tid: The id of the environment this resource belongs to
-    :param discovered_resources: List of discovered_resources containing the discovered_resource_id and values for each resource
-    """
-
-
-@typedmethod(
-    path="/discovered/<discovered_resource_id>",
-    operation="GET",
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
-    api_version=2,
-)
-def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdStr) -> model.DiscoveredResource:
-    """
-    Get a single discovered resource.
-
-    :param tid: the id of the environment in which to get the discovered resource.
-    :param discovered_resource_id: The id of the discovered resource
-    """
-
-
-@typedmethod(
-    path="/discovered",
-    operation="GET",
-    arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.api],
-    api_version=2,
-)
-def discovered_resources_get_batch(
-    tid: uuid.UUID,
-    limit: Optional[int] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    sort: str = "discovered_resource_id.asc",
-) -> List[model.DiscoveredResource]:
-    """
-    :param tid: The id of the environment this resource belongs to
-    :param limit: Limit the number of instances that are returned
-    :param start: The lower limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
-    :param end: The upper limit for the order by column (exclusive).
-                Only one of 'start' and 'end' should be specified at the same time.
-    :param sort: Return the results sorted according to the parameter value.
-            The following sorting attributes are supported: 'discovered_resource_id'.
-            The following orders are supported: 'asc', 'desc'
-    :return: A list of all matching released resources
-    :raise NotFound: This exception is raised when the referenced environment is not found
-    :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """

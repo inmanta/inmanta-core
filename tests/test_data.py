@@ -23,6 +23,7 @@ import logging
 import time
 import uuid
 from collections import abc
+from datetime import timezone
 from typing import Dict, List, Optional, Type, cast
 
 import asyncpg
@@ -428,23 +429,23 @@ async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    for deprecated_option, new_option in [
-        (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL),
-        (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME),
+    for deprecated_option, new_option, old_value, new_value in [
+        (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 22, "23"),
+        (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 22, 23),
     ]:
-        await env.set(deprecated_option, 22)
+        await env.set(deprecated_option, old_value)
         caplog.clear()
-        assert (await env.get(new_option)) == 22
+        assert (await env.get(new_option)) == old_value
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) in caplog.text
 
-        await env.set(new_option, 23)
+        await env.set(new_option, new_value)
         caplog.clear()
-        assert (await env.get(new_option)) == 23
+        assert (await env.get(new_option)) == new_value
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
         await env.unset(deprecated_option)
         caplog.clear()
-        assert (await env.get(new_option)) == 23
+        assert (await env.get(new_option)) == new_value
         assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
 
@@ -1808,6 +1809,79 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
     assert res1.attribute_hash == res2.attribute_hash
     assert res3.attribute_hash is not None
     assert res1.attribute_hash != res3.attribute_hash
+
+
+async def test_resource_copy_last_success(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    marker_date = datetime.datetime(1987, 12, 3, 15, 23, 36, 0, tzinfo=timezone.utc)
+
+    for version in range(1, 5):
+        cm1 = data.ConfigurationModel(
+            environment=env.id,
+            version=version,
+            date=datetime.datetime.now(),
+            total=1,
+            version_info={},
+            released=(version == 2),
+            deployed=True,
+            is_suitable_for_partial_compiles=False,
+        )
+        await cm1.insert()
+
+    res1 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+        status=const.ResourceState.deployed,
+        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+    )
+    res2 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file1],v=2",
+        status=const.ResourceState.deployed,
+        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False},
+        last_success=marker_date,
+    )
+    res3 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file1],v=3",
+        status=const.ResourceState.available,
+        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
+    )
+    res4 = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file1],v=4",
+        status=const.ResourceState.available,
+        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
+    )
+
+    side_res = data.Resource.new(
+        environment=env.id,
+        resource_version_id="std::File[agent1,path=/etc/file2],v=3",
+        status=const.ResourceState.available,
+        attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True},
+    )
+
+    await res1.insert()
+    await res2.insert()
+    await res3.insert()
+    await res4.insert()
+    await side_res.insert()
+
+    await data.Resource.copy_last_success(env.id, 2, 3)
+
+    readres = await data.Resource.get(env.id, res3.resource_version_id)
+    assert readres.last_success == marker_date
+
+    readres = await data.Resource.get(env.id, res4.resource_version_id)
+    assert readres.last_success is None
+
+    readres = await data.Resource.get(env.id, side_res.resource_version_id)
+    assert readres.last_success is None
 
 
 async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_load_schema):

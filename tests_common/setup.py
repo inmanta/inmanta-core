@@ -19,12 +19,12 @@ from os import path
 
 from setuptools import find_namespace_packages, setup
 
-version = "8.5.0"
+version = "8.6.0"
 
 requires = [
     "asyncpg",
     "click",
-    f"inmanta-core~={version}.dev",
+    f"inmanta-core~={version}.0.dev",
     "pip2pi",
     "pyformance",
     "pytest-asyncio",
