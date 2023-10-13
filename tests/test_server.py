@@ -1290,7 +1290,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["started"] is not None
     assert resource_action["finished"] is not None
 
-    # TODO fix this test case for both values of server_tz_aware_timestamps
     expected_timestamp: str
     if opt.server_tz_aware_timestamps.get():
         if endpoint_to_use == "resource_deploy_done":
