@@ -47,6 +47,7 @@ from inmanta.execute.runtime import (
     VariableABC,
     WrappedValueVariable,
 )
+from inmanta.execute.util import Unknown
 
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
@@ -161,17 +162,7 @@ class RequiresEmitStatement(DynamicStatement):
         """
         return self._requires_emit_promises(resolver, queue)
 
-    def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
-    ) -> Dict[object, VariableABC]:
-        """
-        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
-        resultcollector as a listener to result variables.
-        When this method is called, the caller must make sure to eventually call `execute` as well.
-        """
-        return self.requires_emit(resolver, queue)
-
-    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+    def _requires_emit_promises(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         """
         Acquires eager promises this statement is responsible for and returns them, wrapped in a variable, in a requires dict.
         Returns an empty dict if no promises were acquired (for performance reasons).
@@ -193,7 +184,7 @@ class RequiresEmitStatement(DynamicStatement):
         self._fulfill_promises(requires)
         return None
 
-    def _fulfill_promises(self, requires: Dict[object, object]) -> None:
+    def _fulfill_promises(self, requires: dict[object, object]) -> None:
         """
         Given a requires dict, fulfills this statements dynamic promises
         """
@@ -230,6 +221,19 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
+    ) -> dict[object, VariableABC]:
+        """
+        Returns a dict of the result variables required for execution. Behaves like requires_emit, but additionally may attach
+        resultcollector as a listener to result variables.
+        When this method is called, the caller must make sure to eventually call `execute` as well.
+
+        Composite statements (e.g. conditional expression) will pass result collectors to their children rather than
+        report to them themselves.
+        """
+        return {**self.requires_emit(resolver, queue), (self, ResultCollector): WrappedValueVariable(resultcollector)}
+
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         """
         :param lhs_attribute: The left hand side attribute if this expression is a right hand side in an attribute assignment.
@@ -238,6 +242,29 @@ class ExpressionStatement(RequiresEmitStatement):
             depends on this statement.
         """
         raise NotImplementedError()
+
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+        Execute the expression and return the value it resolves to without performing any of the associated steps like
+        fulfilling promises or notifying result collectors.
+        """
+        raise NotImplementedError()
+
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+        Execute the expression and return the value it resolves to.
+        The requires dict contains the resolved values of the variables that were requested via requires_emit.
+        """
+        super().execute(requires, resolver, queue)
+        # resolve expression, then notify result collectors before returning
+        result: object = self._resolve(requires, resolver, queue)
+        resultcollector: Optional[ResultCollector] = requires.get((self, ResultCollector), None)
+        # `result is None` represents the absence of a result, not the `null` DSL value
+        if result is not None and resultcollector is not None:
+            for value in result if isinstance(result, list) else [result]:
+                if not isinstance(result, Unknown):
+                    resultcollector.receive_result(value, self.location)
+        return result
 
     def as_constant(self) -> object:
         """
@@ -569,8 +596,7 @@ class Literal(ExpressionStatement):
     def requires(self) -> List[str]:
         return []
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self.value
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
