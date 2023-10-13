@@ -4065,8 +4065,9 @@ class ResourceAction(BaseDocument):
             for message in self.messages:
                 message = json.loads(message)
                 if "timestamp" in message:
+                    ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
-                    message["timestamp"] = pydantic.parse_obj_as(datetime.datetime, message["timestamp"])
+                    message["timestamp"] = ta.validate_python(message["timestamp"])
                     if message["timestamp"].tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
                 new_messages.append(message)
