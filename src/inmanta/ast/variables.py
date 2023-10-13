@@ -41,7 +41,6 @@ from inmanta.execute.runtime import (
     ResultVariable,
     ResultVariableProxy,
     VariableABC,
-    WrappedValueVariable,
 )
 from inmanta.execute.util import NoneValue
 from inmanta.parser import ParserException
@@ -84,7 +83,7 @@ class Reference(ExpressionStatement):
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
-    ) -> dict[object, VariableABC]:
+    ) -> Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
         requires[self.name] = resolver.lookup(self.full_name)
@@ -92,17 +91,15 @@ class Reference(ExpressionStatement):
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector, *, propagate_unset: bool = False
-    ) -> dict[object, VariableABC]:
-        result: dict[object, VariableABC] = self.requires_emit(resolver, queue, propagate_unset=propagate_unset)
-        var: VariableABC = result[self.name]
-        assert isinstance(var, ResultVariable)
-        listener_registered: bool = var.listener(resultcollector, self.location)
-        if not listener_registered:
-            # pass on resultcollector for explicit reporting in execute
-            result[(self, ResultCollector)] = WrappedValueVariable(resultcollector)
-        return result
+    ) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        var: ResultVariable = resolver.lookup(self.full_name)
+        var.listener(resultcollector, self.location)
+        requires[self.name] = var
+        return requires
 
-    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        super().execute(requires, resolver, queue)
         return requires[self.name]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -167,11 +164,13 @@ class VariableReader(VariableResumer, Generic[T]):
     Optionally subscribes a result collector to intermediate values.
     """
 
-    __slots__ = ("target",)
+    __slots__ = ("owner", "target", "resultcollector")
 
-    def __init__(self, target: ResultVariableProxy[T]) -> None:
+    def __init__(self, owner: Statement, target: ResultVariableProxy[T], resultcollector: Optional[ResultCollector[T]]) -> None:
         super().__init__()
+        self.owner: Statement = owner
         self.target: ResultVariableProxy[T] = target
+        self.resultcollector: Optional[ResultCollector[T]] = resultcollector
 
     def variable_resume(
         self,
@@ -179,6 +178,8 @@ class VariableReader(VariableResumer, Generic[T]):
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
+        if self.resultcollector:
+            variable.listener(self.resultcollector, self.owner.location)
         self.target.connect(variable)
 
 
@@ -284,17 +285,15 @@ class AttributeReference(Reference):
         resultcollector: Optional[ResultCollector],
         *,
         propagate_unset: bool = False,
-    ) -> dict[object, VariableABC]:
-        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+    ) -> Dict[object, VariableABC]:
+        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # The tricky one!
 
-        # introduce proxy variable to point to the eventual result of this stmt
-        proxy: ResultVariableProxy[object] = ResultVariableProxy(
-            listener=(resultcollector, self.location) if resultcollector is not None else None,
-        )
+        # introduce temp variable to contain the eventual result of this stmt
+        temp = ResultVariableProxy()
         # construct waiter
-        reader: VariableReader = VariableReader(target=proxy)
+        reader: VariableReader = VariableReader(owner=self, target=temp, resultcollector=resultcollector)
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             str(self.attribute),
@@ -304,11 +303,12 @@ class AttributeReference(Reference):
         self.copy_location(hook)
         hook.schedule(resolver, queue)
         # wait for the attribute value
-        requires[self] = proxy
+        requires[self] = temp
 
         return requires
 
-    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+        ExpressionStatement.execute(self, requires, resolver, queue)
         # helper returned: return result
         return requires[self]
 
