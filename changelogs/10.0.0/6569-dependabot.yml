@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump packaging from 23.1 to 23.2
+destination-branches:
+- master
+sections: {}

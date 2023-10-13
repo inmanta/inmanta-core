@@ -47,7 +47,7 @@ def put_partial(
     resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[List[str]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
-) -> int:
+) -> ReturnValue[int]:
     """
     Store a new version of the configuration model after a partial recompile. The partial is applied on top of the latest
     version. Dynamically acquires a new version and serializes concurrent calls. Python code for the new version is copied
@@ -129,7 +129,7 @@ def environment_create(
     Create a new environment
 
     :param project_id: The id of the project this environment belongs to
-    :param name: The name of the environment
+    :param name: The name of the environment. The name should be unique for each project.
     :param repository: The url (in git form) of the repository
     :param branch: The name of the branch in the repository
     :param environment_id: A unique environment id, if none an id is allocated by the server
@@ -593,8 +593,8 @@ def get_resource_events(
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
-    deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in descending
-    order according to their started timestamp.
+    successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
+    descending order according to their started timestamp.
 
     This method searches through all versions of this resource.
     This method should only be called when a deploy is in progress.
@@ -1298,6 +1298,7 @@ def get_environment_metrics(
     start_interval: datetime.datetime,
     end_interval: datetime.datetime,
     nb_datapoints: int,
+    round_timestamps: bool = False,
 ) -> model.EnvironmentMetricsResult:
     """
     Obtain metrics about the given environment for the given time interval.
@@ -1307,6 +1308,21 @@ def get_environment_metrics(
     :param start_interval: The start of the time window for which the metrics should be returned.
     :param end_interval: The end of the time window for which the metrics should be returned.
     :param nb_datapoints: The amount of datapoint that will be returned within the given time interval for each metric.
+    :param round_timestamps: If this parameter is set to True, the timestamps in the reply will be rounded to a full hour.
+        All time windows in the reply will have an equal size. To achieve this the start_interval, end_interval and
+        nb_datapoint in the reply may differ from the ones requested.
+
+            * The start_interval may be smaller than requested
+            * The end_interval may be larger than requested
+            * The nb_datapoints may be larger than requested
+
+    :raises BadRequest: start_interval >= end_interval
+    :raises BadRequest: nb_datapoints < 0
+    :raises BadRequest: The provided metrics list is an empty list.
+    :raises BadRequest: The start_interval and end_interval are not separated from each other by at least nb_datapoints minutes
+                        separated from each other.
+    :raises BadRequest: The round_timestamps parameter is set to True and the amount of hours between
+                        start_interval and end_interval is less than the requested number of datapoints.
     """
 
 
@@ -1373,6 +1389,7 @@ def discovered_resource_create(
 ) -> None:
     """
     create a discovered resource.
+
     :param tid: The id of the environment this resource belongs to
     :param discovered_resource_id: The id of the discovered_resource
     :param **kwargs: The following arguments are supported:

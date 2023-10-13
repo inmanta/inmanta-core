@@ -117,10 +117,10 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
 
     mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
-    undep = await mod_db.get_undeployable()
+    undep = mod_db.get_undeployable()
     assert undep == ["test::Resource[agent2,key=key4]"]
 
-    undep = await mod_db.get_skipped_for_undeployable()
+    undep = mod_db.get_skipped_for_undeployable()
     assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     # request a dryrun
@@ -420,10 +420,11 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     assert result.code == 200
 
     mod_db = await data.ConfigurationModel.get_version(uuid.UUID(environment), version)
-    undep = await mod_db.get_undeployable()
+    assert mod_db is not None
+    undep = mod_db.get_undeployable()
     assert undep == ["test::Resource[agent2,key=key4]"]
 
-    undep = await mod_db.get_skipped_for_undeployable()
+    undep = mod_db.get_skipped_for_undeployable()
     assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     result = await client.dryrun_trigger(uuid.uuid4(), version)

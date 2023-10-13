@@ -1,0 +1,6 @@
+---
+description: Ensure compatibility with python3.9
+issue-nr: 5258
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master]

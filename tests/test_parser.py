@@ -17,7 +17,6 @@
 """
 import logging
 import re
-import warnings
 from typing import List
 
 import pytest
@@ -42,7 +41,7 @@ from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineI
 from inmanta.ast.statements.generator import ConditionalExpression, Constructor, If
 from inmanta.ast.variables import AttributeReference, Reference
 from inmanta.execute.util import NoneValue
-from inmanta.parser import InvalidNamespaceAccess, ParserException, SyntaxDeprecationWarning
+from inmanta.parser import InvalidNamespaceAccess, ParserException
 from inmanta.parser.plyInmantaParser import base_parse
 from utils import log_contains, log_doesnt_contain
 
@@ -174,7 +173,7 @@ def test_relation():
     """Test definition of relations"""
     statements = parse_code(
         """
-Test tests [0:] -- [5:10] Foo bars
+Test.bars [5:10] -- Foo.tests [0:]
 """
     )
 
@@ -198,7 +197,7 @@ def test_relation_2():
     """Test definition of relations"""
     statements = parse_code(
         """
-Test tests [3] -- [:10] Foo bars
+Test.bars [:10] -- Foo.tests [3]
 """
     )
 
@@ -218,7 +217,7 @@ Test tests [3] -- [:10] Foo bars
     assert rel.right[2] == (0, 10)
 
 
-def test_new_relation():
+def test_relation_3():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -242,7 +241,7 @@ Test.bar [1] -- Foo.tests [5:10]
     assert rel.right[2] == (1, 1)
 
 
-def test_new_relation_with_annotations():
+def test_relation_with_annotations():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -274,7 +273,7 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     assert rel.annotation_expression[1][1].location == range2
 
 
-def test_new_relation_unidir():
+def test_relation_unidir():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -298,7 +297,7 @@ Test.bar [1] -- Foo
     assert rel.right[2] == (1, 1)
 
 
-def test_new_relation_with_annotations_unidir():
+def test_relation_with_annotations_unidir():
     """Test definition of relations"""
     statements = parse_code(
         """
@@ -567,30 +566,6 @@ typedef abc as string matching self in ["a","b","c"]
     assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), In)
     assert [x.value for x in stmt.get_expression().children[1].items] == ["a", "b", "c"]
-
-
-def test_typedef_plugin_call():
-    """
-    If this test fails, the collection of validation types and
-    validation_parameters will fail in the LSM module.
-    plugin_call() must expand to (plugin_call() == true)
-    """
-    statements = parse_code(
-        """
-typedef abc as string matching std::is_base64_encoded(self)
-"""
-    )
-    assert len(statements) == 1
-    stmt = statements[0]
-    assert isinstance(stmt, DefineTypeConstraint)
-    assert str(stmt.name) == "abc"
-    assert str(stmt.basetype) == "string"
-    assert isinstance(stmt.get_expression(), Equals)
-    left_side_equals = stmt.get_expression()._arguments[0]
-    right_side_equals = stmt.get_expression()._arguments[1]
-    assert isinstance(left_side_equals, FunctionCall)
-    assert isinstance(right_side_equals, Literal)
-    assert isinstance(right_side_equals.value, bool) and right_side_equals.value
 
 
 def test_index():
@@ -1484,7 +1459,7 @@ a=|
         )
 
 
-def test_doc_string_on_new_relation():
+def test_doc_string_on_relation_unidir():
     statements = parse_code(
         """
 File.host [1] -- Host
@@ -1502,7 +1477,7 @@ Each file needs to be associated with a host
 def test_doc_string_on_relation():
     statements = parse_code(
         """
-File file [1] -- [0:] Host host
+Host.file [1] -- File.host [0:]
 \"""
 Each file needs to be associated with a host
 \"""
@@ -2062,27 +2037,6 @@ __x__ = {expression}
             raise Exception("this test does not support %s" % type(expression))
 
     expression_asserter(assign_stmt.rhs, expected_tree)
-
-
-def test_relation_deprecated_syntax():
-    with warnings.catch_warnings(record=True) as w:
-        parse_code(
-            """
-entity A:
-end
-
-entity B:
-end
-
-A aa [1] -- [0:] B bb
-            """,
-        )
-        assert len(w) == 1
-        assert issubclass(w[0].category, SyntaxDeprecationWarning)
-        assert str(w[0].message) == (
-            "The relation definition syntax `A aa [1] -- [0:] B bb` is deprecated."
-            " Please use `A.bb [0:] -- B.aa [1]` instead. (test:8)"
-        )
 
 
 def test_conditional_expression():

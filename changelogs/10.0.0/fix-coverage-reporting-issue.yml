@@ -1,0 +1,3 @@
+description: Attempt to fix problem reporting code coverage
+change-type: patch
+destination-branches: [master, iso6, iso5]

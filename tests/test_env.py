@@ -212,11 +212,36 @@ def test_gen_req_file(tmpdir):
     ]
 
     req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
+    assert len(req_lines) == 5
+    assert "lorem == 0.1.1, > 0.1" in req_lines
+    assert "dummy-yummy" in req_lines
+    assert "git+https://github.com/bartv/python3-iplib#egg=iplib" in req_lines
+    assert 'lorem ; python_version < "3.7"' in req_lines
+    assert 'lorem ; platform_machine == "x86_64" and platform_system == "Linux"' in req_lines
+
+
+def test_gen_req_file_multiple_python_versions(tmpdir):
+    e = env.VirtualEnv(tmpdir)
+    req = [
+        "lorem",
+        "lorem == 0.1;python_version=='3.7'",
+        "lorem == 0.2;python_version=='3.9'",
+    ]
+
+    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
     assert len(req_lines) == 3
-    assert (
-        'lorem == 0.1.1, > 0.1 ; python_version < "3.7" and platform_machine == "x86_64" and platform_system == "Linux"'
-        in req_lines
-    )
+    assert "lorem" in req_lines
+    assert 'lorem == 0.1 ; python_version == "3.7"' in req_lines
+    assert 'lorem == 0.2 ; python_version == "3.9"' in req_lines
+
+
+def test_gen_req_file_multiple_extras(tmpdir):
+    e = env.VirtualEnv(tmpdir)
+    req = ["dep[opt]", "dep[otheropt]"]
+
+    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
+    assert len(req_lines) == 1
+    assert "dep[opt,otheropt]" in req_lines
 
 
 def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
@@ -518,7 +543,7 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
     with pytest.raises(env.ConflictingRequirements) as excinfo:
         tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
     match = re.search(
-        r"Cannot install inmanta-core==4\.0\.0 and inmanta-core=.* because these "
+        r"Cannot install (inmanta-core==4\.0\.0 and inmanta-core=.*|inmanta-core=.* and inmanta-core==4\.0\.0) because these "
         r"package versions have conflicting dependencies",
         excinfo.value.msg,
     )

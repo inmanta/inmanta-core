@@ -34,6 +34,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
+from crontab import CronTab
 from inmanta import const
 
 LOGGER = logging.getLogger(__name__)
@@ -207,6 +208,18 @@ def is_time(value: str) -> int:
     return int(value)
 
 
+def is_time_or_cron(value: str) -> Union[int, str]:
+    """Time, the number of seconds represented as an integer value or a cron-like expression"""
+    try:
+        return is_time(value)
+    except ValueError:
+        try:
+            CronTab(value)
+        except ValueError as e:
+            raise ValueError("Not an int or cron expression: %s" % value)
+        return value
+
+
 def is_bool(value: Union[bool, str]) -> bool:
     """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
     if isinstance(value, bool):
@@ -251,11 +264,18 @@ def is_str_opt(value: str) -> Optional[str]:
     return str(value)
 
 
-def is_uuid_opt(value: str) -> uuid.UUID:
+def is_uuid_opt(value: str) -> Optional[uuid.UUID]:
     """optional uuid"""
     if value is None:
         return None
     return uuid.UUID(value)
+
+
+def is_int_opt(value: str) -> Optional[int]:
+    """optional int"""
+    if value is None:
+        return None
+    return int(value)
 
 
 T = TypeVar("T")
@@ -265,7 +285,7 @@ class Option(Generic[T]):
     """
     Defines an option and exposes it for use
 
-    All config option should be define prior to use
+    All config option should be defined prior to use
     For the document generator to work properly, they should be defined at the module level.
 
     :param section: section in the config file
@@ -406,6 +426,13 @@ class TransportConfig(object):
         self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
         self.request_timeout = Option(
             self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int
+        )
+        self.max_clients = Option(
+            self.prefix,
+            "max_clients",
+            None,
+            "The maximum number of simultaneous connections that can be open in parallel",
+            is_int_opt,
         )
 
 

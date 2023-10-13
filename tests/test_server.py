@@ -33,6 +33,7 @@ from inmanta import const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
+from inmanta.data import AUTO_DEPLOY
 from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
@@ -312,6 +313,9 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment_mu
     await agent.start()
     aclient = agent._client
 
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
     version = (await client_multi.reserve_version(environment_multi)).result["data"]
 
     resources = [
@@ -480,6 +484,9 @@ async def test_resource_update(postgresql_client, client, clienthelper, server, 
     async_finalizer(agent.stop)
     await agent.start()
     aclient = agent._client
+
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = await clienthelper.get_version()
 
@@ -791,6 +798,9 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     Test querying resource actions via the API
     """
     aclient = agent._client
+
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = await clienthelper.get_version()
 
@@ -1612,3 +1622,67 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
     result = await client.resource_details(tid=environment, rid=resource_id)
     assert result.code == 200
     assert result.result["data"]["attributes"] == attributes_on_api
+
+
+@pytest.mark.parametrize("v1_partial,v2_partial", [(False, False), (False, True)])
+# the other two cases require a race condition to trigger
+# as put_partial determines its own version number
+async def test_put_stale_version(client, server, environment, clienthelper, caplog, v1_partial, v2_partial):
+    """Put a version in with auto deploy on that is already stale"""
+    await client.set_setting(environment, AUTO_DEPLOY, True)
+
+    v0 = await clienthelper.get_version()
+    v1 = await clienthelper.get_version()
+    v2 = await clienthelper.get_version()
+
+    async def put_version(version):
+        partial = (version == v1 and v1_partial) or (version == v2 and v2_partial)
+
+        if partial:
+            version = 0
+
+        resource_id = "test::Resource[agent1,key=key1]"
+        resources = [
+            {
+                "id": f"{resource_id},v={version}",
+                "att": "val",
+                "version": version,
+                "send_event": False,
+                "purged": False,
+                "requires": [],
+            }
+        ]
+
+        if partial:
+            result = await client.put_partial(
+                tid=environment,
+                resources=resources,
+                unknowns=[],
+                version_info={},
+            )
+            assert result.code == 200
+
+        else:
+            result = await client.put_version(
+                tid=environment,
+                version=version,
+                resources=resources,
+                unknowns=[],
+                version_info={},
+                compiler_version=get_compiler_version(),
+            )
+            assert result.code == 200
+
+    await put_version(v0)
+
+    with caplog.at_level(logging.WARNING):
+        await put_version(v2)
+        await put_version(v1)
+    log_contains(
+        caplog,
+        "inmanta",
+        logging.WARNING,
+        f"Could not perform auto deploy on version 2 in environment {environment}, "
+        f"because Request conflicts with the current state of the resource: "
+        f"The version 2 on environment {environment} is older then the latest released version",
+    )
