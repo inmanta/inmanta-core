@@ -47,7 +47,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.util import get_compiler_version
+from inmanta.util import get_compiler_version, parse_timestamp
 from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -1293,10 +1293,14 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     # TODO fix this test case for both values of server_tz_aware_timestamps
     expected_timestamp: str
     if opt.server_tz_aware_timestamps.get():
-        expected_timestamp = now.astimezone().isoformat(timespec="microseconds")
+        if endpoint_to_use == "resource_deploy_done":
+            expected_timestamp = now.astimezone().isoformat(timespec="microseconds")
+        else:
+            expected_timestamp = now.astimezone(timezone.utc).isoformat(timespec="microseconds")
     else:
-        expected_timestamp = now.astimezone(timezone.utc).isoformat(timespec="microseconds")
+        expected_timestamp = now.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
 
+    parse_timestamp(expected_timestamp)
     expected_resource_action_messages = [
         {
             "level": const.LogLevel.DEBUG.name,
