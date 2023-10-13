@@ -34,6 +34,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
+from crontab import CronTab
 from inmanta import const
 
 LOGGER = logging.getLogger(__name__)
@@ -207,6 +208,18 @@ def is_time(value: str) -> int:
     return int(value)
 
 
+def is_time_or_cron(value: str) -> Union[int, str]:
+    """Time, the number of seconds represented as an integer value or a cron-like expression"""
+    try:
+        return is_time(value)
+    except ValueError:
+        try:
+            CronTab(value)
+        except ValueError as e:
+            raise ValueError("Not an int or cron expression: %s" % value)
+        return value
+
+
 def is_bool(value: Union[bool, str]) -> bool:
     """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
     if isinstance(value, bool):
@@ -265,7 +278,7 @@ class Option(Generic[T]):
     """
     Defines an option and exposes it for use
 
-    All config option should be define prior to use
+    All config option should be defined prior to use
     For the document generator to work properly, they should be defined at the module level.
 
     :param section: section in the config file

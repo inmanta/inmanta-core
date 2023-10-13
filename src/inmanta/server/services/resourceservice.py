@@ -25,22 +25,14 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
-from pydantic import ValidationError
 from tornado.httputil import url_concat
 
 from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
-from inmanta.data.dataview import (
-    DiscoveredResourceView,
-    ResourceHistoryView,
-    ResourceLogsView,
-    ResourcesInVersionView,
-    ResourceView,
-)
+from inmanta.data.dataview import ResourceHistoryView, ResourceLogsView, ResourcesInVersionView, ResourceView
 from inmanta.data.model import (
     AttributeStateChange,
-    DiscoveredResource,
     LatestReleasedResource,
     LogLine,
     ReleasedResourceDetails,
@@ -64,7 +56,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes
+from inmanta.types import Apireturn, PrimitiveTypes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -379,6 +371,7 @@ class ResourceService(protocol.ServerSlice):
         timestamp: datetime.datetime,
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
+        connection: Optional[Connection] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -411,16 +404,125 @@ class ResourceService(protocol.ServerSlice):
             change=const.Change.nochange,
             send_events=False,
             keep_increment_cache=True,
+            is_increment_notification=True,
+            connection=connection,
         )
 
-    async def get_increment(self, env: data.Environment, version: int) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+    async def _update_deploy_state(
+        self,
+        env: data.Environment,
+        resource_id: ResourceIdStr,
+        timestamp: datetime.datetime,
+        version: int,
+        status: ResourceState,
+        message: str,
+        fail_on_error: bool,
+        connection: Optional[Connection] = None,
+        can_overwrite_available: bool = True,
+    ) -> None:
+        """
+        Set the status of the provided resources as to skipped or failed
+
+        Performs all required bookkeeping for this.
+
+        Factored out the code to set a status on a resource
+
+
+        :param env: Environment to consider.
+        :param resource_id: resource to mark.
+        :param timestamp: Timestamp for the log message and the resource action entry.
+        :param version: Version of the resources to consider.
+        :param status: status to set
+        :param message: reason to log on the transfer
+        :param fail_on_error: When encountering an undeployable state: fail or do nothing?.
+        :param can_overwrite_available: can we overwrite available.
+            If set to false, we return without changes if the current state is available
+        """
+        resource_version_id = resource_id + ",v=" + str(version)
+        logline = LogLine(
+            level=const.LogLevel.INFO,
+            msg=f"Setting {status.value} because of {message}",
+            timestamp=timestamp,
+        )
+
+        assert status in [ResourceState.failed, ResourceState.skipped]
+        # this method is purpose specific for now.
+
+        async with data.Resource.get_connection(connection) as connection:
+            async with connection.transaction():
+                # validate resources
+                resource = await data.Resource.get_one(
+                    environment=env.id,
+                    resource_id=resource_id,
+                    model=version,
+                    # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                    # cascading deletes
+                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
+                    connection=connection,
+                )
+                if not resource:
+                    raise NotFound("The resource with the given ids do not exist in the given environment.")
+
+                # no escape from terminal
+                if resource.status != status and resource.status in TERMINAL_STATES:
+                    if not fail_on_error:
+                        return
+                    else:
+                        LOGGER.error("Attempting to set undeployable resource to deployable state")
+                        raise AssertionError("Attempting to set undeployable resource to deployable state")
+
+                if resource.status == ResourceState.available and not can_overwrite_available:
+                    return
+
+                resource_action = data.ResourceAction(
+                    environment=env.id,
+                    version=version,
+                    resource_version_ids=[resource_version_id],
+                    action_id=uuid.uuid4(),
+                    action=const.ResourceAction.deploy,
+                    started=timestamp,
+                    messages=[
+                        {
+                            **logline.dict(),
+                            "timestamp": logline.timestamp.astimezone().isoformat(timespec="microseconds"),
+                        }
+                    ],
+                    changes={},
+                    status=status,
+                    change=const.Change.nochange,
+                    finished=timestamp,
+                )
+                await resource_action.insert(connection=connection)
+
+                self.log_resource_action(
+                    env.id,
+                    [resource_version_id],
+                    logline.level.to_int,
+                    logline.timestamp,
+                    logline.msg,
+                )
+
+                self.clear_env_cache(env)
+
+                await resource.update_fields(
+                    last_deploy=timestamp,
+                    status=status,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    connection=connection,
+                )
+
+    async def get_increment(
+        self, env: data.Environment, version: int, connection: Optional[Connection] = None
+    ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
         In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
         version, per environment.
 
         :param env: The environment to consider.
-        :parma version: The version of the model to consider.
+        :param version: The version of the model to consider.
+        :param connection: connection to use towards the DB.
+            When the connection is in a transaction, we will always invalidate the cache
         """
 
         def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
@@ -439,12 +541,12 @@ class ResourceService(protocol.ServerSlice):
             return incr, neg_incr
 
         increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
-        if increment is None:
+        if increment is None or (connection is not None and connection.is_in_transaction()):
             lock = self._increment_cache_locks[env.id]
             async with lock:
                 increment = _get_cache_entry()
                 if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version)
+                    increment = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
                     self._increment_cache[env.id] = (version, *increment)
         return increment
 
@@ -535,19 +637,37 @@ class ResourceService(protocol.ServerSlice):
                     connection=connection,
                 )
 
-                # final resource update
-                if not keep_increment_cache:
-                    self.clear_env_cache(env)
+                extra_fields = {}
+                if status == ResourceState.deployed:
+                    extra_fields["last_success"] = resource_action.started
+
+                propagate_last_produced_events = False
+                # keep track IF we need to propagate if we are stale
+                # but only do it at the end of the transaction
+                if change != Change.nochange:
+                    # We are producing an event
+                    extra_fields["last_produced_events"] = finished
+                    propagate_last_produced_events = True
 
                 await resource.update_fields(
                     last_deploy=finished,
                     status=status,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
+                    **extra_fields,
                     connection=connection,
                 )
 
+                # final resource update
+                if not keep_increment_cache:
+                    self.clear_env_cache(env)
+
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
+
+                propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
+                await self.propagate_resource_state_if_stale(
+                    connection, env, [resource_id], finished, status, propagate_last_produced_events, propagate_deploy_state
+                )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
@@ -567,6 +687,49 @@ class ResourceService(protocol.ServerSlice):
                     changes=changes_with_rvid,
                 )
 
+    async def propagate_resource_state_if_stale(
+        self,
+        connection: Connection,
+        env: data.Environment,
+        resource_ids: list[Id],
+        last_produced_events: datetime.datetime,
+        deploy_state: ResourceState,
+        propagate_last_produced_events: bool,
+        propagate_deploy_state: bool,
+    ) -> None:
+        if propagate_deploy_state or propagate_last_produced_events:
+            # lock out release version
+            await env.acquire_release_version_lock(connection=connection)
+            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
+
+            for resource_id in resource_ids:
+                if latest_version is not None and latest_version > resource_id.version:
+                    # we are stale, forward propagate our status
+                    # this is required because:
+                    # upon release of the newer version our old status may have been copied over into the new version
+                    # (by the increment calculation)
+                    # the new version may thus hide this failure
+                    # issue #6475
+                    # the release_version_lock above ensure we can not race with release itself
+                    # this is at the end of the transaction to not block release too long
+                    # and vice versa
+                    if propagate_deploy_state:
+                        await self._update_deploy_state(
+                            env,
+                            resource_id.resource_str(),
+                            last_produced_events,
+                            latest_version,
+                            deploy_state,
+                            f"update on stale version {resource_id.version}",
+                            fail_on_error=False,
+                            connection=connection,
+                            can_overwrite_available=False,
+                        )
+                    if propagate_last_produced_events:
+                        await data.Resource.update_last_produced_events_if_newer(
+                            env.id, resource_id.resource_str(), latest_version, last_produced_events, connection=connection
+                        )
+
     @handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
         self,
@@ -582,9 +745,16 @@ class ResourceService(protocol.ServerSlice):
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
+        is_increment_notification: bool = False,
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
+        """
+        :param is_increment_notification: is this the increment calucation setting the deployed status,
+            instead of an actual deploy? Used to keep track of the last_success field on the resources,
+            which should not be updated for increments.
+        """
+
         def convert_legacy_state(
             status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
         ) -> Optional[const.ResourceState]:
@@ -653,7 +823,7 @@ class ResourceService(protocol.ServerSlice):
                     resource_ids,
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
-                    lock=data.RowLockMode.FOR_UPDATE,
+                    lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
                     connection=connection,
                 )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
@@ -758,9 +928,28 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
+                        propagate_last_produced_events = change != Change.nochange
+
+                        await self.propagate_resource_state_if_stale(
+                            connection,
+                            env,
+                            [Id.parse_id(res) for res in resource_ids],
+                            finished,
+                            status,  # mypy can't figure out this is never None here
+                            propagate_last_produced_events,
+                            status == ResourceState.failed or status == ResourceState.skipped,
+                        )
+
                         model_version = None
                         for res in resources:
-                            await update_fields_resource(res, last_deploy=finished, status=status, connection=connection)
+                            extra_fields = {}
+                            if status == ResourceState.deployed and not is_increment_notification:
+                                extra_fields["last_success"] = resource_action.started
+                            if propagate_last_produced_events:
+                                extra_fields["last_produced_events"] = finished
+                            await update_fields_resource(
+                                res, last_deploy=finished, status=status, **extra_fields, connection=connection
+                            )
                             model_version = res.model
 
                             if (
@@ -1052,55 +1241,3 @@ class ResourceService(protocol.ServerSlice):
         if not resource:
             raise NotFound("The resource with the given id does not exist")
         return resource
-
-    @handle(methods_v2.discovered_resource_create, env="tid")
-    async def discovered_resource_create(self, env: data.Environment, discovered_resource_id: str, values: JsonType) -> None:
-        try:
-            discovered_resource = DiscoveredResource(discovered_resource_id=discovered_resource_id, values=values)
-        except ValidationError as e:
-            # this part was copy/pasted from protocol.common.MethodProperties.validate_arguments.
-            error_msg = f"Failed to validate argument\n{str(e)}"
-            LOGGER.exception(error_msg)
-            raise BadRequest(error_msg, {"validation_errors": e.errors()})
-
-        dao = discovered_resource.to_dao(env.id)
-        await dao.insert_with_overwrite()
-
-    @handle(methods_v2.discovered_resource_create_batch, env="tid")
-    async def discovered_resources_create_batch(
-        self, env: data.Environment, discovered_resources: List[DiscoveredResource]
-    ) -> None:
-        dao_list = [res.to_dao(env.id) for res in discovered_resources]
-        await data.DiscoveredResource.insert_many_with_overwrite(dao_list)
-
-    @handle(methods_v2.discovered_resources_get, env="tid")
-    async def discovered_resources_get(
-        self, env: data.Environment, discovered_resource_id: ResourceIdStr
-    ) -> DiscoveredResource:
-        result = await data.DiscoveredResource.get_one(environment=env.id, discovered_resource_id=discovered_resource_id)
-        if not result:
-            raise NotFound(f"discovered_resource with name {discovered_resource_id} not found in env {env.id}")
-        dto = result.to_dto()
-        return dto
-
-    @protocol.handle(methods_v2.discovered_resources_get_batch, env="tid")
-    async def discovered_resources_get_batch(
-        self,
-        env: data.Environment,
-        limit: Optional[int] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        sort: str = "discovered_resource_id.asc",
-    ) -> ReturnValue[Sequence[DiscoveredResource]]:
-        try:
-            handler = DiscoveredResourceView(
-                environment=env,
-                limit=limit,
-                sort=sort,
-                start=start,
-                end=end,
-            )
-            out = await handler.execute()
-            return out
-        except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
-            raise BadRequest(e.message) from e

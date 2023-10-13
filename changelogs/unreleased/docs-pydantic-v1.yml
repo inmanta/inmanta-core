@@ -1,0 +1,9 @@
+description: Fixed broken link to Pydantic docs in documentation
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - iso4
+  - iso5
+  - iso6
+  - master

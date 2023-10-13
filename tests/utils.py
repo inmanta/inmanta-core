@@ -37,6 +37,7 @@ import build
 import build.env
 from _pytest.mark import MarkDecorator
 from inmanta import const, data, env, module, util
+from inmanta.data import ResourceIdStr
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -46,6 +47,8 @@ from libpip2pi.commands import dir2pi
 from packaging import version
 
 T = TypeVar("T")
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_all_subclasses(cls: Type[T]) -> set[Type[T]]:
@@ -310,6 +313,19 @@ async def _wait_until_deployment_finishes(client: Client, environment: str, vers
     await retry_limited(is_deployment_finished, timeout)
 
 
+async def _wait_for_resource_actions(
+    client: Client, environment: str, rid: ResourceIdStr, deploy_count: int, timeout: int = 10
+) -> None:
+    async def is_deployment_finished() -> bool:
+        result = await client.resource_logs(environment, rid, filter={"action": ["deploy"]})
+        assert result.code == 200
+        end_lines = [line for line in result.result["data"] if "End run" in line.get("msg", "")]
+        LOGGER.info("Deploys done: %s", end_lines)
+        return len(end_lines) >= deploy_count
+
+    await retry_limited(is_deployment_finished, timeout)
+
+
 class ClientHelper(object):
     def __init__(self, client: Client, environment: uuid.UUID) -> None:
         self.client = client
@@ -455,10 +471,8 @@ author = Inmanta <code@inmanta.com>
     if install:
         env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
     if publish_index is not None:
-        with build.env.IsolatedEnvBuilder() as build_env:
-            builder = build.ProjectBuilder(
-                srcdir=path, python_executable=build_env.executable, scripts_dir=build_env.scripts_dir
-            )
+        with build.env.DefaultIsolatedEnv() as build_env:
+            builder = build.ProjectBuilder(source_dir=path, python_executable=build_env.python_executable)
             build_env.install(builder.build_system_requires)
             build_env.install(builder.get_requires_for_build(distribution="wheel"))
             builder.build(distribution="wheel", output_directory=publish_index.artifact_dir)

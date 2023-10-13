@@ -67,9 +67,10 @@ async def test_dump_db(server, client, postgres_db, database_name):
     shutil.copytree(project_source, project_dir)
 
     check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_splay_time", 0))
-    check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_interval", 0))
+    check_result(await client.set_setting(env_id_1, "autostart_agent_deploy_interval", "0"))
     check_result(await client.set_setting(env_id_1, "autostart_agent_repair_splay_time", 0))
-    check_result(await client.set_setting(env_id_1, "autostart_agent_repair_interval", 600))
+    check_result(await client.set_setting(env_id_1, "autostart_agent_repair_interval", "600"))
+    check_result(await client.set_setting(env_id_1, "auto_deploy", False))
 
     await client.notify_change(id=env_id_1)
 
@@ -88,6 +89,18 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await client.release_version(env_id_1, v2, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
 
     await _wait_until_deployment_finishes(client, env_id_1, v2, 20)
+
+    # a version that is release, but not deployed
+    await client.notify_change(id=env_id_1)
+
+    versions = await wait_for_version(client, env_id_1, 3)
+    v3 = versions["versions"][0]["version"]
+
+    await client.release_version(env_id_1, v3, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
+
+    # a not released version
+    await client.notify_change(id=env_id_1)
+    versions = await wait_for_version(client, env_id_1, 4)
 
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name

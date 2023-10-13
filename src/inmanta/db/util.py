@@ -17,6 +17,7 @@
 """
 import collections.abc
 import logging
+import re
 from collections import abc
 from dataclasses import dataclass
 from typing import List, NamedTuple, Optional
@@ -52,7 +53,12 @@ class AsyncSingleton(collections.abc.AsyncIterable[bytes]):
 class PGRestore:
     """
     Class that offers support to restore a database dump.
+
+    This class assumes that the names of schemas, tables and columns in the dump don't contain a dot, double quote or
+    whitespace character.
     """
+
+    PARSE_EXT_BUFFER_REGEX = re.compile(r"COPY (?P<fq_table_name>[^ ]+)[ ]+\((?P<columns>[^)]+)\)[ ]+FROM stdin")
 
     # asyncpg execute method can not read in COPY IN
 
@@ -94,8 +100,46 @@ class PGRestore:
         await self.client.execute(self.commandbuffer)
         self.commandbuffer = ""
 
+    async def _parse_fq_table_name(self, fq_table_name: str) -> tuple[Optional[str], str]:
+        """
+        Parse a fully qualified PostgreSQL table name into its schema and table components.
+
+        :return: A tuple where the first element is the schema name and the second the table name.
+                 If the provided fq_table_name doesn't contain a schema, the first element in the tuple
+                 will be None.
+        """
+        if "." in fq_table_name:
+            schema, table_name = fq_table_name.split(".", maxsplit=1)
+        else:
+            schema = None
+            table_name = fq_table_name
+
+        # The schema or table name might be surrounded in quotes when the name conflicts with a keyword.
+        if schema:
+            schema = schema.strip(' "')
+        table_name = table_name.strip(' "')
+
+        return schema, table_name
+
+    async def _parse_copy_command_in_ext_buffer(self) -> tuple[Optional[str], str, list[str]]:
+        assert self.extbuffer
+        match = self.PARSE_EXT_BUFFER_REGEX.match(self.extbuffer)
+        if match is None:
+            raise Exception(f"Invalid COPY command: {self.extbuffer}")
+        schema, table_name = await self._parse_fq_table_name(match.group("fq_table_name"))
+        # A column name might be surrounded in quotes when the name conflicts with a keyword.
+        columns = [elem.strip(' "') for elem in match.group("columns").split(",")]
+        return schema, table_name, columns
+
     async def execute_input(self) -> None:
-        await self.client._copy_in(self.extbuffer, AsyncSingleton(self.commandbuffer.encode()), 10)
+        schema_name, table_name, column_names = await self._parse_copy_command_in_ext_buffer()
+        await self.client.copy_to_table(
+            schema_name=schema_name,
+            table_name=table_name,
+            source=AsyncSingleton(self.commandbuffer.encode()),
+            columns=column_names,
+            timeout=10,
+        )
         self.commandbuffer = ""
 
 

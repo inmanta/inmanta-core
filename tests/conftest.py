@@ -115,7 +115,7 @@ from inmanta.db import util as db_util
 from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
-from inmanta.moduletool import IsolatedEnvBuilderCached, ModuleTool, V2ModuleBuilder
+from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
 from inmanta.parser.plyInmantaParser import cache_manager
 from inmanta.protocol import VersionMatch
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_COMPILER
@@ -468,6 +468,29 @@ def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[Lis
 
 
 @pytest.fixture(scope="function")
+def get_type_of_column(postgresql_client) -> Callable[[], Awaitable[Optional[str]]]:
+    """
+    Fixture that returns the type of a column in a table
+    """
+
+    async def _get_type_of_column(table_name: str, column_name: str) -> Optional[str]:
+        data_type = await postgresql_client.fetchval(
+            """
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                    AND table_name = $1
+                    AND column_name = $2;
+            """,
+            table_name,
+            column_name,
+        )
+        return data_type
+
+    return _get_type_of_column
+
+
+@pytest.fixture(scope="function")
 def deactive_venv():
     old_os_path = os.environ.get("PATH", "")
     old_prefix = sys.prefix
@@ -536,7 +559,7 @@ def clean_reset_session():
     Execute cleanup tasks that should only run at the end of the test suite.
     """
     yield
-    IsolatedEnvBuilderCached.get_instance().destroy()
+    DefaultIsolatedEnvCached.get_instance().destroy()
 
 
 def reset_all_objects():
@@ -549,7 +572,7 @@ def reset_all_objects():
     Project._project = None
     unknown_parameters.clear()
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
-    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = False
+    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
     AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
@@ -557,7 +580,7 @@ def reset_all_objects():
 
 @pytest.fixture()
 def disable_isolated_env_builder_cache() -> None:
-    V2ModuleBuilder.DISABLE_ISOLATED_ENV_BUILDER_CACHE = True
+    V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = True
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -1698,7 +1721,7 @@ async def migrate_db_from(
 @pytest.fixture(scope="session", autouse=not PYTEST_PLUGIN_MODE)
 def guard_invariant_on_v2_modules_in_data_dir(modules_v2_dir: str) -> None:
     """
-    When the test suite runs, the python environment used to build V2 modules is cached using the IsolatedEnvBuilderCached
+    When the test suite runs, the python environment used to build V2 modules is cached using the DefaultIsolatedEnvCached
     class. This cache relies on the fact that all modules in the tests/data/modules_v2 directory use the same build-backand
     and build requirements. This guard verifies whether that assumption is fulfilled and raises an exception if it's not.
     """

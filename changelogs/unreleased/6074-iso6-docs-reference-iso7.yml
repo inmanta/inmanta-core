@@ -1,0 +1,5 @@
+description: >
+  Add variables for the iso major version and for the cloudsmith gpg keys to conf.py.
+issue-nr: 6074
+change-type: patch
+destination-branches: [master, iso6, iso5]

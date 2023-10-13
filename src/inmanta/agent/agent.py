@@ -17,7 +17,9 @@
 """
 import abc
 import asyncio
+import dataclasses
 import datetime
+import enum
 import logging
 import os
 import random
@@ -27,7 +29,7 @@ from asyncio import Lock
 from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -42,7 +44,16 @@ from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
-from inmanta.util import IntervalSchedule, NamedLock, ScheduledTask, TaskMethod, add_future, join_threadpools
+from inmanta.util import (
+    CronSchedule,
+    IntervalSchedule,
+    NamedLock,
+    ScheduledTask,
+    TaskMethod,
+    TaskSchedule,
+    add_future,
+    join_threadpools,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -200,6 +211,26 @@ class ResourceAction(ResourceActionBase):
             # Explicit cast is required because mypy has issues with * and generics
             results: List[ResourceActionResult] = cast(List[ResourceActionResult], await asyncio.gather(*waiters))
 
+            if self.undeployable:
+                self.running = True
+                try:
+                    if self.is_done():
+                        # Action is cancelled
+                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active" % (self.gid, self.resource))
+                        return
+                    result = sum(results, ResourceActionResult(cancel=False))
+                    if result.cancel:
+                        # self.running will be set to false when self.cancel is called
+                        # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
+                        return
+                    self.status = self.undeployable
+                    self.change = const.Change.nochange
+                    self.changes = {}
+                    self.future.set_result(ResourceActionResult(cancel=False))
+                    return
+                finally:
+                    self.running = False
+
             async with self.scheduler.ratelimiter:
                 ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
@@ -231,10 +262,7 @@ class ResourceAction(ResourceActionBase):
                         ctx.set_status(const.ResourceState.failed)
                         ctx.exception("Failed to report the start of the deployment to the server")
                     else:
-                        if self.undeployable is not None:
-                            ctx.set_status(self.undeployable)
-                        else:
-                            await self._execute(ctx=ctx, requires=requires)
+                        await self._execute(ctx=ctx, requires=requires)
 
                     ctx.debug(
                         "End run for resource %(resource)s in deploy %(deploy_id)s",
@@ -334,6 +362,98 @@ class RemoteResourceAction(ResourceActionBase):
             self.future.set_result(ResourceActionResult(cancel=False))
 
 
+@dataclasses.dataclass
+class DeployRequest:
+    """
+    A request to perform a deploy
+
+    :param is_full_deploy: is this a full deploy or incremental deploy?
+    :param is_periodic: is this deploy triggered by a timer?
+    :param reason: textual description of the deployment
+    """
+
+    is_full_deploy: bool
+    is_periodic: bool
+    reason: str
+
+    def interrupt(self, other: "DeployRequest") -> "DeployRequest":
+        """Interrupt this deploy for the other and produce a new request for future rescheduling of this deploy"""
+        return DeployRequest(
+            self.is_full_deploy, self.is_periodic, "Restarting run '%s', interrupted for '%s'" % (self.reason, other.reason)
+        )
+
+
+class DeployRequestAction(str, enum.Enum):
+    """
+    When a deploy is running and a new request arrives, we can take the following actions
+    """
+
+    ignore = "ignore"
+    """ ignore the new request, continue with the exiting deploy """
+    terminate = "terminate"
+    """ terminate the current deploy, start the new one """
+    defer = "defer"
+    """ defer the new request,  continue with the exiting deploy, start the new one when the current deploy is done"""
+    interrupt = "interrupt"
+    """ interrupt the current deploy: cancel it, start the new one and restart the current deploy when the new one is done"""
+
+
+# Two letter abbreviations to make table line up
+# N normal
+# P periodic
+# F full
+# I incremental
+NF = (True, False)
+NI = (False, False)
+PF = (True, True)
+PI = (False, True)
+# shorten table
+ignore = DeployRequestAction.ignore
+terminate = DeployRequestAction.terminate
+defer = DeployRequestAction.defer
+interrupt = DeployRequestAction.interrupt
+
+# This matrix describes what do when a new DeployRequest enters before the old one is done
+# Format is (old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic)
+# The underlying idea is that
+# 1. periodic deploys have no time pressure, they can be delayed
+# 2. non-periodic deploy should run as soon as possible
+# 3. non-periodic incremental deploys take precedence over repairs (as they are smaller)
+# 4. Periodic repairs should not interrupt each other to prevent restart loops
+# 5. Periodic repairs take precedence over periodic incremental deploys.
+# These rules do not full specify the matrix! They are the rules we have to follow.
+# A subtle detail is that when we do defer or interrupt, we only over keep one.
+# So if a previous deferred run exists, it will be silently dropped
+# But, we only defer or interrupt full deploys
+# As such, we will always execute a full deploy
+# (it may oscillate between periodic and not, but it will execute)
+
+deploy_response_matrix = {
+    # ((old_is_repair, old_is_periodic), (new_is_repair, new_is_periodic))
+    # Periodic restart loops: Full periodic is never interrupted by periodic
+    (PF, PF): ignore,  # Full periodic ignores full periodic to prevent restart loops
+    (NF, PF): ignore,  # Full ignores full periodic to avoid restart loops
+    (PF, PI): ignore,  # Full periodic ignores periodic increment to prevent restart loops
+    (PI, PF): terminate,  # Incremental periodic terminated by full periodic: upgrade to full
+    (PI, NF): terminate,  # Incremental periodic terminated by full: upgrade to full
+    # Same terminates same: focus on the new one
+    (PF, NF): terminate,  # Full periodic terminated by Full
+    (NF, NF): terminate,  # Full terminated by Full
+    # Increment * terminates Increment *
+    (PI, PI): terminate,
+    (PI, NI): terminate,
+    (NI, PI): terminate,
+    (NI, NI): terminate,
+    (NI, PF): defer,  # Incremental defers full periodic
+    (NI, NF): defer,  # Incremental defers full
+    # Non-periodic is always executed asap
+    (PF, NI): interrupt,  # periodic full interrupted by increment
+    (NF, NI): interrupt,  # full interrupted by increment
+    # Prefer the normal full over PI
+    (NF, PI): ignore,  # full ignores periodic increment
+}
+
+
 class ResourceScheduler(object):
     """Class responsible for managing sequencing of actions performed by the agent.
 
@@ -353,13 +473,10 @@ class ResourceScheduler(object):
         self.name = name
         self.ratelimiter = agent.ratelimiter
         self.version: int = 0
-        # the reason the last run was started
-        self.reason: str = ""
-        # was the last run a repair run?
-        self.is_repair: bool = False
-        # if this value is not None, a new repair run will be started after the current run is done
-        # this field is both flag and value, to ensure consistency
-        self._resume_reason: Optional[str] = None
+
+        self.running: Optional[DeployRequest] = None
+        self.deferred: Optional[DeployRequest] = None
+
         self.logger: Logger = agent.logger
 
     def get_scheduled_resource_actions(self) -> List[ResourceActionBase]:
@@ -370,9 +487,6 @@ class ResourceScheduler(object):
             if not resource_action.is_done():
                 return False
         return True
-
-    def is_normal_deploy_running(self) -> bool:
-        return not self.finished() and not self.is_repair
 
     def cancel(self) -> None:
         """
@@ -386,9 +500,8 @@ class ResourceScheduler(object):
     def reload(
         self,
         resources: List[Resource],
-        undeployable: Dict[ResourceVersionIdStr, ResourceState] = {},
-        reason: str = "RELOAD",
-        is_repair: bool = False,
+        undeployable: Dict[ResourceVersionIdStr, ResourceState],
+        new_request: DeployRequest,
     ) -> None:
         """
         Schedule a new set of resources for execution.
@@ -398,41 +511,42 @@ class ResourceScheduler(object):
 
         **This method should only be called under critical_ratelimiter lock!**
         """
-
         # First determined if we should start and if the current run should be resumed
         if not self.finished():
             # we are still running
-            if self.is_repair:
-                # now running repair
-                if is_repair:
-                    # repair restarts repair
-                    self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
-                else:
-                    # increment interrupts repair
-                    self.logger.info("Interrupting run '%s' for '%s'", self.reason, reason)
-                    self._resume_reason = "Restarting run '%s', interrupted for '%s'" % (self.reason, reason)
+            assert self.running is not None
+            # Get correct action
+            response = deploy_response_matrix[
+                ((self.running.is_full_deploy, self.running.is_periodic), (new_request.is_full_deploy, new_request.is_periodic))
+            ]
+            # Execute action
+            if response == DeployRequestAction.terminate:
+                self.logger.info("Terminating run '%s' for '%s'", self.running.reason, new_request.reason)
+            elif response == DeployRequestAction.defer:
+                self.logger.info("Deferring run '%s' for '%s'", new_request.reason, self.running.reason)
+                self.deferred = new_request
+                return
+            elif response == DeployRequestAction.ignore:
+                self.logger.info("Ignoring new run '%s' in favor of current '%s'", new_request.reason, self.running.reason)
+                return
+            elif response == DeployRequestAction.interrupt:
+                self.logger.info("Interrupting run '%s' for '%s'", self.running.reason, new_request.reason)
+                # Can overwrite, acceptable
+                self.deferred = self.running.interrupt(new_request)
             else:
-                # now running increment
-                if is_repair:
-                    # repair is delayed
-                    self.logger.info("Deferring run '%s' for '%s'", reason, self.reason)
-                    self._resume_reason = reason
-                    return
-                else:
-                    # increment overrules increment
-                    self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
+                assert False, f"Unexpected DeployRequestAction {response}"
+
             # cancel old run
             self.cancel()
 
         # start new run
-        self.reason = reason
-        self.is_repair = is_repair
+        self.running = new_request
         self.version = resources[0].id.get_version()
         gid = uuid.uuid4()
-        self.logger.info("Running %s for reason: %s" % (gid, reason))
+        self.logger.info("Running %s for reason: %s" % (gid, self.running.reason))
 
         # re-generate generation
-        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources}
+        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, self.running.reason) for r in resources}
 
         # mark undeployable
         for key, res in self.generation.items():
@@ -443,12 +557,12 @@ class ResourceScheduler(object):
         # hook up Cross Agent Dependencies
         cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
-            ra = RemoteResourceAction(self, cad, gid, reason)
+            ra = RemoteResourceAction(self, cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
             self.generation[cad.resource_str()] = ra
 
         # Create dummy to give start signal
-        dummy = DummyResourceAction(self, gid, reason)
+        dummy = DummyResourceAction(self, gid, self.running.reason)
         # Dispatch all actions
         # Will block on dependencies and dummy
         for r in self.generation.values():
@@ -469,14 +583,10 @@ class ResourceScheduler(object):
         async with self.agent.critical_ratelimiter:
             if not self.finished():
                 return
-            if self._resume_reason is not None:
-                self.logger.info("Resuming run '%s'", self._resume_reason)
-                self.agent.process.add_background_task(
-                    self.agent.get_latest_version_for_agent(
-                        reason=self._resume_reason, incremental_deploy=False, is_repair_run=True
-                    )
-                )
-                self._resume_reason = None
+            if self.deferred is not None:
+                self.logger.info("Resuming run '%s'", self.deferred.reason)
+                self.agent.process.add_background_task(self.agent.get_latest_version_for_agent(self.deferred))
+                self.deferred = None
 
     def notify_ready(
         self,
@@ -541,7 +651,7 @@ class AgentInstance(object):
         self._deploy_splay_value = random.randint(0, deploy_splay_time)
 
         # do regular repair runs
-        self._repair_interval = cfg.agent_repair_interval.get()
+        self._repair_interval: Union[int, str] = cfg.agent_repair_interval.get()
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
@@ -615,39 +725,53 @@ class AgentInstance(object):
         async def deploy_action() -> None:
             now = datetime.datetime.now().astimezone()
             await self.get_latest_version_for_agent(
-                reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
-                incremental_deploy=True,
-                is_repair_run=False,
+                DeployRequest(
+                    reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
+                    is_full_deploy=False,
+                    is_periodic=True,
+                )
             )
 
         async def repair_action() -> None:
             now = datetime.datetime.now().astimezone()
             await self.get_latest_version_for_agent(
-                reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
-                incremental_deploy=False,
-                is_repair_run=True,
+                DeployRequest(
+                    reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
+                    is_full_deploy=True,
+                    is_periodic=True,
+                )
             )
+
+        def periodic_schedule(
+            kind: str,
+            action: Callable[[], Awaitable[object]],
+            interval: Union[int, str],
+            splay_value: int,
+            initial_time: datetime.datetime,
+        ) -> None:
+            if isinstance(interval, int) and interval > 0:
+                self.logger.info(
+                    "Scheduling periodic %s with interval %d and splay %d (first run at %s)",
+                    kind,
+                    interval,
+                    splay_value,
+                    (initial_time + datetime.timedelta(seconds=splay_value)).strftime(const.TIME_LOGFMT),
+                )
+                interval_schedule: IntervalSchedule = IntervalSchedule(
+                    interval=float(interval), initial_delay=float(splay_value)
+                )
+                self._enable_time_trigger(action, interval_schedule)
+
+            if isinstance(interval, str):
+                self.logger.info("Scheduling periodic %s with cron expression '%s'", kind, interval)
+                cron_schedule = CronSchedule(cron=interval)
+                self._enable_time_trigger(action, cron_schedule)
 
         now = datetime.datetime.now().astimezone()
-        if self._deploy_interval > 0:
-            self.logger.info(
-                "Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
-                self._deploy_interval,
-                self._deploy_splay_value,
-                (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT),
-            )
-            self._enable_time_trigger(deploy_action, self._deploy_interval, self._deploy_splay_value)
-        if self._repair_interval > 0:
-            self.logger.info(
-                "Scheduling repair with interval %d and splay %d (first run at %s)",
-                self._repair_interval,
-                self._repair_splay_value,
-                (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT),
-            )
-            self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
+        periodic_schedule("deploy", deploy_action, self._deploy_interval, self._deploy_splay_value, now)
+        periodic_schedule("repair", repair_action, self._repair_interval, self._repair_splay_value, now)
 
-    def _enable_time_trigger(self, action: TaskMethod, interval: int, splay: int) -> None:
-        schedule: IntervalSchedule = IntervalSchedule(interval=float(interval), initial_delay=float(splay))
+    def _enable_time_trigger(self, action: TaskMethod, schedule: TaskSchedule) -> None:
         self.process._sched.add_action(action, schedule)
         self._time_triggered_actions.add(ScheduledTask(action=action, schedule=schedule))
 
@@ -686,7 +810,8 @@ class AgentInstance(object):
         return provider
 
     async def get_latest_version_for_agent(
-        self, reason: str = "Unknown", incremental_deploy: bool = False, is_repair_run: bool = False
+        self,
+        deploy_request: DeployRequest,
     ) -> None:
         """
         Get the latest version for the given agent (this is also how we are notified)
@@ -694,20 +819,20 @@ class AgentInstance(object):
         :param reason: the reason this deploy was started
         """
         if not self._can_get_resources():
-            self.logger.warning("%s aborted by rate limiter", reason)
+            self.logger.warning("%s aborted by rate limiter", deploy_request.reason)
             return
 
         async with self.critical_ratelimiter:
             if not self._can_get_resources():
-                self.logger.warning("%s aborted by rate limiter", reason)
+                self.logger.warning("%s aborted by rate limiter", deploy_request.reason)
                 return
 
-            self.logger.debug("Getting latest resources for %s", reason)
+            self.logger.debug("Getting latest resources for %s", deploy_request.reason)
             self._getting_resources = True
             start = time.time()
             try:
                 result = await self.get_client().get_resources_for_agent(
-                    tid=self._env_id, agent=self.name, incremental_deploy=incremental_deploy
+                    tid=self._env_id, agent=self.name, incremental_deploy=not deploy_request.is_full_deploy
                 )
             finally:
                 self._getting_resources = False
@@ -715,20 +840,20 @@ class AgentInstance(object):
             self._get_resource_duration = end - start
             self._get_resource_timeout = cfg.agent_get_resource_backoff.get() * self._get_resource_duration + end
             if result.code == 404:
-                self.logger.info("No released configuration model version available for %s", reason)
+                self.logger.info("No released configuration model version available for %s", deploy_request.reason)
             elif result.code == 409:
-                self.logger.warning("We are not currently primary during %s: %s", reason, result.result)
+                self.logger.warning("We are not currently primary during %s: %s", deploy_request.reason, result.result)
             elif result.code != 200 or result.result is None:
-                self.logger.warning("Got an error while pulling resources for %s. %s", reason, result.result)
+                self.logger.warning("Got an error while pulling resources for %s. %s", deploy_request.reason, result.result)
 
             else:
                 undeployable, resources = await self.load_resources(
                     result.result["version"], const.ResourceAction.deploy, result.result["resources"]
                 )
-                self.logger.debug("Pulled %d resources because %s", len(resources), reason)
+                self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
 
                 if len(resources) > 0:
-                    self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
+                    self._nq.reload(resources, undeployable, deploy_request)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
@@ -1185,13 +1310,6 @@ class Agent(SessionEndpoint):
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
-    async def get_latest_version(self) -> None:
-        """
-        Get the latest version of managed resources for all agents
-        """
-        for agent in self._instances.values():
-            await agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
-
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> Set[str]:
         """Ensure that the code for the given environment and version is loaded"""
         failed_to_load: Set[str] = set()
@@ -1260,7 +1378,13 @@ class Agent(SessionEndpoint):
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
         self.add_background_task(
-            instance.get_latest_version_for_agent(reason="call to trigger_update", incremental_deploy=incremental_deploy)
+            instance.get_latest_version_for_agent(
+                DeployRequest(
+                    is_full_deploy=not incremental_deploy,
+                    is_periodic=False,
+                    reason="call to trigger_update",
+                )
+            )
         )
         return 200
 
