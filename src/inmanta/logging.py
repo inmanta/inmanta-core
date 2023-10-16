@@ -19,9 +19,10 @@ import enum
 import logging
 import os
 import sys
+import types
 from argparse import Namespace
 from contextlib import contextmanager
-from typing import Optional, TextIO
+from typing import Iterator, Optional, TextIO, Union
 
 import colorlog
 from colorlog.formatter import LogColors
@@ -116,6 +117,7 @@ class InmantaLoggerConfig:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
         """
         self._options_applied = False
+        self._executing_compile_or_export_command = False
         self._handler: logging.Handler = logging.StreamHandler(stream=stream)
         self.set_log_level("INFO")
         formatter = self._get_log_formatter_for_stream_handler(timed=False)
@@ -143,7 +145,11 @@ class InmantaLoggerConfig:
         if Project._project:
             # Directories containing V1 modules
             dirs_containing_modules += [p for p in Project._project._metadata.modulepath]
-        if "inmanta_plugins" in sys.modules and sys.modules["inmanta_plugins"].__spec__.submodule_search_locations:
+        if (
+            "inmanta_plugins" in sys.modules
+            and sys.modules["inmanta_plugins"].__spec__
+            and sys.modules["inmanta_plugins"].__spec__.submodule_search_locations
+        ):
             # Directories containing v2 modules
             dirs_containing_modules += [str(s) for s in sys.modules["inmanta_plugins"].__spec__.submodule_search_locations]
         result = None
@@ -156,7 +162,19 @@ class InmantaLoggerConfig:
         self._source_file_to_module_cache[path_source_file] = result
         return result
 
-    def custom_log_record_factory(self, *args, **kwargs) -> logging.LogRecord:
+    def custom_log_record_factory(
+        self,
+        name: str,
+        level: int,
+        pathname: str,
+        lineno: int,
+        msg: object,
+        args: Union[tuple[object] | dict[str, object]],
+        exc_info: Optional[tuple[type[BaseException], BaseException, types.TracebackType]],
+        func: Optional[str] = None,
+        sinfo: Optional[str] = None,
+        **kwargs: object,
+    ) -> logging.LogRecord:
         """
         This log record factory makes sure that the name of the log record is updated
         in the following way while executing in the "compiler" or "exporter" logger mode:
@@ -165,15 +183,18 @@ class InmantaLoggerConfig:
         * compiler: When executing in compiler mode and the log record doesn't come from an Inmanta module.
         * exporter: When executing in exporter mode and the log record doesn't come from an Inmanta module.
         """
+        new_logger_name: str
         if self._logger_mode is LoggerMode.COMPILER or self._logger_mode is LoggerMode.EXPORTER:
-            source_file_for_log_line = args[2]
-            module_name: Optional[str] = self._get_module_name_for_source_file(source_file_for_log_line)
-            new_logger_name = module_name if module_name else self._logger_mode.value
-            args = (new_logger_name, *args[1:])
-        return self._default_log_level_factory(*args, **kwargs)
+            inmanta_module_name: Optional[str] = self._get_module_name_for_source_file(pathname)
+            new_logger_name = inmanta_module_name if inmanta_module_name else self._logger_mode.value
+        else:
+            new_logger_name = name
+        return self._default_log_level_factory(
+            new_logger_name, level, pathname, lineno, msg, args, exc_info, func, sinfo, **kwargs
+        )
 
     @contextmanager
-    def run_in_logger_mode(self, logger_mode: LoggerMode) -> None:
+    def run_in_logger_mode(self, logger_mode: LoggerMode) -> Iterator[None]:
         """
         A contextmanager that can be used to temporarily change the LoggerMode within a code block.
         """
@@ -234,15 +255,16 @@ class InmantaLoggerConfig:
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
         self._options_applied = True
+        if hasattr(options, "func") and options.func.__name__ in ["compile_project", "export"]:
+            self._executing_compile_or_export_command = True
         if options.log_file:
             self.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
             self.set_log_formatter(formatter)
             self.set_log_level(options.log_file_level, cli=False)
         else:
-            if options.timed:
-                formatter = self._get_log_formatter_for_stream_handler(timed=True)
-                self.set_log_formatter(formatter)
+            formatter = self._get_log_formatter_for_stream_handler(timed=options.timed)
+            self.set_log_formatter(formatter)
             self.set_log_level(str(options.verbose))
 
     @stable_api
@@ -302,8 +324,11 @@ class InmantaLoggerConfig:
 
     def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:
         log_format = "%(asctime)s " if timed else ""
+        # Use a shorter space padding for the compile and export command, because these commands
+        # don't use display the fully qualified name of the module that created the log line.
+        size_space_padding = 15 if self._executing_compile_or_export_command else 25
         if _is_on_tty():
-            log_format += "%(log_color)s%(name)-15s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+            log_format += f"%(log_color)s%(name)-{size_space_padding}s%(levelname)-8s%(reset)s%(blue)s%(message)s"
             formatter = MultiLineFormatter(
                 self,
                 log_format,
@@ -311,7 +336,7 @@ class InmantaLoggerConfig:
                 log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
             )
         else:
-            log_format += "%(name)-15s%(levelname)-8s%(message)s"
+            log_format += f"%(name)-{size_space_padding}s%(levelname)-8s%(message)s"
             formatter = MultiLineFormatter(
                 self,
                 log_format,
