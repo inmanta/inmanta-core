@@ -454,7 +454,7 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
 
 @stable_api
-def api_boundary_json_encoder(o: object, tz_aware: bool = False) -> Union[ReturnTypes, "JSONSerializable"]:
+def api_boundary_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
     encoder is meant to be used for API boundaries.

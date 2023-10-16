@@ -18,6 +18,7 @@
 import inspect
 import json
 import re
+from functools import partial
 from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic.networks import AnyUrl
@@ -50,10 +51,10 @@ from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
 
 
-def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
+def openapi_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
-    return util.api_boundary_json_encoder(o)
+    return util.api_boundary_json_encoder(o, tz_aware=tz_aware)
 
 
 class OpenApiConverter:
@@ -109,10 +110,10 @@ class OpenApiConverter:
             path_item.__setattr__(http_method_name.lower(), operation)
         return path_item
 
-    def generate_openapi_json(self) -> str:
+    def generate_openapi_json(self, tz_aware: bool = True) -> str:
         openapi = self.generate_openapi_definition()
 
-        return json.dumps(openapi, default=openapi_json_encoder)
+        return json.dumps(openapi, default=partial(openapi_json_encoder, tz_aware))
 
     def generate_swagger_html(self) -> str:
         return self.get_swagger_html(self.generate_openapi_json())

@@ -37,6 +37,7 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance
 from inmanta.execute.util import Unknown
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
+from inmanta.server.config import server_tz_aware_timestamps
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version, hash_file
 
@@ -401,7 +402,7 @@ class Exporter(object):
 
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
-                fd.write(protocol.json_encode(resources).encode("utf-8"))
+                fd.write(protocol.json_encode(resources, tz_aware=server_tz_aware_timestamps.get()).encode("utf-8"))
         elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             self._version = self.commit_resources(
                 self._version, resources, metadata, partial_compile, resource_sets_to_remove_all
