@@ -21,6 +21,8 @@ import os
 import shutil
 import sys
 from asyncio import subprocess
+from utils import v1_module_from_template
+import textwrap
 
 import py
 import pytest
@@ -441,3 +443,113 @@ async def test_export_invalid_argument_combination() -> None:
 
     assert process.returncode == 1
     assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")
+
+
+async def test_logger_name_in_compiler_exporter_output(
+    server, environment: str, tmpvenv_active_inherit: env.VirtualEnv, modules_dir: str, tmpdir, monkeypatch
+) -> None:
+    """
+    This test case verifies that the logger name mentioned in the log of the compile/export command is correct. Namely:
+
+    * compiler: For log lines produced by the compiler.
+    * exporter: For log lines produced by the exporter.
+    * <name-of-module>: For log lines produced by a specific module.
+    """
+    v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
+    mod_name = "mymod"
+    libs_dir = os.path.join(tmpdir, "libs")
+    v1_module_from_template(
+        source_dir=v1_template_path,
+        dest_dir=os.path.join(libs_dir, mod_name),
+        new_name=mod_name,
+        new_content_init_cf="",
+        new_content_init_py=textwrap.dedent(
+            """
+                from inmanta.plugins import plugin
+                import logging
+
+                LOGGER = logging.getLogger("my_logger")
+
+                @plugin
+                def test_plugin():
+                    LOGGER.info("test")
+            """,
+        )
+    )
+
+    path_project_yml_file = tmpdir.join("project.yml")
+    path_project_yml_file.write(
+        textwrap.dedent(
+            f"""
+                name: testproject
+                modulepath: {libs_dir}
+                downloadpath: {libs_dir}
+                repo: https://github.com/inmanta/
+            """
+        )
+    )
+
+    path_main_cf = tmpdir.join("main.cf")
+    path_main_cf.write(
+        textwrap.dedent(
+            """
+                import mymod
+                mymod::test_plugin()
+            """
+        )
+    )
+
+    await install_project(python_env=tmpvenv_active_inherit, project_dir=tmpdir)
+
+    # Compile command
+    args = [
+        tmpvenv_active_inherit.python_path,
+        "-m",
+        "inmanta.app",
+        "-vvv",
+        "compile",
+    ]
+    process = await subprocess.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
+    )
+    try:
+        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+    stdout = stdout.decode("utf-8")
+
+    assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
+    assert "compiler       DEBUG   Starting compile" in stdout
+    assert "mymod          INFO    test" in stdout
+
+    # Export command
+    server_port = Config.get("client_rest_transport", "port")
+    server_host = Config.get("client_rest_transport", "host", "localhost")
+    args = [
+        tmpvenv_active_inherit.python_path,
+        "-m",
+        "inmanta.app",
+        "-vvv",
+        "export",
+    ]
+    args.extend(["--server_port", str(server_port)])
+    args.extend(["--server_address", str(server_host)])
+    args.extend(["-e", environment])
+
+    process = await subprocess.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, cwd=tmpdir
+    )
+    try:
+        (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
+    except asyncio.TimeoutError as e:
+        process.kill()
+        await process.communicate()
+        raise e
+    stdout = stdout.decode("utf-8")
+
+    assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
+    assert "compiler       DEBUG   Starting compile" in stdout
+    assert "mymod          INFO    test" in stdout
+    assert "exporter       INFO    Committed resources with version 1" in stdout

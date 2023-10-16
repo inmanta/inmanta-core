@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import enum
 import logging
 import os
 import sys
@@ -26,6 +27,8 @@ from colorlog.formatter import LogColors
 
 from inmanta import const
 from inmanta.stable_api import stable_api
+from contextlib import contextmanager
+from inmanta.module import Project
 
 
 def _is_on_tty() -> bool:
@@ -69,6 +72,19 @@ class Options(Namespace):
     timed: bool = False
 
 
+class LoggerMode(enum.Enum):
+    """
+    A different log format is used when the compiler/exporter is executed. This enum
+    indicates which mode we are currently executing in.
+        * COMPILER: the compiler is running.
+        * EXPORT: The exporter is running.
+        * OTHER: We are executing neither the compiler nor the exporter (e.g. running the server).
+    """
+    COMPILER = "compiler"
+    EXPORTER = "exporter"
+    OTHER = "other"
+
+
 @stable_api
 class InmantaLoggerConfig:
     """
@@ -104,9 +120,80 @@ class InmantaLoggerConfig:
         formatter = self._get_log_formatter_for_stream_handler(timed=False)
         self.set_log_formatter(formatter)
 
+        self._logger_mode = LoggerMode.OTHER
+        self._default_log_level_factory = logging.getLogRecordFactory()
+        logging.setLogRecordFactory(self.custom_log_record_factory)
+        # A cache for the `_get_module_name_for_source_file()` method. A None value
+        # indicates that the source file doesn't belong to an Inmanta module.
+        self._source_file_to_module_cache: dict[str, Optional[str]] = {}
+
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
         logging.root.setLevel(0)
+
+    def _get_module_name_for_source_file(self, path_source_file: str) -> Optional[str]:
+        """
+        Return the module name that the given `path_source_file` belongs to or None if `path_source_file`
+        doesn't belong to a module.
+        """
+        if path_source_file in self._source_file_to_module_cache:
+            return self._source_file_to_module_cache[path_source_file]
+        dirs_containing_modules = []
+        if Project._project:
+            # Directories containing V1 modules
+            dirs_containing_modules += [p for p in Project._project._metadata.modulepath]
+        if "inmanta_plugins" in sys.modules and sys.modules["inmanta_plugins"].__spec__.submodule_search_locations:
+            # Directories containing v2 modules
+            dirs_containing_modules += [
+                str(s) for s in sys.modules["inmanta_plugins"].__spec__.submodule_search_locations
+            ]
+        result = None
+        for mod_dir in dirs_containing_modules:
+            if path_source_file.startswith(mod_dir):
+                rel_path = path_source_file[len(mod_dir):].strip("/")
+                if rel_path:
+                    result = rel_path.split("/", maxsplit=1)[0]
+
+        self._source_file_to_module_cache[path_source_file] = result
+        return result
+
+    def custom_log_record_factory(self, *args, **kwargs) -> logging.LogRecord:
+        """
+        This log record factory makes sure that the name of the log record is updated
+        in the following way while executing in the "compiler" or "exporter" logger mode:
+
+        * The name of the Inmanta module: When the log record was created by a source file in an Inmanta module.
+        * compiler: When executing in compiler mode and the log record doesn't come from an Inmanta module.
+        * exporter: When executing in exporter mode and the log record doesn't come from an Inmanta module.
+        """
+        if self._logger_mode is LoggerMode.COMPILER or self._logger_mode is LoggerMode.EXPORTER:
+            source_file_for_log_line = args[2]
+            module_name: Optional[str] = self._get_module_name_for_source_file(source_file_for_log_line)
+            new_logger_name = module_name if module_name else self._logger_mode.value
+            args = (new_logger_name, *args[1:])
+        return self._default_log_level_factory(*args, **kwargs)
+
+    @contextmanager
+    def run_in_logger_mode(self, logger_mode: LoggerMode) -> None:
+        """
+        A contextmanager that can be used to temporarily change the LoggerMode within a code block.
+        """
+        prev_logger_mode = self._logger_mode
+        self._logger_mode = logger_mode
+        try:
+            yield
+        finally:
+            self._logger_mode = prev_logger_mode
+
+    @classmethod
+    def get_current_instance(cls) -> "InmantaLoggerConfig":
+        """
+        Obtain the InmantaLoggerConfig singleton. This method assumes that an InmantaLoggerConfig was already initialized
+        using the `get_instance()` method.
+        """
+        if not cls._instance:
+            raise Exception("InmantaLoggerConfig was not yet initialized. Call get_instance() first.")
+        return cls._instance
 
     @classmethod
     @stable_api
@@ -217,15 +304,17 @@ class InmantaLoggerConfig:
     def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:
         log_format = "%(asctime)s " if timed else ""
         if _is_on_tty():
-            log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+            log_format += "%(log_color)s%(name)-15s%(levelname)-8s%(reset)s%(blue)s%(message)s"
             formatter = MultiLineFormatter(
+                self,
                 log_format,
                 reset=True,
                 log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
             )
         else:
-            log_format += "%(name)-25s%(levelname)-8s%(message)s"
+            log_format += "%(name)-15s%(levelname)-8s%(message)s"
             formatter = MultiLineFormatter(
+                self,
                 log_format,
                 reset=False,
                 no_color=True,
@@ -243,6 +332,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
     def __init__(
         self,
+        logger_config: InmantaLoggerConfig,
         fmt: Optional[str] = None,
         *,
         # keep interface minimal: only include fields we actually use
@@ -259,6 +349,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         :param no_color: Boolean indicating whether to disable colors in the output.
         """
         super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
+        self._logger_config = logger_config
         self.fmt = fmt
 
     def get_header_length(self, record: logging.LogRecord) -> int:
@@ -276,14 +367,14 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
             no_color=True,
         )
         header = formatter.format(
-            logging.LogRecord(
-                name=record.name,
-                level=record.levelno,
-                pathname=record.pathname,
-                lineno=record.lineno,
-                msg="",
-                args=(),
-                exc_info=None,
+            self._logger_config.custom_log_record_factory(
+                record.name,
+                record.levelno,
+                record.pathname,
+                record.lineno,
+                "",
+                (),
+                None,
             )
         )
         return len(header)
