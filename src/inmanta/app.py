@@ -67,7 +67,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
-from inmanta.logging import InmantaLoggerConfig, _is_on_tty, LoggerMode
+from inmanta.logging import InmantaLoggerConfig, LoggerMode, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager

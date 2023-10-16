@@ -20,15 +20,15 @@ import logging
 import os
 import sys
 from argparse import Namespace
+from contextlib import contextmanager
 from typing import Optional, TextIO
 
 import colorlog
 from colorlog.formatter import LogColors
 
 from inmanta import const
-from inmanta.stable_api import stable_api
-from contextlib import contextmanager
 from inmanta.module import Project
+from inmanta.stable_api import stable_api
 
 
 def _is_on_tty() -> bool:
@@ -80,6 +80,7 @@ class LoggerMode(enum.Enum):
         * EXPORT: The exporter is running.
         * OTHER: We are executing neither the compiler nor the exporter (e.g. running the server).
     """
+
     COMPILER = "compiler"
     EXPORTER = "exporter"
     OTHER = "other"
@@ -144,13 +145,11 @@ class InmantaLoggerConfig:
             dirs_containing_modules += [p for p in Project._project._metadata.modulepath]
         if "inmanta_plugins" in sys.modules and sys.modules["inmanta_plugins"].__spec__.submodule_search_locations:
             # Directories containing v2 modules
-            dirs_containing_modules += [
-                str(s) for s in sys.modules["inmanta_plugins"].__spec__.submodule_search_locations
-            ]
+            dirs_containing_modules += [str(s) for s in sys.modules["inmanta_plugins"].__spec__.submodule_search_locations]
         result = None
         for mod_dir in dirs_containing_modules:
             if path_source_file.startswith(mod_dir):
-                rel_path = path_source_file[len(mod_dir):].strip("/")
+                rel_path = path_source_file[len(mod_dir) :].strip("/")
                 if rel_path:
                     result = rel_path.split("/", maxsplit=1)[0]
 

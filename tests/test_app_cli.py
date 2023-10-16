@@ -20,9 +20,8 @@ import asyncio
 import os
 import shutil
 import sys
-from asyncio import subprocess
-from utils import v1_module_from_template
 import textwrap
+from asyncio import subprocess
 
 import py
 import pytest
@@ -33,6 +32,7 @@ from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
 from inmanta.const import VersionState
+from utils import v1_module_from_template
 
 
 def app(args):
@@ -474,7 +474,7 @@ async def test_logger_name_in_compiler_exporter_output(
                 def test_plugin():
                     LOGGER.info("test")
             """,
-        )
+        ),
     )
 
     path_project_yml_file = tmpdir.join("project.yml")
