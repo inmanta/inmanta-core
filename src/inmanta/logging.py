@@ -126,6 +126,7 @@ class InmantaLoggerConfig:
         self._logger_mode = LoggerMode.OTHER
         self._default_log_level_factory = logging.getLogRecordFactory()
         logging.setLogRecordFactory(self.custom_log_record_factory)
+        self._dirs_containing_modules = self._get_dirs_containing_modules()
         self._source_file_to_module_cache: dict[str, Optional[str]] = {}
         # A cache for the `_get_module_name_for_source_file()` method.
 
@@ -133,13 +134,10 @@ class InmantaLoggerConfig:
         logging.root.addHandler(self._handler)
         logging.root.setLevel(0)
 
-    def _get_module_name_for_source_file(self, path_source_file: str) -> Optional[str]:
+    def _get_dirs_containing_modules(self) -> list[str]:
         """
-        Return the module name that the given `path_source_file` belongs to or None if `path_source_file`
-        doesn't belong to a module.
+        Return all the directories that contain V1 or V2 modules that are installed.
         """
-        if path_source_file in self._source_file_to_module_cache:
-            return self._source_file_to_module_cache[path_source_file]
         dirs_containing_modules = []
         if Project._project:
             # Directories containing V1 modules
@@ -151,8 +149,17 @@ class InmantaLoggerConfig:
         ):
             # Directories containing v2 modules
             dirs_containing_modules += [str(s) for s in sys.modules["inmanta_plugins"].__spec__.submodule_search_locations]
+        return dirs_containing_modules
+
+    def _get_module_name_for_source_file(self, path_source_file: str) -> Optional[str]:
+        """
+        Return the module name that the given `path_source_file` belongs to or None if `path_source_file`
+        doesn't belong to a module.
+        """
+        if path_source_file in self._source_file_to_module_cache:
+            return self._source_file_to_module_cache[path_source_file]
         result = None
-        for mod_dir in dirs_containing_modules:
+        for mod_dir in self._dirs_containing_modules:
             if path_source_file.startswith(mod_dir):
                 rel_path = path_source_file[len(mod_dir) :].strip("/")
                 if rel_path:
