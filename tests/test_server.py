@@ -1299,7 +1299,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     else:
         expected_timestamp = now.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
 
-    parse_timestamp(expected_timestamp)
     expected_resource_action_messages = [
         {
             "level": const.LogLevel.DEBUG.name,
