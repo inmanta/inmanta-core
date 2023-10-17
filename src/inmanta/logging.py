@@ -190,7 +190,7 @@ class InmantaLoggerConfig:
         * exporter: When executing in exporter mode and the log record doesn't come from an Inmanta module.
         """
         new_logger_name: str
-        if self._logger_mode is LoggerMode.COMPILER or self._logger_mode is LoggerMode.EXPORTER:
+        if self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
             inmanta_module_name: Optional[str] = self._get_module_name_for_source_file(pathname)
             new_logger_name = inmanta_module_name if inmanta_module_name else self._logger_mode.value
         else:
