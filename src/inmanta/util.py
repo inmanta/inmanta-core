@@ -404,7 +404,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     :param tz_aware: Whether to return timezone aware timestamps or naive, implicit UTC timestamp.
     """
 
-    def convert_timestamp(timestamp: datetime.datetime, naive_utc: bool, tz_aware: bool) -> datetime.datetime:
+    def convert_timestamp(timestamp: datetime.datetime) -> datetime.datetime:
         if tz_aware:
             if timestamp.tzinfo:
                 return timestamp
@@ -418,7 +418,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
 
         return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
 
-    return convert_timestamp(timestamp, naive_utc, tz_aware).isoformat(timespec="microseconds")
+    return convert_timestamp(timestamp).isoformat(timespec="microseconds")
 
 
 def parse_timestamp(timestamp: str) -> datetime.datetime:
