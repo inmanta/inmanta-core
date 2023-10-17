@@ -126,9 +126,8 @@ class InmantaLoggerConfig:
         self._logger_mode = LoggerMode.OTHER
         self._default_log_level_factory = logging.getLogRecordFactory()
         logging.setLogRecordFactory(self.custom_log_record_factory)
-        # A cache for the `_get_module_name_for_source_file()` method. A None value
-        # indicates that the source file doesn't belong to an Inmanta module.
         self._source_file_to_module_cache: dict[str, Optional[str]] = {}
+        # A cache for the `_get_module_name_for_source_file()` method.
 
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
@@ -324,8 +323,8 @@ class InmantaLoggerConfig:
 
     def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:
         log_format = "%(asctime)s " if timed else ""
-        # Use a shorter space padding for the compile and export command, because these commands
-        # don't use display the fully qualified name of the module that created the log line.
+        # Use a shorter space padding for the compile and export commands, because these commands
+        # don't use the qualified name of the module that created the log line as the logger name.
         size_space_padding = 15 if self._executing_compile_or_export_command else 25
         if _is_on_tty():
             log_format += f"%(log_color)s%(name)-{size_space_padding}s%(levelname)-8s%(reset)s%(blue)s%(message)s"

@@ -518,8 +518,8 @@ async def test_logger_name_in_compiler_exporter_output(
         process.kill()
         await process.communicate()
         raise e
-    stdout = stdout.decode("utf-8")
 
+    stdout = stdout.decode("utf-8")
     assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
     assert "compiler       DEBUG   Starting compile" in stdout
     assert "mymod          INFO    test" in stdout
@@ -547,8 +547,8 @@ async def test_logger_name_in_compiler_exporter_output(
         process.kill()
         await process.communicate()
         raise e
-    stdout = stdout.decode("utf-8")
 
+    stdout = stdout.decode("utf-8")
     assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
     assert "compiler       DEBUG   Starting compile" in stdout
     assert "mymod          INFO    test" in stdout
