@@ -429,7 +429,7 @@ class Session(object):
         self._callhandle: Optional[asyncio.TimerHandle] = None
         self.expired: bool = False
 
-        self.last_dispatched_call: float = time.monotonic()
+        self.last_dispatched_call: float = 0
         self.dispatch_delay = 0.1  # keep at least 100 ms between dispatches
 
         self.tid: uuid.UUID = tid

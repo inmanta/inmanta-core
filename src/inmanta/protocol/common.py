@@ -119,6 +119,9 @@ class Request(object):
         self._method = method
         self._headers = headers
         self._body = body
+        # Reply ID is used to send back the result
+        # If None, no reply is expected
+        #  i.e. this call will immediately return, potentially even before the request is dispatched
         self._reply_id: Optional[uuid.UUID] = None
 
     @property

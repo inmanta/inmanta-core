@@ -317,7 +317,6 @@ class RemoteResourceAction(ResourceActionBase):
                 if self.is_done():
                     return
 
-                self.running = True
                 result = await self.scheduler.get_client().get_resource(
                     self.scheduler.agent._env_id,
                     self.resource_id.resource_version_str(),
@@ -330,6 +329,8 @@ class RemoteResourceAction(ResourceActionBase):
                     return
 
                 status = const.ResourceState[result.result["resource"]["status"]]
+
+                self.running = True
 
                 if status in const.TRANSIENT_STATES or self.future.done():
                     # wait for event
