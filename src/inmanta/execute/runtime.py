@@ -385,6 +385,7 @@ class ResultVariableProxy(VariableABC[T]):
                 # TOOD: add test cases
                 # TOOD: should we exclude NoneValue?
                 # TOOD: should we exclude Unknown? Both here and in ExpressionStatement
+                #   I think both should be propagated and e.g. For loop should ignore Unknown
                 if not isinstance(subvalue, Unknown):
                     listener.receive_result(subvalue, location)
             # clean up: prevent data leaks and ensure listener is only notified once
