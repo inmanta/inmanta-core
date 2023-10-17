@@ -20,7 +20,6 @@ import json
 import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
-from pydantic.networks import AnyUrl
 from pydantic.schema import model_schema
 from pydantic.typing import NoneType
 from typing_inspect import get_args, get_origin, is_generic_type
@@ -70,8 +69,11 @@ class OpenApiConverter:
     def _collect_server_information(self) -> List[Server]:
         bind_port = config.get_bind_port()
         server_address = config.server_address.get()
+        protocol = "https" if config.ssl_enabled() else "http"
         return [
-            Server(url=AnyUrl(url=f"http://{server_address}:{bind_port}/", scheme="http", host=server_address, port=bind_port))
+            Server(
+                url=f"{protocol}://{server_address}:{bind_port}/",
+            )
         ]
 
     def _get_inmanta_version(self) -> Optional[str]:
