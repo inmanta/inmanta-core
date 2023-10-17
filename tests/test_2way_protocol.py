@@ -158,7 +158,7 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
         status = await client.get_agent_push("x")
         duration = time.monotonic() - now
         assert duration < 0.9  # less then built-in wait time
-        assert status.result == None
+        assert status.result is None
 
     await rs.stop()
     await agent.stop()
