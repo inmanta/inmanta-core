@@ -1,0 +1,8 @@
+---
+description: Move the dict_path library from inmanta-lsm to util.
+issue-nr: 6631
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
