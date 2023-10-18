@@ -68,13 +68,15 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
     )
     try:
-        await asyncio.wait_for(process.communicate(), timeout=30)
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         (stdout, stderr) = await process.communicate()
         print(stdout.decode())
         print(stderr.decode())
         raise e
+
+    assert process.returncode == 0, f"{stdout}\n\n{stderr}"
 
 
 def test_help(inmanta_config, capsys):
@@ -445,8 +447,15 @@ async def test_export_invalid_argument_combination() -> None:
     assert "The --delete-resource-set option should always be used together with the --partial option" in stderr.decode("utf-8")
 
 
+@pytest.mark.parametrize("set_keep_logger_names_option", [True, False])
 async def test_logger_name_in_compiler_exporter_output(
-    server, environment: str, tmpvenv_active_inherit: env.VirtualEnv, modules_dir: str, tmpdir, monkeypatch
+    server,
+    environment: str,
+    tmpvenv_active_inherit: env.VirtualEnv,
+    modules_dir: str,
+    tmpdir,
+    monkeypatch,
+    set_keep_logger_names_option: bool,
 ) -> None:
     """
     This test case verifies that the logger name mentioned in the log of the compile/export command is correct. Namely:
@@ -507,6 +516,7 @@ async def test_logger_name_in_compiler_exporter_output(
         "-m",
         "inmanta.app",
         "-vvv",
+        *(["--keep-logger-names"] if set_keep_logger_names_option else []),
         "compile",
     ]
     process = await subprocess.create_subprocess_exec(
@@ -521,8 +531,12 @@ async def test_logger_name_in_compiler_exporter_output(
 
     stdout = stdout.decode("utf-8")
     assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
-    assert "compiler       DEBUG   Starting compile" in stdout
-    assert "mymod          INFO    test" in stdout
+    if set_keep_logger_names_option:
+        assert "inmanta.compiler         DEBUG   Starting compile" in stdout
+        assert "inmanta_plugins.mymod    INFO    test" in stdout
+    else:
+        assert "compiler       DEBUG   Starting compile" in stdout
+        assert "mymod          INFO    test" in stdout
 
     # Export command
     server_port = Config.get("client_rest_transport", "port")
@@ -532,6 +546,7 @@ async def test_logger_name_in_compiler_exporter_output(
         "-m",
         "inmanta.app",
         "-vvv",
+        *(["--keep-logger-names"] if set_keep_logger_names_option else []),
         "export",
     ]
     args.extend(["--server_port", str(server_port)])
@@ -550,6 +565,11 @@ async def test_logger_name_in_compiler_exporter_output(
 
     stdout = stdout.decode("utf-8")
     assert process.returncode == 0, f"Process ended with bad return code, got {process.returncode} (expected 0): {stdout}"
-    assert "compiler       DEBUG   Starting compile" in stdout
-    assert "mymod          INFO    test" in stdout
-    assert "exporter       INFO    Committed resources with version 1" in stdout
+    if set_keep_logger_names_option:
+        assert "inmanta.compiler         DEBUG   Starting compile" in stdout
+        assert "inmanta_plugins.mymod    INFO    test" in stdout
+        assert "inmanta.export           INFO    Committed resources with version 1" in stdout
+    else:
+        assert "compiler       DEBUG   Starting compile" in stdout
+        assert "mymod          INFO    test" in stdout
+        assert "exporter       INFO    Committed resources with version 1" in stdout

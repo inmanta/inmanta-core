@@ -828,6 +828,13 @@ def cmd_parser() -> argparse.ArgumentParser:
         default=False,
         required=False,
     )
+    parser.add_argument(
+        "--keep-logger-names",
+        dest="keep_logger_names",
+        help="Display the log messages using the name of the logger that created the log messages.",
+        action="store_true",
+        default=False,
+    )
 
     verbosity_parser = argparse.ArgumentParser(add_help=False)
     verbosity_parser.add_argument(

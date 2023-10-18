@@ -71,6 +71,7 @@ class Options(Namespace):
     log_file_level: str = "INFO"
     verbose: int = 1
     timed: bool = False
+    keep_logger_names: bool = False
 
 
 class LoggerMode(enum.Enum):
@@ -117,7 +118,7 @@ class InmantaLoggerConfig:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
         """
         self._options_applied = False
-        self._executing_compile_or_export_command = False
+        self._keep_logger_names = False
         self._handler: logging.Handler = logging.StreamHandler(stream=stream)
         self.set_log_level("INFO")
         formatter = self._get_log_formatter_for_stream_handler(timed=False)
@@ -158,7 +159,7 @@ class InmantaLoggerConfig:
         * exporter: When executing in exporter mode and the log record doesn't come from an Inmanta module.
         """
         new_logger_name: str
-        if self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
+        if not self._keep_logger_names and self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
             match: Optional[re.Match] = self._inmanta_plugin_pkg_regex.match(name)
             if match:
                 new_logger_name = match.groupdict()["module_name"]
@@ -233,15 +234,27 @@ class InmantaLoggerConfig:
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
         self._options_applied = True
-        if hasattr(options, "func") and options.func.__name__ in ["compile_project", "export"]:
-            self._executing_compile_or_export_command = True
+        self._keep_logger_names = options.keep_logger_names
         if options.log_file:
             self.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
             self.set_log_formatter(formatter)
             self.set_log_level(options.log_file_level, cli=False)
         else:
-            formatter = self._get_log_formatter_for_stream_handler(timed=options.timed)
+            # Use a shorter space padding if we know that we will use short names as the logger name.
+            # Otherwise the log records contains too much white spaces.
+            space_padding_after_logger_name = (
+                15
+                if (
+                    not options.keep_logger_names
+                    and hasattr(options, "func")
+                    and options.func.__name__ in ["compile_project", "export"]
+                )
+                else 25
+            )
+            formatter = self._get_log_formatter_for_stream_handler(
+                timed=options.timed, space_padding_after_logger_name=space_padding_after_logger_name
+            )
             self.set_log_formatter(formatter)
             self.set_log_level(str(options.verbose))
 
@@ -300,13 +313,12 @@ class InmantaLoggerConfig:
         """
         return self._handler
 
-    def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:
+    def _get_log_formatter_for_stream_handler(
+        self, timed: bool, space_padding_after_logger_name: int = 25
+    ) -> logging.Formatter:
         log_format = "%(asctime)s " if timed else ""
-        # Use a shorter space padding for the compile and export commands, because these commands
-        # don't use the qualified name of the module that created the log line as the logger name.
-        size_space_padding = 15 if self._executing_compile_or_export_command else 25
         if _is_on_tty():
-            log_format += f"%(log_color)s%(name)-{size_space_padding}s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+            log_format += f"%(log_color)s%(name)-{space_padding_after_logger_name}s%(levelname)-8s%(reset)s%(blue)s%(message)s"
             formatter = MultiLineFormatter(
                 self,
                 log_format,
@@ -314,7 +326,7 @@ class InmantaLoggerConfig:
                 log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
             )
         else:
-            log_format += f"%(name)-{size_space_padding}s%(levelname)-8s%(message)s"
+            log_format += f"%(name)-{space_padding_after_logger_name}s%(levelname)-8s%(message)s"
             formatter = MultiLineFormatter(
                 self,
                 log_format,
