@@ -787,7 +787,7 @@ class KeyedList(DictPath, WildKeyedList):
         return result
 
     @classmethod
-    def _parse_value(cls, value: str) -> Union[NormalValue, NullValue]:
+    def _parse_value(cls, value: str) -> DictPathValue:
         """
         Parse a value string into the corresponding dict path object.
         """

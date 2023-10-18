@@ -21,6 +21,7 @@ from itertools import chain
 from typing import Dict, Optional, Sequence, Tuple
 
 import pytest
+
 from inmanta.util.dict_path import (
     ComposedPath,
     DictPath,
