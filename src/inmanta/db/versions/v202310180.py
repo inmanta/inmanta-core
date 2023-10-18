@@ -21,5 +21,6 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    # Add an index to speed up counting the different types of resources per version, e.g. in inmanta-license get_license_metrics
+    # Add an index to speed up counting the different types of resources per version.
+    # e.g. in inmanta-license get_license_metrics.
     await connection.execute("CREATE INDEX ON public.resource (environment, model, resource_type)")

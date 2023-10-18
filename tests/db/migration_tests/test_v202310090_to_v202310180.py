@@ -21,9 +21,9 @@ from collections import abc
 import pytest
 
 
-
-
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202310090.sql"))
-async def test_add_index_resource_environment_model_resource_type(migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
+async def test_add_index_resource_environment_model_resource_type(
+    migrate_db_from: abc.Callable[[], abc.Awaitable[None]]
+) -> None:
     # This migration script only adds an index. Just verify that the script doesn't fail.
     await migrate_db_from()
