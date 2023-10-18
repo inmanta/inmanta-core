@@ -468,7 +468,7 @@ async def test_logger_name_in_compiler_exporter_output(
                 from inmanta.plugins import plugin
                 import logging
 
-                LOGGER = logging.getLogger("my_logger")
+                LOGGER = logging.getLogger(__name__)
 
                 @plugin
                 def test_plugin():

@@ -28,7 +28,6 @@ import colorlog
 from colorlog.formatter import LogColors
 
 from inmanta import const
-from inmanta.module import Project
 from inmanta.stable_api import stable_api
 
 
@@ -126,47 +125,10 @@ class InmantaLoggerConfig:
         self._logger_mode = LoggerMode.OTHER
         self._default_log_level_factory = logging.getLogRecordFactory()
         logging.setLogRecordFactory(self.custom_log_record_factory)
-        self._dirs_containing_modules = self._get_dirs_containing_modules()
-        self._source_file_to_module_cache: dict[str, Optional[str]] = {}
-        # A cache for the `_get_module_name_for_source_file()` method.
 
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
         logging.root.setLevel(0)
-
-    def _get_dirs_containing_modules(self) -> list[str]:
-        """
-        Return all the directories that contain V1 or V2 modules that are installed.
-        """
-        dirs_containing_modules = []
-        if Project._project:
-            # Directories containing V1 modules
-            dirs_containing_modules += [p for p in Project._project._metadata.modulepath]
-        if (
-            "inmanta_plugins" in sys.modules
-            and sys.modules["inmanta_plugins"].__spec__
-            and sys.modules["inmanta_plugins"].__spec__.submodule_search_locations
-        ):
-            # Directories containing v2 modules
-            dirs_containing_modules += [str(s) for s in sys.modules["inmanta_plugins"].__spec__.submodule_search_locations]
-        return dirs_containing_modules
-
-    def _get_module_name_for_source_file(self, path_source_file: str) -> Optional[str]:
-        """
-        Return the module name that the given `path_source_file` belongs to or None if `path_source_file`
-        doesn't belong to a module.
-        """
-        if path_source_file in self._source_file_to_module_cache:
-            return self._source_file_to_module_cache[path_source_file]
-        result = None
-        for mod_dir in self._dirs_containing_modules:
-            if path_source_file.startswith(mod_dir):
-                rel_path = path_source_file[len(mod_dir) :].strip("/")
-                if rel_path:
-                    result = rel_path.split("/", maxsplit=1)[0]
-
-        self._source_file_to_module_cache[path_source_file] = result
-        return result
 
     def custom_log_record_factory(
         self,
@@ -191,8 +153,10 @@ class InmantaLoggerConfig:
         """
         new_logger_name: str
         if self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
-            inmanta_module_name: Optional[str] = self._get_module_name_for_source_file(pathname)
-            new_logger_name = inmanta_module_name if inmanta_module_name else self._logger_mode.value
+            if name.startswith("inmanta_plugins.") and len(name) > len("inmanta_plugins."):
+                new_logger_name = name.split(".", maxsplit=2)[1]
+            else:
+                new_logger_name = self._logger_mode.value
         else:
             new_logger_name = name
         return self._default_log_level_factory(
@@ -203,6 +167,7 @@ class InmantaLoggerConfig:
     def run_in_logger_mode(self, logger_mode: LoggerMode) -> Iterator[None]:
         """
         A contextmanager that can be used to temporarily change the LoggerMode within a code block.
+        This ContextManager updates the InmantaLoggerConfig singleton and is therefore not async- or threadsafe.
         """
         prev_logger_mode = self._logger_mode
         self._logger_mode = logger_mode
