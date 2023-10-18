@@ -453,7 +453,7 @@ def resource_action_update(
     started: datetime.datetime = None,
     finished: datetime.datetime = None,
     status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]] = None,
-    messages: list = [],
+    messages: List[model.LogLine] = [],
     changes: dict = {},
     change: const.Change = None,
     send_events: bool = False,

@@ -1265,8 +1265,8 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
                 finished=now,
                 status=const.ResourceState.deployed,
                 messages=[
-                    data.LogLine.log(level=const.LogLevel.DEBUG, msg="message", timestamp=now, keyword=123, none=None),
-                    data.LogLine.log(level=const.LogLevel.INFO, msg="test", timestamp=now),
+                    LogLine(level=const.LogLevel.DEBUG, msg="message", kwargs={"keyword": 123, "none": None}, timestamp=now),
+                    LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
                 ],
                 changes={rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test")}},
                 change=const.Change.purged,
@@ -1292,10 +1292,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     expected_timestamp: str
     if opt.server_tz_aware_timestamps.get():
-        if endpoint_to_use == "resource_deploy_done":
-            expected_timestamp = now.astimezone().isoformat(timespec="microseconds")
-        else:
-            expected_timestamp = now.astimezone(timezone.utc).isoformat(timespec="microseconds")
+        expected_timestamp = now.astimezone().isoformat(timespec="microseconds")
     else:
         expected_timestamp = now.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
 

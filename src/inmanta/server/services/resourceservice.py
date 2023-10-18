@@ -57,7 +57,6 @@ from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, PrimitiveTypes
-from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -741,7 +740,7 @@ class ResourceService(protocol.ServerSlice):
         started: datetime.datetime,
         finished: datetime.datetime,
         status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
-        messages: List[Dict[str, Any]],
+        messages: List[LogLine],
         changes: Dict[str, Any],
         change: const.Change,
         send_events: bool,
@@ -878,15 +877,15 @@ class ResourceService(protocol.ServerSlice):
                     self.log_resource_action(
                         env.id,
                         resource_ids,
-                        const.LogLevel(msg["level"]).to_int,
-                        parse_timestamp(msg["timestamp"]),
-                        msg["msg"],
+                        const.LogLevel(msg.level).to_int,
+                        msg.timestamp,
+                        msg.msg,
                     )
                 await resource_action.set_and_save(
                     messages=[
                         {
-                            **msg,
-                            "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds"),
+                            **msg.dict(),
+                            "timestamp": msg.timestamp.astimezone().isoformat(timespec="microseconds"),
                         }
                         for msg in messages
                     ],
