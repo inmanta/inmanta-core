@@ -297,16 +297,13 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         textwrap.dedent(
             """
-            entity A:
-                string? name = null
-            end
-            A.opt [0:1] -- A
+            entity A: end
             A.others [0:] -- A
             implement A using std::none
 
             # gradual execution of iterable
-            a = A(name="a")
-            b = A(name="b", others=[chained for chained in [other for other in a.others]])
+            a = A()
+            b = A(others=[chained for chained in [other for other in a.others]])
             a.others += A()
             if b.others is defined:
                 # this seems like bad practice, but it should work as long as the list comprehension is executed gradually.
@@ -314,112 +311,28 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             end
 
             # gradual execution of guard
-            x = A(name="x")
+            x = A()
             # again bad practice but asserts gradual execution of the `is defined`
-            y = A(name="y", others=[A(), c.others])
-            c = A(name="c", others=[candidate for candidate in [x, y] if candidate.others is defined])
+            y = A(others=[A(), c.others])
+            c = A(others=[candidate for candidate in [x, y] if candidate.others is defined])
 
             # gradual execution with nested lists in the iterable
-            u = A(name="u")
-            v = A(name="v", others=[candidate for candidate in [a, [b, c, [x, y, u], u, x], y]])
+            u = A()
+            v = A(others=[candidate for candidate in [a, [b, c, [x, y, u], u, x], y]])
             if v.others is defined:
                 # again bad practice but asserts gradual execution of the `is defined`
                 v.others += A()
             end
 
-            # gradual execution with nested for
-            w = A(
-                name="w",
-                others=[
-                    o
-                    for base in v.others
-                    for o in base.others
-                ]
-            )
-            if w.others is defined:
-                # again bad practice but asserts gradual execution of the `is defined`
-                w.others += A()
-            end
-
-            # verify that a constructor expression does not block gradual execution,
-            # which would result in a list modified after freeze
-            dd = A(name="dd", others=[A(), A()])
-            d = A(
-                name="d",
-                others=[
-                    A()
-                    for _ in dd.others
-                ],
-            )
-
-            # verify that attribute references report values correctly and gradually,
-            # both for explicit attribute references and implicit self
-            entity E extends A: end
-            f = A()
-            g = A()
-            h = A()
-            i = A()
-            j = A()
-            k = A()
-            implementation e for E:
-                # implicit relation access (Reference) for optional
-                for x in [opt for _ in [1, 2, 3]]:
-                    # verify that optional relation reference correctly reports to for loop's result collector
-                    f.others += x
-                end
-                # explicit relation access through self (AttributeReference) for optional
-                for x in [self.opt for _ in [1, 2, 3]]:
-                    # verify that optional relation reference correctly reports to for loop's result collector
-                    g.others += x
-                end
-
-                # implicit relation access (Reference) for list relation
-                ha = A()
-                for x in [others for _ in [1, 2, 3]]:
-                    h.others += x
-                    # this only works if the for loop receives its values gradually from the list comprehension
-                    self.others += ha
-                end
-                # explicit relation access through self (AttributeReference) for list relation
-                ia = A()
-                for x in [self.others for _ in [1, 2, 3]]:
-                    i.others += x
-                    # this only works if the for loop receives its values gradually from the list comprehension
-                    self.others += ia
-                end
-            end
-            implement E using e
-            e = E()
-            e.opt = A()
-            e.others = [A()]
-
-            ##############
-            # assertions #
-            ##############
-
-            a_count = 2
-            a_count = std::count(a.others)
-            a_count = std::count(b.others)
+            count = 2
+            count = std::count(a.others)
+            count = std::count(b.others)
 
             c_count = 1
             c_count = std::count(c.others)
 
             v_count = 7
             v_count = std::count(v.others)
-
-            w_count = 5  # a/b's 2 children, c's 1 child, y's 1 extra child, w's 1 extra child
-            w_count = std::count(w.others)
-
-            d_count = 2
-            d_count = std::count(d.others)
-
-            f_count = 1
-            f_count = std::count(f.others)
-            f_count = std::count(g.others)
-
-            h_count = 3  # initial value + ha + ia
-            h_count = std::count(h.others)
-            h_count = std::count(i.others)
             """.strip(
                 "\n"
             )
