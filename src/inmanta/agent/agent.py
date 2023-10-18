@@ -1105,6 +1105,15 @@ class Agent(SessionEndpoint):
         environment: Optional[uuid.UUID] = None,
         poolsize: int = 1,
     ):
+        """
+        :param hostname: this used to indicate the hostname of the agent,
+        but it is now mostly used by testcases to prevent endpoint to be loaded from the config singleton
+           see _init_endpoint_names
+        :param agent_map: the agent map for this agent to use
+        :param code_loader: do we enable the code loader (used for testing)
+        :param environment: environment id
+        :param poolsize: level of parallelism per agent instance, in practice, always 1
+        """
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.hostname = hostname
