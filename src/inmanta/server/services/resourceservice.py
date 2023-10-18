@@ -384,12 +384,12 @@ class ResourceService(protocol.ServerSlice):
         resources_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
         ]
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": timestamp.isoformat(),
-            "args": [],
-        }
+        logline = LogLine(
+            level=const.LogLevel.INFO,
+            msg="Setting deployed due to known good status",
+            timestamp=timestamp,
+        )
+
         await self.resource_action_update(
             env,
             resources_version_ids,
