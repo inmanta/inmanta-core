@@ -158,21 +158,34 @@ class InmantaLoggerConfig:
         * compiler: When executing in compiler mode and the log record doesn't come from an Inmanta module.
         * exporter: When executing in exporter mode and the log record doesn't come from an Inmanta module.
         """
-        new_logger_name: str
-        if not self._keep_logger_names and self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
-            if name == "inmanta.pip":
-                new_logger_name = "pip"
-            else:
-                match: Optional[re.Match[str]] = self._inmanta_plugin_pkg_regex.match(name)
-                if match:
-                    new_logger_name = match.groupdict()["module_name"]
-                else:
-                    new_logger_name = self._logger_mode.value
-        else:
-            new_logger_name = name
+        new_logger_name = self._get_logger_name_for(name)
         return self._default_log_level_factory(
             new_logger_name, level, pathname, lineno, msg, args, exc_info, func, sinfo, **kwargs
         )
+
+    def _get_logger_name_for(self, logger_name: str) -> str:
+        """
+        Returns the logger name that should be used in the log record.
+
+        :attr logger_name: The name of the logger that was used to create the log record.
+        """
+        if not self._keep_logger_names and self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
+            if not logger_name.startswith("inmanta"):
+                # This is a log record from a third-party library. Don't adjust the logger name.
+                return logger_name
+            if logger_name == "inmanta.pip":
+                # Log record created by a pip subprocess started by the inmanta.
+                return "pip"
+            match: Optional[re.Match[str]] = self._inmanta_plugin_pkg_regex.match(logger_name)
+            if match:
+                # Log record created by an Inmanta module.
+                return match.groupdict()["module_name"]
+            else:
+                # Log record created by Inmanta code.
+                return self._logger_mode.value
+        else:
+            # Don't modify the logger name
+            return logger_name
 
     @contextmanager
     def run_in_logger_mode(self, logger_mode: LoggerMode) -> Iterator[None]:
