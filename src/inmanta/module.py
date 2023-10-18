@@ -1579,9 +1579,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
         project. Similar to the module, version constraints are defined using
         `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
+    :param freeze_recursive: (Optional) This key determines if the freeze command will behave recursively or not. If
         freeze_recursive is set to false or not set, the current version of all modules imported directly in the main.cf file
-        will be set in project.yml. If it is set to true, the versions of all modules used in this project will set in
+        will be set in project.yml. If it is set to true, the versions of all modules used in this project will be set in
         project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
         Valid values are [==, ~=, >=]. *Default is '~='*
