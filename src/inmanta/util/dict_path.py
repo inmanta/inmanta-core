@@ -21,6 +21,7 @@ import logging
 import re
 from typing import Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union, overload
 
+from inmanta.stable_api import stable_api
 from typing_extensions import TypeGuard
 
 LOGGER = logging.getLogger(__name__)
@@ -31,12 +32,14 @@ TWKL = TypeVar("TWKL", bound="WildKeyedList")
 TWCP = TypeVar("TWCP", bound="WildComposedPath")
 
 
+@stable_api
 class InvalidPathException(Exception):
     """
     The path could not be parsed correctly.
     """
 
 
+@stable_api
 class ContainerStructureException(LookupError):
     """
     The requested item could not be found,
@@ -44,6 +47,7 @@ class ContainerStructureException(LookupError):
     """
 
 
+@stable_api
 class DictPathValue(abc.ABC):
     """
     Represents a data value part of a WildDictPath.
@@ -101,6 +105,7 @@ class DictPathValue(abc.ABC):
         return isinstance(other, self.__class__)
 
 
+@stable_api
 class NormalValue(DictPathValue):
     """
     A normal dict path value. This is a data value that is matched literally
@@ -129,6 +134,7 @@ class NormalValue(DictPathValue):
         return self.value == other.value
 
 
+@stable_api
 class WildCardValue(DictPathValue):
     """
     Represents a wildcard value. This is a data value that matches any other value.
@@ -147,6 +153,7 @@ class WildCardValue(DictPathValue):
         raise Exception("A WildCardValue doesn't have an actual data value.")
 
 
+@stable_api
 class NullValue(DictPathValue):
     """
     Represents the data value None. Matches against any other None value.
@@ -165,6 +172,7 @@ class NullValue(DictPathValue):
         return None
 
 
+@stable_api
 class WildDictPath(abc.ABC):
     """
     A base class for all dict paths segments.  It supports the usage of wildcards, allowing to reach
@@ -233,6 +241,7 @@ class WildDictPath(abc.ABC):
         return isinstance(container, Dict)
 
 
+@stable_api
 class WildInDict(WildDictPath):
     """
     This is the path that, if you call get_element on a dict, it returns the value stored in
@@ -305,6 +314,7 @@ class WildInDict(WildDictPath):
         return None
 
 
+@stable_api
 class WildKeyedList(WildDictPath):
     """
     Find a specific item in a list, based on a key-value pair.
@@ -500,8 +510,8 @@ class WildKeyedList(WildDictPath):
         return self.relation == other.relation and self.key_value_pairs == other.key_value_pairs
 
 
+@stable_api
 class WildComposedPath(WildDictPath):
-
     """
     A path composed of multiple elements, separated by "."
     """
@@ -584,6 +594,7 @@ class WildComposedPath(WildDictPath):
         return self.expanded_path == other.expanded_path
 
 
+@stable_api
 class WildNullPath(WildDictPath):
     """
     A DictPath with no length
@@ -608,6 +619,7 @@ class WildNullPath(WildDictPath):
         raise NotImplementedError("NullPath is not intended to be parseable, it should only be used programmatically.")
 
 
+@stable_api
 class DictPath(WildDictPath):
     """
     A base class for all non-wild dict paths segments.  The key difference between WildDictPath and DictPath subclasses are:
@@ -677,6 +689,7 @@ class DictPath(WildDictPath):
         raise NotImplementedError()
 
 
+@stable_api
 class InDict(DictPath, WildInDict):
     """
     This is the path that, if you call get_element on a dict, it returns the value stored in that key in that dict.
@@ -736,6 +749,7 @@ class InDict(DictPath, WildInDict):
             raise ContainerStructureException(f"{container} is not a Dict")
 
 
+@stable_api
 class KeyedList(DictPath, WildKeyedList):
     """
     Find a specific item in a list, based on a key-value pair.
@@ -850,6 +864,7 @@ class KeyedList(DictPath, WildKeyedList):
         ]
 
 
+@stable_api
 class ComposedPath(DictPath, WildComposedPath):
     """
     A path composed of multiple elements, separated by "."
@@ -898,6 +913,7 @@ class ComposedPath(DictPath, WildComposedPath):
         self.get_path_sections()[-1].remove(container)
 
 
+@stable_api
 class NullPath(DictPath, WildNullPath):
     """
     A DictPath with no length
@@ -933,6 +949,7 @@ class NullPath(DictPath, WildNullPath):
         raise NotImplementedError("Method remove() is not supported on a NullPath")
 
 
+@stable_api
 def to_wild_path(inp: str) -> WildDictPath:
     """
     Convert a string to a WildDictPath
@@ -950,6 +967,7 @@ def to_wild_path(inp: str) -> WildDictPath:
         raise InvalidPathException(str(e))
 
 
+@stable_api
 def to_path(inp: str) -> DictPath:
     """
     Convert a string to a DictPath
