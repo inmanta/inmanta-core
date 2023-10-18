@@ -453,7 +453,7 @@ async def test_logger_name_in_compiler_exporter_output(
 
     * compiler: For log lines produced by the compiler.
     * exporter: For log lines produced by the exporter.
-    * <name-of-module>: For log lines produced by a specific module.
+    * <name-of-module>: For log lines produced by a specific module and the name of the logger was set to __name__.
     """
     v1_template_path: str = os.path.join(modules_dir, "minimalv1module")
     mod_name = "mymod"

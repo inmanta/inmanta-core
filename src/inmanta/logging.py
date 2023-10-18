@@ -18,6 +18,7 @@
 import enum
 import logging
 import os
+import re
 import sys
 import types
 from argparse import Namespace
@@ -130,6 +131,10 @@ class InmantaLoggerConfig:
         logging.root.addHandler(self._handler)
         logging.root.setLevel(0)
 
+        self._inmanta_plugin_pkg_regex = re.compile(r"^inmanta_plugins\.(?P<module_name>[^.]+)")
+        # Regex that extracts the name of the module from a fully qualified import of a Python
+        # module inside an Inmanta module.
+
     def custom_log_record_factory(
         self,
         name: str,
@@ -147,14 +152,16 @@ class InmantaLoggerConfig:
         This log record factory makes sure that the name of the log record is updated
         in the following way while executing in the "compiler" or "exporter" logger mode:
 
-        * The name of the Inmanta module: When the log record was created by a source file in an Inmanta module.
+        * The name of the Inmanta module: When the log record was created by a source file in an Inmanta module
+                                          and the name of the logger was set to __name__.
         * compiler: When executing in compiler mode and the log record doesn't come from an Inmanta module.
         * exporter: When executing in exporter mode and the log record doesn't come from an Inmanta module.
         """
         new_logger_name: str
         if self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
-            if name.startswith("inmanta_plugins.") and len(name) > len("inmanta_plugins."):
-                new_logger_name = name.split(".", maxsplit=2)[1]
+            match: Optional[re.Match] = self._inmanta_plugin_pkg_regex.match(name)
+            if match:
+                new_logger_name = match.groupdict()["module_name"]
             else:
                 new_logger_name = self._logger_mode.value
         else:
