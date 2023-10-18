@@ -398,7 +398,7 @@ class Exporter(object):
         resources = self.resources_to_list()
 
         export_done = time.time()
-        LOGGER.debug("Exporter took %0.03f seconds", export_done - start)
+        LOGGER.debug("Serializing resources took %0.03f seconds", export_done - start)
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")

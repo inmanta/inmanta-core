@@ -2133,6 +2133,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         else:
             self.modules = {}
         self.loaded = False
+        self._ast_cache = None
+        self._complete_ast = None
 
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
         if self._ast_cache is None:
