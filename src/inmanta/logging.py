@@ -160,11 +160,14 @@ class InmantaLoggerConfig:
         """
         new_logger_name: str
         if not self._keep_logger_names and self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
-            match: Optional[re.Match[str]] = self._inmanta_plugin_pkg_regex.match(name)
-            if match:
-                new_logger_name = match.groupdict()["module_name"]
+            if name == "inmanta.pip":
+                new_logger_name = "pip"
             else:
-                new_logger_name = self._logger_mode.value
+                match: Optional[re.Match[str]] = self._inmanta_plugin_pkg_regex.match(name)
+                if match:
+                    new_logger_name = match.groupdict()["module_name"]
+                else:
+                    new_logger_name = self._logger_mode.value
         else:
             new_logger_name = name
         return self._default_log_level_factory(
