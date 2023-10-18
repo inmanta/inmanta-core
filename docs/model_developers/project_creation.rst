@@ -47,9 +47,10 @@ An example ``project.yml`` could be:
   install_mode: release
   requires:
   pip:
-      use_config_file: False
-      index_urls:
-          - https://pypi.org/simple
+      index-url: https://pypi.org/simple/
+      extra-index-url: []
+      pre: false
+      use-system-config: false
 
 .. warning::
     Using more than one Python package index in the project config is discouraged.

@@ -1,0 +1,13 @@
+description: Documentation PR for the new pip config and its behaviour. This PR centralizes the change entries.
+issue-nr: 6518
+change-type: major
+destination-branches: [master]
+sections:
+  feature: "{{description}}"
+  minor-improvement: "{{description}}"
+  bugfix: "{{description}}"
+  known-issue: "{{description}}"
+  upgrade-note: "{{description}}"
+  deprecation-note: "{{description}}"
+  other-note: "{{description}}"
+

@@ -1537,14 +1537,26 @@ class RelationPrecedenceRule:
 @stable_api
 class ProjectPipConfig(BaseModel):
     """
-    :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
-        Python packages.
-    :param index_urls: List of pip indexes to use project-wide. These repositories should be
+    :param index_url: Url of the pip index to use for the project. This repository should be
         `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-        compliant. If more than one index url is configured, they will all be passed to pip. This is generally only
+        compliant.
+    :param extra_index_url: List of extra pip index urls, which will all be passed to pip. This is generally only
         recommended if all configured indexes are under full control of the end user to protect against dependency
         confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
         `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
+    :param pre: Allow pre-releases when installing Python packages. A null value is interpreted as False, unless
+        use_system_config is set to True, in which case the system config is respected.
+
+    # TODO : `inmanta.module.ProjectPipConfig.blabla` -> check if this is the right link (multiple occurrences in this docstring)
+    :param use_system_config: When True, the indexes defined in `inmanta.module.ProjectPipConfig.index_url`
+        and `inmanta.module.ProjectPipConfig.extra_index_url` (if any) will be used, in addition to indexes defined in pip
+        environment variables (PIP_INDEX_URL and PIP_EXTRA_INDEX_URL) and/or config in the pip config file (in that order),
+        including any extra-index-urls. If no indexes are defined in `inmanta.module.ProjectPipConfig.index_url` or
+        `inmanta.module.ProjectPipConfig.extra_index_url`, fallback to pip's default behaviour: the index(es) defined in
+        pip environment variables will override those defined in pip config files, which will override the default PyPi index.
+        When False, only use the pip options defined in the project.yml file and ignore all pip config files and pip
+        environment variables related to installation e.g. PIP_PRE.
+
     """
 
     use_config_file: bool = False
