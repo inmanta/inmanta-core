@@ -471,7 +471,7 @@ def test_keyed_list_deprecated_constructor(caplog) -> None:
             " instead"
         )
         found: bool = any(
-            "inmanta_lsm.dict_path" in logger_name and log_level == logging.WARNING and msg in message
+            "inmanta.util.dict_path" in logger_name and log_level == logging.WARNING and msg in message
             for logger_name, log_level, message in caplog.record_tuples
         )
         assert found == expect_warning
