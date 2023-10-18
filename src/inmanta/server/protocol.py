@@ -430,7 +430,7 @@ class Session(object):
         self.expired: bool = False
 
         self.last_dispatched_call: float = 0
-        self.dispatch_delay = 0.1  # keep at least 100 ms between dispatches
+        self.dispatch_delay = 0.01  # keep at least 10 ms between dispatches
 
         self.tid: uuid.UUID = tid
         self.endpoint_names: Set[str] = endpoint_names
@@ -745,6 +745,7 @@ class SessionManager(ServerSlice):
 
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
+            session.last_dispatched_call = time.monotonic()
             return 200, {"method_calls": call_list}
         else:
             LOGGER.debug("Heartbeat wait expired for %s, returning. (long poll)", nodename)
