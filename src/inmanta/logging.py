@@ -143,7 +143,7 @@ class InmantaLoggerConfig:
         pathname: str,
         lineno: int,
         msg: object,
-        args: Union[tuple[...] | dict[str, object]],
+        args: Union[tuple[object, ...] | dict[str, object]],
         exc_info: Optional[tuple[type[BaseException], BaseException, types.TracebackType]],
         func: Optional[str] = None,
         sinfo: Optional[str] = None,
@@ -160,7 +160,7 @@ class InmantaLoggerConfig:
         """
         new_logger_name: str
         if not self._keep_logger_names and self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
-            match: Optional[re.Match] = self._inmanta_plugin_pkg_regex.match(name)
+            match: Optional[re.Match[str]] = self._inmanta_plugin_pkg_regex.match(name)
             if match:
                 new_logger_name = match.groupdict()["module_name"]
             else:
