@@ -59,11 +59,40 @@ The code snippet below provides an example of a complete ``project.yml`` file:
 .. _specify_location_pip:
 
 
-Specify locations from where V2 modules will be installed
----------------------------------------------------------
-This section explains how to configure your project in order to download v2 modules from any python package repository.
-By default, a project created using the :ref:`project-creation-guide` is configured to install packages from ``https://pypi.org/simple/``. There are multiple ways
-to change this behaviour.
+When True, the indexes defined in `inmanta.module.ProjectPipConfig.index_url`
+        and `inmanta.module.ProjectPipConfig.extra_index_url` (if any) will be used, in addition to indexes defined in pip
+        environment variables (PIP_INDEX_URL and PIP_EXTRA_INDEX_URL) and/or config in the pip config file (in that order),
+        including any extra-index-urls. If no indexes are defined in `inmanta.module.ProjectPipConfig.index_url` or
+        `inmanta.module.ProjectPipConfig.extra_index_url`, fallback to pip's default behaviour: the index(es) defined in
+        pip environment variables will override those defined in pip config files, which will override the default PyPi index.
+        When False, only use the pip options defined in the project.yml file and ignore all pip config files and pip
+        environment variables related to installation e.g. PIP_PRE.
+
+Configure pip index
+-------------------
+
+This section explains how to configure a project-wide pip index. This index will be used to download v2 modules and v1
+modules' dependencies.
+By default, a project created using the :ref:`project-creation-guide` is configured to install packages from ``https://pypi.org/simple/``.
+The :class:`~inmanta.module.ProjectPipConfig` section of the project.yml file offers options to configure this behaviour.
+
+use-system-config
+"""""""""""""""""
+
+This option determines the isolation level of the project's pip config. When false, pip will only look for packages
+in the index(es) defined in the project.yml, when true, pip will in addition look in the eventual index(es) defined on the system.
+
+Setting this to `false` is recommended during development both for portability (by making sure that only the pip
+config defined in the project.yml will be used regardless of the sytem's pip config) and for security (The isolation
+reduces the risk of dependency confusion attacks if the `index-url` option is set mindfully).
+
+Setting this to `true` will have the following consequences:
+
+- If no index is set in the project.yml file i.e. both index_url and extra_index_url are unset -> Pip's
+default behaviour to look for indexes will be used : environment variables, pip config files and then PyPi (in that order).
+
+- If index_url and/or extra_index_url are set, they will be used and any index defined in the system's environment
+variables or pip config files will also be used (in that order).
 
 Using pip config file
 """""""""""""""""""""
@@ -108,8 +137,9 @@ Another option is to use the  ``index_urls`` option in the ``pip`` section of th
     * If the pip config is used (by setting ``use_config_file`` to ``true``), the ``index-url`` specified in the pip config file will take precedence and the ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file will be used as ``extra-index-urls`` when installing with pip.
     * If the pip config is not used (by setting ``use_config_file`` to ``False``), then the first ``index_url`` specified in the project.yml will be used as an ``index_url`` and all the following ones will be used as ``extra-index-urls`` when installing with pip.
 
+.. _migrate_from_repo_package:
 
-
+Defining a `repo` with type `package` is deprecated. Make sure you define this index through the pip.index-url option instead.
 
 
 Module metadata files

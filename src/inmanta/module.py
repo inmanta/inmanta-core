@@ -1534,6 +1534,7 @@ class RelationPrecedenceRule:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
 
+    # TODO : `inmanta.module.ProjectPipConfig.blabla` -> check if this is the right link (multiple occurrences in this docstring)
 @stable_api
 class ProjectPipConfig(BaseModel):
     """
@@ -1546,16 +1547,9 @@ class ProjectPipConfig(BaseModel):
         `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
     :param pre: Allow pre-releases when installing Python packages. A null value is interpreted as False, unless
         use_system_config is set to True, in which case the system config is respected.
-
-    # TODO : `inmanta.module.ProjectPipConfig.blabla` -> check if this is the right link (multiple occurrences in this docstring)
-    :param use_system_config: When True, the indexes defined in `inmanta.module.ProjectPipConfig.index_url`
-        and `inmanta.module.ProjectPipConfig.extra_index_url` (if any) will be used, in addition to indexes defined in pip
-        environment variables (PIP_INDEX_URL and PIP_EXTRA_INDEX_URL) and/or config in the pip config file (in that order),
-        including any extra-index-urls. If no indexes are defined in `inmanta.module.ProjectPipConfig.index_url` or
-        `inmanta.module.ProjectPipConfig.extra_index_url`, fallback to pip's default behaviour: the index(es) defined in
-        pip environment variables will override those defined in pip config files, which will override the default PyPi index.
-        When False, only use the pip options defined in the project.yml file and ignore all pip config files and pip
-        environment variables related to installation e.g. PIP_PRE.
+    :param use_system_config: This option determines whether the system's pip configuration should also be taken into account
+    in addition to the project's pip configuration. See the :ref:`section <_specify_location_pip>` about setting up pip index
+    for more information.
 
     """
 
@@ -1584,8 +1578,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
-        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. See
-          :py:class:`inmanta.module.ProjectPipConfig` for more details.
+        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. Refer
+          to the :ref:`migration guide <_migrate_from_repo_package>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
