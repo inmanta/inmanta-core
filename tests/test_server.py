@@ -29,7 +29,7 @@ import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import const, data, loader, resources, config
+from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
@@ -47,7 +47,7 @@ from inmanta.server import (
 )
 from inmanta.server import config as opt
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.util import get_compiler_version, parse_timestamp
+from inmanta.util import get_compiler_version
 from utils import log_contains, log_doesnt_contain, retry_limited
 
 LOGGER = logging.getLogger(__name__)
@@ -1265,8 +1265,8 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
                 finished=now,
                 status=const.ResourceState.deployed,
                 messages=[
-                    LogLine(level=const.LogLevel.DEBUG, msg="message", timestamp=now,  kwargs={"keyword"=123, "none"=None}),
-                    LogLine(level=const.LogLevel.INFO, msg="test",  kwargs={},timestamp=now),
+                    LogLine(level=const.LogLevel.DEBUG, msg="message", timestamp=now, kwargs={"keyword": 123, "none": None}),
+                    LogLine(level=const.LogLevel.INFO, msg="test", kwargs={}, timestamp=now),
                 ],
                 changes={rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test")}},
                 change=const.Change.purged,

@@ -403,6 +403,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     be in local time.
     :param tz_aware: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
     """
+
     def convert_timestamp() -> datetime.datetime:
         if tz_aware:
             if timestamp.tzinfo:
@@ -422,7 +423,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
 
 def parse_timestamp(timestamp: str) -> datetime.datetime:
     """
-      Parse a timestamp into a timezone aware object. Naive timestamps are assumed to be UTC.
+    Parse a timestamp into a timezone aware object. Naive timestamps are assumed to be UTC.
     """
     try:
         return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")

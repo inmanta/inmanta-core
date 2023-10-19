@@ -28,9 +28,9 @@ from threading import Event
 from typing import Optional
 
 import pytest
-import time_machine
 
 import inmanta
+import time_machine
 from inmanta import util
 from inmanta.util import (
     CronSchedule,
