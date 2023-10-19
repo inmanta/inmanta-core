@@ -396,19 +396,6 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
                 "args": [],
                 "status": ResourceState.failed.value,
             },
-            LogLine(
-                level="INFO",
-                msg="Deploying",
-                timestamp=datetime.datetime.now(),
-                args=[],
-            ),
-            LogLine(
-                level="ERROR",
-                msg="Deployment failed",
-                timestamp=datetime.datetime.now(),
-                args=[],
-                status=ResourceState.failed.value,
-            ),
         ],
         changes={},
         change=Change.nochange,
@@ -424,11 +411,12 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         finished=datetime.datetime.now(),
         status=ResourceState.deployed,
         messages=[
-            LogLine(
-                level="INFO",
-                msg="Deployed successfully",
-                timestamp=datetime.datetime.now(),
-            )
+            {
+                "level": "INFO",
+                "msg": "Deployed successfully",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
         ],
         changes={},
         change=Change.nochange,
@@ -478,18 +466,18 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
         finished=datetime.datetime.now(),
         status=ResourceState.deployed,
         messages=[
-            LogLine(
-                level="DEBUG",
-                msg="Started deployment",
-                timestamp=datetime.datetime.now().isoformat(timespec="microseconds"),
-                args=[],
-            ),
-            LogLine(
-                level="INFO",
-                msg="Deployed successfully",
-                timestamp=datetime.datetime.now().isoformat(timespec="microseconds"),
-                args=[],
-            ),
+            {
+                "level": "DEBUG",
+                "msg": "Started deployment",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
+            {
+                "level": "INFO",
+                "msg": "Deployed successfully",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            }
         ],
         changes={},
         change=Change.nochange,
