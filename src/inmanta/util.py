@@ -394,7 +394,7 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, tz_aware: bool = False) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, tz_aware: bool = False) -> str:
     """
     Returns a timestamp ISO string.
 
@@ -408,15 +408,12 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
         if tz_aware:
             if timestamp.tzinfo:
                 return timestamp
-            if naive_utc:
-                return timestamp.replace(tzinfo=datetime.timezone.utc)
-            return timestamp.astimezone()
+            # naive timestamps are assumed to be UTC.
+            return timestamp.replace(tzinfo=datetime.timezone.utc)
 
-        if not timestamp.tzinfo:
-            if naive_utc:
-                return timestamp.replace(tzinfo=None)
-
-        return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        if timestamp.tzinfo:
+            return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return timestamp
 
     return convert_timestamp().isoformat(timespec="microseconds")
 
@@ -469,7 +466,7 @@ def api_boundary_json_encoder(o: object, tz_aware: bool = False) -> Union[Return
     """
     if isinstance(o, datetime.datetime):
         # Accross API boundaries, all naive datetime instances are assumed UTC.
-        return datetime_iso_format(o, naive_utc=True, tz_aware=tz_aware)
+        return datetime_iso_format(o, tz_aware=tz_aware)
 
     return _custom_json_encoder(o)
 

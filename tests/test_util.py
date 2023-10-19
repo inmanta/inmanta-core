@@ -545,27 +545,17 @@ def test_datetime_iso_format():
         # Naive timestamp:
         timestamp = datetime.datetime.now()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
         assert timestamp_iso_str == "2023-10-03T09:00:00.000000+00:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
-        assert timestamp_iso_str == "2023-10-03T09:00:00.000000"
-
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
-        assert timestamp_iso_str == "2023-10-03T09:00:00.000000+02:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
-        assert timestamp_iso_str == "2023-10-03T07:00:00.000000"
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
+        assert timestamp_iso_str == "2023-10-03T09:00:00.000000"  # Naive timestamps are assumed UTC
 
         # Aware timestamp:
         timestamp = datetime.datetime.now().astimezone()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
         assert timestamp_iso_str == "2023-10-03T09:00:00.000000+02:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
-        assert timestamp_iso_str == "2023-10-03T09:00:00.000000+02:00"
-
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
-        assert timestamp_iso_str == "2023-10-03T07:00:00.000000"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
         assert timestamp_iso_str == "2023-10-03T07:00:00.000000"
 
     # Non-daylight saving time date (UTC+1)
@@ -575,25 +565,15 @@ def test_datetime_iso_format():
         # Naive timestamp
         timestamp = datetime.datetime.now()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
         assert timestamp_iso_str == "2023-12-03T09:00:00.000000+00:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
         assert timestamp_iso_str == "2023-12-03T09:00:00.000000"
-
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
-        assert timestamp_iso_str == "2023-12-03T09:00:00.000000+01:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
-        assert timestamp_iso_str == "2023-12-03T08:00:00.000000"
 
         # Aware timestamp
         timestamp = datetime.datetime.now().astimezone()
 
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=True)
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=True)
         assert timestamp_iso_str == "2023-12-03T09:00:00.000000+01:00"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=True)
-        assert timestamp_iso_str == "2023-12-03T09:00:00.000000+01:00"
-
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=True, tz_aware=False)
-        assert timestamp_iso_str == "2023-12-03T08:00:00.000000"
-        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, naive_utc=False, tz_aware=False)
+        timestamp_iso_str = util.datetime_iso_format(timestamp=timestamp, tz_aware=False)
         assert timestamp_iso_str == "2023-12-03T08:00:00.000000"
