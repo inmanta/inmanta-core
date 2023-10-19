@@ -24,7 +24,6 @@ import pytest
 
 from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.data.model import LogLine
 from inmanta.util import get_compiler_version
 from utils import get_resource
 
