@@ -393,12 +393,11 @@ class ResourceService(protocol.ServerSlice):
         resources_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
         ]
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_iso_format(timestamp, tz_aware=opt.server_tz_aware_timestamps.get()),
-            "args": [],
-        }
+        logline = LogLine(
+            level=const.LogLevel.INFO,
+            msg="Setting deployed due to known good status",
+            timestamp=timestamp,
+        )
         await self.resource_action_update(
             env,
             resources_version_ids,
@@ -749,7 +748,7 @@ class ResourceService(protocol.ServerSlice):
         started: datetime.datetime,
         finished: datetime.datetime,
         status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
-        messages: List[Dict[str, Any]],
+        messages: List[LogLine],
         changes: Dict[str, Any],
         change: const.Change,
         send_events: bool,
@@ -886,15 +885,15 @@ class ResourceService(protocol.ServerSlice):
                     self.log_resource_action(
                         env.id,
                         resource_ids,
-                        const.LogLevel(msg["level"]).to_int,
-                        parse_timestamp(msg["timestamp"]),
-                        msg["msg"],
+                        const.LogLevel(msg.level).to_int,
+                        msg.timestamp,
+                        msg.msg,
                     )
                 await resource_action.set_and_save(
                     messages=[
                         {
-                            **msg,
-                            "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds"),
+                            **msg.dict(),
+                            "timestamp": msg.timestamp.astimezone().isoformat(timespec="microseconds"),
                         }
                         for msg in messages
                     ],

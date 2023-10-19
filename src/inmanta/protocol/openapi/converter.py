@@ -115,7 +115,7 @@ class OpenApiConverter:
     def generate_openapi_json(self) -> str:
         openapi = self.generate_openapi_definition()
 
-        return json.dumps(openapi, openapi_json_encoder)
+        return json.dumps(openapi, default=openapi_json_encoder)
 
     def generate_swagger_html(self) -> str:
         return self.get_swagger_html(self.generate_openapi_json())

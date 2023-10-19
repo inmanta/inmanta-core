@@ -177,7 +177,7 @@ class Server(protocol.ServerSlice):
         feature_manager = self.feature_manager
         openapi = OpenApiConverter(url_map, feature_manager)
         # Get rid of none values with custom json encoder
-        openapi_json_str = openapi.generate_openapi_json(tz_aware=opt.server_tz_aware_timestamps.get())
+        openapi_json_str = openapi.generate_openapi_json()
         if format == ApiDocsFormat.openapi:
             openapi_dict = json.loads(openapi_json_str)
             return ReturnValue(response=openapi_dict)

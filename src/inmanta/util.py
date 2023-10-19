@@ -403,21 +403,27 @@ def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False
     be in local time.
     :param tz_aware: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
     """
-    if tz_aware:
-        if timestamp.tzinfo:
-            return timestamp.isoformat(timespec="microseconds")
-        if naive_utc:
-            return timestamp.replace(tzinfo=datetime.timezone.utc).isoformat(timespec="microseconds")
-        return timestamp.astimezone().isoformat(timespec="microseconds")
+    def convert_timestamp() -> datetime.datetime:
+        if tz_aware:
+            if timestamp.tzinfo:
+                return timestamp
+            if naive_utc:
+                return timestamp.replace(tzinfo=datetime.timezone.utc)
+            return timestamp.astimezone()
 
-    if not timestamp.tzinfo:
-        if naive_utc:
-            return timestamp.replace(tzinfo=None).isoformat(timespec="microseconds")
+        if not timestamp.tzinfo:
+            if naive_utc:
+                return timestamp.replace(tzinfo=None)
 
-    return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None).isoformat(timespec="microseconds")
+        return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+    return convert_timestamp().isoformat(timespec="microseconds")
 
 
 def parse_timestamp(timestamp: str) -> datetime.datetime:
+    """
+      Parse a timestamp into a timezone aware object. Naive timestamps are assumed to be UTC.
+    """
     try:
         return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
     except ValueError:
@@ -458,9 +464,10 @@ def api_boundary_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnT
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
     encoder is meant to be used for API boundaries.
+    :param tz_aware: Whether to serialize timestamps as timezone aware objects or as naive implicit UTC.
     """
     if isinstance(o, datetime.datetime):
-        # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
+        # Accross API boundaries, all naive datetime instances are assumed UTC.
         return datetime_iso_format(o, naive_utc=True, tz_aware=tz_aware)
 
     return _custom_json_encoder(o)

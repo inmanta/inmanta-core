@@ -24,6 +24,7 @@ import pytest
 
 from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
+from inmanta.data.model import LogLine
 from inmanta.util import get_compiler_version
 from utils import get_resource
 
@@ -382,19 +383,19 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         finished=datetime.datetime.now(),
         status=ResourceState.failed,
         messages=[
-            {
-                "level": "INFO",
-                "msg": "Deploying",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
-            {
-                "level": "ERROR",
-                "msg": "Deployment failed",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-                "status": ResourceState.failed.value,
-            },
+            LogLine(
+                level= "INFO",
+                msg= "Deploying",
+                timestamp= datetime.datetime.now(),
+                args= [],
+            ),
+            LogLine(
+                level= "ERROR",
+                msg= "Deployment failed",
+                timestamp= datetime.datetime.now(),
+                args= [],
+                status= ResourceState.failed.value,
+            )
         ],
         changes={},
         change=Change.nochange,
@@ -410,12 +411,11 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         finished=datetime.datetime.now(),
         status=ResourceState.deployed,
         messages=[
-            {
-                "level": "INFO",
-                "msg": "Deployed successfully",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
+            LogLine(
+                level="INFO",
+                msg="Deployed successfully",
+                timestamp=datetime.datetime.now(),
+            )
         ],
         changes={},
         change=Change.nochange,
@@ -465,18 +465,18 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
         finished=datetime.datetime.now(),
         status=ResourceState.deployed,
         messages=[
-            {
-                "level": "DEBUG",
-                "msg": "Started deployment",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
-            {
-                "level": "INFO",
-                "msg": "Deployed successfully",
-                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
-                "args": [],
-            },
+            LogLine(
+                level= "DEBUG",
+                msg= "Started deployment",
+                timestamp= datetime.datetime.now().isoformat(timespec="microseconds"),
+                args= [],
+            ),
+            LogLine(
+                level= "INFO",
+                msg= "Deployed successfully",
+                timestamp= datetime.datetime.now().isoformat(timespec="microseconds"),
+                args= [],
+            ),
         ],
         changes={},
         change=Change.nochange,

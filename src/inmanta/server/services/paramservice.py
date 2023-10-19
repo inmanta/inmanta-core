@@ -281,9 +281,8 @@ class ParameterService(protocol.ServerSlice):
             {
                 "parameters": params,
                 "expire": self._fact_expire,
-                # Return datetime in UTC. The tz_aware_timestamps option tells the RESTHandler's json encoder
-                # whether to make it explicitly aware.
-                "now": datetime.datetime.now(tz=datetime.timezone.utc),
+                # Serialization happens in the RESTHandler's json encoder
+                "now": datetime.datetime.now().astimezone(),
             },
         )
 
