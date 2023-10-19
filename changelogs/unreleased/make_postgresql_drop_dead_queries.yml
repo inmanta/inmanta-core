@@ -1,5 +1,0 @@
-description: Configure postgresql connections to stop queries one second after connection loss
-change-type: patch
-destination-branches: [master, iso6]
-sections:
-  minor-improvement: "{{description}}"
