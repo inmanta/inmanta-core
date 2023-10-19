@@ -58,7 +58,7 @@ import dateutil
 import pydantic
 import pydantic.tools
 import typing_inspect
-from asyncpg import Connection, UndefinedObjectError
+from asyncpg import Connection
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
@@ -6250,7 +6250,7 @@ async def probe_if_options_exist(
     password: str,
     connection_timeout: float = 60,
 ) -> list[str]:
-    """ Connect to a postgresql server to find out if a specific option is supported """
+    """Connect to a postgresql server to find out if a specific option is supported"""
     connection = await asyncpg.connect(
         host=host,
         port=port,
