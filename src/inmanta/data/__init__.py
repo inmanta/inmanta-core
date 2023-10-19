@@ -58,7 +58,7 @@ import dateutil
 import pydantic
 import pydantic.tools
 import typing_inspect
-from asyncpg import Connection
+from asyncpg import Connection, UndefinedObjectError
 from asyncpg.exceptions import SerializationError
 from asyncpg.protocol import Record
 
@@ -6241,6 +6241,31 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
 
+async def probe_if_options_exist(
+    options: list[str],
+    host: str,
+    port: int,
+    database: str,
+    username: str,
+    password: str,
+    connection_timeout: float = 60,
+) -> list[str]:
+    """ Connect to a postgresql server to find out if a specific option is supported """
+    connection = await asyncpg.connect(
+        host=host,
+        port=port,
+        database=database,
+        user=username,
+        password=password,
+        timeout=connection_timeout,
+    )
+    try:
+        results = await connection.fetch("select name from pg_settings where name=ANY($1);", options)
+        return [result["name"] for result in results]
+    finally:
+        await connection.close()
+
+
 async def connect(
     host: str,
     port: int,
@@ -6252,6 +6277,17 @@ async def connect(
     connection_pool_max_size: int = 10,
     connection_timeout: float = 60,
 ) -> asyncpg.pool.Pool:
+    server_settings: dict[str, str] = {}
+    # The option `client_connection_check_interval` ensures connections are closed (more) reliably when this process terminates
+    # However, it only exists from PG 13 onwards
+    #
+    # If a non-existing option is used, the connection is rejected
+    # As such, we first set up a connection to ensure the option exists, then we construct the pool
+    if await probe_if_options_exist(
+        ["client_connection_check_interval"], host, port, database, username, password, connection_timeout
+    ):
+        server_settings["client_connection_check_interval"] = "1000"
+
     pool = await asyncpg.create_pool(
         host=host,
         port=port,
@@ -6261,9 +6297,7 @@ async def connect(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
-        server_settings={
-            "client_connection_check_interval": "1000",  # make server check the tpc connection every 1 second
-        },
+        server_settings=server_settings,
     )
     try:
         set_connection_pool(pool)
