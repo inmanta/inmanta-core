@@ -28,7 +28,7 @@ from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 from tornado.httputil import url_concat
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
@@ -65,6 +65,7 @@ from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -392,11 +393,12 @@ class ResourceService(protocol.ServerSlice):
         resources_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
         ]
-        logline = LogLine(
-            level=const.LogLevel.INFO,
-            msg="Setting deployed due to known good status",
-            timestamp=timestamp,
-        )
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": util.datetime_iso_format(timestamp),
+            "args": [],
+        }
         await self.resource_action_update(
             env,
             resources_version_ids,
@@ -747,7 +749,7 @@ class ResourceService(protocol.ServerSlice):
         started: datetime.datetime,
         finished: datetime.datetime,
         status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
-        messages: List[LogLine],
+        messages: List[Dict[str, Any]],
         changes: Dict[str, Any],
         change: const.Change,
         send_events: bool,
@@ -884,15 +886,15 @@ class ResourceService(protocol.ServerSlice):
                     self.log_resource_action(
                         env.id,
                         resource_ids,
-                        const.LogLevel(msg.level).to_int,
-                        msg.timestamp,
-                        msg.msg,
+                        const.LogLevel(msg["level"]).to_int,
+                        parse_timestamp(msg["timestamp"]),
+                        msg["msg"],
                     )
                 await resource_action.set_and_save(
                     messages=[
                         {
-                            **msg.dict(),
-                            "timestamp": msg.timestamp.astimezone().isoformat(timespec="microseconds"),
+                            **msg,
+                            "timestamp": parse_timestamp(msg["timestamp"]).isoformat(timespec="microseconds"),
                         }
                         for msg in messages
                     ],

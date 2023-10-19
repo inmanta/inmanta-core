@@ -383,19 +383,19 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         finished=datetime.datetime.now(),
         status=ResourceState.failed,
         messages=[
-            LogLine(
-                level="INFO",
-                msg="Deploying",
-                timestamp=datetime.datetime.now(),
-                args=[],
-            ),
-            LogLine(
-                level="ERROR",
-                msg="Deployment failed",
-                timestamp=datetime.datetime.now(),
-                args=[],
-                status=ResourceState.failed.value,
-            ),
+            {
+                "level": "INFO",
+                "msg": "Deploying",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
+            {
+                "level": "ERROR",
+                "msg": "Deployment failed",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+                "status": ResourceState.failed.value,
+            },
         ],
         changes={},
         change=Change.nochange,
@@ -411,11 +411,12 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         finished=datetime.datetime.now(),
         status=ResourceState.deployed,
         messages=[
-            LogLine(
-                level="INFO",
-                msg="Deployed successfully",
-                timestamp=datetime.datetime.now(),
-            )
+            {
+                "level": "INFO",
+                "msg": "Deployed successfully",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
         ],
         changes={},
         change=Change.nochange,

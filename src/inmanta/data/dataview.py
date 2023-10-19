@@ -392,7 +392,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
                 if isinstance(value, datetime):
                     # Accross API boundaries, all naive datetime instances are assumed UTC.
                     # Returns ISO timestamp.
-                    return datetime_iso_format(value, naive_utc=True, tz_aware=opt.server_tz_aware_timestamps.get())
+                    return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
                 return str(value)
 
             def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:

@@ -394,29 +394,25 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, tz_aware: bool = True) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, tz_aware: bool = True) -> str:
     """
     Returns a timestamp ISO string.
 
     :param timestamp: The timestamp to get the ISO string for.
     :param naive_utc: Whether to interpret naive timestamps as UTC. By default, naive timestamps are assumed to
     be in local time.
-    :param tz_aware: Whether to return aware timestamps in the local timezone or naive, implicit UTC timestamp.
+    :param tz_aware: Whether to return timezone aware timestamps or naive, implicit UTC timestamp.
     """
 
     def convert_timestamp() -> datetime.datetime:
         if tz_aware:
             if timestamp.tzinfo:
                 return timestamp
-            if naive_utc:
-                return timestamp.replace(tzinfo=datetime.timezone.utc)
-            return timestamp.astimezone()
+            return timestamp.replace(tzinfo=datetime.timezone.utc)
 
-        if not timestamp.tzinfo:
-            if naive_utc:
-                return timestamp.replace(tzinfo=None)
-
-        return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        if timestamp.tzinfo:
+            return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return timestamp
 
     return convert_timestamp().isoformat(timespec="microseconds")
 
@@ -469,7 +465,7 @@ def api_boundary_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnT
     """
     if isinstance(o, datetime.datetime):
         # Accross API boundaries, all naive datetime instances are assumed UTC.
-        return datetime_iso_format(o, naive_utc=True, tz_aware=tz_aware)
+        return datetime_iso_format(o, tz_aware=tz_aware)
 
     return _custom_json_encoder(o)
 
