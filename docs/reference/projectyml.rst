@@ -79,14 +79,15 @@ The :class:`~inmanta.module.ProjectPipConfig` section of the project.yml file of
 use-system-config
 """""""""""""""""
 
-This option determines the isolation level of the project's pip config. When false, pip will only look for packages
+This option determines the isolation level of the project's pip config. When false, any pip config set on the system
+(e.g. through environment variables or pip config files) are ignored and pip will only look for packages
 in the index(es) defined in the project.yml, when true, pip will in addition look in the eventual index(es) defined on the system.
 
-Setting this to `false` is recommended during development both for portability (by making sure that only the pip
+Setting this to ``false`` is recommended during development both for portability (by making sure that only the pip
 config defined in the project.yml will be used regardless of the sytem's pip config) and for security (The isolation
-reduces the risk of dependency confusion attacks if the `index-url` option is set mindfully).
+reduces the risk of dependency confusion attacks if the ``index-url`` option is set mindfully).
 
-Setting this to `true` will have the following consequences:
+Setting this to ``true`` will have the following consequences:
 
 - If no index is set in the project.yml file i.e. both index_url and extra_index_url are unset -> Pip's
 default behaviour to look for indexes will be used : environment variables, pip config files and then PyPi (in that order).
@@ -94,10 +95,13 @@ default behaviour to look for indexes will be used : environment variables, pip 
 - If index_url and/or extra_index_url are set, they will be used and any index defined in the system's environment
 variables or pip config files will also be used (in that order).
 
+- The ``PIP_PRE`` environment variable (if set) is no longer ignored and will be used to determine whether pre-release
+versions are allowed when installing v2 modules or v1 modules' dependencies.
+
 Using pip config file
 """""""""""""""""""""
 
-By setting the ``use_config_file`` option of the pip section to ``True``, the project will use the pip config files.
+By setting the ``use_config_file`` option of the pip section to ``true``, the project will use the pip config files.
 
 .. code-block:: yaml
 
@@ -139,8 +143,10 @@ Another option is to use the  ``index_urls`` option in the ``pip`` section of th
 
 .. _migrate_from_repo_package:
 
-Defining a `repo` with type `package` is deprecated. Make sure you define this index through the pip.index-url option instead.
+Defining a ``repo`` with type ``package`` is deprecated. Make sure you define this index through the pip.index-url option instead.
 
+Previously, the :class:`InstallMode` set at the project level or at a module level was used to determine if the
+installation of pre-release versions was allowed. This behaviour should now be set through the pip.pre option instead.
 
 Module metadata files
 #####################

@@ -1569,8 +1569,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
         repositories. This path is not automatically included in the modulepath!
-    :param install_mode: (Optional) This key determines what version of a module should be selected when a module
-        is downloaded. For more information see :class:`InstallMode`.
+    :param install_mode: (Optional) [DEPRECATED] This key was used to determine what version of a module should be selected when a module
+        is downloaded. For more information see :class:`InstallMode`. This should now be set via the ``pre`` option of the ``pip`` section.
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
         in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
         can have the following values:
