@@ -27,7 +27,7 @@ from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
 from tornado.httputil import url_concat
 
-from inmanta import const, data
+from inmanta import const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import ResourceHistoryView, ResourceLogsView, ResourcesInVersionView, ResourceView
@@ -385,11 +385,12 @@ class ResourceService(protocol.ServerSlice):
         resources_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
         ]
-        logline = LogLine(
-            level=const.LogLevel.INFO,
-            msg="Setting deployed due to known good status",
-            timestamp=timestamp,
-        )
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": util.datetime_iso_format(timestamp),
+            "args": [],
+        }
 
         await self.resource_action_update(
             env,
