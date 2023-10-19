@@ -39,8 +39,8 @@ from typing import Any, Dict, Iterator, List, Mapping, NamedTuple, Optional, Pat
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
+from pydantic import BaseModel
 
-import inmanta.module
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
@@ -241,6 +241,8 @@ class PythonWorkingSet:
 
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
+        import inmanta.module  # TODO: import cycle
+
         return {
             dist_info.key: version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
@@ -312,6 +314,41 @@ class PipUpgradeStrategy(enum.Enum):
 
     EAGER = "eager"
     ONLY_IF_NEEDED = "only-if-needed"
+
+
+class PipConfig(BaseModel):
+    """
+    :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
+        Python packages.
+    :param index_url: one pip index url for this project.
+    :param extra_index_url:  additional pip index urls for this project. This is generally only
+        recommended if all configured indexes are under full control of the end user to protect against dependency
+        confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
+        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
+    :param pre:  allow pre-releases when installing Python packages, i.e. pip --pre.
+        If null, behaves like false unless pip.use-system-config=true, in which case system config is respected.
+    :param use_system_config: defaults to false.
+        When true, sets the pip's index url, extra index urls and pre according to the respective settings outlined above
+            but otherwise respect any pip environment variables and/or config in the pip config file,
+            including any extra-index-urls.
+
+        If no indexes are configured in pip.index-url/pip.extra-index-url, this option falls back to pip's default behavior,
+        meaning it uses the pip index url from the environment, the config file, or PyPi, in that order.
+
+        For development, it is recommended to set this option to false, both for portability
+        (and related compatibility with tools like pytest-inmanta-lsm) and for security
+        (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
+    """
+
+    index_url: Optional[str] = None
+    # Singular to be consistent with pip itself
+    extra_index_url: Sequence[str] = []
+    pre: Optional[bool] = None
+    use_system_config: bool = False
+
+    def has_source(self) -> bool:
+        """Can this config get packages from anywhere?"""
+        return self.index_url or self.extra_index_url or self.use_system_config
 
 
 class PipCommandBuilder:
@@ -489,6 +526,7 @@ class PythonEnvironment:
         requirements_files: Optional[List[str]] = None,
         use_pip_config: Optional[bool] = False,
     ) -> None:
+        # TODO push the config in
         cmd: List[str] = PipCommandBuilder.compose_install_command(
             python_path=python_path,
             requirements=requirements,
@@ -589,26 +627,32 @@ class PythonEnvironment:
     def install_from_index(
         self,
         requirements: List[Requirement],
-        index_urls: Optional[List[str]] = None,
+        config: PipConfig,
         upgrade: bool = False,
-        allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: Optional[bool] = False,
     ) -> None:
         if len(requirements) == 0:
             raise Exception("install_from_index requires at least one requirement to install")
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
+
+        # TODO push the config in
+        # fix semantics
+        index_urls = []
+        if config.index_url:
+            index_urls.append(config.index_url)
+        index_urls.extend(config.extra_index_url)
+
         self._run_pip_install_command(
             python_path=self.python_path,
             requirements=[*requirements, *inmanta_requirements],
             index_urls=index_urls,
             upgrade=upgrade,
-            allow_pre_releases=allow_pre_releases,
+            allow_pre_releases=config.pre or False,  # TODO
             constraints_files=[*constraint_files],
             upgrade_strategy=upgrade_strategy,
-            use_pip_config=use_pip_config,
+            use_pip_config=config.use_system_config,
         )
 
     def install_from_source(
@@ -757,19 +801,15 @@ class ActiveEnv(PythonEnvironment):
     def install_from_index(
         self,
         requirements: List[Requirement],
-        index_urls: Optional[List[str]] = None,
+        config: PipConfig,
         upgrade: bool = False,
-        allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not upgrade and self.are_installed(requirements):
             return
         try:
-            super(ActiveEnv, self).install_from_index(
-                requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy, use_pip_config
-            )
+            super(ActiveEnv, self).install_from_index(requirements, config, upgrade, constraint_files, upgrade_strategy)
         finally:
             self.notify_change()
 
@@ -1310,18 +1350,14 @@ import sys
     def install_from_index(
         self,
         requirements: List[Requirement],
-        index_urls: Optional[List[str]] = None,
+        config: PipConfig,
         upgrade: bool = False,
-        allow_pre_releases: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: Optional[bool] = False,
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_index(
-            requirements, index_urls, upgrade, allow_pre_releases, constraint_files, upgrade_strategy, use_pip_config
-        )
+        super(VirtualEnv, self).install_from_index(requirements, config, upgrade, constraint_files, upgrade_strategy)
 
     def install_from_source(
         self,

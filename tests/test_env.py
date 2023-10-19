@@ -34,6 +34,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
+from inmanta.env import PipConfig
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
@@ -341,9 +342,16 @@ def test_active_env_get_module_file(
     if package_name.startswith(module.ModuleV2.PKG_NAME_PREFIX):
         module_name = "inmanta_plugins." + package_name[len(module.ModuleV2.PKG_NAME_PREFIX) :].replace("-", "_")
         index = str(local_module_package_index)
+        pip_config = PipConfig(
+            index_url=index,
+            use_system_config=True,  # we need an upstream for some packages
+        )
+
     else:
         module_name = package_name.replace("-", "_")
-        index = None
+        pip_config = PipConfig(
+            use_system_config=True,
+        )
 
     # unload module if already loaded from encapsulating development venv
     if module_name in sys.modules:
@@ -356,7 +364,7 @@ def test_active_env_get_module_file(
         loader.PluginModuleFinder.configure_module_finder([os.path.join(str(tmpdir), "libs")])
 
     assert env.ActiveEnv.get_module_file(module_name) is None
-    env.process_env.install_from_index([Requirement.parse(package_name)], index_urls=[index] if index is not None else None)
+    env.process_env.install_from_index([Requirement.parse(package_name)], pip_config)
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
@@ -659,7 +667,10 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
     )
 
     requirements = [Requirement.parse("pkg[optional-pkg]")]
-    tmpvenv_active_inherit.install_from_index(requirements=requirements, index_urls=[pip_index.url])
+    tmpvenv_active_inherit.install_from_index(requirements=requirements, pip_config = PipConfig(
+            index_url=pip_index.url,
+            use_system_config=True,  # we need an upstream for some packages
+        ))
     assert tmpvenv_active_inherit.are_installed(requirements=requirements)
 
 

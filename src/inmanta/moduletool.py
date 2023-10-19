@@ -484,10 +484,8 @@ compatible with the dependencies specified by the updated modules.
                 current_requires = my_project.get_strict_python_requirements_as_list()
                 env.process_env.install_from_index(
                     v2_python_specs + [Requirement.parse(r) for r in current_requires],
-                    my_project.module_source.urls,
+                    my_project.metadata.pip,
                     upgrade=True,
-                    allow_pre_releases=my_project.install_mode != InstallMode.release,
-                    use_pip_config=my_project.metadata.pip.use_config_file,
                 )
 
             for v1_module in set(modules).difference(v2_modules):
