@@ -391,7 +391,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
                 if isinstance(value, datetime):
                     # Accross API boundaries, all naive datetime instances are assumed UTC.
-                    # Returns ISO timestamp implicitly in UTC.
+                    # Returns ISO timestamp.
                     return datetime_iso_format(value, naive_utc=True, tz_aware=opt.server_tz_aware_timestamps.get())
                 return str(value)
 
