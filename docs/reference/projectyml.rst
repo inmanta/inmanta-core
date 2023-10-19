@@ -98,55 +98,65 @@ variables or pip config files will also be used (in that order).
 - The ``PIP_PRE`` environment variable (if set) is no longer ignored and will be used to determine whether pre-release
 versions are allowed when installing v2 modules or v1 modules' dependencies.
 
-Using pip config file
-"""""""""""""""""""""
+Example scenario
+""""""""""""""""
 
-By setting the ``use_config_file`` option of the pip section to ``true``, the project will use the pip config files.
+1) During development
 
-.. code-block:: yaml
-
-    pip:
-      use_config_file: True
-
-To specify the url of a pip repository, add the following to the pip config file of the ``inmanta`` user, located at ``/var/lib/inmanta/.config/pip/pip.conf``:
-
-.. code-block:: text
-
-  [global]
-  timeout = 60
-  index-url = <url of a python package repository>
-
-
-Alternatively, a pip config file can be used at a custom location.
-The ``index-url`` can be specified in this file as explained in the previous section.
-To make this work, the ``PIP_CONFIG_FILE`` environment variable needs to be set to the path of the newly created file (See: :ref:`env_vars`).
-For more information see the `Pip documentation <https://pip.pypa.io/en/stable/topics/configuration/>`_.
-
-Specify the index-urls in the project.yml file
-""""""""""""""""""""""""""""""""""""""""""""""
-
-Another option is to use the  ``index_urls`` option in the ``pip`` section of the ``project.yml`` file:
+Using a single pip index isolated from any system config is the recommended approach. The ``pre=true`` option allows
+pip to use pre-release versions, e.g. when testing dev versions of modules published to the dev index. Here is an
+example of a dev config:
 
 .. code-block:: yaml
 
     pip:
-      use_config_file: False
-      index_urls:
-        - <url of a python package repository>
+        index-url: https://devpi.example.com/dev/
+        extra-index-url: []
+        pre: true
+        use-system-config: false
 
+2) In production
+
+Using a single pip index is still the recommended approach, and the use of pre-release versions should be disabled. Here is an
+example of a config suitable in production:
+
+.. code-block:: yaml
+
+    pip:
+        index-url: https://devpi.example.com/stable/
+        extra-index-url: []
+        pre: false
+        use-system-config: true
 
 .. note::
-    The pip config file can also be used in combination with ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file:
+    The options defined in the pip section will always take precedence over the corresponding pip options, even
+    when ``use-system-config`` is set to true (other pip-related environment variables are not overridden).
+    For example, in the production scenario above, if the following
+    pip environment variables were set by mistake on the server running the compiler: ``PIP_INDEX_URL=https://devpi.example.com/dev/``
+    and ``PIP_PRE=true``, the config used in the end would still be the one defined in the project.yml, namely
+    ``index-url=https://devpi.example.com/stable/`` and ``pre=false``.
 
-    * If the pip config is used (by setting ``use_config_file`` to ``true``), the ``index-url`` specified in the pip config file will take precedence and the ``index-urls`` specified in the ``pip`` section of the ``project.yml`` file will be used as ``extra-index-urls`` when installing with pip.
-    * If the pip config is not used (by setting ``use_config_file`` to ``False``), then the first ``index_url`` specified in the project.yml will be used as an ``index_url`` and all the following ones will be used as ``extra-index-urls`` when installing with pip.
+An alternative approach would be to configure all pip-related options through the system config. For example:
 
-.. _migrate_from_repo_package:
+.. code-block:: yaml
+
+    pip:
+        index-url:
+        extra-index-url: []
+        pre:
+        use-system-config: true
+
+In this scenario, pip options defined in env variables (if any) would be used over the system's pip config.
+
+
+.. _migrate_to_project_wide_pip_config:
 
 Defining a ``repo`` with type ``package`` is deprecated. Make sure you define this index through the pip.index-url option instead.
 
 Previously, the :class:`InstallMode` set at the project level or at a module level was used to determine if the
 installation of pre-release versions was allowed. This behaviour should now be set through the pip.pre option instead.
+
+A full compile should be run after upgrading, in order to export the project pip config to the server.
 
 Module metadata files
 #####################

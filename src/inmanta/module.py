@@ -1535,18 +1535,21 @@ class RelationPrecedenceRule:
 
 
     # TODO : `inmanta.module.ProjectPipConfig.blabla` -> check if this is the right link (multiple occurrences in this docstring)
+    # TODO : uniformize index_url vs index-url
 @stable_api
 class ProjectPipConfig(BaseModel):
     """
     :param index_url: Url of the pip index to use for the project. This repository should be
         `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-        compliant.
+        compliant. Unless it is unset and pip.use_system_config=true, this option will always supersede PIP_INDEX_URL.
     :param extra_index_url: List of extra pip index urls, which will all be passed to pip. This is generally only
         recommended if all configured indexes are under full control of the end user to protect against dependency
         confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
-        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
-    :param pre: Allow pre-releases when installing Python packages. A null value is interpreted as False, unless
-        use_system_config is set to True, in which case the system config is respected.
+        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information. If set along with pip.use_system_config=true,
+        the union of all extra indexes will be used. If set along with pip.use_system_config=false, then only the extra indexes
+        set here will be used.
+    :param pre: Allow pre-releases when installing Python packages. Unless it is unset and pip.use_system_config=true, this
+        option will always supersede PIP_PRE.
     :param use_system_config: This option determines whether the system's pip configuration should also be taken into account
     in addition to the project's pip configuration. See the :ref:`section <_specify_location_pip>` about setting up pip index
     for more information.
@@ -1579,7 +1582,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
         * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. Refer
-          to the :ref:`migration guide <_migrate_from_repo_package>` for more information.
+          to the :ref:`migration guide <_migrate_to_project_wide_pip_config>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
