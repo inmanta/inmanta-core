@@ -6248,7 +6248,7 @@ async def probe_if_options_exist(
     database: str,
     username: str,
     password: str,
-    connection_timeout: float = 60,
+    connection_timeout: float = 60.0,
 ) -> list[str]:
     """Connect to a postgresql server to find out if a specific option is supported"""
     connection = await asyncpg.connect(
@@ -6261,7 +6261,7 @@ async def probe_if_options_exist(
     )
     try:
         results = await connection.fetch("select name from pg_settings where name=ANY($1);", options)
-        return [result["name"] for result in results]
+        return [cast(str,result["name"]) for result in results]
     finally:
         await connection.close()
 
