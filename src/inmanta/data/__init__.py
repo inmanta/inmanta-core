@@ -6261,7 +6261,7 @@ async def probe_if_options_exist(
     )
     try:
         results = await connection.fetch("select name from pg_settings where name=ANY($1);", options)
-        return [cast(str,result["name"]) for result in results]
+        return [cast(str, result["name"]) for result in results]
     finally:
         await connection.close()
 
