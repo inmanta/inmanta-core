@@ -2,7 +2,7 @@ description: Add server config option server.tz_aware_timestamps to make the ser
   aware timestamps.
 issue-nr: 6428
 change-type: minor
-destination-branches: [iso6]
+destination-branches: [master]
 sections:
   feature: "{{description}}"
 
