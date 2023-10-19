@@ -383,6 +383,19 @@ async def test_list_actionlog(server, environment, client, cli, agent, clienthel
         finished=datetime.datetime.now(),
         status=ResourceState.failed,
         messages=[
+            {
+                "level": "INFO",
+                "msg": "Deploying",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+            },
+            {
+                "level": "ERROR",
+                "msg": "Deployment failed",
+                "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
+                "args": [],
+                "status": ResourceState.failed.value,
+            },
             LogLine(
                 level="INFO",
                 msg="Deploying",
