@@ -270,7 +270,12 @@ def test_process_env_install_from_index(
     """
     package_name: str = "more-itertools"
     assert package_name not in env.process_env.get_installed_packages()
-    env.process_env.install_from_index([Requirement.parse(package_name + (f"=={version}" if version is not None else ""))])
+    env.process_env.install_from_index(
+        [Requirement.parse(package_name + (f"=={version}" if version is not None else ""))],
+        config=PipConfig(
+            use_system_config=True,  # we need an upstream for some packages
+        ),
+    )
     installed: Dict[str, version.Version] = env.process_env.get_installed_packages()
     assert package_name in installed
     if version is not None:
@@ -284,7 +289,12 @@ def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.
     """
     with pytest.raises(env.PackageNotFound):
         # pass empty index list for security reasons (anyone could publish this package to PyPi)
-        env.process_env.install_from_index([Requirement.parse("this-package-does-not-exist")], index_urls=[])
+        env.process_env.install_from_index(
+            [Requirement.parse("this-package-does-not-exist")],
+            config=PipConfig(
+                use_system_config=False,
+            ),
+        )
 
 
 @pytest.mark.slowtest
@@ -297,7 +307,12 @@ def test_process_env_install_from_index_conflicting_reqs(
     """
     package_name: str = "more-itertools"
     with pytest.raises(env.ConflictingRequirements) as e:
-        env.process_env.install_from_index([Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]])
+        env.process_env.install_from_index(
+            [Requirement.parse(f"{package_name}{version}") for version in [">8.5", "<=8"]],
+            config=PipConfig(
+                use_system_config=True,  # we need an upstream for some packages
+            ),
+        )
     assert "conflicting dependencies" in e.value.msg
     assert package_name not in env.process_env.get_installed_packages()
 
@@ -549,7 +564,12 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
 
     inmanta_requirements = Requirement.parse("inmanta-core==4.0.0")
     with pytest.raises(env.ConflictingRequirements) as excinfo:
-        tmpvenv_active_inherit.install_from_index(requirements=[inmanta_requirements])
+        tmpvenv_active_inherit.install_from_index(
+            requirements=[inmanta_requirements],
+            config=PipConfig(
+                use_system_config=True,  # we need some upstream
+            ),
+        )
     match = re.search(
         r"Cannot install (inmanta-core==4\.0\.0 and inmanta-core=.*|inmanta-core=.* and inmanta-core==4\.0\.0) because these "
         r"package versions have conflicting dependencies",
@@ -595,7 +615,10 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=False)
     tmpvenv_active_inherit.install_from_index(
         requirements=[Requirement.parse("inmanta-module-elaboratev2module==1.2.3")],
-        index_urls=[local_module_package_index],
+        config=PipConfig(
+            index_url=local_module_package_index,
+            use_system_config=True,  # we need an upstream for some packages
+        ),
     )
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=True)
     _assert_install("inmanta-module-elaboratev2module~=1.2.0", installed=True)
@@ -667,10 +690,13 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
     )
 
     requirements = [Requirement.parse("pkg[optional-pkg]")]
-    tmpvenv_active_inherit.install_from_index(requirements=requirements, pip_config = PipConfig(
+    tmpvenv_active_inherit.install_from_index(
+        requirements=requirements,
+        config=PipConfig(
             index_url=pip_index.url,
             use_system_config=True,  # we need an upstream for some packages
-        ))
+        ),
+    )
     assert tmpvenv_active_inherit.are_installed(requirements=requirements)
 
 

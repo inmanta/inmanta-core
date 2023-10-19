@@ -38,7 +38,7 @@ import utils
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
-from inmanta.env import PythonEnvironment
+from inmanta.env import PipConfig, PythonEnvironment
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
@@ -1500,7 +1500,11 @@ async def test_uninstall_python_packages(
     venv = PythonEnvironment(env_path=venv_path)
     assert name_protected_pkg not in venv.get_installed_packages()
     venv.install_from_index(
-        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)], index_urls=[local_module_package_index]
+        requirements=[pkg_resources.Requirement.parse(name_protected_pkg)],
+        config=PipConfig(
+            index_url=local_module_package_index,
+            use_system_config=True,  # we need an upstream for some packages
+        ),
     )
     assert name_protected_pkg in venv.get_installed_packages()
 

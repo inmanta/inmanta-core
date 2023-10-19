@@ -30,7 +30,7 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
-from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
+from inmanta.env import ConflictingRequirements, LocalPackagePath, PipConfig, process_env
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
@@ -559,7 +559,10 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
     process_env.install_from_index(
         [InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()],
-        index_urls=[local_module_package_index],
+        config=PipConfig(
+            index_url=local_module_package_index,
+            use_system_config=True,  # we need an upstream for some packages
+        ),
     )
 
     # set up project: import submodule only, don't add the module to requirements

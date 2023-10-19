@@ -23,7 +23,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta.config import Config
-from inmanta.env import LocalPackagePath, process_env
+from inmanta.env import LocalPackagePath, PipConfig, process_env
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
@@ -214,7 +214,13 @@ def test_module_update_dependencies(
         create_python_package("c", Version(v), str(tmpdir.join(f"c-{v}")), publish_index=index)
 
     # install b-1.0.0 and c-1.0.0
-    process_env.install_from_index([Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")], index_urls=[index.url])
+    process_env.install_from_index(
+        [Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")],
+        config=PipConfig(
+            index_url=index.url,
+            use_system_config=True,  # we need an upstream for some packages
+        ),
+    )
 
     # create my_mod
     v1_module_from_template(
