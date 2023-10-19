@@ -24,7 +24,6 @@ import pytest
 
 from inmanta import data
 from inmanta.const import Change, ResourceAction, ResourceState
-from inmanta.data.model import LogLine
 from inmanta.util import get_compiler_version
 from utils import get_resource
 
@@ -477,7 +476,7 @@ async def test_show_messages_actionlog(server, environment, client, cli, agent, 
                 "msg": "Deployed successfully",
                 "timestamp": datetime.datetime.now().isoformat(timespec="microseconds"),
                 "args": [],
-            }
+            },
         ],
         changes={},
         change=Change.nochange,
