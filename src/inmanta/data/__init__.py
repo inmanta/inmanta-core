@@ -6240,6 +6240,19 @@ PACKAGE_WITH_UPDATE_FILES = inmanta.db.versions
 # prevent import loop
 CORE_SCHEMA_NAME = schema.CORE_SCHEMA_NAME
 
+async def set_options(connection: Connection) -> None:
+    """ Set options on the connection """
+    try:
+        # make server check the tpc connection every 1 second
+        # This ensures connections are closed(more) reliably when this process terminates
+        # However, it only exists from PG 13 onwards
+        #
+        # If a non-existing option is used, the connection is rejected
+        # As such, we set it after the connection is up and tolerate failure
+        await connection.execute("SET client_connection_check_interval TO 1000;")
+    except asyncpg.UndefinedObjectError:
+        # It is ok if we can't set it
+        pass
 
 async def connect(
     host: str,
@@ -6261,9 +6274,7 @@ async def connect(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
-        server_settings={
-            "client_connection_check_interval": "1000",  # make server check the tpc connection every 1 second
-        },
+        setup=set_options,
     )
     try:
         set_connection_pool(pool)
