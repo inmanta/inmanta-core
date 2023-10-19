@@ -30,7 +30,6 @@ from pydantic.types import StrictFloat, StrictInt, StrictStr
 import inmanta
 import inmanta.ast.export as ast_export
 from inmanta import const, data, protocol, resources
-from inmanta.server.config import server_tz_aware_timestamps
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
 
@@ -225,7 +224,7 @@ class AttributeStateChange(BaseModel):
         Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
         """
         try:
-            protocol.common.json_encode(v, server_tz_aware_timestamps.get())
+            protocol.common.json_encode(v)
         except TypeError:
             if inmanta.RUNNING_TESTS:
                 # Fail the test when the value is not serializable

@@ -394,7 +394,7 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, tz_aware: bool = False) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, naive_utc: bool = False, tz_aware: bool = True) -> str:
     """
     Returns a timestamp ISO string.
 

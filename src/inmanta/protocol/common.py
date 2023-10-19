@@ -960,7 +960,7 @@ class UrlMethod(object):
 
 
 # Util functions
-def custom_json_encoder(o: object, tz_aware: bool = False) -> Union[ReturnTypes, util.JSONSerializable]:
+def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta
     """

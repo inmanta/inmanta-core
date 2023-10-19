@@ -36,7 +36,6 @@ from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr
 from inmanta.protocol import Result, json_encode
-from inmanta.server.config import server_tz_aware_timestamps
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
 from inmanta.util import hash_file
@@ -409,7 +408,7 @@ class HandlerContext(LoggerABC):
 
         for k, v in kwargs.items():
             try:
-                json_encode(v, server_tz_aware_timestamps.get())
+                json_encode(v)
             except TypeError:
                 if inmanta.RUNNING_TESTS:
                     # Fail the test when the value is not serializable
