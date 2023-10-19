@@ -2047,8 +2047,17 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
 
     response: Result = await client.test_method(timestamp=now)
     assert response.code == 200
-    assert all(pydantic.parse_obj_as(datetime.datetime, timestamp) == naive_utc for timestamp in response.result["data"])
 
+    def convert_to_naive_utc(timestamp: str) -> datetime.datetime:
+        datetime_obj = pydantic.parse_obj_as(datetime.datetime, timestamp)
+        if datetime_obj.tzinfo:
+            datetime_obj = datetime_obj.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+        return datetime_obj
+
+    timestamps = [convert_to_naive_utc(timestamp) for timestamp in response.result["data"]]
+
+    assert all(timestamp == naive_utc for timestamp in timestamps)
     response: Result = await client.test_method(timestamp=now.astimezone(datetime.timezone.utc))
     assert response.code == 200
 
