@@ -1228,7 +1228,9 @@ class Metadata(BaseModel):
     def parse(cls: Type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
         raw: Mapping[str, object] = cls._raw_parser.parse(source)
         try:
-            return cls(**raw)
+            return cls(
+                **raw,
+            )
         except ValidationError as e:
             if isinstance(source, TextIOBase):
                 raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid:", validation_error=e) from e
@@ -1565,7 +1567,11 @@ class ProjectPipConfig(env.PipConfig):
     """
 
     class Config:
+        # use alias generator have `-` in names
         alias_generator = hyphenize
+        # allow use of aliases
+        populate_by_name = True
+        extra = "forbid"  # TODO exception handling
 
 
 @stable_api
