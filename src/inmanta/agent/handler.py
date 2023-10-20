@@ -35,7 +35,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr, BaseModel
+from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
