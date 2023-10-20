@@ -134,7 +134,6 @@ class InmantaLoggerConfig:
         # Regex that extracts the name of the module from a fully qualified import of a Python
         # module inside an Inmanta module.
 
-
     def wrap_record(self, record: logging.LogRecord) -> logging.LogRecord:
         """
         Wrap a log record to perform renaming for specific formatter as determined by the _logger_mode
