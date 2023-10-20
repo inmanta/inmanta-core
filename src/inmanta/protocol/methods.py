@@ -946,7 +946,9 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
 # Methods to send event to the server
 
 
-@method(path="/event/<id>", operation="PUT", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/event/<id>", operation="PUT", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[], reply=False
+)
 def resource_event(
     tid: uuid.UUID, id: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes={}
 ):

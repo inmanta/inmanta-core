@@ -698,7 +698,7 @@ class DiscoveredResource(BaseModel):
     """
 
     discovered_resource_id: ResourceIdStr
-    values: BaseModel
+    values: dict[str, object]
 
     @field_validator("discovered_resource_id")
     @classmethod
@@ -710,7 +710,7 @@ class DiscoveredResource(BaseModel):
     def to_dao(self, env: uuid) -> "data.DiscoveredResource":
         return data.DiscoveredResource(
             discovered_resource_id=self.discovered_resource_id,
-            values=self.values.model_dump(),
+            values=self.values,
             discovered_at=datetime.datetime.now(),
             environment=env,
         )
