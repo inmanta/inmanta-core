@@ -2210,7 +2210,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
-    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete_cascade(
+        self, only_content: Optional[bool] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         await self.delete(connection=connection)
 
     @classmethod
@@ -2312,7 +2314,9 @@ class Project(BaseDocument):
     def to_dto(self) -> m.Project:
         return m.Project(id=self.id, name=self.name, environments=[])
 
-    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete_cascade(
+        self, only_content: Optional[bool] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         As such, we perform the deletes on each table in a separate transaction.
@@ -2841,7 +2845,7 @@ class Environment(BaseDocument):
             await self.set(key, self._settings[key].default)
 
     async def delete_cascade(
-        self, only_content: bool = False, connection: Optional[asyncpg.connection.Connection] = None
+        self, only_content: Optional[bool] = False, connection: Optional[asyncpg.connection.Connection] = None
     ) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
@@ -5531,7 +5535,9 @@ class ConfigurationModel(BaseDocument):
         )
         return versions
 
-    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete_cascade(
+        self, only_content: Optional[bool] = None, connection: Optional[asyncpg.connection.Connection] = None
+    ) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         As such, we perform the deletes on each table in a separate transaction.
