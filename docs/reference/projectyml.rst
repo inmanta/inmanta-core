@@ -144,7 +144,7 @@ And set the following env variables:
     export PIP_INDEX_URL=https://devpi.example.com/stable/
     export PIP_PRE=false
 
-In this scenario, pip options defined in env variables (if any) would be used over the system's pip config.
+In this scenario, pip options defined in env variables would be used over the system's pip config (if any).
 
 .. note::
 
@@ -161,7 +161,7 @@ as a migration guide.
 
 Defining a ``repo`` with type ``package`` is deprecated. Make sure you define this index through the pip.index-url option instead.
 
-Previously, the :class:`InstallMode` set at the project level or at a module level was used to determine if the
+Previously, the :class:`~inmanta.module.InstallMode` set at the project level or at a module level was used to determine if the
 installation of pre-release versions was allowed. This behaviour should now be set through the ``pip.pre`` option instead.
 
 A full compile should be run after upgrading, in order to export the project pip config to the server, so that it
