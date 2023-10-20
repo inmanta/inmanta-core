@@ -167,7 +167,7 @@ Becomes:
 Source for V2 modules and V1 modules' dependencies
 ==================================================
 
-Add the pip index where your modules are hosted to ``project.yml`` in the ``pip.index_url`` :ref:`section<specify_location_pip>`.
+Add the pip index where your modules and dependencies are hosted to ``project.yml`` in the ``pip.index-url`` :ref:`section<specify_location_pip>`.
 For example, for modules hosted on PyPi:
 
 .. code-block:: yaml

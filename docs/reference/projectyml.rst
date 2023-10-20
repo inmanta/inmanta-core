@@ -58,16 +58,6 @@ The code snippet below provides an example of a complete ``project.yml`` file:
 
 .. _specify_location_pip:
 
-
-When True, the indexes defined in `inmanta.module.ProjectPipConfig.index_url`
-        and `inmanta.module.ProjectPipConfig.extra_index_url` (if any) will be used, in addition to indexes defined in pip
-        environment variables (PIP_INDEX_URL and PIP_EXTRA_INDEX_URL) and/or config in the pip config file (in that order),
-        including any extra-index-urls. If no indexes are defined in `inmanta.module.ProjectPipConfig.index_url` or
-        `inmanta.module.ProjectPipConfig.extra_index_url`, fallback to pip's default behaviour: the index(es) defined in
-        pip environment variables will override those defined in pip config files, which will override the default PyPi index.
-        When False, only use the pip options defined in the project.yml file and ignore all pip config files and pip
-        environment variables related to installation e.g. PIP_PRE.
-
 Configure pip index
 -------------------
 
