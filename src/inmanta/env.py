@@ -326,7 +326,7 @@ class PipConfig(BaseModel):
         confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
         `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
     :param pre:  allow pre-releases when installing Python packages, i.e. pip --pre.
-        If null, behaves like false unless pip.use-system-config=true, in which case system config is respected.
+        Defaults to False. When false and pip.use-system-config=true we follow the system config.
     :param use_system_config: defaults to false.
         When true, sets the pip's index url, extra index urls and pre according to the respective settings outlined above
             but otherwise respect any pip environment variables and/or config in the pip config file,
@@ -343,18 +343,156 @@ class PipConfig(BaseModel):
     index_url: Optional[str] = None
     # Singular to be consistent with pip itself
     extra_index_url: Sequence[str] = []
-    pre: Optional[bool] = None
+    pre: bool = False
     use_system_config: bool = False
 
     def has_source(self) -> bool:
         """Can this config get packages from anywhere?"""
-        return self.index_url or self.extra_index_url or self.use_system_config
+        return self.index_url or self.use_system_config
+
+    def assert_has_source(self, reason: str) -> None:
+        if not self.has_source():
+            raise Exception(
+                f"Attempting to install {reason} but no pip is configured. Add the relevant pip "
+                f"indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
+                "to `project.yml`:"
+                "\npip:"
+                "\n  index_url:"
+                "\n    - https://pypi.org/simple"
+                "\nAnother option is to set the pip.use_system_config = true to use the system's pip config."
+            )
 
 
 class PipCommandBuilder:
     """
     Class used to compose pip commands.
     """
+
+    @classmethod
+    def run_pip_install_command_from_config(
+        cls,
+        python_path: str,
+        config: PipConfig,
+        requirements: Optional[List[Requirement]] = None,
+        requirements_files: Optional[List[str]] = None,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        constraints_files: Optional[List[str]] = None,
+    ):
+        # What
+        requirements = requirements if requirements is not None else []
+        requirements_files = requirements_files if requirements_files is not None else []
+
+        install_args = [
+            *(str(requirement) for requirement in requirements),
+            *chain.from_iterable(["-r", f] for f in requirements_files),
+        ]
+
+        # From where
+        index_args: list[str] = []
+        if config.index_url:
+            index_args.append("--index-url")
+            index_args.append(config.index_url)
+
+        for extra_index_url in config.extra_index_url:
+            index_args.append("--extra-index-url")
+            index_args.append(extra_index_url)
+
+        config.assert_has_source(" ".join(install_args))
+
+        constraints_files = constraints_files if constraints_files is not None else []
+
+        # Command
+        cmd = [
+            python_path,
+            "-m",
+            "pip",
+            "install",
+            *(["--upgrade", "--upgrade-strategy", upgrade_strategy.value] if upgrade else []),
+            *(["--pre"] if config.pre else []),
+            *chain.from_iterable(["-c", f] for f in constraints_files),
+            *install_args,
+            *index_args,
+        ]
+
+        # ISOLATION!
+        sub_env = os.environ.copy()
+
+        if not config.use_system_config:
+            # If we don't use system config, unset env vars
+            # setting this env_var to os.devnull disables the loading of all pip configuration files
+
+            # TODO: switch to        --isolated
+            #               Run pip in an isolated mode, ignoring environment variables  and
+            #               user configuration.
+            # Sander has something to say on this
+
+            sub_env["PIP_CONFIG_FILE"] = os.devnull
+            if "PIP_EXTRA_INDEX_URL" in sub_env:
+                del sub_env["PIP_EXTRA_INDEX_URL"]
+            if "PIP_INDEX_URL" in sub_env:
+                del sub_env["PIP_INDEX_URL"]
+            if "PIP_PRE" in sub_env:
+                del sub_env["PIP_PRE"]
+
+        cls.run_pip(cmd, sub_env, constraints_files, requirements_files)
+
+    @classmethod
+    def run_pip(cls, cmd, env, constraints_files, requirements_files):
+        def create_log_content_files(title: str, files: List[str]) -> List[str]:
+            """
+            Log the content of a list of files with indentations in the following format:
+
+            Content of [title]:
+                [files[0]]:
+                    line 1 in files[0]
+                [files[1]]:
+                    line 1 in files[1]
+                    line 2 in files[1]
+                    line 3 in files[1]
+                    ...
+                [files[2]]:
+                ...
+
+            this function will skip empty lines in files
+            """
+            log_msg: List[str] = [f"Content of {title}:\n"]
+            indentation: str = "    "
+            for file in files:
+                log_msg.append(indent(file + ":\n", indentation))
+                with open(file) as f:
+                    for line in f:
+                        if line.strip():
+                            log_msg.append(indent(line.strip() + "\n", 2 * indentation))
+            return log_msg
+
+        log_msg: List[str] = []
+        if requirements_files:
+            log_msg.extend(create_log_content_files("requirements files", requirements_files))
+        if constraints_files:
+            log_msg.extend(create_log_content_files("constraints files", constraints_files))
+        log_msg.append("Pip command: " + " ".join(cmd))
+        LOGGER_PIP.debug("".join(log_msg).strip())
+        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
+        if return_code != 0:
+            not_found: List[str] = []
+            conflicts: List[str] = []
+            for line in full_output:
+                m = re.search(r"No matching distribution found for ([\S]+)", line)
+                if m:
+                    # Add missing package name to not_found list
+                    not_found.append(m.group(1))
+
+                if "versions have conflicting dependencies" in line:
+                    conflicts.append(line)
+            if not_found:
+                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+            if conflicts:
+                raise ConflictingRequirements("\n".join(conflicts))
+            raise PipInstallError(
+                f"Process {cmd} exited with return code {return_code}. "
+                "Increase the verbosity level with the -v option for more information."
+            )
 
     @classmethod
     def compose_install_command(
@@ -526,6 +664,7 @@ class PythonEnvironment:
         requirements_files: Optional[List[str]] = None,
         use_pip_config: Optional[bool] = False,
     ) -> None:
+        # TODO MOVE TO PIP CLASS!
         # TODO push the config in
         cmd: List[str] = PipCommandBuilder.compose_install_command(
             python_path=python_path,
@@ -637,22 +776,13 @@ class PythonEnvironment:
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
 
-        # TODO push the config in
-        # fix semantics
-        index_urls = []
-        if config.index_url:
-            index_urls.append(config.index_url)
-        index_urls.extend(config.extra_index_url)
-
-        self._run_pip_install_command(
+        PipCommandBuilder.run_pip_install_command_from_config(
             python_path=self.python_path,
+            config=config,
             requirements=[*requirements, *inmanta_requirements],
-            index_urls=index_urls,
+            constraints_files=constraint_files,
             upgrade=upgrade,
-            allow_pre_releases=config.pre or False,  # TODO
-            constraints_files=[*constraint_files],
             upgrade_strategy=upgrade_strategy,
-            use_pip_config=config.use_system_config,
         )
 
     def install_from_source(

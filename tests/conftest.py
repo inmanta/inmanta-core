@@ -1143,7 +1143,9 @@ class SnippetCompilationTest(KeepOnFail):
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
         strict_deps_check: Optional[bool] = None,
-        use_pip_config_file: Optional[bool] = False,
+        use_pip_config_file: bool = False,
+        index_url: Optional[str] = None,
+        extra_index_url: list[str] = [],
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1174,6 +1176,8 @@ class SnippetCompilationTest(KeepOnFail):
             install_mode,
             relation_precedence_rules,
             use_pip_config_file,
+            index_url,
+            extra_index_url,
         )
         return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
 
@@ -1230,9 +1234,12 @@ class SnippetCompilationTest(KeepOnFail):
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
         use_pip_config_file: bool = False,
+        index_url: Optional[str] = None,
+        extra_index_url: list[str] = [],
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
+
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
@@ -1256,13 +1263,23 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
+
             cfg.write(
                 f"""
             pip:
                 use_system_config: {use_pip_config_file}
-                extra_index_url: [{", ".join(url for url in python_package_sources)}]
-            """
+"""
             )
+            if index_url:
+                cfg.write(
+                    f"""                index_url: {index_url}
+"""
+                )
+            if extra_index_url:
+                cfg.write(
+                    f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
+"""
+                )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")

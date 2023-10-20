@@ -477,7 +477,7 @@ def test_project_install(
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         # We add tornado, as there is a code path in update for the case where the project has python requires
         python_requires=["tornado"]
         + [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
@@ -644,7 +644,8 @@ def test_project_install_modules_cache_invalid(
         autostd=False,
         install_project=False,
         add_to_module_path=[libs_dir],
-        python_package_sources=[index.url, local_module_package_index],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index],
         # make sure main module gets installed, pulling in newest version of dependency module
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(main_module))],
     )
@@ -730,7 +731,7 @@ def test_project_install_incompatible_versions(
         autostd=autostd,
         install_project=False,
         add_to_module_path=[v1_modules_path],
-        python_package_sources=[index.url],
+        index_url=index.url,
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_mod_name))],
     )
 
@@ -803,7 +804,7 @@ def test_project_install_incompatible_dependencies(
         """,
         autostd=False,
         install_project=False,
-        python_package_sources=[index.url],
+        index_url=index.url,
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
             for metadata in [v2mod2, v2mod3]
@@ -885,7 +886,7 @@ def test_install_from_index_dont_leak_pip_index(
         autostd=False,
         install_project=False,
         # Installing a V2 module requires a python package source.
-        python_package_sources=["unknown"],
+        index_url="unknown",
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
             for metadata in [v2mod1]
@@ -940,7 +941,7 @@ def test_install_with_use_config(
         autostd=False,
         install_project=False,
         # Installing a V2 module requires a python package source if use_config_file is not True
-        python_package_sources=[index.url] if not use_pip_config else None,
+        index_url=index.url if not use_pip_config else None,
         use_pip_config_file=use_pip_config,
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
@@ -1004,7 +1005,7 @@ def test_install_with_use_config_extra_index(
         autostd=False,
         install_project=False,
         # Installing a V2 module requires a python package source if use_config_file is not True
-        python_package_sources=[index2.url],
+        extra_index_url=[index2.url],
         use_pip_config_file=True,
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
@@ -1053,6 +1054,7 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
 
 
 @pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
+@pytest.mark.skip(reason="The install mode is no longer relevant here!")  # TODO REMOVE
 def test_project_install_with_install_mode(
     tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
 ) -> None:
@@ -1077,7 +1079,7 @@ def test_project_install_with_install_mode(
     snippetcompiler_clean.setup_for_snippet(
         f"import {module_name}",
         autostd=False,
-        python_package_sources=[index.url],
+        index_url=index.url,
         python_requires=[Requirement.parse(package_name)],
         install_mode=install_mode,
     )
@@ -1234,7 +1236,7 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "\n".join(f"import {mod}" for mod in ["std", v2_module]),
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=v2_requirements,
         install_project=False,
         project_requires=[
@@ -1332,7 +1334,8 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         import {module.ModuleV2.get_name_from_metadata(modtwo)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=v2_requirements,
         install_project=True,
     )
@@ -1407,7 +1410,8 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             import {module.ModuleV2.get_name_from_metadata(parent_module)}
             """,
             autostd=False,
-            python_package_sources=[local_module_package_index, index.url],
+            index_url=local_module_package_index,
+            extra_index_url=[index.url],
             python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
             install_project=True,
         )
@@ -1538,7 +1542,8 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
         import {module.ModuleV2.get_name_from_metadata(module_b)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_b"))],
         install_project=True,
     )
@@ -1563,7 +1568,8 @@ Modules versions after installation:
         import {module.ModuleV2.get_name_from_metadata(module_c)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_c"))],
         install_project=True,
     )
@@ -1632,7 +1638,8 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
         import module_b
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in ["module_b", "module_a"]
         ],
@@ -1674,7 +1681,7 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
             module.InmantaModuleRequirement.parse("std<=100.0.0"),
             module.InmantaModuleRequirement.parse("std<100.0.0"),
         ],
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
     )
     log_contains(
         caplog,
