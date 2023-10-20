@@ -311,50 +311,43 @@ class RemoteResourceAction(ResourceActionBase):
         self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
         await dummy.future
-        async with self.scheduler.agent.process.cad_ratelimiter:
-            try:
-                # got event or cancel first
-                if self.is_done():
-                    return
+        try:
+            result = await self.scheduler.get_client().get_resource(
+                self.scheduler.agent._env_id,
+                self.resource_id.resource_version_str(),
+                logs=True,
+                log_action=const.ResourceAction.deploy,
+                log_limit=1,
+            )
+            if result.code != 200 or result.result is None:
+                LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
+                return
 
-                result = await self.scheduler.get_client().get_resource(
-                    self.scheduler.agent._env_id,
-                    self.resource_id.resource_version_str(),
-                    logs=True,
-                    log_action=const.ResourceAction.deploy,
-                    log_limit=1,
-                )
-                if result.code != 200 or result.result is None:
-                    LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id), result.result)
-                    return
+            status = const.ResourceState[result.result["resource"]["status"]]
+            self.running = True
+            if status in const.TRANSIENT_STATES or self.future.done():
+                # wait for event
+                pass
+            else:
+                if "logs" in result.result and len(result.result["logs"]) > 0:
+                    log = result.result["logs"][0]
 
-                status = const.ResourceState[result.result["resource"]["status"]]
+                    if "change" in log and log["change"] is not None:
+                        self.change = const.Change[log["change"]]
+                    else:
+                        self.change = const.Change.nochange
 
-                self.running = True
+                    if "changes" in log and log["changes"] is not None and str(self.resource_id) in log["changes"]:
+                        self.changes = log["changes"]
+                    else:
+                        self.changes = {}
+                    self.status = status
 
-                if status in const.TRANSIENT_STATES or self.future.done():
-                    # wait for event
-                    pass
-                else:
-                    if "logs" in result.result and len(result.result["logs"]) > 0:
-                        log = result.result["logs"][0]
-
-                        if "change" in log and log["change"] is not None:
-                            self.change = const.Change[log["change"]]
-                        else:
-                            self.change = const.Change.nochange
-
-                        if "changes" in log and log["changes"] is not None and str(self.resource_id) in log["changes"]:
-                            self.changes = log["changes"]
-                        else:
-                            self.changes = {}
-                        self.status = status
-
-                    self.future.set_result(ResourceActionResult(cancel=False))
-            except Exception:
-                LOGGER.exception("could not get status for remote resource")
-            finally:
-                self.running = False
+                self.future.set_result(ResourceActionResult(cancel=False))
+        except Exception:
+            LOGGER.exception("could not get status for remote resource")
+        finally:
+            self.running = False
 
     def notify(
         self,
@@ -1105,22 +1098,11 @@ class Agent(SessionEndpoint):
         environment: Optional[uuid.UUID] = None,
         poolsize: int = 1,
     ):
-        """
-        :param hostname: this used to indicate the hostname of the agent,
-        but it is now mostly used by testcases to prevent endpoint to be loaded from the config singleton
-           see _init_endpoint_names
-        :param agent_map: the agent map for this agent to use
-        :param code_loader: do we enable the code loader (used for testing)
-        :param environment: environment id
-        :param poolsize: level of parallelism per agent instance, in practice, always 1
-        """
         super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.hostname = hostname
         self.poolsize = poolsize
         self.ratelimiter = asyncio.Semaphore(poolsize)
-        # Number of in flight requests for resolving CAD's
-        self.cad_ratelimiter = asyncio.Semaphore(3)
         self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
         self._storage = self.check_storage()

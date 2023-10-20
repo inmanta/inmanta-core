@@ -119,9 +119,6 @@ class Request(object):
         self._method = method
         self._headers = headers
         self._body = body
-        # Reply ID is used to send back the result
-        # If None, no reply is expected
-        #  i.e. this call will immediately return, potentially even before the request is dispatched
         self._reply_id: Optional[uuid.UUID] = None
 
     @property
@@ -420,7 +417,6 @@ class MethodProperties(object):
                              not enforced, even if auth is enabled.
         :param varkw: If true, additional arguments are allowed and will be dispatched to the handler. The handler is
                       responsible for the validation.
-        :param reply: If False, this is a fire-and-forget query: we will not wait for any result, just deliver the call
         """
         if api is None:
             api = not server_agent and not agent_server

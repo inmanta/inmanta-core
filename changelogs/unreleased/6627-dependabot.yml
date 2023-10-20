@@ -1,5 +1,0 @@
-change-type: patch
-description: Bump pip from 23.2.1 to 23.3
-destination-branches:
-- master
-sections: {}

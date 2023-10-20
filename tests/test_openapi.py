@@ -39,7 +39,7 @@ from inmanta.protocol.openapi.converter import (
     OperationHandler,
 )
 from inmanta.protocol.openapi.model import MediaType, OpenApiDataTypes, ParameterType, Schema
-from inmanta.server import SLICE_SERVER, config
+from inmanta.server import SLICE_SERVER
 from inmanta.server.extensions import FeatureManager
 from inmanta.server.protocol import Server
 
@@ -179,22 +179,13 @@ def api_methods_fixture(clean_reset):
         return ""
 
 
-async def test_generate_openapi_definition(server: Server):
-    feature_manager = server.get_slice(SLICE_SERVER).feature_manager
+async def test_generate_openapi_definition(server: Server, feature_manager: FeatureManager):
     global_url_map = server._transport.get_global_url_map(server.get_slices().values())
     openapi = OpenApiConverter(global_url_map, feature_manager)
     openapi_json = openapi.generate_openapi_json()
     assert openapi_json
     openapi_parsed = json.loads(openapi_json)
     openapi_v30_spec_validator.validate(openapi_parsed)
-    assert "https" not in openapi_parsed["servers"][0]["url"]
-    # enable https
-    config.server_ssl_key.set("ssl_key")
-    config.server_ssl_cert.set("ssl_cert")
-    openapi_json = openapi.generate_openapi_json()
-    assert openapi_json
-    openapi_parsed = json.loads(openapi_json)
-    assert "https" in openapi_parsed["servers"][0]["url"]
 
 
 def test_filter_api_methods(server, api_methods_fixture, feature_manager):

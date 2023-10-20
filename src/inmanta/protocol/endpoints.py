@@ -293,10 +293,9 @@ class SessionEndpoint(Endpoint, CallTarget):
                 "No such method",
             )
             LOGGER.error(msg)
-            # if reply_id is none, we don't send the reply
-            if method_call.reply_id is not None:
-                await self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
-            return
+            self.add_background_task(
+                self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
+            )
 
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query
@@ -306,6 +305,7 @@ class SessionEndpoint(Endpoint, CallTarget):
             else:
                 body[key] = [v.decode("latin-1") for v in value]
 
+        # FIXME: why create a new transport instance on each call? keep-alive?
         response: common.Response = await transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
 
         if response.status_code == 500:
@@ -323,11 +323,9 @@ class SessionEndpoint(Endpoint, CallTarget):
         if self._client is None:
             raise Exception("AgentEndpoint not started")
 
-        # if reply is is none, we don't send the reply
-        if method_call.reply_id is not None:
-            await self._client.heartbeat_reply(
-                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
-            )
+        await self._client.heartbeat_reply(
+            self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+        )
 
 
 class VersionMatch(str, Enum):

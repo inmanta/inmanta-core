@@ -18,7 +18,6 @@
 
 import logging
 import warnings
-from typing import Optional
 
 from inmanta.config import (
     Config,
@@ -130,14 +129,6 @@ server_ssl_key = Option(
 server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
-
-
-def ssl_enabled():
-    """Is ssl enabled on the server, given the current server config"""
-    ssl_key: Optional[str] = server_ssl_key.get()
-    ssl_cert: Optional[str] = server_ssl_cert.get()
-    return ssl_key is not None and ssl_cert is not None
-
 
 server_ssl_ca_cert = Option(
     "server",

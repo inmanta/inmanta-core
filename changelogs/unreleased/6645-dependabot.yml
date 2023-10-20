@@ -1,5 +1,0 @@
-change-type: patch
-description: Bump ruamel-yaml from 0.17.35 to 0.17.39
-destination-branches:
-- master
-sections: {}
