@@ -20,20 +20,7 @@
 import builtins
 import uuid
 from datetime import datetime
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Coroutine,
-    Dict,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import typing_inspect
 from pydantic import errors, types
@@ -105,7 +92,12 @@ class StrictNonIntBool(object):
 
         raise errors.StrictBoolError()
 
-    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler = None) -> JsonSchemaValue:
+        if handler is None:
+            # TODO: Handler is actually mandatory however for some schemas it will call us without this argument. We need to
+            #  figure out why (but the stacktrace points to the wrong code so it maybe in the rust part of pydantic) or just
+            #  file a bug. It is triggered by test_openapi.py::test_tags
+            return {}
         json_schema = handler(core_schema)
         json_schema["type"] = "boolean"
         return json_schema

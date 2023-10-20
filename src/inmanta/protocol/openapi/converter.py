@@ -20,7 +20,9 @@ import json
 import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
+import pydantic
 from pydantic import ConfigDict
+from pydantic._internal._typing_extra import TypingGenericAlias
 from pydantic.networks import AnyUrl
 from pydantic.v1.schema import model_schema  # [TODO] migrate to v2
 from pydantic.v1.typing import NoneType  # [TODO] migrate to v2
@@ -159,8 +161,9 @@ class OpenApiTypeConverter:
 
     def __init__(self) -> None:
         self.components = Components(schemas={})
-        self.ref_prefix = "#/components/schemas/"
-        self.ref_regex = re.compile(self.ref_prefix + r"(.*)")
+        self.ref_key = "$defs"
+        self.ref_prefix = f"#/{self.ref_key}/"
+        self.ref_regex = re.compile(re.escape(self.ref_prefix) + r"(.*)")
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         schema = self.get_openapi_type(parameter_type.annotation)
@@ -168,13 +171,13 @@ class OpenApiTypeConverter:
             schema.default = parameter_type.default
         return schema
 
-    def _handle_pydantic_model(self, type_annotation: Type, by_alias: bool = True) -> Schema:
+    def _handle_pydantic_model(self, type_annotation: BaseModel, by_alias: bool = True) -> Schema:
         # JsonSchema stores the model (and sub-model) definitions at #/definitions,
         # but OpenAPI requires them to be placed at "#/components/schemas/"
         # The ref_prefix changes the references, but the actual schemas are still at #/definitions
-        schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix=self.ref_prefix)
-        if "definitions" in schema.keys():
-            definitions: Dict[str, Dict[str, object]] = schema.pop("definitions")
+        schema = type_annotation.model_json_schema()
+        if self.ref_key in schema.keys():
+            definitions: Dict[str, Dict[str, object]] = schema.pop(self.ref_key)
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
                     definition = self._add_type_field_to_enum_value(definition)

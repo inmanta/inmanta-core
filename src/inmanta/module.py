@@ -30,6 +30,7 @@ import tempfile
 import textwrap
 import traceback
 import types
+import typing
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
@@ -45,6 +46,7 @@ from tarfile import TarFile
 from time import time
 from typing import (
     Any,
+    ClassVar,
     Dict,
     Generic,
     Iterable,
@@ -1643,7 +1645,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     """
 
     _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
-    _re_relation_precedence_rule_compiled: re.Pattern[str] = re.compile(_re_relation_precedence_rule)
+    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_re_relation_precedence_rule)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None

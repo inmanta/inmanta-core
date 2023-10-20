@@ -18,7 +18,6 @@
 import base64
 import inspect
 import logging
-import pydantic
 import traceback
 import typing
 import uuid
@@ -28,6 +27,7 @@ from concurrent.futures import Future
 from functools import partial
 from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
 
+import pydantic
 from tornado import concurrent
 
 import inmanta
