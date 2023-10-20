@@ -980,7 +980,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
           conventional resource type expected to be deployed on a network, but rather a way to express
           the intent to discover resources of the second type TDiscovered already present on the network.
         - TDiscovered denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
-          discovered and reported to the server. Objects of this type must an pydantic object.
+          discovered and reported to the server. Objects of this type must a pydantic object.
     """
 
     def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> Dict[str, object]:
