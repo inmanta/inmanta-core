@@ -143,7 +143,7 @@ class InmantaLoggerConfig:
         pathname: str,
         lineno: int,
         msg: object,
-        args: Union[tuple[object, ...] | dict[str, object]],
+        args: Union[tuple[object, ...], dict[str, object]],
         exc_info: Optional[tuple[type[BaseException], BaseException, types.TracebackType]],
         func: Optional[str] = None,
         sinfo: Optional[str] = None,
