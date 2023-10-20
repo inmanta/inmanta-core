@@ -1533,9 +1533,6 @@ class RelationPrecedenceRule:
     def __str__(self) -> str:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
-    # TODO : `inmanta.module.ProjectPipConfig(...)` -> check if this is the right link (multiple occurrences in this docstring)
-    # TODO : uniformize index_url vs index-url
-
 
 @stable_api
 class ProjectPipConfig(BaseModel):

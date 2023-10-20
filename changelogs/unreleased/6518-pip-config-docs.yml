@@ -3,11 +3,8 @@ issue-nr: 6518
 change-type: major
 destination-branches: [master]
 sections:
-  feature: "{{description}}"
-  minor-improvement: "{{description}}"
-  bugfix: "{{description}}"
-  known-issue: "{{description}}"
-  upgrade-note: "{{description}}"
-  deprecation-note: "{{description}}"
-  other-note: "{{description}}"
-
+  feature: "A project-wide pip configuration can be set through the project.yml pip section"
+  upgrade-note: "Please refer to the `migration guide <https://docs.inmanta.com/inmanta-service-orchestrator/7/reference/projectyml.html#migrate-to-project-wide-pip-config>`_ to move to a project-wide pip configuration"
+  deprecation-note:
+    - "Allowing the installation of pre-release versions for modules through the :class:`~inmanta.module.InstallMode` is now deprecated in favour of the project.yml ``pip.pre`` section"
+    -
