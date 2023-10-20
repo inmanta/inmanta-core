@@ -148,6 +148,10 @@ An alternative approach would be to configure all pip-related options through th
 
 In this scenario, pip options defined in env variables (if any) would be used over the system's pip config.
 
+.. note::
+
+    Using netrc is the recommended way to set up authentication towards the index. See
+    this `section <setting_up_pip_index_authentication>` for more information.
 
 .. _migrate_to_project_wide_pip_config:
 

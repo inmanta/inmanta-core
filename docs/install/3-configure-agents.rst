@@ -155,6 +155,8 @@ configure the behavior of the manually started agent:
 * :inmanta.config:option:`agent_rest_transport.ssl`
 * :inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file`
 
+The agent will follow the pip configuration defined in the :ref:`project_yml`. Make sure it can access the pip
+index defined in the project (See the `pip documentation for netrc <https://pip.pypa.io/en/stable/topics/authentication/#netrc-support>`_ for more information).
 
 The :inmanta.config:option:`config.agent-map` option can be configured in the same way as the ``autostart_agent_map`` for
 auto-started agents.
