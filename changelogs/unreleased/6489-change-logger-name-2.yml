@@ -1,0 +1,4 @@
+---
+description: Improve consistency of logger internals
+change-type: minor
+destination-branches: [master, iso6]
