@@ -610,13 +610,13 @@ def export(options: argparse.Namespace) -> None:
         types: Optional[Dict[str, inmanta_type.Type]]
         scopes: Optional[Namespace]
 
-    t1 = time.time()
-    with summary_reporter.compiler_exception.capture():
-        try:
-            (types, scopes) = do_compile()
-        except Exception:
-            types, scopes = (None, None)
-            raise
+        t1 = time.time()
+        with summary_reporter.compiler_exception.capture():
+            try:
+                (types, scopes) = do_compile()
+            except Exception:
+                types, scopes = (None, None)
+                raise
 
     with inmanta_logger_config.run_in_logger_mode(LoggerMode.EXPORTER):
         # Even if the compile failed we might have collected additional data such as unknowns. So
