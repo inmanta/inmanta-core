@@ -516,7 +516,7 @@ requires:
     assert (
         f"Metadata defined in {inmanta_module_v1.get_metadata_file_path()} is invalid:\n"
         + "  requires -> 0\n"
-        + "    str type expected (type=type_error.str)"
+        + "    Input should be a valid string (type=string_type)"
         in cause.msg
     )
 
