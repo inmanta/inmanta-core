@@ -2210,9 +2210,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
-    async def delete_cascade(
-        self, only_content: Optional[bool] = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         await self.delete(connection=connection)
 
     @classmethod
@@ -2314,9 +2312,7 @@ class Project(BaseDocument):
     def to_dto(self) -> m.Project:
         return m.Project(id=self.id, name=self.name, environments=[])
 
-    async def delete_cascade(
-        self, only_content: Optional[bool] = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         As such, we perform the deletes on each table in a separate transaction.
@@ -2844,14 +2840,17 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(
-        self, only_content: Optional[bool] = False, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         This is especially true for the tables resourceaction_resource, resource and resourceaction, because they
         have a high read/write load. As such, we perform the deletes on each table in a separate transaction.
         """
+        async with self.get_connection(connection=connection) as con:
+            await self.delete_content(connection=con)
+            await self.delete(connection=con)
+
+    async def delete_content(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         async with self.get_connection(connection=connection) as con:
             await Agent.delete_all(environment=self.id, connection=con)
             await AgentProcess.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on agentinstance
@@ -2870,8 +2869,6 @@ class Environment(BaseDocument):
             await ResourceAction.delete_all(environment=self.id, connection=con)
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
-            if not only_content:
-                await self.delete(connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
@@ -5535,9 +5532,7 @@ class ConfigurationModel(BaseDocument):
         )
         return versions
 
-    async def delete_cascade(
-        self, only_content: Optional[bool] = None, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         As such, we perform the deletes on each table in a separate transaction.

@@ -499,7 +499,7 @@ class EnvironmentService(protocol.ServerSlice):
             raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
 
         await self.autostarted_agent_manager.stop_agents(env)
-        await env.delete_cascade(only_content=True)
+        await env.delete_content()
 
         await self.notify_listeners(EnvironmentAction.cleared, env.to_dto())
         self._delete_environment_dir(env.id)
