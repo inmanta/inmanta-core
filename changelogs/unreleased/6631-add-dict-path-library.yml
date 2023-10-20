@@ -1,0 +1,8 @@
+---
+description: Introduced the dict_path module in the inmanta.util package. This module was previously located in the inmanta-lsm package. Users transitioning from inmanta-lsm should now use inmanta.util.dict_path for relevant functionality.
+issue-nr: 6631
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
