@@ -20,10 +20,9 @@ import logging
 import os
 import re
 import sys
-import types
 from argparse import Namespace
 from contextlib import contextmanager
-from typing import Iterator, Optional, TextIO, Union
+from typing import Iterator, Optional, TextIO
 
 import colorlog
 from colorlog.formatter import LogColors
