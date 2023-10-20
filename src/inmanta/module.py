@@ -1552,8 +1552,8 @@ class ProjectPipConfig(BaseModel):
     :param pre: Allow pre-releases when installing Python packages. Unless it is unset and pip.use_system_config=true, this
         option will always supersede PIP_PRE.
     :param use_system_config: This option determines whether the system's pip configuration should also be taken into account
-    in addition to the project's pip configuration. See the :ref:`section <_specify_location_pip>` about setting up pip index
-    for more information.
+        in addition to the project's pip configuration. See the :ref:`section<specify_location_pip>` about setting up pip index
+        for more information.
 
     """
 
@@ -1584,7 +1584,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
         * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section.
-            Refer to the :ref:`migration guide <_migrate_to_project_wide_pip_config>` for more information.
+          Refer to the :ref:`migration guide<migrate_to_project_wide_pip_config>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
