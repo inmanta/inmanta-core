@@ -2842,15 +2842,20 @@ class Environment(BaseDocument):
 
     async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
-        This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
-        This is especially true for the tables resourceaction_resource, resource and resourceaction, because they
-        have a high read/write load. As such, we perform the deletes on each table in a separate transaction.
+            Completely remove this environment from the db
         """
         async with self.get_connection(connection=connection) as con:
-            await self.delete_content(connection=con)
+            await self.clear(connection=con)
             await self.delete(connection=con)
 
-    async def delete_content(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def clear(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+            Delete everything related to this environment from the db, except the entry in the Environment table.
+
+            This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
+            This is especially true for the tables resourceaction_resource, resource and resourceaction, because they
+            have a high read/write load. As such, we perform the deletes on each table in a separate transaction.
+        """
         async with self.get_connection(connection=connection) as con:
             await Agent.delete_all(environment=self.id, connection=con)
             await AgentProcess.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on agentinstance

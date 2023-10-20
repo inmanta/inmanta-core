@@ -348,7 +348,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
-    await env.delete_content()
+    await env.clear()
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
