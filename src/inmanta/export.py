@@ -410,7 +410,7 @@ class Exporter(object):
             self._version = self.commit_resources(
                 self._version, resources, metadata, partial_compile, resource_sets_to_remove_all
             )
-            LOGGER.debug("Committed resources with version %d" % self._version)
+            LOGGER.info("Committed resources with version %d" % self._version)
 
         exported_version: int = self._version
         if include_status:
