@@ -1533,9 +1533,10 @@ class RelationPrecedenceRule:
     def __str__(self) -> str:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
-
-    # TODO : `inmanta.module.ProjectPipConfig.blabla` -> check if this is the right link (multiple occurrences in this docstring)
+    # TODO : `inmanta.module.ProjectPipConfig(...)` -> check if this is the right link (multiple occurrences in this docstring)
     # TODO : uniformize index_url vs index-url
+
+
 @stable_api
 class ProjectPipConfig(BaseModel):
     """
@@ -1545,9 +1546,9 @@ class ProjectPipConfig(BaseModel):
     :param extra_index_url: List of extra pip index urls, which will all be passed to pip. This is generally only
         recommended if all configured indexes are under full control of the end user to protect against dependency
         confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
-        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information. If set along with pip.use_system_config=true,
-        the union of all extra indexes will be used. If set along with pip.use_system_config=false, then only the extra indexes
-        set here will be used.
+        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information. If set along with
+        pip.use_system_config=true, the union of all extra indexes will be used. If set along with pip.use_system_config=false,
+        then only the extra indexes set here will be used.
     :param pre: Allow pre-releases when installing Python packages. Unless it is unset and pip.use_system_config=true, this
         option will always supersede PIP_PRE.
     :param use_system_config: This option determines whether the system's pip configuration should also be taken into account
@@ -1572,8 +1573,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
         repositories. This path is not automatically included in the modulepath!
-    :param install_mode: (Optional) [DEPRECATED] This key was used to determine what version of a module should be selected when a module
-        is downloaded. For more information see :class:`InstallMode`. This should now be set via the ``pre`` option of the ``pip`` section.
+    :param install_mode: (Optional) [DEPRECATED] This key was used to determine what version of a module should be selected
+        when a module is downloaded. For more information see :class:`InstallMode`. This should now be set via the ``pre``
+        option of the ``pip`` section.
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
         in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
         can have the following values:
@@ -1581,8 +1583,8 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
-        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. Refer
-          to the :ref:`migration guide <_migrate_to_project_wide_pip_config>` for more information.
+        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section.
+            Refer to the :ref:`migration guide <_migrate_to_project_wide_pip_config>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
