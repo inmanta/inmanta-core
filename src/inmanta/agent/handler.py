@@ -18,6 +18,7 @@
 import base64
 import inspect
 import logging
+import pydantic
 import traceback
 import typing
 import uuid
@@ -34,7 +35,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr, BaseModel
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -51,7 +52,7 @@ T = TypeVar("T")
 # A resource present in the model that describes the resources that should be discovered
 TDiscovery = TypeVar("TDiscovery", bound=resources.DiscoveryResource)
 # The type of elements produced by the resource discovery process.
-TDiscovered = TypeVar("TDiscovered")
+TDiscovered = TypeVar("TDiscovered", bound=BaseModel)
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 TResource = TypeVar("TResource", bound=resources.Resource)
 
