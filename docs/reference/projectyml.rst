@@ -159,7 +159,7 @@ Migrate to project-wide pip config
 Previously, there was no centralized way of configuring pip settings for the whole project. This section can be used
 as a migration guide.
 
-Defining a ``repo`` with type ``package`` is deprecated. Make sure you define this index through the pip.index-url option instead.
+Defining a ``repo`` with type ``package`` is deprecated. Make sure you define this index through the ``pip.index-url`` option instead.
 
 Previously, the :class:`~inmanta.module.InstallMode` set at the project level or at a module level was used to determine if the
 installation of pre-release versions was allowed. This behaviour should now be set through the ``pip.pre`` option instead.
