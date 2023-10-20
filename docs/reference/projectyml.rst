@@ -66,8 +66,8 @@ modules' dependencies.
 By default, a project created using the :ref:`project-creation-guide` is configured to install packages from ``https://pypi.org/simple/``.
 The :class:`~inmanta.module.ProjectPipConfig` section of the project.yml file offers options to configure this behaviour.
 
-use-system-config
-"""""""""""""""""
+pip.use-system-config
+"""""""""""""""""""""
 
 This option determines the isolation level of the project's pip config. When false, any pip config set on the system
 (e.g. through environment variables or pip config files) are ignored and pip will only look for packages
@@ -79,14 +79,14 @@ reduces the risk of dependency confusion attacks if the ``index-url`` option is 
 
 Setting this to ``true`` will have the following consequences:
 
-- If no index is set in the project.yml file i.e. both index_url and extra_index_url are unset -> Pip's
-default behaviour to look for indexes will be used : environment variables, pip config files and then PyPi (in that order).
+- If no index is set in the project.yml file i.e. both ``index-url`` and ``extra-index-url`` are unset, then Pip's
+  default search behaviour will be used: environment variables, pip config files and then PyPi (in that order).
 
-- If index_url and/or extra_index_url are set, they will be used and any index defined in the system's environment
-variables or pip config files will also be used (in that order).
+- If ``index-url`` and/or ``extra-index-url`` are set, they will be used and any index defined in the system's environment
+  variables or pip config files will also be used (in that order) and passed to pip as extra indexes.
 
 - The ``PIP_PRE`` environment variable (if set) is no longer ignored and will be used to determine whether pre-release
-versions are allowed when installing v2 modules or v1 modules' dependencies.
+  versions are allowed when installing v2 modules or v1 modules' dependencies.
 
 Example scenario
 """"""""""""""""
@@ -119,8 +119,9 @@ example of a config suitable in production:
         use-system-config: true
 
 .. note::
-    The options defined in the pip section will always take precedence over the corresponding pip options, even
+    The options defined in the ``project.yml`` pip section will always take precedence over the corresponding pip options, even
     when ``use-system-config`` is set to true (other pip-related environment variables are not overridden).
+
     For example, in the production scenario above, if the following
     pip environment variables were set by mistake on the server running the compiler: ``PIP_INDEX_URL=https://devpi.example.com/dev/``
     and ``PIP_PRE=true``, the config used in the end would still be the one defined in the project.yml, namely
@@ -136,21 +137,35 @@ An alternative approach would be to configure all pip-related options through th
         pre:
         use-system-config: true
 
+And set the following env variables:
+
+.. code-block:: bash
+
+    export PIP_INDEX_URL=https://devpi.example.com/stable/
+    export PIP_PRE=false
+
 In this scenario, pip options defined in env variables (if any) would be used over the system's pip config.
 
 .. note::
 
     Using netrc is the recommended way to set up authentication towards the index. See
-    this `section <setting_up_pip_index_authentication>` for more information.
+    this :ref:`section<setting_up_pip_index_authentication>` for more information.
 
 .. _migrate_to_project_wide_pip_config:
+
+Migrate to project-wide pip config
+----------------------------------
+
+Previously, there was no centralized way of configuring pip settings for the whole project. This section can be used
+as a migration guide.
 
 Defining a ``repo`` with type ``package`` is deprecated. Make sure you define this index through the pip.index-url option instead.
 
 Previously, the :class:`InstallMode` set at the project level or at a module level was used to determine if the
-installation of pre-release versions was allowed. This behaviour should now be set through the pip.pre option instead.
+installation of pre-release versions was allowed. This behaviour should now be set through the ``pip.pre`` option instead.
 
-A full compile should be run after upgrading, in order to export the project pip config to the server.
+A full compile should be run after upgrading, in order to export the project pip config to the server, so that it
+is available for agents.
 
 Module metadata files
 #####################
