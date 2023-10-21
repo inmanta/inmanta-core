@@ -18,7 +18,7 @@
 import inspect
 import json
 import re
-from typing import Callable, Dict, List, Optional, Type, Union, Any
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import pydantic
 from pydantic import ConfigDict
@@ -155,8 +155,7 @@ class OpenApiConverter:
 
 
 def is_nullable(schema: list[dict[str, Any]]) -> bool:
-    """ Returns true if in an anyOf list at least once the type null is present
-    """
+    """Returns true if in an anyOf list at least once the type null is present"""
     for sub in schema:
         if "type" in sub and sub["type"] == "null":
             return True
@@ -164,8 +163,7 @@ def is_nullable(schema: list[dict[str, Any]]) -> bool:
 
 
 def nullable_item(schema: Union[dict[str, Any], str]) -> dict[str, Any]:
-    """ Make sure nullable is used correctly. See generate_nullable for details
-    """
+    """Make sure nullable is used correctly. See generate_nullable for details"""
     if isinstance(schema, str):
         return schema
 
@@ -183,9 +181,8 @@ def nullable_item(schema: Union[dict[str, Any], str]) -> dict[str, Any]:
     return schema
 
 
-
 def generate_nullable(schema: dict[str, Any]) -> dict[str, Any]:
-    """ Generate nullable based on the union types. In case there is a union (anyOf) with null, nullable will be set and the
+    """Generate nullable based on the union types. In case there is a union (anyOf) with null, nullable will be set and the
     anyOf list will be modified.
     """
     for prop, sub in schema.get("properties", {}).items():
