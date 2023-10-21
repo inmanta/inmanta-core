@@ -331,9 +331,8 @@ def test_openapi_types_optional_union():
 def test_openapi_types_union_optional():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(Union[Optional[int], Optional[str]])
-    # TODO: Not sure how this actually should work. This now is Union[int, str, None] which is correct.
-    # What the meaning of nullable is in the openapi_type thing? No clue because there is no documentation.
-    assert len(openapi_type.anyOf) == 3
+    assert len(openapi_type.anyOf) == 2
+    assert openapi_type.nullable
 
 
 def test_openapi_types_datetime():
@@ -394,7 +393,7 @@ def test_openapi_types_anyurl():
     assert openapi_type == Schema(type="string", format="uri")
 
     openapi_type = type_converter.get_openapi_type(PostgresDsn)
-    assert openapi_type == Schema(type="string", format="uri")
+    assert openapi_type == Schema(type="string", format="multi-host-uri")
 
 
 def test_openapi_types_env_setting():

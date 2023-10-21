@@ -1617,6 +1617,7 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
 
     result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
     assert result.code == 200
+    print(result.result["data"])
     assert result.result["data"]["attributes"] == attributes_on_api
 
     result = await client.resource_details(tid=environment, rid=resource_id)

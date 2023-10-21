@@ -18,7 +18,7 @@
 import inspect
 import json
 import re
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union, Any
 
 import pydantic
 from pydantic import ConfigDict
@@ -154,6 +154,46 @@ class OpenApiConverter:
         return template
 
 
+def is_nullable(schema: list[dict[str, Any]]) -> bool:
+    """ Returns true if in an anyOf list at least once the type null is present
+    """
+    for sub in schema:
+        if "type" in sub and sub["type"] == "null":
+            return True
+    return False
+
+
+def nullable_item(schema: Union[dict[str, Any], str]) -> dict[str, Any]:
+    """ Make sure nullable is used correctly. See generate_nullable for details
+    """
+    if isinstance(schema, str):
+        return schema
+
+    if "anyOf" in schema and is_nullable(schema["anyOf"]):
+        schema["nullable"] = True
+        schema["anyOf"] = [x for x in schema["anyOf"] if x.get("type") != "null"]
+        if len(schema["anyOf"]) == 1:
+            anyOfList = schema["anyOf"]
+            del schema["anyOf"]
+            schema.update(anyOfList[0])
+
+    if "items" in schema:
+        schema["items"] = nullable_item(schema["items"])
+
+    return schema
+
+
+
+def generate_nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    """ Generate nullable based on the union types. In case there is a union (anyOf) with null, nullable will be set and the
+    anyOf list will be modified.
+    """
+    for prop, sub in schema.get("properties", {}).items():
+        schema["properties"][prop] = nullable_item(sub)
+
+    return schema
+
+
 class OpenApiTypeConverter:
     """
     Lookup for OpenAPI types corresponding to python types
@@ -181,8 +221,8 @@ class OpenApiTypeConverter:
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
                     definition = self._add_type_field_to_enum_value(definition)
-                    self.components.schemas[key] = Schema(**definition)
-        return Schema(**schema)
+                    self.components.schemas[key] = Schema(**generate_nullable(definition))
+        return Schema(**generate_nullable(schema))
 
     def _add_type_field_to_enum_value(self, definition: Dict[str, object]) -> Dict[str, object]:
         """
