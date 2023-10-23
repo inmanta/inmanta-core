@@ -71,7 +71,8 @@ class ResultCollector(Generic[T_contra]):
 
     def receive_result(self, value: T_contra, location: Location) -> bool:
         """
-        Receive a single value for gradual execution. Called once for each value that is part of the result.
+        Receive a single value for gradual execution. Called once for each value that is part of the result. May be `null` or
+        Unknown.
 
         :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
             waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
@@ -382,12 +383,10 @@ class ResultVariableProxy(VariableABC[T]):
             listener, location = self._listener
             # simple case: single value. Multi-value variables implement their own listener functionality
             for subvalue in value if isinstance(value, list) else [value]:
-                # TOOD: add test cases
-                # TOOD: should we exclude NoneValue?
-                # TOOD: should we exclude Unknown? Both here and in ExpressionStatement
-                #   I think both should be propagated and e.g. For loop should ignore Unknown
-                if not isinstance(subvalue, Unknown):
-                    listener.receive_result(subvalue, location)
+                # TODO: add test cases for NoneValue and Unknown
+                # TODO: properly handle Unknown and NoneValue in all ResultCollector classes
+                # TODO: Unknown vs [1, 2, Unknown] vs Unknown when this is a substmt
+                listener.receive_result(subvalue, location)
             # clean up: prevent data leaks and ensure listener is only notified once
             self._listener = None
             self._notify_listeners = False

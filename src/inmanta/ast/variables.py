@@ -43,7 +43,7 @@ from inmanta.execute.runtime import (
     VariableABC,
     WrappedValueVariable,
 )
-from inmanta.execute.util import NoneValue
+from inmanta.execute.util import NoneValue, Unknown
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
 
@@ -203,6 +203,9 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
         value implies that the variable is defined.
         """
+        if isinstance(value, (NoneValue, Unknown)):
+            # TODO: can this occur in pracice? I don't think so because it's always attached to a variable, never an expression
+            return False
         self.target.set_value(True, self.owner.location)
         return True
 

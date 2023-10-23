@@ -636,6 +636,44 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
                 if x == 2 or unknown
             ]
 
+            # verify unknowns in gradual execution
+            entity Value:
+                int n
+            end
+            entity Collector: end
+            Collector.values [0:] -- Value
+            implement Value using std::none
+            implement Collector using std::none
+
+            # gradual with CreateList as source -> ListLiteral.listener code path
+            c1 = Collector(
+                # TODO: should unknowns even be passed to value expression?
+                values=[
+                    Value(n=tests::is_uknown(x) ? 0 : x)
+                    for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
+                    # TODO: is this more representative?
+                    #if tests::is_uknown(x) or x > 1 or unknown
+                ]
+            )
+            # gradual with Reference as source -> ExpressionStatement.execute code path
+            c2 = Collector(
+                values=[
+                    Value(n=tests::is_uknown(x) ? 0 : x)
+                    for x in l2
+                ]
+            )
+            # gradual with AttributeReference as source -> ResultVariableProxy code path
+            c3_helper = Collector(values=[Value(n=1), tests::unknown()])
+            c3 = Collector(
+                values=[
+                    x
+                    for x in c3_helper.values
+                ]
+            )
+            l10 = std::select(std::key_sort(c1.values, "n"), "n")
+            l11 = std::select(std::key_sort(c2.values, "n"), "n")
+            l12 = std::select(std::key_sort(c3.values, "n"), "n")
+
             assert = true
             assert = tests::is_uknown(l1)
             assert = not tests::is_uknown(l2)
@@ -643,9 +681,15 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             assert = not tests::is_uknown(l4)
             assert = not tests::is_uknown(l5)
             assert = not tests::is_uknown(l6)
+            assert = not tests::is_uknown(l7)
+            assert = not tests::is_uknown(l8)
+            assert = not tests::is_uknown(l9)
+            assert = not tests::is_uknown(l10)
+            assert = not tests::is_uknown(l11)
+            assert = not tests::is_uknown(l12)
 
             l2_unknowns = [1, 2, "unknown"]
-            l2_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l2]
+            l2_unknowns = tests::convert_unknowns(l2, "unknown")
 
             l3_unknowns = [1, "unknown", 3]
             l3_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l3]
@@ -667,6 +711,12 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
 
             l9_unknowns = ["unknown", "unknown", "unknown", 1, 2, 3, "unknown", "unknown", "unknown"]
             l9_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l9]
+
+            l10 = [0, 0, 1, 2, 3]
+
+            l11 = [0, 1, 2]
+
+            l12 = [0, 1]
             """.strip(
                 "\n"
             )

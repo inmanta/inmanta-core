@@ -356,6 +356,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
         # indicate to helper that we're done
         if isinstance(iterable, Unknown):
+            # TODO: if Unknown was already reported gradually here, this will fail => top_level: bool parameter for r_e_grad?
             collector_helper.set_unknown()
         elif not isinstance(iterable, list):
             raise TypingException(
@@ -497,6 +498,11 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         """
         if self._complete:
             raise InvalidCompilerState(self, "list comprehension helper received gradual result after it was declared complete")
+
+        if isinstance(value, Unknown):
+            # don't execute value expression, just propagate Unknown
+            self._results.append(WrappedValueVariable(value))
+            return False
 
         # Use special result variable for a pre-known value with listener capabilities. Using a plain `ResultVariable` would
         # break gradual execution (e.g. `Reference.requires_emit_gradual` registers self.lhs as listener)
