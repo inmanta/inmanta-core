@@ -193,7 +193,7 @@
         service instance
             The lifecycle manager manages the lifeycle of service instance.
 
-Dict Path Library
+    Dict Path Library
     -----------------
 
     This extension also uses the :ref:`Dict Path library<dict_path>`. This library can be used to extract or modify specific elements
