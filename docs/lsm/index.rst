@@ -193,12 +193,6 @@
         service instance
             The lifecycle manager manages the lifeycle of service instance.
 
-    Dict Path Library
-    -----------------
-
-    This extension also provides the :ref:`Dict Path library<dict_path>`. This library can be used to extract or modify specific elements
-    from an arbitrary location in a nested dictionary-based data structure.
-
 
     .. _partial_compile_lsm:
 

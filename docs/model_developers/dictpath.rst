@@ -45,7 +45,7 @@ Example
 
 .. code-block:: python
 
-    from inmanta_lsm import dict_path
+    from inmanta.util import dict_path
 
     container = {
         "a": "b",
