@@ -237,7 +237,7 @@ class Number(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [int, float]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -249,8 +249,28 @@ class Number(Primitive):
 
         if not isinstance(value, numbers.Number):
             raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
-
+        if isinstance(value, numbers.Integral):
+            raise RuntimeException(None, "Invalid value '%s', expected float" % value)  # Updated line
         return True  # allow this function to be called from a lambda function
+
+    def cast(self, value: Optional[object]) -> object:
+        """
+        Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
+        """
+        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
+
+        if isinstance(value, Unknown):
+            # propagate unknowns
+            return value
+
+        if isinstance(value, numbers.Integral) or isinstance(value, str) and value.isdigit():
+            return float(value)
+        elif isinstance(value, bool):
+            return float(int(value))
+        elif isinstance(value, float):
+            return value
+
+        raise exception
 
     def is_primitive(self) -> bool:
         return True

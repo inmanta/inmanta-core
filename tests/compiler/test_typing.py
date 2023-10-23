@@ -106,10 +106,10 @@ end
 def test_cast_to_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
-x = number("42")
-x = 42
-y = number("42.0")
-y = 42.0
+x = number("31")
+x = 31.0
+y = number("22.0")
+y = 22.0
 z = number(true)
 z = 1
 u = number(false)
@@ -126,6 +126,27 @@ u = 0
     assert Number().validate(y)
     assert Number().validate(z)
     assert Number().validate(u)
+
+
+# def test_cast_to_number(snippetcompiler):
+#     snippetcompiler.setup_for_snippet(
+#         """
+# entity A:
+#     number x
+# end
+#
+# implement A using std::none
+#
+# index A(x)
+#
+#
+# test = (A(x=0) == A(x=0.0))
+#         """,
+#     )
+#     (_, scopes) = compiler.do_compile()
+#     root: Namespace = scopes.get_child("__config__")
+#     test = root.lookup("test").get_value()
+#     assert test
 
 
 def test_cast_to_int(snippetcompiler):
