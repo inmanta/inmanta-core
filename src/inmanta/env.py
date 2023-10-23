@@ -352,14 +352,19 @@ class PipConfig(BaseModel):
 
     def assert_has_source(self, reason: str) -> None:
         if not self.has_source():
-            raise Exception(
-                f"Attempting to install {reason} but no pip is configured. Add the relevant pip "
-                f"indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
+            # TODO: Is this the correct exception type here?
+            # It is consistent with was there before, but is it Correct
+            # TODO: import cycle
+            from inmanta.module import InvalidModuleException
+
+            raise InvalidModuleException(
+                f"Attempting to install {reason} but pip is not configured. Add the relevant pip "
+                f"indexes to the project config file. e.g. to add PyPi as a module source, add the following "
                 "to `project.yml`:"
                 "\npip:"
                 "\n  index_url:"
                 "\n    - https://pypi.org/simple"
-                "\nAnother option is to set the pip.use_system_config = true to use the system's pip config."
+                "\nAnother option is to set `pip.use_system_config = true` to use the system's pip config."
             )
 
 

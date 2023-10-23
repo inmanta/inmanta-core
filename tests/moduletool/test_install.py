@@ -1442,7 +1442,8 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             import {module.ModuleV2.get_name_from_metadata(parent_module)}
             """,
             autostd=False,
-            python_package_sources=[local_module_package_index, index.url],
+            index_url=local_module_package_index,
+            extra_index_url=[index.url],
             python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
             install_project=True,
         )
@@ -1474,7 +1475,8 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         import {module.ModuleV2.get_name_from_metadata(parent_module)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
         install_project=True,
     )
