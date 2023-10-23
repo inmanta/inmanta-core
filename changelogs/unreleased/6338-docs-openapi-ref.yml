@@ -1,0 +1,7 @@
+description: Fixed reference to OpenAPI docs to work from any page
+change-type: patch
+sections:
+  minor-improvement: "{{description}}"
+destination-branches:
+  - master
+  - iso6
