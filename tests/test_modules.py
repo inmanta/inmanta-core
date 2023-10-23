@@ -270,6 +270,7 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     assert source.path_for("std") is None
 
 
+# TODO exceptions changed
 def test_module_v2_from_v1_path(
     local_module_package_index: str,
     modules_v2_dir: str,

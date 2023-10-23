@@ -283,6 +283,7 @@ def test_process_env_install_from_index(
 
 
 @pytest.mark.slowtest
+# TODO: depends on deciding exception structure
 def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.

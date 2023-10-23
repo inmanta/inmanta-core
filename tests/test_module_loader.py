@@ -248,6 +248,7 @@ def test_load_module_v2_already_installed(
 
 
 @pytest.mark.parametrize("install", [True, False])
+# TODO: exception type has changed here
 def test_load_module_v2_module_using_install(
     snippetcompiler_clean,
     local_module_package_index: str,
@@ -1219,7 +1220,7 @@ async def test_v1_module_depends_on_third_party_dep_with_extra(
         "import myv1mod",
         install_project=True,
         add_to_module_path=[str(tmpdir)],
-        python_package_sources=[index_with_pkgs_containing_optional_deps],
+        index_url=index_with_pkgs_containing_optional_deps,
         autostd=False,
     )
     assert project.virtualenv.are_installed(["pkg", "dep-a"])
