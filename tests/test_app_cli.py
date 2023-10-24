@@ -18,6 +18,7 @@
 
 import asyncio
 import os
+import re
 import shutil
 import sys
 import textwrap
@@ -568,8 +569,8 @@ async def test_logger_name_in_compiler_exporter_output(
     if set_keep_logger_names_option:
         assert "inmanta.compiler         DEBUG   Starting compile" in stdout
         assert "inmanta_plugins.mymod    INFO    test" in stdout
-        assert "inmanta.export           INFO    Committed resources with version 1" in stdout
+        assert re.search("inmanta.export[ ]+INFO[ ]+Committed resources with version 1", stdout)
     else:
-        assert "compiler       DEBUG   Starting compile" in stdout
+        assert re.search("^compiler[ ]*DEBUG[ ]+Starting compile", stdout)
         assert "mymod          INFO    test" in stdout
-        assert "exporter       INFO    Committed resources with version 1" in stdout
+        assert re.search("\nexporter[ ]+INFO[ ]+Committed resources with version 1", stdout)
