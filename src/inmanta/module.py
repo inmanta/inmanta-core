@@ -1221,6 +1221,9 @@ TMetadata = TypeVar("TMetadata", bound="Metadata")
 
 @stable_api
 class Metadata(BaseModel):
+    # TODO: comment
+    model_config = pydantic.ConfigDict(coerce_numbers_to_str=True)
+
     name: str
     description: Optional[str] = None
     freeze_recursive: bool = False
@@ -1262,7 +1265,7 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 
 @stable_api
 class ModuleMetadata(ABC, Metadata):
-    version: str = pydantic.Field(strict=False)  # e.g. 0.1 in yaml is a float
+    version: str
     license: str
     deprecated: Optional[bool] = None
 
