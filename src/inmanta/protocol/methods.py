@@ -851,7 +851,7 @@ def get_report(id: uuid.UUID):
 
 @method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
 def list_agent_processes(
-    environment: uuid.UUID = None,
+    environment: Optional[uuid.UUID] = None,
     expired: bool = True,
     start: Optional[uuid.UUID] = None,
     end: Optional[uuid.UUID] = None,
