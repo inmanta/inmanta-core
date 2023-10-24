@@ -105,7 +105,7 @@ class InmantaBootloader(object):
     @classmethod
     def get_available_extensions(cls) -> Dict[str, str]:
         """
-        Returns a dictionary of with all available inmanta extensions.
+        Returns a dictionary of all available inmanta extensions.
         The key contains the name of the extension and the value the fully qualified path to the python package.
         """
         if cls.AVAILABLE_EXTENSIONS is None:
