@@ -2,4 +2,4 @@ description: Fix jwt config error message to use the correct attribute and provi
 change-type: patch
 destination-branches: [master, iso6]
 sections:
-  feature: "{{description}}"
+  bugfix: "{{description}}"
