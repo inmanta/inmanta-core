@@ -318,6 +318,8 @@ class PipUpgradeStrategy(enum.Enum):
 
 class PipConfig(BaseModel):
     """
+    Base class to represent pip config internally
+
     :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
         Python packages.
     :param index_url: one pip index url for this project.
@@ -351,6 +353,7 @@ class PipConfig(BaseModel):
         return self.index_url or self.use_system_config
 
     def assert_has_source(self, reason: str) -> None:
+        """Ensure this index has a valid package source, otherwise raise exception"""
         if not self.has_source():
             # TODO: Is this the correct exception type here?
             # It is consistent with was there before, but is it Correct
@@ -426,11 +429,6 @@ class PipCommandBuilder:
         if not config.use_system_config:
             # If we don't use system config, unset env vars
             # setting this env_var to os.devnull disables the loading of all pip configuration files
-
-            # TODO: switch to        --isolated
-            #               Run pip in an isolated mode, ignoring environment variables  and
-            #               user configuration.
-            # Sander has something to say on this
 
             sub_env["PIP_CONFIG_FILE"] = os.devnull
             if "PIP_EXTRA_INDEX_URL" in sub_env:
