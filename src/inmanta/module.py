@@ -1221,8 +1221,11 @@ TMetadata = TypeVar("TMetadata", bound="Metadata")
 
 @stable_api
 class Metadata(BaseModel):
-    # TODO: comment
-    model_config = pydantic.ConfigDict(coerce_numbers_to_str=True)
+    model_config = pydantic.ConfigDict(
+        # By default pydantic does not coerce to strings. However, our raw metadata may be typed incorrectly,
+        # e.g. in case of yaml, 1.0.0 is a string but 1.0 is a float
+        coerce_numbers_to_str=True
+    )
 
     name: str
     description: Optional[str] = None
@@ -1271,7 +1274,7 @@ class ModuleMetadata(ABC, Metadata):
 
     @field_validator("version")
     @classmethod
-    def is_pep440_version(cls, v: Union[str, float]) -> str:
+    def is_pep440_version(cls, v: str) -> str:
         try:
             version.Version(v)
         except version.InvalidVersion as e:
@@ -1353,12 +1356,6 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
     compiler_version: Optional[str] = None
 
     _raw_parser: typing.ClassVar[Type[YamlParser]] = YamlParser
-
-    @field_validator("compiler_version", mode="before")
-    @classmethod
-    def convert_to_string(cls, v: Union[str, int, float]) -> str:
-        """Make sure versions that are also numbers become an actual string, even if yaml loads them as int or float"""
-        return str(v)
 
     @field_validator("compiler_version")
     @classmethod
