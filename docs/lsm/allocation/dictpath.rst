@@ -34,11 +34,11 @@ Using DictPath in code
 - To get the element from a collection use ``DictPath.get_element(collection)``
 - To set an element in a collection use ``DictPath.set_element(collection, value)``
 
-.. autoclass:: inmanta_lsm.dict_path.DictPath
+.. autoclass:: inmanta.util.dict_path.DictPath
    :members:
 
-.. autofunction:: inmanta_lsm.dict_path.to_path
-.. autofunction:: inmanta_lsm.dict_path.to_wild_path
+.. autofunction:: inmanta.util.dict_path.to_path
+.. autofunction:: inmanta.util.dict_path.to_wild_path
 
 Example
 #######
