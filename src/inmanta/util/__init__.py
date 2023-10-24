@@ -458,7 +458,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
 
-    if isinstance(o, uuid.UUID):
+    if isinstance(o, (uuid.UUID, Url)):
         return str(o)
 
     if isinstance(o, datetime.datetime):
@@ -478,9 +478,6 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
     if isinstance(o, BaseModel):
         return o.model_dump(by_alias=True)
-
-    if isinstance(o, Url):
-        return str(o)
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
