@@ -6148,7 +6148,7 @@ class DiscoveredResource(BaseDocument):
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
-    values: dict[str, str]
+    values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
@@ -6261,9 +6261,6 @@ async def connect(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
-        server_settings={
-            "client_connection_check_interval": "1000",  # make server check the tpc connection every 1 second
-        },
     )
     try:
         set_connection_pool(pool)

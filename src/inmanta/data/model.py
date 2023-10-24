@@ -725,7 +725,7 @@ class DiscoveredResource(BaseModel):
     """
 
     discovered_resource_id: ResourceIdStr
-    values: JsonType
+    values: dict[str, object]
 
     @validator("discovered_resource_id")
     @classmethod

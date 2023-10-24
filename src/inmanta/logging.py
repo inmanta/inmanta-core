@@ -20,10 +20,9 @@ import logging
 import os
 import re
 import sys
-import types
 from argparse import Namespace
 from contextlib import contextmanager
-from typing import Iterator, Optional, TextIO, Union
+from typing import Iterator, Optional, TextIO
 
 import colorlog
 from colorlog.formatter import LogColors
@@ -125,8 +124,6 @@ class InmantaLoggerConfig:
         self.set_log_formatter(formatter)
 
         self._logger_mode = LoggerMode.OTHER
-        self._default_log_level_factory = logging.getLogRecordFactory()
-        logging.setLogRecordFactory(self.custom_log_record_factory)
 
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
@@ -136,32 +133,19 @@ class InmantaLoggerConfig:
         # Regex that extracts the name of the module from a fully qualified import of a Python
         # module inside an Inmanta module.
 
-    def custom_log_record_factory(
-        self,
-        name: str,
-        level: int,
-        pathname: str,
-        lineno: int,
-        msg: object,
-        args: Union[tuple[object, ...] | dict[str, object]],
-        exc_info: Optional[tuple[type[BaseException], BaseException, types.TracebackType]],
-        func: Optional[str] = None,
-        sinfo: Optional[str] = None,
-        **kwargs: object,
-    ) -> logging.LogRecord:
+    def wrap_record(self, record: logging.LogRecord) -> logging.LogRecord:
         """
-        This log record factory makes sure that the name of the log record is updated
-        in the following way while executing in the "compiler" or "exporter" logger mode:
+        Wrap a log record to perform renaming for specific formatter as determined by the _logger_mode
 
-        * The name of the Inmanta module: When the log record was created by a source file in an Inmanta module
-                                          and the name of the logger was set to __name__.
-        * compiler: When executing in compiler mode and the log record doesn't come from an Inmanta module.
-        * exporter: When executing in exporter mode and the log record doesn't come from an Inmanta module.
+        This is derived from the way the colorlog.ColoredFormatter works
         """
-        new_logger_name = self._get_logger_name_for(name)
-        return self._default_log_level_factory(
-            new_logger_name, level, pathname, lineno, msg, args, exc_info, func, sinfo, **kwargs
-        )
+        old_name = record.name
+        new_name = self._get_logger_name_for(old_name)
+        if old_name == new_name:
+            return record
+        attributes = dict(record.__dict__)
+        attributes["name"] = new_name
+        return logging.makeLogRecord(attributes)
 
     def _get_logger_name_for(self, logger_name: str) -> str:
         """
@@ -397,7 +381,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
             no_color=True,
         )
         header = formatter.format(
-            self._logger_config.custom_log_record_factory(
+            logging.LogRecord(
                 record.name,
                 record.levelno,
                 record.pathname,
@@ -416,6 +400,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         :param record: The `logging.LogRecord` object to format.
         :return: The formatted log record as a string.
         """
+        record = self._logger_config.wrap_record(record)
         indent: str = " " * self.get_header_length(record)
         head, *tail = super().format(record).splitlines(True)
         return head + "".join(indent + line for line in tail)
