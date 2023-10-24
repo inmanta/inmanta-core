@@ -158,11 +158,6 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
 
     # Test link for next page
     url = f"""{base_url}{result.result["links"]["next"]}"""
-    # TODO: this test fails because for some reason url
-    #   (http://localhost:36951/api/v2/agents?limit=2&sort=paused.asc&filter.status=paused&filter.status=up&start=False&first_id=agent_with_instance2)
-    #   is deserialized as start="False" rather than start=False
-    #   root cause: `pydantic.TypeAdapter(typing.Union[bool, int, str]).validate_python("False") == "False"`
-    #   => may be a bug in deserializer
     assert "limit=2" in url
     assert "filter.status=" in url
     request = HTTPRequest(

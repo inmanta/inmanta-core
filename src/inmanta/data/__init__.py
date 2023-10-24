@@ -302,7 +302,7 @@ class ColumnType:
             return value
         if self.base_type == bool:
             ta = pydantic.TypeAdapter(bool)
-            return ta.validate_python(value, strict=True)
+            return ta.validate_python(value)
         if self.base_type == datetime.datetime and isinstance(value, str):
             return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
         if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
