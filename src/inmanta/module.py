@@ -1221,7 +1221,7 @@ TMetadata = TypeVar("TMetadata", bound="Metadata")
 
 @stable_api
 class Metadata(BaseModel):
-    model_config = pydantic.ConfigDict(
+    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
         # By default pydantic does not coerce to strings. However, our raw metadata may be typed incorrectly,
         # e.g. in case of yaml, 1.0.0 is a string but 1.0 is a float
         coerce_numbers_to_str=True

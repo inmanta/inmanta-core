@@ -19,7 +19,7 @@ import datetime
 import uuid
 from enum import Enum
 from itertools import chain
-from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
+from typing import ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
@@ -60,7 +60,7 @@ class BaseModel(pydantic.BaseModel):
     )
     # Populate models with the value property of enums, rather than the raw enum.
     # This is useful to serialise model.dict() later
-    model_config = ConfigDict(use_enum_values=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=True)
 
 
 class ExtensionStatus(BaseModel):
@@ -89,7 +89,7 @@ class FeatureStatus(BaseModel):
 
     slice: str
     name: str
-    value: Optional[Any] = None
+    value: Optional[object] = None
 
 
 class StatusResponse(BaseModel):
@@ -186,12 +186,12 @@ class AttributeStateChange(BaseModel):
     Changes in the attribute
     """
 
-    current: Optional[Any] = None
-    desired: Optional[Any] = None
+    current: Optional[object] = None
+    desired: Optional[object] = None
 
     @field_validator("current", "desired")
     @classmethod
-    def check_serializable(cls, v: Optional[Any]) -> Optional[Any]:
+    def check_serializable(cls, v: Optional[object]) -> Optional[object]:
         """
         Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
         """
@@ -296,7 +296,7 @@ class ResourceMinimal(BaseModel):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
 
-    model_config = ConfigDict(extra="allow")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
 
 
 class Resource(BaseModel):
@@ -361,7 +361,7 @@ class LogLine(BaseModel):
     # serialized using the name of the enum instead of its value. This is required
     # to make sure that data sent to the API endpoints resource_action_update
     # and resource_deploy_done are serialized consistently using the name of the enum.
-    model_config = ConfigDict(use_enum_values=False)
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel
     msg: str
@@ -402,7 +402,7 @@ class VersionedResource(BaseModel):
     requires: List[ResourceVersionIdStr]
 
     @property
-    def all_fields(self) -> Dict[str, Any]:
+    def all_fields(self) -> Dict[str, object]:
         return {**self.dict(), **self.id_details.dict()}
 
 
@@ -702,7 +702,7 @@ class DiscoveredResource(BaseModel):
 
     @field_validator("discovered_resource_id")
     @classmethod
-    def discovered_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
+    def discovered_resource_id_is_resource_id(cls, v: str) -> str:
         if resources.Id.is_resource_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceIdStr")
