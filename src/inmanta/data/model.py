@@ -17,6 +17,7 @@
 """
 import datetime
 import uuid
+from collections import abc
 from enum import Enum
 from itertools import chain
 from typing import ClassVar, Dict, List, NewType, Optional, Union
@@ -364,6 +365,7 @@ class LogLine(BaseModel):
     msg: str
     args: List[Optional[ArgumentTypes]] = []
     kwargs: JsonType = {}
+    # TODO: make all timestamps tz aware?
     timestamp: datetime.datetime
 
     @field_validator("level", mode="before")
@@ -371,10 +373,17 @@ class LogLine(BaseModel):
     def validate_log_level(cls, value: object) -> const.LogLevel:
         """
         Validate the log level using the LogLevel enum. Pydantic's default validation does not suffice because of the
-        custom behavior built on top of LogLevel to allow passing int's to the constructor.
+        custom value aliasing behavior built on top of LogLevel to allow passing ints to the constructor.
         """
-        # raises ValueError if value is not a known LogLevel
-        return const.LogLevel(value)
+        try:
+            return const.LogLevel(value)
+        except ValueError:
+            # error message as close to pydantic's as possible but add in the int aliases
+            name_value_pairs: abc.Iterator[tuple[str, int]] = ((level.value, level.to_int) for level in const.LogLevel)
+            valid_input_descriptions: list[str] = [f"'{name}' | {num_value}" for name, num_value in name_value_pairs]
+            raise ValueError(
+                f"Input should be %s" % " or ".join((", ".join(valid_input_descriptions[:-1]), valid_input_descriptions[-1]))
+            )
 
 
 class ResourceIdDetails(BaseModel):
