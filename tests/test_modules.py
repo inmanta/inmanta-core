@@ -240,7 +240,7 @@ def test_module_v2_source_get_installed_module_editable(
         install_v2_modules=[env.LocalPackagePath(path=module_dir, editable=editable)],
     )
 
-    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    source: module.ModuleV2Source = module.ModuleV2Source()
     mod: Optional[module.ModuleV2] = source.get_installed_module(module.DummyProject(autostd=False), module_name)
     assert mod is not None
     # os.path.realpath because snippetcompiler uses symlinks
@@ -266,7 +266,7 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     assert path is not None
     assert isinstance(loader, PluginModuleLoader)
 
-    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    source: module.ModuleV2Source = module.ModuleV2Source()
     assert source.path_for("std") is None
 
 
