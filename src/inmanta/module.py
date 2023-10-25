@@ -3276,7 +3276,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
     GENERATION = ModuleGeneration.V2
-    PKG_NAME_PREFIX = "inmanta-module-"
+    PKG_NAME_PREFIX = const.V2_PKG_NAME_PREFIX
 
     def __init__(
         self,

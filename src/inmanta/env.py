@@ -229,12 +229,10 @@ class PythonWorkingSet:
 
         :param inmanta_modules_only: Only return inmanta modules from the working set
         """
-        import inmanta.module  # TODO: import cycle
-
         return {
             dist_info.key: version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
-            if not inmanta_modules_only or dist_info.key.startswith(inmanta.module.ModuleV2.PKG_NAME_PREFIX)
+            if not inmanta_modules_only or dist_info.key.startswith(const.V2_PKG_NAME_PREFIX)
         }
 
     @classmethod

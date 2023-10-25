@@ -270,7 +270,6 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     assert source.path_for("std") is None
 
 
-# TODO exceptions changed
 def test_module_v2_from_v1_path(
     local_module_package_index: str,
     modules_v2_dir: str,
@@ -310,7 +309,7 @@ If you want to use the module as a v2 module:
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "",
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         install_project=False,
     )
     os.chdir(project.path)
