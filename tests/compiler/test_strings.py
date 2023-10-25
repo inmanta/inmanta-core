@@ -248,12 +248,13 @@ std::print(f"{a.b.c.n_c}")
 
 def test_fstring_numbering_logic():
     """
-    Check that variable ranges in f-string are
+    Check that variable ranges in f-strings are correctly computed
     """
     statements = parse_code(
         """
 std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr   }")
-#                <> <->        <--->      <----->                   <--->
+#                |   |           |           |                        |
+#                [[ [-[        [---[      [-----[                   [---[     <--- expected ranges
         """
     )
 
