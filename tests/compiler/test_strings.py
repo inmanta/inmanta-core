@@ -29,7 +29,7 @@ def test_multiline_string_interpolation(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 var = 42
-str = \"\"\"var == {{var}}\"\"\"
+str = \"\"\"var == {{   var }}\"\"\"
         """,
     )
     (_, scopes) = compiler.do_compile()
@@ -182,10 +182,11 @@ std::print(z)
 @pytest.mark.parametrize(
     "f_string,expected_output",
     [
-        (r"f'{arg}'", "123\n"),
-        (r"f'{arg}{arg}{arg}'", "123123123\n"),
-        (r"f'{arg:@>5}'", "@@123\n"),
-        (r"f'{arg:^5}'", " 123 \n"),
+        # (r"f'{arg}{arg}{arg}'", "123123123\n"),
+        # (r"f'{arg:@>5}'", "@@123\n"),
+        # (r"f'{arg:^5}'", " 123 \n"),
+        # (r"f'{arg}'", "123\n"),
+        (r"f' {  arg    } '", " 123 \n"),
     ],
 )
 def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):

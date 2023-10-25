@@ -891,16 +891,26 @@ def p_constant_fstring(p: YaccProduction) -> None:
     start_lnr = p[1].location.lnr
     start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
 
-    locatable_matches: List[Tuple[str, LocatableString]] = []
+    locatable_matches: List[Tuple[str, LocatableString, Tuple[int, int]]] = []
 
-    def locate_match(match: Tuple[str, Optional[str], Optional[str], Optional[str]]) -> None:
+    def locate_match(match: Tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int) -> None:
         """
         Associates a parsed field name with a locatable string
         """
-        range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
+        # range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
+        # assert match[1]  # make mypy happy
+        # locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
+        # locatable_matches.append((match[1], locatable_string))
+
+        field_name_left_trim = match[1].lstrip()
+        left_spaces: int = len(match[1]) - len(field_name_left_trim)
+        field_name_full_trim = field_name_left_trim.rstrip()
+        right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
+
+        range: Range = Range(p[1].location.file, start_lnr, start_char_pos + left_spaces, start_lnr, end_char - right_spaces)
         assert match[1]  # make mypy happy
-        locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
-        locatable_matches.append((match[1], locatable_string))
+        locatable_string = LocatableString(field_name_full_trim, range, p[1].lexpos, p[1].namespace)
+        locatable_matches.append((field_name_full_trim, locatable_string, (left_spaces, right_spaces)))
 
     for match in parsed:
         if not match[1]:
@@ -912,7 +922,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
         start_char_pos += literal_text_len + brackets_length
         end_char = start_char_pos + field_name_len
 
-        locate_match(match)
+        locate_match(match, start_char_pos, end_char)
         start_char_pos += field_name_len
 
         if match[2]:
@@ -979,12 +989,12 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
         end_line, end_char = char_count_to_lnr_char(match.end(2))
         range: Range = Range(string_ast.location.file, start_line, start_char, end_line, end_char)
         locatable_string = LocatableString(match[2], range, string_ast.lexpos, string_ast.namespace)
-        locatable_matches.append((match[1], locatable_string))
+        locatable_matches.append((match[1], locatable_string, (0, 0)))
 
     return StringFormat(str(string_ast), convert_to_references(locatable_matches))
 
 
-def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[Tuple["Reference", str]]:
+def convert_to_references(variables: List[Tuple[str, LocatableString, Tuple[int, int]]]) -> List[Tuple["Reference", str]]:
     """
     This function is used in a context of string formatting. It expects variables that are part of a single line
     format string and converts them to a format that can be processed by StringFormat (for regular
@@ -1004,7 +1014,7 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
     """
     assert namespace
     _vars: List[Tuple[Reference, str]] = []
-    for match, var in variables:
+    for match, var, padding in variables:
         var_name: str = str(var)
         var_parts: List[str] = var_name.split(".")
         start_char = var.location.start_char
@@ -1029,7 +1039,7 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
             # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
             _vars.append((ref, match))
         else:
-            _vars.append((ref, match))
+            _vars.append((ref, " "*padding[0]+match+" "*padding[1]))
     return _vars
 
 

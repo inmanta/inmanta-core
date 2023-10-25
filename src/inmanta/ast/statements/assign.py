@@ -621,7 +621,8 @@ class StringFormatV2(FormattedString):
     def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
         only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
-        self._variables = only_refs
+        self._variables = variables
+        # self._padded_names = padded_names
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -630,14 +631,14 @@ class StringFormatV2(FormattedString):
         # We can't cache the formatter because it has no ability to cache the parsed string
 
         kwargs = {}
-        for _var in self._variables:
+        for _var, _name in self._variables:
             value = _var.execute(requires, resolver, queue)
             if isinstance(value, Unknown):
                 return Unknown(self)
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
 
-            kwargs[_var.full_name] = value
+            kwargs[_name] = value
 
         result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
 
