@@ -1,0 +1,6 @@
+---
+description: Add `in` operation for DictPath.
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

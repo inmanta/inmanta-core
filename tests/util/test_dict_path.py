@@ -88,6 +88,18 @@ def test_add() -> None:
         assert (ComposedPath(path_str=first) + ComposedPath(path_str=second)).to_str() == first + "." + second
 
 
+def test_in() -> None:
+    items = [
+        ("a.b.c", "a.b", True),
+        ("a.c[z=www].d.e", "c.a", False),
+        ("a.c[z=www].d.g", "a.c.d", True),
+        ("e.f", "g", False),
+    ]
+    for composed_path, sub_composed_path, assert_value in items:
+        is_contained_in_path = ComposedPath(path_str=sub_composed_path) in ComposedPath(path_str=composed_path)
+        assert assert_value == is_contained_in_path
+
+
 def test_null_path() -> None:
     items = [
         ("a.b.c", "d"),

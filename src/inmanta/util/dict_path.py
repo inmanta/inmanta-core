@@ -667,6 +667,15 @@ class DictPath(WildDictPath):
             return NotImplemented
         return ComposedPath(path=list(self.get_path_sections()) + list(other.get_path_sections()))
 
+    def __contains__(self, other: "DictPath") -> bool:
+        other_key_path_sections = [e.get_key() for e in other.get_path_sections()]
+        self_key_path_sections = [e.get_key() for e in self.get_path_sections()]
+        min_len = min(len(other_key_path_sections), len(self_key_path_sections))
+        for i in range(min_len):
+            if self_key_path_sections[i] != other_key_path_sections[i]:
+                return False
+        return True
+
     def get_path_sections(self) -> Sequence["DictPath"]:
         """Get the individual parts of this path"""
         return []
