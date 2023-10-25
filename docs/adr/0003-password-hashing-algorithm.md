@@ -1,7 +1,7 @@
 # Password hashing algorithm
 
 * Status: accepted
-* Date: 2023-10-25
+* Date: 2023-03-03
 
 
 ## Context and Problem Statement
