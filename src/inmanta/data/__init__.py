@@ -3683,7 +3683,7 @@ class Compile(BaseDocument):
     do_export: bool = False
     force_update: bool = False
     metadata: JsonType = {}
-    environment_variables: Optional[JsonType] = {}
+    environment_variables: Optional[dict[str, str]] = {}
 
     success: Optional[bool]
     handled: bool = False

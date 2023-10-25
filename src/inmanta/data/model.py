@@ -128,7 +128,7 @@ class CompileRunBase(BaseModel):
     do_export: bool
     force_update: bool
     metadata: JsonType
-    environment_variables: Dict[str, SimpleTypes]
+    environment_variables: dict[str, str]
 
     partial: bool
     removed_resource_sets: list[str]
