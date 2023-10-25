@@ -267,7 +267,10 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr   }")
         (len('std::print(f"---{s}{m'), len('std::print(f"---{s}{mm}')),
         (len('std::print(f"---{s}{mm} - {sub.a'), len('std::print(f"---{s}{mm} - {sub.attr}')),
         (len('std::print(f"---{s}{mm} - {sub.attr} - {  p'), len('std::print(f"---{s}{mm} - {sub.attr} - {  padded ')),
-        (len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.a'), len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr ')),
+        (
+            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.a'),
+            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr '),
+        ),
     ]
     variables = statements[0].children[0]._variables
 
