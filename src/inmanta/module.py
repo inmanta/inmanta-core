@@ -65,6 +65,7 @@ from typing import (
 
 import more_itertools
 import pkg_resources
+import pydantic
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
@@ -267,6 +268,10 @@ class InvalidMetadata(CompilerException):
 
 
 class ModuleDeprecationWarning(InmantaWarning):
+    pass
+
+
+class ProjectConfigurationWarning(InmantaWarning):
     pass
 
 
@@ -675,10 +680,6 @@ class ModuleSource(Generic[TModule]):
 
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
-    def __init__(self, urls: List[str]) -> None:
-        # TODO: cleanup and warnings
-        self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
-
     @classmethod
     def get_installed_version(cls, module_name: str) -> Optional[version.Version]:
         """
@@ -1564,7 +1565,18 @@ class ProjectPipConfig(env.PipConfig):
         alias_generator = hyphenize
         # allow use of aliases
         allow_population_by_field_name = True
-        extra = "forbid"  # TODO exception handling
+        extra = "ignore"
+
+    @pydantic.root_validator(pre=True)
+    def __alert_extra_field__(cls, values: dict[str, object]) -> dict[str, object]:
+        extra_fields = values.keys() - cls.__fields__.keys() - {v.alias for v in cls.__fields__.values()}
+
+        for extra_field in extra_fields:
+            # This is cfr adr 0000
+            warnings.warn(
+                ProjectConfigurationWarning(f"Found unexpected configuration value 'pip.{extra_field} in 'project.yaml'")
+            )
+        return values
 
 
 @stable_api
@@ -1666,9 +1678,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 result.append({"url": elem, "type": ModuleRepoType.git})
             elif isinstance(elem, dict):
                 if elem["type"] == ModuleRepoType.package.value:
-                    LOGGER.warning(
-                        "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file "
-                        "is deprecated. Please set the pip index url through the `pip -> index_urls` option instead."
+                    warnings.warn(
+                        ProjectConfigurationWarning(
+                            "Setting a pip index through the `repo.url` option with type `package` in the project.yml file "
+                            "is deprecated. This value will be ignored. "
+                            "Please set the pip index url through the `pip.index_url` option instead."
+                        )
                     )
                 result.append(elem)
             else:
@@ -1680,23 +1695,6 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         Return all RelationPrecedenceRules defined in the project.yml file.
         """
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
-
-    def get_index_urls(self) -> List[str]:
-        # Once setting repos with type package is no longer supported, this method can return self.pip.index_urls alone.
-        index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
-
-        # This ensures no duplicates are returned and insertion order is preserved.
-        # i.e. the left-most index will be passed to pip as --index-url and the others as --extra-index-url
-        return list(
-            {
-                value: None
-                for value in itertools.chain(
-                    [self.pip.index_url] if self.pip.index_url is not None else [],
-                    self.pip.index_url or [],
-                    index_urls_deprecated_option,
-                )
-            }
-        )
 
 
 @stable_api
@@ -1970,7 +1968,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        self.module_source: ModuleV2Source = ModuleV2Source(self.metadata.get_index_urls())
+        self.module_source: ModuleV2Source = ModuleV2Source()
         self.module_source_v1: ModuleV1Source = ModuleV1Source(
             local_repo=CompositeModuleRepo([make_repo(x) for x in self.modulepath]),
             remote_repo=CompositeModuleRepo(
@@ -2104,7 +2102,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
-        indexes_urls: List[str] = self.metadata.get_index_urls()
         # Verify non-python part
         self.verify_modules_cache()
         self.verify_module_version_compatibility()

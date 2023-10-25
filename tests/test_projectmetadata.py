@@ -16,11 +16,12 @@
     Contact: code@inmanta.com
 """
 import logging
+import re
 from typing import List, Optional
 
 import pytest
 
-from inmanta.module import ModuleRepoType, Project, ProjectMetadata, RelationPrecedenceRule
+from inmanta.module import ModuleRepoType, Project, ProjectConfigurationWarning, ProjectMetadata, RelationPrecedenceRule
 from utils import assert_no_warning, log_contains
 
 
@@ -99,8 +100,16 @@ def test_no_module_path(tmp_path, caplog):
     assert_no_warning(caplog)
 
 
-def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
-    with caplog.at_level(logging.WARNING):
+def test_deprecation_warning_repo_of_type_package(tmp_path):
+    with pytest.warns(
+        ProjectConfigurationWarning,
+        match=re.escape(
+            "Setting a pip index through the `repo.url` option with "
+            "type `package` in the project.yml file is deprecated. "
+            "This value will be ignored. "
+            "Please set the pip index url through the `pip.index_url` option instead."
+        ),
+    ):
         with (tmp_path / "project.yml").open("w") as fh:
             fh.write(
                 """
@@ -115,15 +124,6 @@ def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
             )
 
         Project(tmp_path, autostd=False)
-    log_contains(
-        caplog,
-        "inmanta.module",
-        logging.WARNING,
-        (
-            "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file is deprecated. "
-            "Please set the pip index url through the `pip -> index_urls` option instead."
-        ),
-    )
 
 
 @pytest.mark.parametrize("use_system_config, value", [(True, True), (True, False), (False, False)])
@@ -156,3 +156,28 @@ def test_pip_config(tmp_path, caplog, use_system_config, value):
     project = Project(tmp_path, autostd=False)
     assert_no_warning(caplog)
     assert project.metadata.pip.use_system_config == value
+
+
+def test_pip_config_warnings(tmp_path):
+    """
+    Verify that "use_config_file" can be specified in a project.yml file but that it isn't mandatory
+    If it is not specified, verify that the default value "False" is used in the project.
+    """
+    pip_config_file = """
+    pip:
+        index_ur: https://pypi.org/simple
+
+    """
+
+    with (tmp_path / "project.yml").open("w") as fh:
+        fh.write(
+            f"""
+    name: testproject
+    downloadpath: libs
+    {pip_config_file}
+    """
+        )
+    with pytest.warns(
+        ProjectConfigurationWarning, match=re.escape("Found unexpected configuration value 'pip.index_ur in 'project.yaml'")
+    ):
+        Project(tmp_path, autostd=False)
