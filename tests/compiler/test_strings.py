@@ -182,10 +182,10 @@ std::print(z)
 @pytest.mark.parametrize(
     "f_string,expected_output",
     [
-        # (r"f'{arg}{arg}{arg}'", "123123123\n"),
-        # (r"f'{arg:@>5}'", "@@123\n"),
-        # (r"f'{arg:^5}'", " 123 \n"),
-        # (r"f'{arg}'", "123\n"),
+        (r"f'{arg}{arg}{arg}'", "123123123\n"),
+        (r"f'{arg:@>5}'", "@@123\n"),
+        (r"f'{arg:^5}'", " 123 \n"),
+        (r"f'{arg}'", "123\n"),
         (r"f' {  arg    } '", " 123 \n"),
     ],
 )
@@ -247,9 +247,13 @@ std::print(f"{a.b.c.n_c}")
 
 
 def test_fstring_numbering_logic():
+    """
+    Check that variable ranges in f-string are
+    """
     statements = parse_code(
         """
-std::print(f"---{s}{mm} - {sub.attr} - {  padded  }")
+std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr   }")
+#                <> <->        <--->      <----->                   <--->
         """
     )
 
@@ -263,7 +267,7 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  }")
         (len('std::print(f"---{s}{m'), len('std::print(f"---{s}{mm}')),
         (len('std::print(f"---{s}{mm} - {sub.a'), len('std::print(f"---{s}{mm} - {sub.attr}')),
         (len('std::print(f"---{s}{mm} - {sub.attr} - {  p'), len('std::print(f"---{s}{mm} - {sub.attr} - {  padded ')),
-        #                                                                                               43  ^     ^ 49 |
+        (len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.a'), len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr ')),
     ]
     variables = statements[0].children[0]._variables
 

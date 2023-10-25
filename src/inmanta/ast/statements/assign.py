@@ -622,7 +622,6 @@ class StringFormatV2(FormattedString):
         only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
         self._variables = variables
-        # self._padded_names = padded_names
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)

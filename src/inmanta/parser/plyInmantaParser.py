@@ -899,10 +899,6 @@ def p_constant_fstring(p: YaccProduction) -> None:
         """
         Associates a parsed field name with a locatable string
         """
-        # range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
-        # locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
-        # locatable_matches.append((match[1], locatable_string))
-
         assert match[1]  # make mypy happy
         field_name_left_trim = match[1].lstrip()
         left_spaces: int = len(match[1]) - len(field_name_left_trim)
@@ -1039,7 +1035,7 @@ def convert_to_references(variables: List[Tuple[str, LocatableString, Tuple[int,
                 ref.location = range_attr
                 ref.namespace = namespace
             # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
-            _vars.append((ref, match))
+            _vars.append((ref, " " * padding[0] + match + " " * padding[1]))
         else:
             _vars.append((ref, " " * padding[0] + match + " " * padding[1]))
     return _vars
