@@ -49,7 +49,7 @@ async def env_with_compiles(client, environment):
             do_export=True,
             force_update=False,
             metadata={"meta": 42} if i % 2 else None,
-            environment_variables={"TEST_ENV_VAR": True} if i % 2 else None,
+            environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else None,
             success=True,
             handled=True,
             version=1,
