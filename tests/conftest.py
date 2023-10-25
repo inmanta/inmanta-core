@@ -1696,6 +1696,9 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     yield index_dir
 
 
+# TODO: run tests and check for pydantic warnings
+
+
 @pytest.fixture
 async def migrate_db_from(
     request: pytest.FixtureRequest, hard_clean_db, hard_clean_db_post, postgresql_client: asyncpg.Connection, server_pre_start

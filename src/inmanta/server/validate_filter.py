@@ -34,20 +34,6 @@ class InvalidFilter(Exception):
         self.message = message
 
 
-def parse_single_value(v: object) -> object:
-    """
-    Transform list values to their single element value.
-    """
-    if isinstance(v, list):
-        return more_itertools.one(
-            v,
-            too_short=ValueError("Empty filter provided"),
-            too_long=ValueError(f"Multiple values provided for filter: {v}"),
-        )
-
-    return v
-
-
 def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.datetime:
     try:
         datetime_obj: datetime.datetime = dateutil.parser.isoparse(value)
@@ -123,11 +109,19 @@ class BooleanEqualityFilter(Filter):
 
     field: Optional[bool] = None
 
-    # [pydantic v1->v2] https://docs.pydantic.dev/2.3/migration/#the-allow_reuse-keyword-argument-is-no-longer-necessary
     @field_validator("field", mode="before")
     @classmethod
-    def val_field(cls, v: Optional[bool]) -> Optional[bool]:
-        return parse_single_value(v)
+    def extract_field_from_list(cls, v: object) -> object:
+        """
+        Transform list values to their single element value.
+        """
+        if isinstance(v, list):
+            return more_itertools.one(
+                v,
+                too_short=ValueError("Empty filter provided"),
+                too_long=ValueError(f"Multiple values provided for filter: {v}"),
+            )
+        return v
 
     def to_query_type(self) -> Optional[Tuple[QueryType, object]]:
         if self.field is not None:
