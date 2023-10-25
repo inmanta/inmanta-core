@@ -272,14 +272,11 @@ class ModelMetadata(BaseModel):
     """Model metadata"""
 
     inmanta_compile_state: const.Compilestate = Field(
-        const.Compilestate.success, alias="inmanta:compile:state"
-    )  # [TODO] check pydantic migration https://docs.pydantic.dev/dev-v2/migration/#changes-to-config
+        default=const.Compilestate.success, alias="inmanta:compile:state"
+    )
     message: str
     type: str
     extra_data: Optional[JsonType] = None
-
-    # TODO[pydantic]: The following keys were removed: `fields`.
-    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
 
 
 class ResourceMinimal(BaseModel):
@@ -371,7 +368,12 @@ class LogLine(BaseModel):
 
     @field_validator("level", mode="before")
     @classmethod
-    def convert_to_string(cls, value: Union[str, int]) -> const.LogLevel:
+    def validate_log_level(cls, value: object) -> const.LogLevel:
+        """
+        Validate the log level using the LogLevel enum. Pydantic's default validation does not suffice because of the
+        custom behavior built on top of LogLevel to allow passing int's to the constructor.
+        """
+        # raises ValueError if value is not a known LogLevel
         return const.LogLevel(value)
 
 
@@ -455,7 +457,7 @@ class VersionedResourceDetails(ResourceDetails):
     version: int
 
     @classmethod
-    @model_validator(mode="before")  # https://docs.pydantic.dev/2.3/errors/usage_errors/#root-validator-pre-skip
+    @model_validator(mode="after")
     def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the

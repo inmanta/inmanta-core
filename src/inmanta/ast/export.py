@@ -115,4 +115,4 @@ class Error(BaseModel):
         Location where this error occurred.
     """
     # allow additional fields to be set for exception types that require it
-    model_config = ConfigDict(extra=pydantic.Extra.allow, validate_assignment=True)
+    model_config = ConfigDict(extra="allow", validate_assignment=True)
