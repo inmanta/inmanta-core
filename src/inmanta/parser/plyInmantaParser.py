@@ -893,7 +893,9 @@ def p_constant_fstring(p: YaccProduction) -> None:
 
     locatable_matches: List[Tuple[str, LocatableString, Tuple[int, int]]] = []
 
-    def locate_match(match: Tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int) -> None:
+    def locate_match(
+        match: Tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int
+    ) -> None:
         """
         Associates a parsed field name with a locatable string
         """
@@ -939,7 +941,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
                 start_char_pos += literal_text_len + inner_brackets_len
                 end_char = start_char_pos + inner_field_name_len
 
-                locate_match(submatch)
+                locate_match(submatch, start_char_pos, end_char)
                 start_char_pos += inner_field_name_len + inner_brackets_len
 
         start_char_pos += brackets_length
@@ -1039,7 +1041,7 @@ def convert_to_references(variables: List[Tuple[str, LocatableString, Tuple[int,
             # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
             _vars.append((ref, match))
         else:
-            _vars.append((ref, " "*padding[0]+match+" "*padding[1]))
+            _vars.append((ref, " " * padding[0] + match + " " * padding[1]))
     return _vars
 
 
