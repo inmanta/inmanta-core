@@ -1209,6 +1209,7 @@ class SnippetCompilationTest(KeepOnFail):
         env.mock_process_env(env_path=self.env)
 
     def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
+        """Assumes we have a project set"""
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
         for mod in install_v2_modules:
@@ -1217,7 +1218,9 @@ class SnippetCompilationTest(KeepOnFail):
                     install_path = mod.path
                 else:
                     install_path = module_tool.build(mod.path, build_dir)
-                self.project.virtualenv.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
+                self.project.virtualenv.install_from_source(
+                    paths=[LocalPackagePath(path=install_path, editable=mod.editable)], pip_config=self.project.metadata.pip
+                )
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))

@@ -32,7 +32,7 @@ from _io import StringIO
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
-from inmanta.env import LocalPackagePath
+from inmanta.env import LocalPackagePath, PipConfig
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool
@@ -363,7 +363,9 @@ def test_module_v2_incorrect_install_warning(
         assert cause.msg == expected
 
     # install module from source without using `inmanta module install`
-    env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
+    env.process_env.install_from_source(
+        [env.LocalPackagePath(path=module_dir, editable=False)], PipConfig(use_system_config=True)
+    )
     module_path = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     verify_exception(
         f"Invalid module at {module_path}: found module package but it has no setup.cfg. "
@@ -374,7 +376,9 @@ def test_module_v2_incorrect_install_warning(
 
     # include setup.cfg in package to circumvent error
     shutil.copy(os.path.join(module_dir, "setup.cfg"), os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module"))
-    env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
+    env.process_env.install_from_source(
+        [env.LocalPackagePath(path=module_dir, editable=False)], PipConfig(use_system_config=True)
+    )
     verify_exception(
         "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"
         " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively install and"

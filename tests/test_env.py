@@ -29,6 +29,7 @@ from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
 
+import pkg_resources
 import py
 import pytest
 from pkg_resources import Requirement
@@ -180,28 +181,15 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     subprocess.check_output([os.path.join(venv.env_path, "bin/pip"), "list"])
 
 
-def test_req_parser(tmpdir):
-    url = "git+https://github.com/bartv/python3-iplib"
-    at_url = "iplib@" + url
-    egg_url = url + "#egg=iplib"
+def test_gen_req_file():
+    """
+    These are all examples used in older testcases that did not work correctly before
+    They are supported now
 
-    e = env.VirtualEnv(tmpdir)
-    name, u = e._parse_line(url)
-    assert name is None
-    assert u == url
+    This testcase now only verifies they are all correctly parsed
+    """
 
-    name, u = e._parse_line(at_url)
-    assert name == "iplib"
-    assert u == egg_url
-
-    e._parse_line(egg_url)
-    assert name == "iplib"
-    assert u == egg_url
-
-
-def test_gen_req_file(tmpdir):
-    e = env.VirtualEnv(tmpdir)
-    req = [
+    reqs = [
         "lorem == 0.1.1",
         "lorem > 0.1",
         "dummy-yummy",
@@ -210,39 +198,15 @@ def test_gen_req_file(tmpdir):
         # verify support for environment markers as described in PEP 508
         "lorem;python_version<'3.7'",
         "lorem;platform_machine == 'x86_64' and platform_system == 'Linux'",
-    ]
-
-    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
-    assert len(req_lines) == 5
-    assert "lorem == 0.1.1, > 0.1" in req_lines
-    assert "dummy-yummy" in req_lines
-    assert "git+https://github.com/bartv/python3-iplib#egg=iplib" in req_lines
-    assert 'lorem ; python_version < "3.7"' in req_lines
-    assert 'lorem ; platform_machine == "x86_64" and platform_system == "Linux"' in req_lines
-
-
-def test_gen_req_file_multiple_python_versions(tmpdir):
-    e = env.VirtualEnv(tmpdir)
-    req = [
-        "lorem",
         "lorem == 0.1;python_version=='3.7'",
         "lorem == 0.2;python_version=='3.9'",
+        "dep[opt]",
+        "dep[otheropt]",
     ]
 
-    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
-    assert len(req_lines) == 3
-    assert "lorem" in req_lines
-    assert 'lorem == 0.1 ; python_version == "3.7"' in req_lines
-    assert 'lorem == 0.2 ; python_version == "3.9"' in req_lines
-
-
-def test_gen_req_file_multiple_extras(tmpdir):
-    e = env.VirtualEnv(tmpdir)
-    req = ["dep[opt]", "dep[otheropt]"]
-
-    req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
-    assert len(req_lines) == 1
-    assert "dep[opt,otheropt]" in req_lines
+    # make sure they all parse
+    for req in reqs:
+        pkg_resources.parse_requirements(req)
 
 
 def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
@@ -331,7 +295,9 @@ def test_process_env_install_from_source(
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.process_env.get_installed_packages()
-    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
+    env.process_env.install_from_source(
+        [env.LocalPackagePath(path=project_dir, editable=editable)], PipConfig(use_system_config=True)
+    )
     assert package_name in env.process_env.get_installed_packages()
     if editable:
         assert package_name in env.process_env.get_installed_packages(only_editable=True)
@@ -409,7 +375,9 @@ def test_active_env_get_module_file_editable_namespace_package(
 
     assert env.ActiveEnv.get_module_file(module_name) is None
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
-    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=True)])
+    env.process_env.install_from_source(
+        [env.LocalPackagePath(path=project_dir, editable=True)], PipConfig(use_system_config=True)
+    )
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
@@ -453,7 +421,9 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
                 """.strip()
             )
-        env.process_env.install_from_source([env.LocalPackagePath(path=str(tmpdir), editable=False)])
+        env.process_env.install_from_source(
+            [env.LocalPackagePath(path=str(tmpdir), editable=False)], PipConfig(use_system_config=True)
+        )
 
 
 @pytest.mark.slowtest
@@ -626,23 +596,6 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
     _assert_install("inmanta-module-elaboratev2module<1.2.4", installed=True)
     _assert_install("inmanta-module-elaboratev2module>1.2.3", installed=False)
     _assert_install("inmanta-module-elaboratev2module==1.2.4", installed=False)
-
-
-def test_gen_content_requirements_file_extras():
-    """
-    Ensure that the `env.ActiveEnv._gen_content_requirements_file` method takes into account extras.
-    """
-    dependency = "dep==1.2.3"
-    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
-    assert content.strip() == "dep == 1.2.3"
-
-    dependency = "dep[opt]==1.2.3"
-    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
-    assert content.strip() == "dep[opt] == 1.2.3"
-
-    dependency = "dep[opt,dev]==1.2.3"
-    content: str = env.ActiveEnv._gen_content_requirements_file([dependency])
-    assert content.strip() == "dep[dev,opt] == 1.2.3"
 
 
 @pytest.mark.slowtest

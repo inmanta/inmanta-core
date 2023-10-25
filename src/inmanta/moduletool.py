@@ -53,6 +53,7 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
+from inmanta.env import PipConfig
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -1024,9 +1025,14 @@ version: 0.0.1dev0"""
         context of a project.
         """
 
+        # TODO: refine behavior
+        pip_config = PipConfig(use_system_config=True)
+
         def install(install_path: str) -> None:
             try:
-                env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+                env.process_env.install_from_source(
+                    [env.LocalPackagePath(path=install_path, editable=editable)], pip_config=pip_config
+                )
             except env.ConflictingRequirements as e:
                 raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
 

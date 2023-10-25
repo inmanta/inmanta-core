@@ -19,7 +19,6 @@
 import configparser
 import glob
 import importlib
-import itertools
 import logging
 import operator
 import os
@@ -719,7 +718,6 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         project.metadata.pip.assert_has_source(f"a v2 module {module_name}")
 
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
-        allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
@@ -2421,6 +2419,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         except InvalidModuleException:
             raise
         except env.ConflictingRequirements:
+            raise
+        except env.PackageNotFound:
             raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e

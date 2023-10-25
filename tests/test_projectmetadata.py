@@ -22,7 +22,7 @@ from typing import List, Optional
 import pytest
 
 from inmanta.module import ModuleRepoType, Project, ProjectConfigurationWarning, ProjectMetadata, RelationPrecedenceRule
-from utils import assert_no_warning, log_contains
+from utils import assert_no_warning
 
 
 @pytest.mark.parametrize(

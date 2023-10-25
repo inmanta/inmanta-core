@@ -18,6 +18,7 @@
 import logging
 import os
 import py_compile
+import re
 import shutil
 import sys
 from collections import abc
@@ -30,7 +31,7 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
-from inmanta.env import ConflictingRequirements, LocalPackagePath, PipConfig, process_env
+from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFound, PipConfig, process_env
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
@@ -165,7 +166,7 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
     Verify that attempting to install a v2 module without a v2 module source configured results in the appropriate exception.
     """
     module_name = "non_existing_module"
-    with pytest.raises(Exception) as e:
+    with pytest.raises(PackageNotFound) as e:
         snippetcompiler.setup_for_snippet(
             snippet=f"import {module_name}",
             install_project=True,
@@ -182,7 +183,7 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
         "    - https://pypi.org/simple\n"
         "Another option is to set `pip.use_system_config = true` to use the system's pip config."
     )
-    assert message in e.value.format_trace()
+    e.match(re.escape(message))
 
 
 @pytest.mark.parametrize("allow_v1", [True, False])
@@ -1373,7 +1374,7 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     module_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     # start with non-editable install to populate site-packages with appropriate metadata (editable install would create pth
     # files if a different mechanism is picked so we want to avoid that).
-    process_env.install_from_source([LocalPackagePath(path=module_dir, editable=False)])
+    process_env.install_from_source([LocalPackagePath(path=module_dir, editable=False)], PipConfig(use_system_config=True))
     # replace module dir in site-packages with symlink
     rel_path_src: str = os.path.join(const.PLUGINS_PACKAGE, "minimalv2module")
     module_dir_site_packages: str = os.path.join(process_env.site_packages_dir, rel_path_src)
