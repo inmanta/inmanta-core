@@ -249,23 +249,25 @@ std::print(f"{a.b.c.n_c}")
 def test_fstring_numbering_logic():
     statements = parse_code(
         """
-std::print(f"---{s}{mm} - {sub.attr}")
+std::print(f"---{s}{mm} - {sub.attr} - {  padded  }")
         """
     )
 
     def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start
-        assert variable.location.end_char == end
+        assert variable.location.start_char == start, (variable, start, end)
+        assert variable.location.end_char == end, (variable, start, end)
 
     # Ranges are 1-indexed [start:end[
     ranges = [
         (len('std::print(f"---{s'), len('std::print(f"---{s}')),
         (len('std::print(f"---{s}{m'), len('std::print(f"---{s}{mm}')),
         (len('std::print(f"---{s}{mm} - {sub.a'), len('std::print(f"---{s}{mm} - {sub.attr}')),
+        (len('std::print(f"---{s}{mm} - {sub.attr} - {  p'), len('std::print(f"---{s}{mm} - {sub.attr} - {  padded ')),
+        #                                                                                               43  ^     ^ 49 |
     ]
     variables = statements[0].children[0]._variables
 
-    for var, range in zip(variables, ranges):
+    for var, range in zip([var[0] for var in variables], ranges):
         check_range(var, *range)
 
 
@@ -335,5 +337,5 @@ std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
     ]
     variables = statements[0].children[0]._variables
 
-    for var, range in zip(variables, ranges):
+    for var, range in zip([var[0] for var in variables], ranges):
         check_range(var, *range)

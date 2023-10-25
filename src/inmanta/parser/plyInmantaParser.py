@@ -900,10 +900,10 @@ def p_constant_fstring(p: YaccProduction) -> None:
         Associates a parsed field name with a locatable string
         """
         # range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
-        # assert match[1]  # make mypy happy
         # locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
         # locatable_matches.append((match[1], locatable_string))
 
+        assert match[1]  # make mypy happy
         field_name_left_trim = match[1].lstrip()
         left_spaces: int = len(match[1]) - len(field_name_left_trim)
         field_name_full_trim = field_name_left_trim.rstrip()
@@ -985,7 +985,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
         else:
             return start_lnr + lines, position - before.rindex("\n")
 
-    locatable_matches: List[Tuple[str, LocatableString]] = []
+    locatable_matches: List[Tuple[str, LocatableString, Tuple[int, int]]] = []
     for match in matches:
         start_line, start_char = char_count_to_lnr_char(match.start(2))
         end_line, end_char = char_count_to_lnr_char(match.end(2))
