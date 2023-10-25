@@ -1,4 +1,3 @@
 description: Fix typos in docstrings.
-issue-nr: 549
 change-type: patch
 destination-branches: [master, iso6]
