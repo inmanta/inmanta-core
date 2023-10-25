@@ -1382,7 +1382,7 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     os.symlink(os.path.join(module_dir, rel_path_src), module_dir_site_packages)
 
     # verify that module can be found
-    module: Optional[ModuleV2] = ModuleV2Source([]).get_installed_module(DummyProject(autostd=False), "minimalv2module")
+    module: Optional[ModuleV2] = ModuleV2Source().get_installed_module(DummyProject(autostd=False), "minimalv2module")
     assert module is not None
     assert module.path == module_dir
 
@@ -1481,7 +1481,7 @@ import complex_module_dependencies_mod2
 
 complex_module_dependencies_mod2::cmd_mod2()
         """.strip(),
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[
             InmantaModuleRequirement.parse("complex_module_dependencies_mod2").get_python_package_requirement(),
         ],

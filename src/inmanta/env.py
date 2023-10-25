@@ -314,7 +314,9 @@ class PipConfig(BaseModel):
         confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
         `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
     :param pre:  allow pre-releases when installing Python packages, i.e. pip --pre.
-        Defaults to False. When false and pip.use-system-config=true we follow the system config.
+        Defaults to None.
+        When None and pip.use-system-config=true we follow the system config.
+        When None and pip.use-system-config=false, we don't allow pre-releases.
     :param use_system_config: defaults to false.
         When true, sets the pip's index url, extra index urls and pre according to the respective settings outlined above
             but otherwise respect any pip environment variables and/or config in the pip config file,
@@ -331,7 +333,7 @@ class PipConfig(BaseModel):
     index_url: Optional[str] = None
     # Singular to be consistent with pip itself
     extra_index_url: Sequence[str] = []
-    pre: bool = False
+    pre: Optional[bool] = None
     use_system_config: bool = False
 
     def has_source(self) -> bool:
@@ -541,6 +543,12 @@ class Pip(PipCommandBuilder):
                 del sub_env["PIP_INDEX_URL"]
             if "PIP_PRE" in sub_env:
                 del sub_env["PIP_PRE"]
+
+        if config.pre is not None:
+            # Make sure that IF pip pre is set, we enforce it
+            # The `--pre` option can only enable it
+            # The env var can both enable and disable
+            sub_env["PIP_PRE"] = str(config.pre)
 
         cls.run_pip(cmd, sub_env, constraints_files, requirements_files)
 
