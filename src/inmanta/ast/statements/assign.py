@@ -621,10 +621,10 @@ class StringFormatV2(FormattedString):
 
     def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
         """
-            :param format_string: The string on which to perform substitution
-            :param variables: Sequence of tuples each holding a reference to a variable to substitute in the format_string
-                and the name of this variable. This name is not used in practice since it's already present in the reference's
-                full_name attribute.
+        :param format_string: The string on which to perform substitution
+        :param variables: Sequence of tuples each holding a reference to a variable to substitute in the format_string
+            and the name of this variable. This name is not used in practice since it's already present in the reference's
+            full_name attribute.
         """
         only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
