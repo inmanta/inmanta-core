@@ -74,7 +74,7 @@ def validate_type(
         raise ValueError(f"Unknown fq_type_name: {fq_type_name}")
 
     custom_annotations: object = []
-    validation_parameters = validation_parameters.copy()
+    validation_parameters = validation_parameters.copy() if validation_parameters is not None else None
 
     # workaround for Pydantic v1 python regex support and removal of stricturl
     if fq_type_name == "pydantic.constr" and validation_parameters is not None:
