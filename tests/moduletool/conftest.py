@@ -114,7 +114,7 @@ def modules_repo(git_modules_dir) -> str:
     +--------+-------------+----------+
     | mod13  | mod11 <4.2.0| 1.2.3    |
     +--------+-------------+----------+
-    |        | mod11 <4.0.0| 1.2.4    |
+    |        | mod11 <4.1.2| 1.2.4    |
     +--------+-------------+----------+"""
     tempdir = git_modules_dir
 
@@ -163,7 +163,7 @@ def modules_repo(git_modules_dir) -> str:
     add_file(mod12, "file", "test", "release version 4.0.0", version="4.0.0")
 
     mod13 = make_module_simple(reporoot, "mod13", version="1.2.3", depends=[("mod11", "<4.2.0")])
-    update_requires(mod13, [["mod11"], ["<4.0.0"]], "add dependency", version="1.2.4")
+    update_requires(mod13, [["mod11"], ["<4.1.2"]], "add dependency", version="1.2.4")
 
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]

@@ -222,7 +222,7 @@ def test_module_update_with_v1_module(
     assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
     ProjectTool().update()
     assert ModuleV1(project=None, path=mod13_dir).version == Version("1.2.4")
-    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.0")
 
 
 @pytest.mark.slowtest
