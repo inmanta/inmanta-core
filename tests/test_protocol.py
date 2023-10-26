@@ -30,7 +30,6 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import pydantic
 import pytest
 import tornado
-from pydantic.types import StrictBool
 from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
@@ -808,7 +807,7 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     """Test dict which may have None as a value"""
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    types = Union[pydantic.StrictInt, pydantic.StrictStr]
+    types = Union[int, str]
 
     class Result(BaseModel):
         val: Optional[types]
@@ -935,7 +934,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime, "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime, "
         "bytes or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -958,7 +957,7 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime, "
+        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, bool, datetime, "
         "bytes or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
@@ -977,7 +976,7 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
     """Test use of union types"""
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    SimpleTypes = Union[float, int, StrictBool, str]  # NOQA
+    SimpleTypes = Union[float, int, bool, str]  # NOQA
     AttributeTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]  # NOQA
 
     class ProjectServer(ServerSlice):
