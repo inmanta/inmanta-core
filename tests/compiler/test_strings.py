@@ -187,6 +187,7 @@ std::print(z)
         (r"f'{arg:^5}'", " 123 \n"),
         (r"f'{arg}'", "123\n"),
         (r"f' {  arg    } '", " 123 \n"),
+        (r"f' {\t arg \t} '", " 123 \n"),
     ],
 )
 def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
@@ -236,7 +237,7 @@ a = A(b=b)
 b = B(c=c)
 c = C()
 
-std::print(f"{a.b.c.n_c}")
+std::print(f"{  a.b.c.n_c }")
         """
     )
 
@@ -275,7 +276,7 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr   }")
     ]
     variables = statements[0].children[0]._variables
 
-    for var, range in zip([var[0] for var in variables], ranges):
+    for var, range in zip(variables, ranges):
         check_range(var, *range)
 
 
@@ -345,5 +346,5 @@ std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
     ]
     variables = statements[0].children[0]._variables
 
-    for var, range in zip([var[0] for var in variables], ranges):
+    for var, range in zip(variables, ranges):
         check_range(var, *range)

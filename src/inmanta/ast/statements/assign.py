@@ -608,20 +608,27 @@ class FStringFormatter(Formatter):
         Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
         retrieved by their full name.
         """
-        return (kwds[key], key)
+        return (kwds[key.strip()], key)
 
 
 class StringFormatV2(FormattedString):
     """
     Create a new string by using python build in formatting
+
     """
 
     __slots__ = ()
 
     def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
+        """
+            :param format_string: The string on which to perform substitution
+            :param variables: Sequence of tuples each holding a reference to a variable to substitute in the format_string
+                and the name of this variable. This name is not used in practice since it's already present in the reference's
+                full_name attribute.
+        """
         only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
-        self._variables = variables
+        self._variables = only_refs
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -630,14 +637,13 @@ class StringFormatV2(FormattedString):
         # We can't cache the formatter because it has no ability to cache the parsed string
 
         kwargs = {}
-        for _var, _name in self._variables:
+        for _var in self._variables:
             value = _var.execute(requires, resolver, queue)
             if isinstance(value, Unknown):
                 return Unknown(self)
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
-
-            kwargs[_name] = value
+            kwargs[_var.full_name] = value
 
         result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
 
