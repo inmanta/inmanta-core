@@ -186,7 +186,7 @@ std::print(z)
         (r"f'{arg}{arg}{arg}'", "123123123\n"),
         (r"f'{arg:@>5}'", "@@123\n"),
         (r"f'{arg:^5}'", " 123 \n"),
-        (r"f' {  arg    } '", " 123 \n"),
+        (r"f' {  \t\narg  \n  } '", " 123 \n"),
     ],
 )
 def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
@@ -252,9 +252,9 @@ def test_fstring_numbering_logic():
     """
     statements = parse_code(
         """
-std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr   }")
-#                |   |           |           |                        |
-#                [[ [-[        [---[      [-----[                   [---[     <--- expected ranges
+std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
+#                |   |           |           |                          |
+#                [[ [-[        [---[      [-----[                     [---[     <--- expected ranges
         """
     )
 
@@ -269,8 +269,8 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr   }")
         (len('std::print(f"---{s}{mm} - {sub.a'), len('std::print(f"---{s}{mm} - {sub.attr}')),
         (len('std::print(f"---{s}{mm} - {sub.attr} - {  p'), len('std::print(f"---{s}{mm} - {sub.attr} - {  padded ')),
         (
-            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.a'),
-            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr '),
+            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.a'),
+            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr '),
         ),
     ]
     variables = statements[0].children[0]._variables
