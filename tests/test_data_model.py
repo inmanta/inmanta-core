@@ -48,9 +48,12 @@ def test_model_inheritance():
 
 
 def test_union_bool_json():
-    """Test if pydantic correctly serializes a bool to bool and not int when using a Union.
+    """
+    Test if pydantic correctly serializes a bool to bool and not int when using a Union.
 
-    Union in python < 3.7 removes all strict subtypes. bool and strictbool are subtypes of int
+    With pydantic<1.10 a union of int and StrictBool would cause True to become 1, hence the need for StrictNonIntBool.
+    With pydantic v2 even StrictBool is not required anymore because of smart unions.
+    This test case verifies that bool, StrictBool and StrictNonIntBool all behave the same when used in a union.
     """
 
     class Test(pydantic.BaseModel):
@@ -58,17 +61,17 @@ def test_union_bool_json():
         attr2: typing.Union[pydantic.StrictBool]
         attr3: pydantic.StrictBool
         attr4: typing.Union[types.StrictNonIntBool, int]
+        attr5: typing.Union[bool, int]
+        attr6: typing.Union[int, bool]
 
-    x = Test(attr1=True, attr2=True, attr3=True, attr4=True)
+    x = Test(attr1=True, attr2=True, attr3=True, attr4=True, attr5=True, attr6=True)
 
-    if sys.version_info[0] == 3 and sys.version_info[1] < 7:
-        assert x.attr1 is not True and x.attr1 == 1
-    else:
-        assert x.attr1 is True
-
+    assert x.attr1 is True
     assert x.attr2 is True
     assert x.attr3 is True
     assert x.attr4 is True
+    assert x.attr5 is True
+    assert x.attr6 is True
 
 
 def test_log_line_serialization():

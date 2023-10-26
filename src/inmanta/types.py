@@ -18,35 +18,35 @@
 # This file defines named type definition for the Inmanta code base
 
 import builtins
+import re
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
+import pydantic
 import typing_inspect
-from pydantic import errors, types
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler, errors, types
+from pydantic.json_schema import JsonSchemaValue
+
+from pydantic_core import CoreSchema, PydanticCustomError, core_schema
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
     from inmanta.data.model import BaseModel  # noqa: F401
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
-import re
-from dataclasses import dataclass
-from typing import Any
-
-from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
-from pydantic.json_schema import JsonSchemaValue
-
-from pydantic_core import CoreSchema, PydanticCustomError, core_schema
-
 
 @dataclass
 class PythonRegex:
-    """A pydantic regex type use for constrained strings that use a regex instead of pattern"""
+    """
+    A pydantic regex type for constrained strings that use the old "regex" parameter instead of the new "pattern".
+    Added for compatibility with
+    """
 
     regex: str
 
-    def __get_pydantic_core_schema__(self, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+    def __get_pydantic_core_schema__(self, source_type: object, handler: GetCoreSchemaHandler) -> CoreSchema:
         try:
             regex = re.compile(self.regex)
         except re.error as e:
@@ -72,35 +72,9 @@ class PythonRegex:
         return json_schema
 
 
-class StrictNonIntBool(object):
-    """
-    StrictNonIntBool to allow for bools which are not type-coerced and that are not a subclass of int
-    Based on StrictBool from pydantic
-    """
-
-    @classmethod
-    def __get_validators__(cls) -> "types.CallableGenerator":
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value: Any, info: Any) -> bool:
-        """
-        Ensure that we only allow bools.
-        """
-        if isinstance(value, bool):
-            return value
-
-        raise errors.StrictBoolError()
-
-    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler = None) -> JsonSchemaValue:
-        if handler is None:
-            # TODO: Handler is actually mandatory however for some schemas it will call us without this argument. We need to
-            #  figure out why (but the stacktrace points to the wrong code so it maybe in the rust part of pydantic) or just
-            #  file a bug. It is triggered by test_openapi.py::test_tags
-            return {}
-        json_schema = handler(core_schema)
-        json_schema["type"] = "boolean"
-        return json_schema
+# TODO: drop usage of this object in other components: inmanta-lsm
+# kept for backwards compatibility
+StrictNonIntBool = pydantic.StrictBool
 
 
 def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
@@ -112,7 +86,7 @@ def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
     return builtins.issubclass(sub, super)
 
 
-PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
+PrimitiveTypes = Union[uuid.UUID, bool, int, float, datetime, str]
 SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
 JsonType = Dict[str, Any]

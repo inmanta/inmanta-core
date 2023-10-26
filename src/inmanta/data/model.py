@@ -24,13 +24,13 @@ from typing import ClassVar, Dict, List, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import ConfigDict, Field, StrictFloat, StrictInt, StrictStr, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
+from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -208,7 +208,7 @@ class AttributeStateChange(BaseModel):
         return v
 
 
-EnvSettingType = Union[StrictNonIntBool, StrictInt, StrictFloat, StrictStr, Dict[str, Union[str, int, StrictNonIntBool]]]
+EnvSettingType = Union[bool, int, float, str, Dict[str, Union[str, int, bool]]]
 
 
 class Environment(BaseModel):

@@ -13,7 +13,7 @@ def test_method_validation() -> None:
         "set_setting_arguments",
         a=(str, None),
         b=(uuid.UUID, None),
-        c=(Union[uuid.UUID, types.StrictNonIntBool, int, float, datetime.datetime, str, Dict[str, Any]], None),
+        c=(Union[uuid.UUID, bool, int, float, datetime.datetime, str, Dict[str, Any]], None),
         __base__=pydantic.BaseModel,
     )
 
@@ -22,7 +22,6 @@ def test_method_validation() -> None:
     validator(**data)
 
     # TODO: when passing strings as types you get weird errors
-    # TODO: StrictNonIntBool needs a rewrite or removed
 
 
 def test_float_str() -> None:
