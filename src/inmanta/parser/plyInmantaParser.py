@@ -906,7 +906,6 @@ def p_constant_fstring(p: YaccProduction) -> None:
         right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
 
         range: Range = Range(p[1].location.file, start_lnr, start_char_pos + left_spaces, start_lnr, end_char - right_spaces)
-        assert match[1]  # make mypy happy
         locatable_string = LocatableString(field_name_full_trim, range, p[1].lexpos, p[1].namespace)
         locatable_matches.append((field_name_full_trim, locatable_string))
 

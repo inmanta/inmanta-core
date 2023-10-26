@@ -182,10 +182,10 @@ std::print(z)
 @pytest.mark.parametrize(
     "f_string,expected_output",
     [
+        (r"f'{arg}'", "123\n"),
         (r"f'{arg}{arg}{arg}'", "123123123\n"),
         (r"f'{arg:@>5}'", "@@123\n"),
         (r"f'{arg:^5}'", " 123 \n"),
-        (r"f'{arg}'", "123\n"),
         (r"f' {  arg    } '", " 123 \n"),
     ],
 )
@@ -259,8 +259,8 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  padded.sub.attr   }")
     )
 
     def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start, (variable, start, end)
-        assert variable.location.end_char == end, (variable, start, end)
+        assert variable.location.start_char == start
+        assert variable.location.end_char == end
 
     # Ranges are 1-indexed [start:end[
     ranges = [
