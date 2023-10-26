@@ -227,6 +227,13 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         pass
 
+    def get_base_query_for_page_count(self) -> SimpleQueryBuilder:
+        """
+        Override this method to use a different query than returned by get_base_query()
+        to calculate the page count for a certain page.
+        """
+        return self.get_base_query()
+
     @property
     @abc.abstractmethod
     def allowed_filters(self) -> Dict[str, Type[Filter]]:
@@ -298,7 +305,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         either from the PagingBoundaries if we have a valid page,
         or from the RequestedPagingBoundaries if we got an empty page
         """
-        query_builder = self.get_base_query()
+        query_builder = self.get_base_query_for_page_count()
 
         query_builder = query_builder.filter(
             *data.BaseDocument.get_composed_filter_with_query_types(
