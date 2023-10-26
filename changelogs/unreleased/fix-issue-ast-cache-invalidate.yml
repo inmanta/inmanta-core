@@ -1,4 +1,4 @@
-description: Resolved a bug where the AST cache failed to invalidate after a module installation/update, leading to unrefreshed dependencies for the said module.
+description: Resolved a bug where the AST cache was not invalidated after a module installation/update, leading to unrefreshed dependencies for the said module.
 change-type: patch
 destination-branches: [master, iso6]
 sections:
