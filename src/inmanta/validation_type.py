@@ -61,7 +61,8 @@ def validate_type(
             tld_required: bool = True
             allowed_schemes: Optional[Set[str]] = None
 
-    :raises ValueError: When the given fq_type_name is an unsupported type name or for workaround validation
+    :raises ValueError: When the given fq_type_name is an unsupported type name or when otherwise invalid parameters are
+        passed.
     :raises pydantic.ValidationError: The provided value didn't pass type validation.
     """
     if not (
@@ -72,20 +73,36 @@ def validate_type(
     ):
         raise ValueError(f"Unknown fq_type_name: {fq_type_name}")
 
+    custom_annotations: object = []
+    validation_parameters = validation_parameters.copy()
+
     # workaround for Pydantic v1 python regex support and removal of stricturl
-    if fq_type_name == "pydantic.constr":
-        t = Annotated[str, PythonRegex(str(validation_parameters["regex"]))]
-        validation_parameters = None
-    else:
-        module_name, type_name = fq_type_name.split(".", 1)
-        module = importlib.import_module(module_name)
-        t = getattr(module, type_name)
+    if fq_type_name == "pydantic.constr" and validation_parameters is not None:
+        # TODO: add tests for regex + other constr parameters -> tests/test_validation_type.py
+        regex: object = validation_parameters.get("regex", None)
+        if regex is not None:
+            custom_annotations.append(PythonRegex(str(validation_parameters["regex"])))
+        del validation_parameters["regex"]
 
-    # Construct pydantic model
-    if validation_parameters is not None:
-        model = pydantic.create_model(fq_type_name, value=(t(**validation_parameters), ...))
-    else:
-        model = pydantic.create_model(fq_type_name, value=(t, ...))
+    module_name, type_name = fq_type_name.split(".", 1)
+    module = importlib.import_module(module_name)
+    requested_type: object = getattr(module, type_name)
 
-    # Do validation
-    model(value=value)
+    parametrized_type: object
+    if validation_parameters is None:
+        parametrized_type = requested_type
+    elif not callable(requested_type):
+        raise ValueError(
+            f"validate_type got validation parameters {validation_parameters}"
+            f" but validation type {fq_type_name} is not parametrized"
+        )
+    else:
+        parametrized_type = requested_type(**validation_parameters)
+
+    validation_type = pydantic.TypeAdapter(
+        # add custom validation annotations
+        parametrized_type if not custom_annotations else Annotated[parametrized_type, *custom_annotations]
+    )
+
+    # run validation logic
+    validation_type.validate_python(value)
