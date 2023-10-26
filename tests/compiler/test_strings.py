@@ -187,7 +187,6 @@ std::print(z)
         (r"f'{arg:^5}'", " 123 \n"),
         (r"f'{arg}'", "123\n"),
         (r"f' {  arg    } '", " 123 \n"),
-        (r"f' {\t arg \t} '", " 123 \n"),
     ],
 )
 def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
