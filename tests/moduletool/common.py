@@ -22,6 +22,7 @@ from typing import Optional
 
 import yaml
 
+import ruamel.yaml
 from inmanta.config import Config
 from inmanta.module import InstallMode, Project
 from inmanta.moduletool import ModuleTool
@@ -89,6 +90,43 @@ repo: %s
 def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
     with open(os.path.join(modpath, file), "w", encoding="utf-8") as projectfile:
         projectfile.write(content)
+
+    if version is None:
+        return commitmodule(modpath, msg)
+    else:
+        old_cwd = os.getcwd()
+        os.chdir(modpath)
+        subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
+        ModuleTool().commit(msg, version=version, dev=dev, commit_all=True, tag=tag)
+        os.chdir(old_cwd)
+
+
+def update_requires(modpath, deps, msg, version=None, dev=False, tag=True):
+    mainfile = "module.yml"
+    file_path = os.path.join(modpath, mainfile)
+    yaml = ruamel.yaml.YAML()
+
+    with open(file_path, "r") as file:
+        data = yaml.load(file)
+
+    # Ensure 'requires' field exists and is a list
+    if "requires" not in data:
+        data["requires"] = []
+
+    # Prepare a dictionary to hold the latest version requirement for each module
+    requires_dict = {item.split()[0]: item for item in data["requires"]}
+
+    # Update the dictionary with the new version requirements
+    for module, version_spec in zip(deps[0], deps[1]):
+        module_name = module  # corrected here
+        requires_dict[module_name] = f"{module_name} {version_spec}"  # corrected here
+
+    # Convert the dictionary back to a list
+    data["requires"] = list(requires_dict.values())
+
+    # Write the updated data back to the file
+    with open(file_path, "w") as file:
+        yaml.dump(data, file)
 
     if version is None:
         return commitmodule(modpath, msg)
