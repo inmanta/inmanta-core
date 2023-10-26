@@ -18,7 +18,7 @@
 import os
 import subprocess
 from subprocess import CalledProcessError
-from typing import Optional
+from typing import List, Optional, Tuple, Union
 
 import yaml
 
@@ -101,7 +101,20 @@ def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
         os.chdir(old_cwd)
 
 
-def update_requires(modpath, deps, msg, version=None, dev=False, tag=True):
+def update_requires(
+    modpath: str, deps: List[Tuple[str, str]], commit_msg: str, version: str, dev: bool = False, tag: bool = True
+) -> None:
+    """
+    Updates the version requirements of dependencies in a module's YAML file and performs a git commit and tags the commit
+    with the specified version.
+
+    :param modpath: The path to the module.
+    :param deps: A list of tuples, each containing a dependency name and its corresponding version specification.
+    :param commit_msg: The commit message to use if a new version is specified.
+    :param version: The version to tag the commit with
+    :param dev: A flag indicating whether this is a development version. Default is False.
+    :param tag: A flag indicating whether to tag the commit. Default is True.
+    """
     mainfile = "module.yml"
     file_path = os.path.join(modpath, mainfile)
     yaml = ruamel.yaml.YAML()
@@ -117,9 +130,8 @@ def update_requires(modpath, deps, msg, version=None, dev=False, tag=True):
     requires_dict = {item.split()[0]: item for item in data["requires"]}
 
     # Update the dictionary with the new version requirements
-    for module, version_spec in zip(deps[0], deps[1]):
-        module_name = module  # corrected here
-        requires_dict[module_name] = f"{module_name} {version_spec}"  # corrected here
+    for module, version_spec in deps:
+        requires_dict[module] = f"{module} {version_spec}"
 
     # Convert the dictionary back to a list
     data["requires"] = list(requires_dict.values())
@@ -128,14 +140,11 @@ def update_requires(modpath, deps, msg, version=None, dev=False, tag=True):
     with open(file_path, "w") as file:
         yaml.dump(data, file)
 
-    if version is None:
-        return commitmodule(modpath, msg)
-    else:
-        old_cwd = os.getcwd()
-        os.chdir(modpath)
-        subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
-        ModuleTool().commit(msg, version=version, dev=dev, commit_all=True, tag=tag)
-        os.chdir(old_cwd)
+    old_cwd = os.getcwd()
+    os.chdir(modpath)
+    subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
+    ModuleTool().commit(commit_msg, version=version, dev=dev, commit_all=True, tag=tag)
+    os.chdir(old_cwd)
 
 
 def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
