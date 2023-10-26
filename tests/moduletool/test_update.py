@@ -16,15 +16,12 @@
     Contact: code@inmanta.com
 """
 import os
-import shutil
 from typing import Dict
 
 import py.path
 import pytest
-import yaml
 from pkg_resources import Requirement
 
-from inmanta import module
 from inmanta.config import Config
 from inmanta.env import LocalPackagePath, process_env
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
