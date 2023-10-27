@@ -101,12 +101,12 @@ def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
         os.chdir(old_cwd)
 
 
-def update_requires(
+def add_requires(
     modpath: str, deps: List[Tuple[str, str]], commit_msg: str, version: str, dev: bool = False, tag: bool = True
 ) -> None:
     """
-    Updates the version requirements of dependencies in a module's YAML file and performs a git commit and tags the commit
-    with the specified version.
+    Add the version requirements of dependencies in a module's YAML file and adds the import to the .cf file.
+    Performs a git commit and tags the commit with the specified version.
 
     :param modpath: The path to the module.
     :param deps: A list of tuples, each containing a dependency name and its corresponding version specification.
@@ -139,6 +139,18 @@ def update_requires(
     # Write the updated data back to the file
     with open(file_path, "w") as file:
         yaml.dump(data, file)
+
+    model = os.path.join(modpath, "model")
+
+    init_file_path = os.path.join(model, "_init.cf")
+    with open(init_file_path, "r", encoding="utf-8") as projectfile:
+        existing_content = projectfile.read()
+
+    import_statements = "\n".join(f"import {module}" for module, _ in deps)
+    updated_content = f"{import_statements}\n{existing_content}"
+
+    with open(init_file_path, "w", encoding="utf-8") as projectfile:
+        projectfile.write(updated_content)
 
     old_cwd = os.getcwd()
     os.chdir(modpath)

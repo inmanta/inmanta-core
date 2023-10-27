@@ -496,6 +496,8 @@ compatible with the dependencies specified by the updated modules.
                 spec = specs.get(v1_module, [])
                 try:
                     ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
+                    # Invalidate the state of the updated module
+                    my_project.invalidate_state(v1_module)
                 except Exception:
                     LOGGER.exception("Failed to update module %s", v1_module)
 

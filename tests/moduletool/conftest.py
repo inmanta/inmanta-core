@@ -26,12 +26,12 @@ from inmanta.module import InstallMode
 from moduletool.common import (
     add_file,
     add_file_and_compiler_constraint,
+    add_requires,
     commitmodule,
     make_module_simple,
     make_module_simple_deps,
     makemodule,
     makeproject,
-    update_requires,
 )
 
 
@@ -162,8 +162,8 @@ def modules_repo(git_modules_dir) -> str:
     add_file(mod12, "file", "test", "release version 4.0.0.dev0", version="4.0.0.dev0")
     add_file(mod12, "file", "test", "release version 4.0.0", version="4.0.0")
 
-    mod13 = make_module_simple(reporoot, "mod13", version="1.2.3", depends=[("mod11", "<4.2.0")])
-    update_requires(mod13, [("mod11", "<4.1.2")], commit_msg="add dependency", version="1.2.4")
+    mod13 = make_module_simple(reporoot, "mod13", version="1.2.3")
+    add_requires(mod13, [("mod11", "<4.1.2")], commit_msg="add dependency", version="1.2.4")
 
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]
