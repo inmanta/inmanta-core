@@ -247,10 +247,8 @@ class Number(Primitive):
         if isinstance(value, AnyType):
             return True
 
-        if not isinstance(value, numbers.Number):
+        if not isinstance(value, float):
             raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
-        if isinstance(value, numbers.Integral):
-            raise RuntimeException(None, "Invalid value '%s', expected float" % value)  # Updated line
         return True  # allow this function to be called from a lambda function
 
     def cast(self, value: Optional[object]) -> object:
@@ -263,12 +261,14 @@ class Number(Primitive):
             # propagate unknowns
             return value
 
-        if isinstance(value, numbers.Integral) or isinstance(value, str) and value.isdigit():
+        try:
+            # Try to convert value to float
             return float(value)
-        elif isinstance(value, bool):
+        except ValueError:
+            pass  # Value cannot be converted to float
+
+        if isinstance(value, bool):
             return float(int(value))
-        elif isinstance(value, float):
-            return value
 
         raise exception
 
@@ -296,9 +296,7 @@ class Integer(Number):
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
 
     def validate(self, value: Optional[object]) -> bool:
-        if not super().validate(value):
-            return False
-        if not isinstance(value, numbers.Integral):
+        if not isinstance(value, int):
             raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
         return True
 

@@ -103,9 +103,24 @@ end
     )
 
 
+def test_number_type_invalid(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    number i = 0
+end
+        """,
+        "Invalid value '0', expected Number (reported in number i = 0 ({dir}/main.cf:3:12))",
+    )
+
+
 def test_cast_to_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
+a = number(21)
+a = 21.0
+b = number(25.0)
+b = 25.0
 x = number("31")
 x = 31.0
 y = number("22.0")
@@ -118,35 +133,39 @@ u = 0
     )
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
     x = root.lookup("x").get_value()
     y = root.lookup("y").get_value()
     z = root.lookup("z").get_value()
     u = root.lookup("u").get_value()
+    assert Number().validate(a)
+    assert Number().validate(b)
     assert Number().validate(x)
     assert Number().validate(y)
     assert Number().validate(z)
     assert Number().validate(u)
 
 
-# def test_cast_to_number(snippetcompiler):
-#     snippetcompiler.setup_for_snippet(
-#         """
-# entity A:
-#     number x
-# end
-#
-# implement A using std::none
-#
-# index A(x)
-#
-#
-# test = (A(x=0) == A(x=0.0))
-#         """,
-#     )
-#     (_, scopes) = compiler.do_compile()
-#     root: Namespace = scopes.get_child("__config__")
-#     test = root.lookup("test").get_value()
-#     assert test
+def test_int_float(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    number x
+end
+
+implement A using std::none
+
+index A(x)
+test = A(x=0)
+test2 = A(x=0.0)
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    test = root.lookup("test").get_value()
+    test2 = root.lookup("test").get_value()
+    assert test
 
 
 def test_cast_to_int(snippetcompiler):
