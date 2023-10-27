@@ -382,7 +382,6 @@ class Entity(NamedType, WithComment):
         been set
         """
         attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
-
         # check if an index entry can be added
         for index_attributes in self.get_indices():
             index_ok = True
