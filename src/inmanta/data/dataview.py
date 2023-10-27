@@ -1246,3 +1246,91 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             ).dict()
             for res in records
         ]
+
+
+class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
+    """
+    A query builder that applies any filters and the LIMIT statement to the prelude query rather than the outer query.
+    """
+
+    def __init__(
+        self,
+        prelude_query_builder: SimpleQueryBuilder,
+        select_clause: Optional[str] = None,
+        from_clause: Optional[str] = None,
+        db_order: Optional[DatabaseOrderV2] = None,
+        backward_paging: bool = False,
+    ) -> None:
+        super().__init__(
+            select_clause=select_clause,
+            from_clause=from_clause,
+            filter_statements=None,
+            values=None,
+            db_order=db_order,
+            limit=None,
+            backward_paging=backward_paging,
+            prelude=None,
+        )
+        self._prelude_query_builder = prelude_query_builder
+
+    @property
+    def offset(self) -> int:
+        """The current offset of the values to be used for filter statements"""
+        return len(self.values) + len(self._prelude_query_builder.values) + 1
+
+    def build(self) -> Tuple[str, List[object]]:
+        prelude_query, prelude_values = self._prelude_query_builder.build()
+        prelude_query_in_with_block = f"WITH prelude AS ({prelude_query})"
+        delegate: SimpleQueryBuilder = SimpleQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=self._from_clause,
+            filter_statements=self._prelude_query_builder.filter_statements + self.filter_statements,
+            values=self._prelude_query_builder.values + self.values,
+            db_order=self.db_order,
+            limit=None,
+            backward_paging=self.backward_paging,
+            prelude=prelude_query_in_with_block,
+        )
+        full_query, values_full = delegate.build()
+        return full_query, prelude_values
+
+    def select(self, select_clause: str) -> "PreludeBasedFilteringQueryBuilder":
+        """Set the select clause of the query"""
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=select_clause,
+            from_clause=self._from_clause,
+            db_order=self.db_order,
+            backward_paging=self.backward_paging,
+            prelude_query_builder=self._prelude_query_builder,
+        )
+
+    def from_clause(self, from_clause: str) -> "PreludeBasedFilteringQueryBuilder":
+        """Set the from clause of the query"""
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=from_clause,
+            db_order=self.db_order,
+            backward_paging=self.backward_paging,
+            prelude_query_builder=self._prelude_query_builder,
+        )
+
+    def order_and_limit(
+        self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
+    ) -> "PreludeBasedFilteringQueryBuilder":
+        """Set the order and limit of the query"""
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=self._from_clause,
+            db_order=db_order,
+            backward_paging=backward_paging,
+            prelude_query_builder=self._prelude_query_builder.order_and_limit(db_order, limit, backward_paging),
+        )
+
+    def filter(self, filter_statements: List[str], values: List[object]) -> "PreludeBasedFilteringQueryBuilder":
+        return PreludeBasedFilteringQueryBuilder(
+            select_clause=self.select_clause,
+            from_clause=self._from_clause,
+            db_order=self.db_order,
+            backward_paging=self.backward_paging,
+            prelude_query_builder=self._prelude_query_builder.filter(filter_statements, values),
+        )
