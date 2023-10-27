@@ -465,14 +465,14 @@ class VersionedResourceDetails(ResourceDetails):
     resource_version_id: ResourceVersionIdStr
     version: int
 
-    @classmethod
     @model_validator(mode="after")
-    def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
+    @classmethod
+    def ensure_version_field_set_in_attributes(cls, v: "VersionedResourceDetails") -> "VersionedResourceDetails":
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
-        if "version" not in v["attributes"]:
-            v["attributes"]["version"] = v["version"]
+        if "version" not in v.attributes:
+            v.attributes["version"] = v.version
         return v
 
 
