@@ -631,7 +631,8 @@ class AuthJWTConfig(object):
             # HTTPError is raised for non-200 responses; the response
             # can be found in e.response.
             raise ValueError(
-                "Unable to load key data for %s using the provided jwks_uri. Got error: %s" % (self.section, e.reason)
+                "Unable to load key data for %s using the provided jwks_uri %s. Got error: %s"
+                % (self.section, self.jwks_uri, e.reason)
             )
         except Exception as e:
             # Other errors are possible, such as IOError.

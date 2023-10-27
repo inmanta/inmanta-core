@@ -1998,6 +1998,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         else:
             self.strict_deps_check = self._metadata.strict_deps_check
 
+        self._complete_ast: Optional[Tuple[List[Statement], List[BasicBlock]]] = None
+        # Cache for the complete ast
+
     def get_relation_precedence_policy(self) -> List[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
@@ -2125,8 +2128,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 self.install_modules()
             self.get_complete_ast()
             self.loaded = True
+            start = time()
             self.verify()
             self.load_plugins()
+            end = time()
+            LOGGER.debug("Plugin loading took %0.03f seconds", end - start)
 
     def invalidate_state(self, module: Optional[str] = None) -> None:
         """
@@ -2140,6 +2146,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         else:
             self.modules = {}
         self.loaded = False
+        self._ast_cache = None
+        self._complete_ast = None
 
     def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
         if self._ast_cache is None:
@@ -2157,6 +2165,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return imports
 
     def get_complete_ast(self) -> Tuple[List[Statement], List[BasicBlock]]:
+        if self._complete_ast is not None:
+            return self._complete_ast
         start = time()
         # load ast
         (statements, block) = self.get_ast()
@@ -2168,9 +2178,10 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             blocks.append(nb)
 
         end = time()
-        LOGGER.debug("Parsing took %f seconds", end - start)
+        LOGGER.debug("Parsing took %0.03f seconds", end - start)
         cache_manager.log_stats()
-        return (statements, blocks)
+        self._complete_ast = (statements, blocks)
+        return self._complete_ast
 
     def __load_ast(self) -> Tuple[List[Statement], BasicBlock]:
         main_ns = Namespace("__config__", self.root_ns)

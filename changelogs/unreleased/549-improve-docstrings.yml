@@ -1,0 +1,3 @@
+description: Fix typos in docstrings.
+change-type: patch
+destination-branches: [master, iso6]
