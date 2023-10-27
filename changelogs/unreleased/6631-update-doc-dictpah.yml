@@ -3,4 +3,4 @@ description: Update the dict_path docs (imports + location)
 issue-nr: 6631
 issue-repo: inmanta-core
 change-type: patch
-destination-branches: [master, iso6]
+destination-branches: [iso6]
