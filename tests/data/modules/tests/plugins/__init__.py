@@ -10,7 +10,7 @@ def unknown() -> "any":
 
 
 @plugin
-def length(string: "string") -> "number":
+def length(string: "string") -> "int":
     """returns the length of the string"""
     return len(string)
 
@@ -45,7 +45,7 @@ def resolve_rule_purged_status(
 
 
 @plugin
-def once(string: "string") -> "number":
+def once(string: "string") -> "int":
     prev = counter[string]
     counter[string] = prev + 1
     return prev

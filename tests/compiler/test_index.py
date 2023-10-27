@@ -55,7 +55,7 @@ entity Repository extends std::File:
     bool enabled=true
     string baseurl
     string gpgkey=""
-    number metadata_expire=7200
+    int metadata_expire=7200
     bool send_event=true
 end
 
