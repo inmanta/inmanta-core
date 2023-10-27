@@ -186,7 +186,7 @@ def test_dataflow_model_default_attribute(dataflow_test_helper: DataflowTestHelp
     dataflow_test_helper.compile(
         """
 entity A:
-    number n = 42
+    int n = 42
 end
 
 implement A using std::none

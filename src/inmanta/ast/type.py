@@ -261,6 +261,8 @@ class Number(Primitive):
             # propagate unknowns
             return value
 
+        if isinstance(value, NoneValue):
+            raise exception  # raise the exception immediately if the value is NoneValue
         try:
             # Try to convert value to float
             return float(value)
@@ -299,6 +301,29 @@ class Integer(Number):
         if not isinstance(value, int):
             raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
         return True
+
+    def cast(self, value: Optional[object]) -> object:
+        """
+        Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
+        """
+        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
+
+        if isinstance(value, Unknown):
+            # propagate unknowns
+            return value
+
+        if isinstance(value, NoneValue):
+            raise exception  # raise the exception immediately if the value is NoneValue
+        try:
+            # Try to convert value to int
+            return int(value)
+        except ValueError:
+            pass  # Value cannot be converted to int
+
+        if isinstance(value, bool):
+            return int(value)
+
+        raise exception
 
     def type_string(self) -> str:
         return "int"

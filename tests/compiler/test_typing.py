@@ -126,9 +126,9 @@ x = 31.0
 y = number("22.0")
 y = 22.0
 z = number(true)
-z = 1
+z = 1.0
 u = number(false)
-u = 0
+u = 0.0
         """,
     )
     (_, scopes) = compiler.do_compile()
