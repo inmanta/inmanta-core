@@ -163,7 +163,7 @@ def modules_repo(git_modules_dir) -> str:
     add_file(mod12, "file", "test", "release version 4.0.0", version="4.0.0")
 
     mod13 = make_module_simple(reporoot, "mod13", version="1.2.3")
-    add_requires(mod13, [("mod11", "<4.1.2")], commit_msg="add dependency", version="1.2.4")
+    add_requires(mod13, deps=[("mod11", "<4.1.2")], commit_msg="add dependency", version="1.2.4")
 
     proj = makemodule(
         reporoot, "testproject", [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"]
