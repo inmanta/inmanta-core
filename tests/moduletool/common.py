@@ -127,7 +127,7 @@ def add_requires(
         data["requires"] = []
 
     # Prepare a dictionary to hold the latest version requirement for each module
-    requires_dict = {item.split()[0]: item for item in data["requires"]}
+    requires_dict = {item.strip().split()[0]: item for item in data["requires"]}
 
     # Update the dictionary with the new version requirements
     for module, version_spec in deps:
