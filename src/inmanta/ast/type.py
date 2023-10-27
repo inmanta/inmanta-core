@@ -237,7 +237,7 @@ class Number(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [int, float]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -247,7 +247,7 @@ class Number(Primitive):
         if isinstance(value, AnyType):
             return True
 
-        if not isinstance(value, float):
+        if not isinstance(value, numbers.Number):
             raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
         return True  # allow this function to be called from a lambda function
 
