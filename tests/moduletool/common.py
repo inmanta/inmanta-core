@@ -110,7 +110,7 @@ def add_requires(
 
     :param modpath: The path to the module.
     :param deps: A list of tuples, each containing a dependency name and its corresponding version specification.
-    :param commit_msg: The commit message to use if a new version is specified.
+    :param commit_msg: The commit message to use
     :param version: The version to tag the commit with
     :param dev: A flag indicating whether this is a development version. Default is False.
     :param tag: A flag indicating whether to tag the commit. Default is True.
