@@ -103,15 +103,23 @@ end
     )
 
 
-def test_number_type_invalid(snippetcompiler):
-    snippetcompiler.setup_for_error(
+def test_number_type(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
         """
 entity Test:
     number i = 0
 end
+
+implement Test using std::none
+
+Test(i = 42)
+Test(i = -42)
+Test()
+Test(i = 42.0)
+Test(i = false)
         """,
-        "Invalid value '0', expected Number (reported in number i = 0 ({dir}/main.cf:3:12))",
     )
+    compiler.do_compile()
 
 
 def test_cast_to_number(snippetcompiler):
