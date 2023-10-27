@@ -298,7 +298,9 @@ class Integer(Number):
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
 
     def validate(self, value: Optional[object]) -> bool:
-        if not isinstance(value, int):
+        if not super().validate(value):
+            return False
+        if not isinstance(value, numbers.Integral):
             raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
         return True
 
