@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import collections
 import asyncio
 import inspect
 import os
@@ -200,11 +201,10 @@ class PluginArgument:
     NO_DEFAULT_VALUE_SET = object()
 
     def __init__(
-        self, arg_name: str, arg_type: object, is_kw_only_argument: bool, default_value: object = NO_DEFAULT_VALUE_SET
+        self, arg_name: str, arg_type: object, default_value: object = NO_DEFAULT_VALUE_SET
     ) -> None:
         self.arg_name = arg_name
         self.arg_type = arg_type
-        self.is_kw_only_argument = is_kw_only_argument
         self._default_value = default_value
 
     @property
@@ -236,11 +236,12 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self._context: int = -1
         self._return = None
 
-        self.arguments: List[PluginArgument]
+        self.positional_arguments: dict[int, PluginArgument]
+        self.keyword_arguments: dict[str, PluginArgument]
         if hasattr(self.__class__, "__function__"):
-            self.arguments = self._load_signature(self.__class__.__function__)
+            self.positional_arguments, self.keyword_arguments = self._load_signature(self.__class__.__function__)
         else:
-            self.arguments = []
+            self.positional_arguments, self.keyword_arguments = {}, {}
 
         self.new_statement = None
 
@@ -262,59 +263,76 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.argtypes = [self.to_type(arg.arg_type, self.namespace) for arg in self.arguments]
         self.returntype = self.to_type(self._return, self.namespace)
 
-    def _load_signature(self, function: Callable[..., object]) -> List[PluginArgument]:
+    def _load_signature(
+        self,
+        function: Callable[..., object],
+    ) -> tuple[dict[int, PluginArgument], dict[str, PluginArgument]]:
         """
-        Load the signature from the given python function
+        Load the signature from the given python function, returns a tuple containing:
+        - As first value, a dict with the mapping from each position to the corresponding
+            argument to validate positioned input parameters.
+        - As second value, a dict with the mapping from each kwarg name to the corresponding
+            argument to validate key-word input parameters.
         """
         arg_spec = inspect.getfullargspec(function)
 
-        # Calculate at which index the default values start (for the non-keyword-only attributes)
-        default_start_for_args: Optional[int]
-        if arg_spec.defaults is not None:
-            default_start_for_args = len(arg_spec.args) - len(arg_spec.defaults)
+        positional_args: dict[int, PluginArgument]
+        if arg_spec.varargs is None:
+            positional_args = dict()
         else:
-            default_start_for_args = None
+            # There is a catch all positional arg, define it as default arg
+            # for args
+            catch_all = PluginArgument(
+                arg_name=arg_spec.varargs,
+                arg_type=arg_spec.annotations[arg_spec.varargs],
+            )
+            positional_args = collections.defaultdict(lambda: catch_all)
+        
+        key_word_args: dict[str, PluginArgument]
+        if arg_spec.varkw is None:
+            key_word_args = dict()
+        else:
+            # There is a catch all, define it as default arg for kwargs
+            catch_all = PluginArgument(
+                arg_name=arg_spec.varkw,
+                arg_type=arg_spec.annotations[arg_spec.varkw],
+            )
+            key_word_args = collections.defaultdict(lambda: catch_all)
+        
+        # Save all positional arguments
+        for position, arg in arg_spec.args:
+            positional_args[position] = PluginArgument(
+                arg_name=arg,
+                arg_type=arg_spec.annotations[arg],
+                default_value=(
+                    arg_spec.defaults[-position]
+                    if position < len(arg_spec.defaults)
+                    else PluginArgument.NO_DEFAULT_VALUE_SET,
+                ),
+            )
 
-        arguments: List[PluginArgument] = []
-
-        def process_kw_only_args(argument_name: str, annotation: object) -> PluginArgument:
-            if arg_spec.kwonlydefaults and argument_name in arg_spec.kwonlydefaults:
-                default_value = arg_spec.kwonlydefaults[argument_name]
-                return PluginArgument(argument_name, annotation, is_kw_only_argument=True, default_value=default_value)
-            else:
-                return PluginArgument(argument_name, annotation, is_kw_only_argument=True)
-
-        def process_regular_args(index: int, argument_name: str, annotation: object) -> PluginArgument:
-            if default_start_for_args is not None and default_start_for_args <= index:
-                default_value = arg_spec.defaults[default_start_for_args - index]
-                return PluginArgument(argument_name, annotation, is_kw_only_argument=False, default_value=default_value)
-            else:
-                return PluginArgument(argument_name, annotation, is_kw_only_argument=False)
-
-        def process_arg(index: int, argument_name: str, is_kwonly_arg: bool) -> None:
-            if argument_name not in arg_spec.annotations:
-                raise CompilerException(f"All arguments of plugin '{function.__name__}' should be annotated")
-            annotation = arg_spec.annotations[argument_name]
-            if annotation == Context:
-                self._context = index
-            else:
-                if is_kwonly_arg:
-                    plugin_argument = process_kw_only_args(argument_name, annotation)
-                else:
-                    plugin_argument = process_regular_args(index, argument_name, annotation)
-                arguments.append(plugin_argument)
-
-        # Process regular arguments
-        for i in range(len(arg_spec.args)):
-            process_arg(i, arg_spec.args[i], is_kwonly_arg=False)
-        # Process keyword-only arguments
-        for i in range(len(arg_spec.kwonlyargs)):
-            process_arg(i, arg_spec.kwonlyargs[i], is_kwonly_arg=True)
+            # All positional arguments can also be assigned as kwargs
+            key_word_args[arg] = PluginArgument(
+                arg_name=arg,
+                arg_type=arg_spec.annotations[arg],
+            )
+        
+        # Save all key-word arguments
+        for arg in arg_spec.kwonlyargs:
+            key_word_args[arg] = PluginArgument(
+                arg_name=arg,
+                arg_type=arg_spec.annotations[arg],
+                default_value=(
+                    arg_spec.kwonlydefaults[arg]
+                    if arg in arg_spec.kwonlydefaults
+                    else PluginArgument.NO_DEFAULT_VALUE_SET
+                ),
+            )
 
         if "return" in arg_spec.annotations:
             self._return = arg_spec.annotations["return"]
 
-        return arguments
+        return positional_args, key_word_args
 
     def get_signature(self) -> str:
         """
@@ -392,6 +410,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         Check if the arguments of the call match the function signature
         """
+        return True
         max_arg = len(self.arguments)
         if len(args) + len(kwargs) > max_arg:
             raise Exception(
