@@ -80,7 +80,7 @@ entity U:
 end
 
 entity V:
-    number n
+    int n
 end
 
 X.u [1] -- U
@@ -117,7 +117,7 @@ entity U:
 end
 
 entity V:
-    number n
+    int n
 end
 
 U.v [1] -- V
@@ -152,9 +152,9 @@ def test_dataflow_model_index(dataflow_test_helper: DataflowTestHelper) -> None:
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
-    number k
-    number l
+    int n
+    int k
+    int l
 end
 
 index A(n)
@@ -211,7 +211,7 @@ def test_dataflow_model_implementation(dataflow_test_helper: DataflowTestHelper,
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 implementation i for A:
