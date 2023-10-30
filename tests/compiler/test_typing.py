@@ -155,8 +155,8 @@ u = 0.0
     assert Number().validate(u)
 
 
-def test_int_as_index_expect_float(snippetcompiler):
-    snippetcompiler.setup_for_error(
+def test_int_as_index_for_number(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
         """
 entity A:
     number x
@@ -166,10 +166,8 @@ implement A using std::none
 
 test = A(x=0)
         """,
-        """Could not set attribute `x` on instance `__config__::A (instantiated at {dir}/main.cf:8)` (reported in Construct(A) ({dir}/main.cf:8))
-caused by:
-  Invalid value '0', expected Number (reported in Construct(A) ({dir}/main.cf:8))""",
     )
+    compiler.do_compile()
 
 
 def test_cast_to_int(snippetcompiler):
