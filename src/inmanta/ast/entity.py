@@ -387,7 +387,7 @@ class Entity(NamedType, WithComment):
                 value = v.get_value()
                 # Check if the value is an integer or a float,
                 # and convert to float if necessary
-                if isinstance(value, (int, float)):
+                if isinstance(value, int):
                     value = float(value)
                 attributes[k] = repr(value)
         # check if an index entry can be added
