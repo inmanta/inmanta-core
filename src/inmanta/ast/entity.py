@@ -18,7 +18,8 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union  # noqa: F401
+from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
+from collections.abc import Sequence
 
 from inmanta.ast import (
     CompilerException,
@@ -124,7 +125,7 @@ class Entity(NamedType, WithComment):
         for sub in self.subc:
             sub.normalize()
 
-    def get_sub_constructor(self) -> List[SubConstructor]:
+    def get_sub_constructor(self) -> list[SubConstructor]:
         return self.subc
 
     def get_implements(self) -> "List[Implement]":
@@ -140,7 +141,7 @@ class Entity(NamedType, WithComment):
         self.__default_values[name] = value
 
     def _get_own_defaults(self) -> "Dict[str, Optional[ExpressionStatement]]":
-        return dict((k, v.default) for k, v in self.__default_values.items() if v.default is not None or v.remove_default)
+        return {k: v.default for k, v in self.__default_values.items() if v.default is not None or v.remove_default}
 
     def get_namespace(self) -> Namespace:
         """
@@ -284,7 +285,7 @@ class Entity(NamedType, WithComment):
 
     def get_instance(
         self,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         resolver: Resolver,
         queue: QueueScheduler,
         location: Location,
@@ -319,11 +320,11 @@ class Entity(NamedType, WithComment):
             return True
 
         if not isinstance(value, Instance):
-            raise RuntimeException(None, "Invalid type for value '%s', should be type %s" % (value, self))
+            raise RuntimeException(None, "Invalid type for value '{}', should be type {}".format(value, self))
 
         value_definition = value.type
         if not (value_definition is self or self.is_subclass(value_definition)):
-            raise RuntimeException(None, "Invalid class type for %s, should be %s" % (value, self))
+            raise RuntimeException(None, "Invalid class type for {}, should be {}".format(value, self))
 
         return True
 
@@ -360,7 +361,7 @@ class Entity(NamedType, WithComment):
 
         return self.name == other.name and self.namespace == other.namespace
 
-    def add_index(self, attributes: List[str]) -> None:
+    def add_index(self, attributes: list[str]) -> None:
         """
         Add an index over the given attributes.
         """
@@ -373,7 +374,7 @@ class Entity(NamedType, WithComment):
         for child in self.child_entities:
             child.add_index(attributes)
 
-    def get_indices(self) -> List[List[str]]:
+    def get_indices(self) -> list[list[str]]:
         return self._index_def
 
     def add_to_index(self, instance: Instance) -> None:
@@ -390,7 +391,7 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    key.append("%s=%s" % (attribute, attributes[attribute]))
+                    key.append("{}={}".format(attribute, attributes[attribute]))
 
             if index_ok:
                 keys = ", ".join(key)
@@ -411,8 +412,8 @@ class Entity(NamedType, WithComment):
         """
         Search an instance in the index.
         """
-        all_attributes: List[str] = [x[0] for x in params]
-        attributes: Set[str] = set(())
+        all_attributes: list[str] = [x[0] for x in params]
+        attributes: set[str] = set()
         for attr in all_attributes:
             if attr in attributes:
                 raise RuntimeException(stmt, "Attribute %s provided twice in index lookup" % attr)
@@ -428,7 +429,7 @@ class Entity(NamedType, WithComment):
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
 
-        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
+        key = ", ".join(["{}={}".format(k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
 
         if target is None:
             if key in self._index:
@@ -470,11 +471,11 @@ class Entity(NamedType, WithComment):
             raise AttributeError(name)
         return defaults[name]
 
-    def final(self, excns: List[CompilerException]) -> None:
+    def final(self, excns: list[CompilerException]) -> None:
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
                 excns.append(
-                    NotFoundException(stmt, key, "No match in index on type %s with key %s" % (self.get_full_name(), key))
+                    NotFoundException(stmt, key, "No match in index on type {} with key {}".format(self.get_full_name(), key))
                 )
         for _, attr in self.get_attributes().items():
             attr.final(excns)
@@ -529,7 +530,7 @@ class Implementation(NamedType):
 
     def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         raise DuplicateException(
-            self, other, "Implementation %s for type %s is already defined" % (self.get_full_name(), self.target_type)
+            self, other, "Implementation {} for type {} is already defined".format(self.get_full_name(), self.target_type)
         )
 
     def get_location(self) -> Location:

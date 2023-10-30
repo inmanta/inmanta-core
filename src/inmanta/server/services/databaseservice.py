@@ -35,7 +35,7 @@ class DatabaseService(protocol.ServerSlice):
     """Slice to initialize the database"""
 
     def __init__(self) -> None:
-        super(DatabaseService, self).__init__(SLICE_DATABASE)
+        super().__init__(SLICE_DATABASE)
         self._pool: Optional[asyncpg.pool.Pool] = None
         self._db_pool_watcher: Optional[util.ExhaustedPoolWatcher] = None
 
@@ -64,7 +64,7 @@ class DatabaseService(protocol.ServerSlice):
         await self.disconnect_database()
         self._pool = None
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return []
 
     async def connect_database(self) -> None:
@@ -93,7 +93,7 @@ class DatabaseService(protocol.ServerSlice):
         """Disconnect the database"""
         await data.disconnect()
 
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
+    async def get_status(self) -> dict[str, ArgumentTypes]:
         """Get the status of the database connection"""
         connected = await self.get_connection_status()
         status = {

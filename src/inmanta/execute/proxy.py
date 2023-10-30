@@ -18,7 +18,8 @@
 
 from collections.abc import Mapping
 from copy import copy
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
+from collections.abc import Iterable, Sequence
 
 from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
@@ -105,11 +106,11 @@ class DynamicProxy:
 
         if isinstance(item, dict):
 
-            def recurse_dict_item(key_value: Tuple[object, object]) -> Tuple[object, object]:
+            def recurse_dict_item(key_value: tuple[object, object]) -> tuple[object, object]:
                 (key, value) = key_value
                 if not isinstance(key, str):
                     raise RuntimeException(
-                        None, "dict keys should be strings, got %s of type %s with dict value %s" % (key, type(key), value)
+                        None, "dict keys should be strings, got {} of type {} with dict value {}".format(key, type(key), value)
                     )
                 return (key, cls.unwrap(value))
 
@@ -118,7 +119,7 @@ class DynamicProxy:
         return item
 
     @classmethod
-    def return_value(cls, value: object) -> Union[None, str, Tuple[object, ...], int, float, bool, "DynamicProxy"]:
+    def return_value(cls, value: object) -> Union[None, str, tuple[object, ...], int, float, bool, "DynamicProxy"]:
         """
         Converts a value from the internal domain to the plugin domain.
         """
@@ -203,7 +204,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
     def __getitem__(self, key: str) -> object:
         instance = self._get_instance()
         if isinstance(key, str):
-            raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (key, self._get_instance()))
+            raise RuntimeException(self, "can not get a attribute {}, {} is a list".format(key, self._get_instance()))
 
         return DynamicProxy.return_value(instance[key])
 
@@ -215,19 +216,19 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
 
         return IteratorProxy(instance.__iter__())
 
-    def json_serialization_step(self) -> List[PrimitiveTypes]:
+    def json_serialization_step(self) -> list[PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
         return [i for i in self]
 
 
 class DictProxy(DynamicProxy, Mapping, JSONSerializable):
-    def __init__(self, mydict: Dict[object, object]) -> None:
+    def __init__(self, mydict: dict[object, object]) -> None:
         DynamicProxy.__init__(self, mydict)
 
     def __getitem__(self, key):
         instance = self._get_instance()
         if not isinstance(key, str):
-            raise RuntimeException(self, "Expected string key, but got %s, %s is a dict" % (key, self._get_instance()))
+            raise RuntimeException(self, "Expected string key, but got {}, {} is a dict".format(key, self._get_instance()))
 
         return DynamicProxy.return_value(instance[key])
 
@@ -239,7 +240,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
 
         return IteratorProxy(instance.__iter__())
 
-    def json_serialization_step(self) -> Dict[str, PrimitiveTypes]:
+    def json_serialization_step(self) -> dict[str, PrimitiveTypes]:
         # Ensure proper unwrapping by using __getitem__
         return {k: v for k, v in self.items()}
 

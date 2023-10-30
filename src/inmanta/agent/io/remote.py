@@ -56,8 +56,8 @@ class SshIO(local.IOBase):
     def is_remote(self) -> bool:
         return True
 
-    def __init__(self, uri: str, config: Dict[str, Optional[str]]) -> None:
-        super(SshIO, self).__init__(uri, config)
+    def __init__(self, uri: str, config: dict[str, Optional[str]]) -> None:
+        super().__init__(uri, config)
         self._host = config["host"]
         if "port" in config and config["port"] is not None:
             self._port = int(config["port"])
@@ -125,7 +125,7 @@ class SshIO(local.IOBase):
         else:
             python = "python"
 
-        return "ssh=%s %s@%s//python=%s" % (opts, self._user, self._host, python)
+        return "ssh={} {}@{}//python={}".format(opts, self._user, self._host, python)
 
     def _execute(self, function_name: str, *args: object, **kwargs: object) -> object:
         with self._lock:

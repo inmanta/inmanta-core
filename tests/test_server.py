@@ -741,7 +741,7 @@ async def test_resource_action_log(server, client, environment):
     resource_action_log = server.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
-    with open(resource_action_log, "r") as f:
+    with open(resource_action_log) as f:
         contents = f.read()
         parts = contents.split(" ")
         # Date and time
@@ -961,7 +961,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     # Use the next link for pagination
     next_page = result.result["links"]["next"]
     port = opt.get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     url = f"{base_url}{next_page}"
     client = AsyncHTTPClient()
     request = HTTPRequest(
@@ -1409,7 +1409,7 @@ async def test_start_location_no_redirect(server):
     Ensure that there is no redirection for the "start" location. (issue #3497)
     """
     port = opt.get_bind_port()
-    base_url = "http://localhost:%s/" % (port,)
+    base_url = "http://localhost:{}/".format(port)
     http_client = AsyncHTTPClient()
     request = HTTPRequest(
         url=base_url,
@@ -1424,8 +1424,8 @@ async def test_redirect_dashboard_to_console(server, path):
     Ensure that there is a redirection from the dashboard to the webconsole
     """
     port = opt.get_bind_port()
-    base_url = "http://localhost:%s/dashboard%s" % (port, path)
-    result_url = "http://localhost:%s/console%s" % (port, path)
+    base_url = "http://localhost:{}/dashboard{}".format(port, path)
+    result_url = "http://localhost:{}/console{}".format(port, path)
     http_client = AsyncHTTPClient()
     request = HTTPRequest(
         url=base_url,

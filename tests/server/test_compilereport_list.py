@@ -101,7 +101,7 @@ async def test_compile_reports_paging(server, client, env_with_compile_reports, 
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     http_client = AsyncHTTPClient()
 
     # Test link for next page

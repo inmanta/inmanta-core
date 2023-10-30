@@ -178,7 +178,7 @@ def log_messages(resource_log_objects):
         ("timestamp", "ASC"),
     ],
 )
-async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs: Tuple[str, List[datetime.datetime]]):
+async def test_resource_logs_paging(server, client, order_by_column, order, env_with_logs: tuple[str, list[datetime.datetime]]):
     """Test querying resource logs with paging, using different sorting parameters."""
     environment, msg_timings = env_with_logs
 
@@ -208,7 +208,7 @@ async def test_resource_logs_paging(server, client, order_by_column, order, env_
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     http_client = AsyncHTTPClient()
 
     # Test link for next page

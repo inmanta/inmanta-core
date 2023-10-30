@@ -26,7 +26,8 @@ import uuid
 from collections import abc
 from dataclasses import dataclass
 from datetime import timezone
-from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
+from typing import Any, Dict, Optional, Type, TypeVar, Union
+from collections.abc import Sequence
 
 import pytest
 import yaml
@@ -51,7 +52,7 @@ T = TypeVar("T")
 LOGGER = logging.getLogger(__name__)
 
 
-def get_all_subclasses(cls: Type[T]) -> set[Type[T]]:
+def get_all_subclasses(cls: type[T]) -> set[type[T]]:
     """
     Returns all loaded subclasses of any depth for a given class. Includes the class itself.
     """
@@ -115,7 +116,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
 def assert_graph(graph, expected):
     lines = [
-        "%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.resource_requires
+        "{}: {}".format(f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.resource_requires
     ]
     lines = sorted(lines)
 
@@ -125,7 +126,7 @@ def assert_graph(graph, expected):
     assert elines == lines, (lines, elines)
 
 
-class AsyncClosing(object):
+class AsyncClosing:
     def __init__(self, awaitable):
         self.awaitable = awaitable
 
@@ -189,7 +190,7 @@ def log_index(caplog, loggerpart, level, msg, after=0):
     assert False
 
 
-class LogSequence(object):
+class LogSequence:
     def __init__(self, caplog, index=0, allow_errors=True, ignore=[]):
         """
 
@@ -326,7 +327,7 @@ async def _wait_for_resource_actions(
     await retry_limited(is_deployment_finished, timeout)
 
 
-class ClientHelper(object):
+class ClientHelper:
     def __init__(self, client: Client, environment: uuid.UUID) -> None:
         self.client = client
         self.environment = environment
@@ -336,7 +337,7 @@ class ClientHelper(object):
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources: Dict[str, Any], version: int) -> None:
+    async def put_version_simple(self, resources: dict[str, Any], version: int) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,
@@ -348,7 +349,7 @@ class ClientHelper(object):
         assert res.code == 200, res.result
 
 
-def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> Dict[str, Any]:
+def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:
     return {
         "key": key,
         "value": value,
@@ -404,7 +405,7 @@ def create_python_package(
     install: bool = False,
     editable: bool = False,
     publish_index: Optional[PipIndex] = None,
-    optional_dependencies: Optional[Dict[str, Sequence[Requirement]]] = None,
+    optional_dependencies: Optional[dict[str, Sequence[Requirement]]] = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -540,7 +541,7 @@ def module_from_template(
         config["metadata"]["name"] = module.ModuleV2Source.get_package_name_for(new_name)
         manifest_file: str = os.path.join(dest_dir, "MANIFEST.in")
         manifest_content: str
-        with open(manifest_file, "r") as fd:
+        with open(manifest_file) as fd:
             manifest_content: str = fd.read()
         with open(manifest_file, "w", encoding="utf-8") as fd:
             fd.write(manifest_content.replace(f"inmanta_plugins/{old_name}/", f"inmanta_plugins/{new_name}/"))
@@ -572,7 +573,7 @@ def module_from_template(
     if publish_index is not None:
         ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
         publish_index.publish()
-    with open(config_file, "r") as fh:
+    with open(config_file) as fh:
         return module.ModuleV2Metadata.parse(fh)
 
 
@@ -599,8 +600,8 @@ def v1_module_from_template(
     """
     shutil.copytree(source_dir, dest_dir)
     config_file: str = os.path.join(dest_dir, module.ModuleV1.MODULE_FILE)
-    config: Dict[str, object] = configparser.ConfigParser()
-    with open(config_file, "r") as fd:
+    config: dict[str, object] = configparser.ConfigParser()
+    with open(config_file) as fd:
         config = yaml.safe_load(fd)
     if new_version is not None:
         config["version"] = str(new_version)
@@ -626,7 +627,7 @@ def v1_module_from_template(
                     for req in new_requirements
                 )
             )
-    with open(config_file, "r") as fd:
+    with open(config_file) as fd:
         return module.ModuleV1Metadata.parse(fd)
 
 

@@ -38,7 +38,7 @@ DEFAULT_INFLUX_PASSWORD = None
 DEFAULT_INFLUX_PROTOCOL = "http"
 
 
-class AsyncReporter(object):
+class AsyncReporter:
     def __init__(self, registry: Optional[MetricsRegistry] = None, reporting_interval: int = 30) -> None:
         self.registry = registry or global_registry()
         self.reporting_interval = reporting_interval
@@ -93,9 +93,9 @@ class InfluxReporter(AsyncReporter):
         port: int = DEFAULT_INFLUX_PORT,
         protocol: str = DEFAULT_INFLUX_PROTOCOL,
         autocreate_database: bool = False,
-        tags: Dict[str, str] = {},
+        tags: dict[str, str] = {},
     ) -> None:
-        super(InfluxReporter, self).__init__(registry, reporting_interval)
+        super().__init__(registry, reporting_interval)
         self.database = database
         self.username = username
         self.password = password
@@ -107,15 +107,15 @@ class InfluxReporter(AsyncReporter):
         self.tags = tags
         self.key = "metrics"
         if self.tags:
-            tagstring = ",".join("%s=%s" % (key, value) for key, value in self.tags.items())
-            self.key = "%s,%s" % (self.key, tagstring)
+            tagstring = ",".join("{}={}".format(key, value) for key, value in self.tags.items())
+            self.key = "{},{}".format(self.key, tagstring)
         self.key = "%s,key=" % self.key
 
         if not self.server:
             raise Exception("Unable to start the metrics reporter without a server. Empty string given.")
 
     async def _create_database(self, http_client: AsyncHTTPClient) -> None:
-        url = "%s://%s:%s/query" % (self.protocol, self.server, self.port)
+        url = "{}://{}:{}/query".format(self.protocol, self.server, self.port)
         q = quote("CREATE DATABASE %s" % self.database)
         request = HTTPRequest(url + "?q=" + q)
         if self.username and self.password:
@@ -140,13 +140,13 @@ class InfluxReporter(AsyncReporter):
         for key, metric_values in metrics.items():
             table = self.key + key
             values = ",".join(
-                ["%s=%s" % (k, v if type(v) is not str else '"{}"'.format(v)) for (k, v) in metric_values.items()]
+                ["{}={}".format(k, v if type(v) is not str else f'"{v}"') for (k, v) in metric_values.items()]
             )
-            line = "%s %s %s" % (table, values, timestamp)
+            line = "{} {} {}".format(table, values, timestamp)
             post_data.append(line)
         post_data_all = "\n".join(post_data)
         path = "/write?db=%s&precision=s" % self.database
-        url = "%s://%s:%s%s" % (self.protocol, self.server, self.port, path)
+        url = "{}://{}:{}{}".format(self.protocol, self.server, self.port, path)
         request = HTTPRequest(url, method="POST", body=post_data_all.encode("utf-8"))
         if self.username and self.password:
             auth = _encode_username(self.username, self.password)
@@ -159,5 +159,5 @@ class InfluxReporter(AsyncReporter):
 
 
 def _encode_username(username: str, password: str) -> bytes:
-    auth_string = ("%s:%s" % (username, password)).encode()
+    auth_string = ("{}:{}".format(username, password)).encode()
     return base64.b64encode(auth_string)

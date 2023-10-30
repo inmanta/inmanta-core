@@ -26,7 +26,7 @@ from . import common
 FuncT = TypeVar("FuncT", bound=HandlerType)
 
 
-class handle(object):  # noqa: N801
+class handle:  # noqa: N801
     """
     Decorator for subclasses of an endpoint to handle protocol methods
 
@@ -38,7 +38,7 @@ class handle(object):  # noqa: N801
 
     def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
         self.method = method
-        self.mapping: Dict[str, str] = kwargs
+        self.mapping: dict[str, str] = kwargs
         self._api_version = api_version
 
     def __call__(self, function: FuncT) -> FuncT:
@@ -61,13 +61,13 @@ def method(
     path: str,
     operation: str = "POST",
     reply: bool = True,
-    arg_options: Dict[str, common.ArgOption] = {},
+    arg_options: dict[str, common.ArgOption] = {},
     timeout: Optional[int] = None,
     server_agent: bool = False,
     api: Optional[bool] = None,
     agent_server: bool = False,
     validate_sid: Optional[bool] = None,
-    client_types: List[const.ClientType] = [const.ClientType.api],
+    client_types: list[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",
     envelope: bool = False,
@@ -131,13 +131,13 @@ def typedmethod(
     path: Union[str, list[str]],
     operation: str = "POST",
     reply: bool = True,
-    arg_options: Dict[str, common.ArgOption] = {},
+    arg_options: dict[str, common.ArgOption] = {},
     timeout: Optional[int] = None,
     server_agent: bool = False,
     api: Optional[bool] = None,
     agent_server: bool = False,
     validate_sid: Optional[bool] = None,
-    client_types: List[const.ClientType] = [const.ClientType.api],
+    client_types: list[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",
     envelope_key: str = const.ENVELOPE_KEY,

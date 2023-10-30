@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import AsyncIterator, Awaitable, Callable, List
+from typing import Callable, List
+from collections.abc import AsyncIterator, Awaitable
 
 import pytest
 from asyncpg import Connection
@@ -34,7 +35,7 @@ async def migrate_v202106080_to_v202106210(
     Returns a callable that performs a v202105170 database restore and migrates to v202106080.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202106080.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v202106080.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
@@ -48,7 +49,7 @@ async def migrate_v202106080_to_v202106210(
 async def test_add_value_to_resource_table(
     migrate_v202106080_to_v202106210: Callable[[], Awaitable[None]],
     postgresql_client: Connection,
-    get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
+    get_columns_in_db_table: Callable[[str], Awaitable[list[str]]],
 ) -> None:
     """
     Test whether the value column was added to the resource table.

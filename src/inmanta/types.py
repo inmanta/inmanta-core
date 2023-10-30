@@ -20,7 +20,8 @@
 import builtins
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from collections.abc import Coroutine, Mapping, Sequence
 
 import typing_inspect
 from pydantic import errors, types
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 
-class StrictNonIntBool(object):
+class StrictNonIntBool:
     """
     StrictNonIntBool to allow for bools which are not type-coerced and that are not a subclass of int
     Based on StrictBool from pydantic
@@ -52,7 +53,7 @@ class StrictNonIntBool(object):
         raise errors.StrictBoolError()
 
     @classmethod
-    def __modify_schema__(cls, f_schema: Dict[str, Any]) -> Dict[str, Any]:
+    def __modify_schema__(cls, f_schema: dict[str, Any]) -> dict[str, Any]:
         """
         Should be handled as a boolean in OpenAPI schemas
         """
@@ -60,7 +61,7 @@ class StrictNonIntBool(object):
         return f_schema
 
 
-def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
+def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
     """
     Alternative issubclass implementation that interpretes instances of NewType for the first argument as their super type.
     """
@@ -72,8 +73,8 @@ def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
 PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
 SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
-JsonType = Dict[str, Any]
-ReturnTupple = Tuple[int, Optional[JsonType]]
+JsonType = dict[str, Any]
+ReturnTupple = tuple[int, Optional[JsonType]]
 
 ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
 
@@ -82,5 +83,5 @@ MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
 MethodType = Callable[..., MethodReturn]
 
 Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
-Warnings = Optional[List[str]]
+Warnings = Optional[list[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]

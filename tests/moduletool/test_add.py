@@ -40,14 +40,14 @@ def test_module_add_v1_module_to_project(snippetcompiler_clean) -> None:
     requirements_txt_file = os.path.join(project.path, "requirements.txt")
 
     def _get_content_requirements_txt_file() -> str:
-        with open(requirements_txt_file, "r", encoding="utf-8") as fd:
+        with open(requirements_txt_file, encoding="utf-8") as fd:
             return fd.read()
 
     def _assert_project_state(constraint: str) -> None:
-        with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(project.get_metadata_file_path(), encoding="utf-8") as fd:
             project_metadata = ProjectMetadata.parse(fd)
             assert constraint in project_metadata.requires
-        with open(os.path.join(snippetcompiler_clean.libs, "std", ModuleV1.MODULE_FILE), "r", encoding="utf-8") as fd:
+        with open(os.path.join(snippetcompiler_clean.libs, "std", ModuleV1.MODULE_FILE), encoding="utf-8") as fd:
             module_metadata = ModuleV1Metadata.parse(fd)
             assert module_metadata.version == constraint.split("==")[1]
         assert os.listdir(snippetcompiler_clean.libs) == ["std"]
@@ -109,10 +109,10 @@ def test_module_add_v2_module_to_project(
         if expected_pkg_from_extra:
             assert expected_pkg_from_extra in installed_packages
         assert installed_packages[pkg_name] == expected_version
-        with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(project.get_metadata_file_path(), encoding="utf-8") as fd:
             project_metadata = ProjectMetadata.parse(fd)
             assert not project_metadata.requires
-        with open(requirements_txt_file, "r", encoding="utf-8") as fd:
+        with open(requirements_txt_file, encoding="utf-8") as fd:
             assert fd.read().strip() == ModuleV2Source.get_package_name_for(project_requires_constraint)
 
     module_name = "elaboratev2module"
@@ -153,7 +153,7 @@ def test_module_add_v2_module_to_v2_module(tmpdir: py.path.local, monkeypatch, m
     module_from_template(source_dir=os.path.join(modules_v2_dir, "elaboratev2module"), dest_dir=module_dir)
     monkeypatch.chdir(module_dir)
 
-    def _assert_module_requirements(expected_requirements: List[str]) -> None:
+    def _assert_module_requirements(expected_requirements: list[str]) -> None:
         module_v2 = ModuleV2(project=None, path=module_dir)
         assert sorted(module_v2.metadata.install_requires) == sorted(expected_requirements)
         assert not os.path.exists(os.path.join(module_dir, "requirements.txt"))
@@ -189,7 +189,7 @@ def test_module_add_v2_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
     def _assert_module_requirements(expected_requirement: str) -> None:
         module_v1 = ModuleV1(project=None, path=module_dir)
         assert module_v1.metadata.requires == []
-        with open(requirements_txt_file, "r", encoding="utf-8") as fd:
+        with open(requirements_txt_file, encoding="utf-8") as fd:
             assert fd.read().strip() == expected_requirement
 
     assert not os.path.exists(requirements_txt_file)
@@ -218,7 +218,7 @@ def test_module_add_v1_module_to_v1_module(tmpdir: py.path.local, modules_dir: s
     module_dir = os.path.join(tmpdir, "mod1")
     shutil.copytree(original_module_dir, module_dir)
 
-    def _assert_module_requirements(expected_requirements: List[str]) -> None:
+    def _assert_module_requirements(expected_requirements: list[str]) -> None:
         module_v1 = ModuleV1(project=None, path=module_dir)
         assert sorted(module_v1.metadata.requires) == sorted(expected_requirements)
         assert not os.path.exists(os.path.join(module_dir, "requirements.txt"))

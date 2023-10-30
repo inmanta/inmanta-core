@@ -198,7 +198,7 @@ class PartialUpdateMerger:
             include_shared_resources=True,
             connection=connection,
         )
-        rids_deleted_resource_sets: abc.Set[ResourceIdStr] = set(
+        rids_deleted_resource_sets: abc.Set[ResourceIdStr] = {
             rid
             for rid in (
                 await data.Resource.get_resources_in_resource_sets(
@@ -208,7 +208,7 @@ class PartialUpdateMerger:
                     connection=connection,
                 )
             ).keys()
-        )
+        }
         return PartialUpdateMerger(
             env_id,
             base_version,
@@ -222,7 +222,7 @@ class PartialUpdateMerger:
 
     def merge_updated_and_shared_resources(
         self, updated_and_shared_resources: abc.Sequence[data.Resource]
-    ) -> Dict[ResourceIdStr, data.Resource]:
+    ) -> dict[ResourceIdStr, data.Resource]:
         """
          Separates named resource sets from the shared resource set and expands the shared set with the shared resources in
          the previous model version.
@@ -265,7 +265,7 @@ class PartialUpdateMerger:
             except CrossResourceSetDependencyError as e:
                 raise BadRequest(e.get_error_message())
 
-    def _merge_shared_resources(self, shared_resources_new: Dict[ResourceIdStr, data.Resource]) -> abc.Sequence[data.Resource]:
+    def _merge_shared_resources(self, shared_resources_new: dict[ResourceIdStr, data.Resource]) -> abc.Sequence[data.Resource]:
         """
         Merge the set of shared resources present in the old version of the model together with the set of shared resources
         present in the partial compile.
@@ -370,12 +370,12 @@ class OrchestrationService(protocol.ServerSlice):
     resource_service: ResourceService
 
     def __init__(self) -> None:
-        super(OrchestrationService, self).__init__(SLICE_ORCHESTRATION)
+        super().__init__(SLICE_ORCHESTRATION)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_RESOURCE, SLICE_AGENT_MANAGER, SLICE_DATABASE]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -462,14 +462,14 @@ class OrchestrationService(protocol.ServerSlice):
                 f" To retrieve more entries, use /api/v2/resource_actions"
             )
 
-        resources_out: List[JsonType] = []
+        resources_out: list[JsonType] = []
         d = {"model": version, "resources": resources_out}
-        resource_action_lookup: Dict[ResourceVersionIdStr, List[data.ResourceAction]] = {}
+        resource_action_lookup: dict[ResourceVersionIdStr, list[data.ResourceAction]] = {}
 
         for res_dict in resources:
             resources_out.append(res_dict)
             if bool(include_logs):
-                actions: List[data.ResourceAction] = []
+                actions: list[data.ResourceAction] = []
                 res_dict["actions"] = actions
                 resource_action_lookup[res_dict["resource_version_id"]] = actions
 
@@ -500,11 +500,11 @@ class OrchestrationService(protocol.ServerSlice):
     def _create_dao_resources_from_api_resources(
         self,
         env_id: uuid.UUID,
-        resources: List[JsonType],
-        resource_state: Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
-        resource_sets: Dict[ResourceIdStr, Optional[str]],
+        resources: list[JsonType],
+        resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
+        resource_sets: dict[ResourceIdStr, Optional[str]],
         set_version: Optional[int] = None,
-    ) -> Dict[ResourceIdStr, data.Resource]:
+    ) -> dict[ResourceIdStr, data.Resource]:
         """
         This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
         The resulting resource objects will have their provides set up correctly for cross agent dependencies
@@ -598,7 +598,7 @@ class OrchestrationService(protocol.ServerSlice):
         :param undeployable_ids: The ids of the resource that are undeployable.
         """
         # Build up provides tree
-        provides_tree: Dict[ResourceIdStr, List[ResourceIdStr]] = defaultdict(lambda: [])
+        provides_tree: dict[ResourceIdStr, list[ResourceIdStr]] = defaultdict(list)
         for r in resources:
             if "requires" in r.attributes:
                 for req in r.attributes["requires"]:
@@ -606,7 +606,7 @@ class OrchestrationService(protocol.ServerSlice):
                     provides_tree[req_id.resource_str()].append(r.resource_id)
         # Find skipped for undeployables
         work = list(undeployable_ids)
-        skippeable: Set[ResourceIdStr] = set()
+        skippeable: set[ResourceIdStr] = set()
         while len(work) > 0:
             current = work.pop()
             if current in skippeable:
@@ -619,12 +619,12 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        rid_to_resource: Dict[ResourceIdStr, data.Resource],
+        rid_to_resource: dict[ResourceIdStr, data.Resource],
         unknowns: abc.Sequence[data.UnknownParameter],
         version_info: Optional[JsonType] = None,
-        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
         partial_base_version: Optional[int] = None,
-        removed_resource_sets: Optional[List[str]] = None,
+        removed_resource_sets: Optional[list[str]] = None,
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
@@ -733,7 +733,7 @@ class OrchestrationService(protocol.ServerSlice):
             except asyncpg.exceptions.UniqueViolationError:
                 raise ServerError("The given version is already defined. Versions should be unique.")
 
-            all_ids: set[Id] = set(Id.parse_id(rid, version) for rid in rid_to_resource.keys())
+            all_ids: set[Id] = {Id.parse_id(rid, version) for rid in rid_to_resource.keys()}
             if is_partial_update:
                 # Make mypy happy
                 assert partial_base_version is not None
@@ -744,7 +744,7 @@ class OrchestrationService(protocol.ServerSlice):
                     environment=env.id,
                     source_version=partial_base_version,
                     destination_version=version,
-                    updated_resource_sets=set(sr for sr in resource_sets.values() if sr is not None),
+                    updated_resource_sets={sr for sr in resource_sets.values() if sr is not None},
                     deleted_resource_sets=set(removed_resource_sets),
                     connection=connection,
                 )
@@ -815,8 +815,8 @@ class OrchestrationService(protocol.ServerSlice):
             )
 
     def _create_unknown_parameter_daos_from_api_unknowns(
-        self, env_id: uuid.UUID, version: int, unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None
-    ) -> List[data.UnknownParameter]:
+        self, env_id: uuid.UUID, version: int, unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None
+    ) -> list[data.UnknownParameter]:
         """
         Create UnknownParameter dao's from the unknowns dictionaries passed through the put_version() and put_partial API
         endpoint.
@@ -845,12 +845,12 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        resources: List[JsonType],
-        resource_state: Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
-        unknowns: List[Dict[str, PrimitiveTypes]],
+        resources: list[JsonType],
+        resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
+        unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
         compiler_version: Optional[str] = None,
-        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -896,11 +896,11 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         resources: object,
-        resource_state: Optional[Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
-        unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
+        resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
+        unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
         version_info: Optional[JsonType] = None,
-        resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
-        removed_resource_sets: Optional[List[str]] = None,
+        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
+        removed_resource_sets: Optional[list[str]] = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -920,7 +920,7 @@ class OrchestrationService(protocol.ServerSlice):
             removed_resource_sets = []
 
         try:
-            pydantic.parse_obj_as(List[ResourceMinimal], resources)
+            pydantic.parse_obj_as(list[ResourceMinimal], resources)
         except pydantic.ValidationError:
             raise BadRequest(
                 "Type validation failed for resources argument. "
@@ -928,7 +928,7 @@ class OrchestrationService(protocol.ServerSlice):
             )
         else:
             # Make mypy happy
-            resources = cast(List[JsonType], resources)
+            resources = cast(list[JsonType], resources)
 
         # validate resources before any side effects take place
         for r in resources:
@@ -976,7 +976,7 @@ class OrchestrationService(protocol.ServerSlice):
                             base_version,
                         )
 
-                rid_to_resource: Dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
+                rid_to_resource: dict[ResourceIdStr, data.Resource] = self._create_dao_resources_from_api_resources(
                     env_id=env.id,
                     resources=resources,
                     resource_state=resource_state,
@@ -984,7 +984,7 @@ class OrchestrationService(protocol.ServerSlice):
                     set_version=version,
                 )
 
-                updated_resource_sets: abc.Set[str] = set(sr_name for sr_name in resource_sets.values() if sr_name is not None)
+                updated_resource_sets: abc.Set[str] = {sr_name for sr_name in resource_sets.values() if sr_name is not None}
                 partial_update_merger = await PartialUpdateMerger.create(
                     env_id=env.id,
                     base_version=base_version,
@@ -1161,7 +1161,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-        agents: Optional[List[str]] = None,
+        agents: Optional[list[str]] = None,
     ) -> Apireturn:
         warnings = []
 
@@ -1214,9 +1214,9 @@ class OrchestrationService(protocol.ServerSlice):
         limit: Optional[int] = None,
         start: Optional[int] = None,
         end: Optional[int] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "version.desc",
-    ) -> ReturnValue[List[DesiredStateVersion]]:
+    ) -> ReturnValue[list[DesiredStateVersion]]:
         try:
             return await DesiredStateVersionView(
                 environment=env,
@@ -1261,7 +1261,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         from_version: int,
         to_version: int,
-    ) -> List[ResourceDiff]:
+    ) -> list[ResourceDiff]:
         await self._validate_version_parameters(env.id, from_version, to_version)
 
         from_version_resources = await data.Resource.get_list(environment=env.id, model=from_version)
@@ -1274,7 +1274,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         return version_diff
 
-    def convert_resources(self, resources: List[data.Resource]) -> Dict[ResourceIdStr, diff.Resource]:
+    def convert_resources(self, resources: list[data.Resource]) -> dict[ResourceIdStr, diff.Resource]:
         return {res.resource_id: diff.Resource(resource_id=res.resource_id, attributes=res.attributes) for res in resources}
 
     async def _validate_version_parameters(self, env: uuid.UUID, first_version: int, other_version: int) -> None:

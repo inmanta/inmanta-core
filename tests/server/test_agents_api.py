@@ -111,7 +111,7 @@ async def test_agent_list_filters(client, environment: str, env_with_agents: Non
     assert len(result.result["data"]) == 1
 
 
-def agent_names(agents: List[Dict[str, str]]) -> List[str]:
+def agent_names(agents: list[dict[str, str]]) -> list[str]:
     return [agent["name"] for agent in agents]
 
 
@@ -153,7 +153,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     http_client = AsyncHTTPClient()
 
     # Test link for next page

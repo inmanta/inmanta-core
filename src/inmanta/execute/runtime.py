@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
+from collections.abc import Hashable
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
@@ -467,8 +468,8 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
-        self.promises: Optional[List[IPromise]] = []
-        self.done_promises: Optional[Set[IPromise]] = set()
+        self.promises: Optional[list[IPromise]] = []
+        self.done_promises: Optional[set[IPromise]] = set()
         self.queued = False
         self.queues = queue
         if self.can_get():
@@ -537,7 +538,7 @@ class DelayedResultVariable(ResultVariable[T]):
         return len(self.waiters)
 
 
-ListValue = Union["Instance", List["Instance"]]
+ListValue = Union["Instance", list["Instance"]]
 
 
 class BaseListVariable(DelayedResultVariable[ListValue]):
@@ -722,7 +723,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         except ModifiedAfterFreezeException as e:
             if len(self.value) == self.attribute.high:
                 new_exception: CompilerException = RuntimeException(
-                    None, "Exceeded relation arity on attribute '%s' of instance '%s'" % (self.attribute.name, self.myself)
+                    None, "Exceeded relation arity on attribute '{}' of instance '{}'".format(self.attribute.name, self.myself)
                 )
                 new_exception.set_location(location)
                 raise new_exception
@@ -747,7 +748,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
 
     def __str__(self) -> str:
-        return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+        return "ListVariable {} {} = {}".format(self.myself, self.attribute, self.value)
 
     def get_progress_potential(self) -> int:
         # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
@@ -818,13 +819,13 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return result
 
     def __str__(self) -> str:
-        return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+        return "OptionVariable {} {} = {}".format(self.myself, self.attribute, self.value)
 
     def get_progress_potential(self) -> int:
         return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
 
-class QueueScheduler(object):
+class QueueScheduler:
     """
     Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
 
@@ -838,7 +839,7 @@ class QueueScheduler(object):
         compiler: "Compiler",
         runqueue: "Deque[Waiter]",
         waitqueue: "PrioritisedDelayedResultVariableQueue",
-        types: Dict[str, Type],
+        types: dict[str, Type],
         allwaiters: "Set[Waiter]",
     ) -> None:
         self.compiler = compiler
@@ -856,7 +857,7 @@ class QueueScheduler(object):
     def get_compiler(self) -> "Compiler":
         return self.compiler
 
-    def get_types(self) -> Dict[str, Type]:
+    def get_types(self) -> dict[str, Type]:
         return self.types
 
     def add_to_all(self, item: "Waiter") -> None:
@@ -888,7 +889,7 @@ class DelegateQueueScheduler(QueueScheduler):
     def get_compiler(self) -> "Compiler":
         return self.__delegate.get_compiler()
 
-    def get_types(self) -> Dict[str, Type]:
+    def get_types(self) -> dict[str, Type]:
         return self.__delegate.get_types()
 
     def add_to_all(self, item: "Waiter") -> None:
@@ -904,14 +905,14 @@ class DelegateQueueScheduler(QueueScheduler):
         return DelegateQueueScheduler(self.__delegate, tracer)
 
 
-class Waiter(object):
+class Waiter:
     """
     Waiters represent an executable unit, that can be executed the result variables they depend on have their values.
     """
 
     __slots__ = ("waitcount", "queue", "done", "requires")
 
-    requires: Dict[object, VariableABC]
+    requires: dict[object, VariableABC]
 
     def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
@@ -958,7 +959,7 @@ class ExecutionUnit(Waiter):
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
         result: ResultVariable[object],
-        requires: Dict[object, VariableABC],
+        requires: dict[object, VariableABC],
         expression: "RequiresEmitStatement",
         owner: "Optional[Statement]" = None,
     ):
@@ -1005,7 +1006,7 @@ class HangUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, VariableABC],
+        requires: dict[object, VariableABC],
         target: Optional[ResultVariable],
         resumer: "Resumer",
     ) -> None:
@@ -1039,7 +1040,7 @@ class RawUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, VariableABC],
+        requires: dict[object, VariableABC],
         resumer: "RawResumer",
         override_exception_location: bool = True,
     ) -> None:
@@ -1081,7 +1082,7 @@ resolution
 Typeorvalue = Union[Type, ResultVariable]
 
 
-class Resolver(object):
+class Resolver:
     __slots__ = ("namespace", "dataflow_graph")
 
     def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
@@ -1172,7 +1173,7 @@ class ExecutionContext(Resolver):
 
     def __init__(self, block: "BasicBlock", resolver: Resolver):
         self.block = block
-        self.slots: Dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
+        self.slots: dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
         self.resolver = resolver
         self.dataflow_graph: Optional[DataflowGraph] = None
         if resolver.dataflow_graph is not None:
@@ -1237,7 +1238,7 @@ class Instance(ExecutionContext):
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
-        self.slots: Dict[str, ResultVariable] = {}
+        self.slots: dict[str, ResultVariable] = {}
         for attr_name in mytype.get_all_attribute_names():
             if attr_name in self.slots:
                 # prune duplicates because get_new_result_variable() has side effects
@@ -1266,16 +1267,16 @@ class Instance(ExecutionContext):
         self.implementations: "Set[Implementation]" = set()
 
         # see inmanta.ast.execute.scheduler.QueueScheduler
-        self.trackers: List[Tracker] = []
+        self.trackers: list[Tracker] = []
 
-        self.locations: List[Location] = []
+        self.locations: list[Location] = []
 
     def get_type(self) -> "Entity":
         return self.type
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:
-            raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
+            raise NotFoundException(None, name, "cannot set attribute with name {} on type {}".format(name, str(self.type)))
         try:
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:
@@ -1285,13 +1286,13 @@ class Instance(ExecutionContext):
         try:
             return self.slots[name]
         except KeyError:
-            raise NotFoundException(None, name, "could not find attribute with name: %s in type %s" % (name, self.type))
+            raise NotFoundException(None, name, "could not find attribute with name: {} in type {}".format(name, self.type))
 
     def __repr__(self) -> str:
-        return "%s %02x" % (self.type, self.sid)
+        return "{} {:02x}".format(self.type, self.sid)
 
     def __str__(self) -> str:
-        return "%s (instantiated at %s)" % (self.type, ",".join([str(location) for location in self.get_locations()]))
+        return "{} (instantiated at {})".format(self.type, ",".join([str(location) for location in self.get_locations()]))
 
     def add_implementation(self, impl: "Implementation") -> bool:
         if impl in self.implementations:
@@ -1299,7 +1300,7 @@ class Instance(ExecutionContext):
         self.implementations.add(impl)
         return True
 
-    def final(self, excns: List[CompilerException]) -> None:
+    def final(self, excns: list[CompilerException]) -> None:
         """
         The object should be complete, freeze all attributes
         """
@@ -1329,7 +1330,7 @@ class Instance(ExecutionContext):
                     else:
                         excns.append(
                             proxy.UnsetException(
-                                "The object %s is not complete: attribute %s (%s) is not set" % (self, k, attr.location),
+                                "The object {} is not complete: attribute {} ({}) is not set".format(self, k, attr.location),
                                 self,
                                 attr,
                             )
@@ -1341,5 +1342,5 @@ class Instance(ExecutionContext):
                 return False
         return True
 
-    def get_locations(self) -> List[Location]:
+    def get_locations(self) -> list[Location]:
         return self.locations

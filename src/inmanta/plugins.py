@@ -57,7 +57,7 @@ class PluginDeprecationWarning(InmantaWarning):
 
 
 @stable_api
-class Context(object):
+class Context:
     """
     An instance of this class is used to pass context to the plugin
     """
@@ -150,23 +150,23 @@ class PluginMeta(type):
     A metaclass that keeps track of concrete plugin subclasses. This class is responsible for all plugin registration.
     """
 
-    def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
+    def __new__(cls, name: str, bases: tuple[type, ...], dct: dict[str, object]) -> type:
         subclass = type.__new__(cls, name, bases, dct)
         if hasattr(subclass, "__function_name__"):
             cls.add_function(subclass)
         return subclass
 
-    __functions: Dict[str, Type["Plugin"]] = {}
+    __functions: dict[str, type["Plugin"]] = {}
 
     @classmethod
-    def add_function(cls, plugin_class: Type["Plugin"]) -> None:
+    def add_function(cls, plugin_class: type["Plugin"]) -> None:
         """
         Add a function plugin class
         """
         cls.__functions[plugin_class.__fq_plugin_name__] = plugin_class
 
     @classmethod
-    def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
+    def get_functions(cls) -> dict[str, "Type[Plugin]"]:
         """
         Get all functions that are registered
         """
@@ -236,7 +236,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self._context: int = -1
         self._return = None
 
-        self.arguments: List[PluginArgument]
+        self.arguments: list[PluginArgument]
         if hasattr(self.__class__, "__function__"):
             self.arguments = self._load_signature(self.__class__.__function__)
         else:
@@ -262,7 +262,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.argtypes = [self.to_type(arg.arg_type, self.namespace) for arg in self.arguments]
         self.returntype = self.to_type(self._return, self.namespace)
 
-    def _load_signature(self, function: Callable[..., object]) -> List[PluginArgument]:
+    def _load_signature(self, function: Callable[..., object]) -> list[PluginArgument]:
         """
         Load the signature from the given python function
         """
@@ -275,7 +275,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         else:
             default_start_for_args = None
 
-        arguments: List[PluginArgument] = []
+        arguments: list[PluginArgument] = []
 
         def process_kw_only_args(argument_name: str, annotation: object) -> PluginArgument:
             if arg_spec.kwonlydefaults and argument_name in arg_spec.kwonlydefaults:
@@ -323,15 +323,15 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         arg_list = []
         for arg in self.arguments:
             if arg.has_default_value():
-                arg_list.append("%s: %s=%s" % (arg.arg_name, arg.arg_type, str(arg.default_value)))
+                arg_list.append("{}: {}={}".format(arg.arg_name, arg.arg_type, str(arg.default_value)))
             else:
-                arg_list.append("%s: %s" % (arg.arg_name, arg.arg_type))
+                arg_list.append("{}: {}".format(arg.arg_name, arg.arg_type))
 
         args = ", ".join(arg_list)
 
         if self._return is None:
-            return "%s(%s)" % (self.__class__.__function_name__, args)
-        return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
+            return "{}({})".format(self.__class__.__function_name__, args)
+        return "{}({}) -> {}".format(self.__class__.__function_name__, args, self._return)
 
     def to_type(self, arg_type: Optional[object], resolver: Namespace) -> Optional[inmanta_type.Type]:
         """
@@ -364,7 +364,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         # stack of transformations to be applied to the base inmanta_type.Type
         # transformations will be applied right to left
-        transformation_stack: List[Callable[[inmanta_type.Type], inmanta_type.Type]] = []
+        transformation_stack: list[Callable[[inmanta_type.Type], inmanta_type.Type]] = []
 
         if locatable_type.value.endswith("?"):
             locatable_type.value = locatable_type.value[0:-1]
@@ -376,7 +376,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
-    def _is_instance(self, value: object, arg_type: Type[object]) -> bool:
+    def _is_instance(self, value: object, arg_type: type[object]) -> bool:
         """
         Check if value is of arg_type
         """
@@ -388,7 +388,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         return isinstance(value, arg_type)
 
-    def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
+    def check_args(self, args: list[object], kwargs: dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature
         """
@@ -399,9 +399,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 % (self.get_signature(), max_arg, len(args) + len(kwargs))
             )
         # check for missing arguments
-        required_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments if not arg.has_default_value())
-        present_positional_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments[: len(args)])
-        present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
+        required_args: frozenset[str] = frozenset(arg.arg_name for arg in self.arguments if not arg.has_default_value())
+        present_positional_args: frozenset[str] = frozenset(arg.arg_name for arg in self.arguments[: len(args)])
+        present_kwargs: frozenset[str] = frozenset(kwargs.keys())
         missing_args = required_args.difference({*present_positional_args, *present_kwargs})
         if missing_args:
             raise RuntimeException(
@@ -410,14 +410,14 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 % (len(missing_args), self.__class__.__function_name__, ",".join(missing_args)),
             )
         # check for kwargs overlap with positional arguments
-        overlapping_args: FrozenSet[str] = present_kwargs.intersection(present_positional_args)
+        overlapping_args: frozenset[str] = present_kwargs.intersection(present_positional_args)
         if overlapping_args:
             raise RuntimeException(
                 None,
-                "Multiple values for %s in %s()" % (",".join(overlapping_args), self.__class__.__function_name__),
+                "Multiple values for {} in {}()".format(",".join(overlapping_args), self.__class__.__function_name__),
             )
 
-        def is_valid(expected_arg: PluginArgument, expected_type: Type[object], arg: object) -> bool:
+        def is_valid(expected_arg: PluginArgument, expected_type: type[object], arg: object) -> bool:
             if isinstance(arg, Unknown):
                 return False
 
@@ -431,7 +431,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         for i in range(len(args)):
             if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
                 return False
-        arg_types: Dict[str, Tuple[PluginArgument, Optional[inmanta_type.Type]]] = {
+        arg_types: dict[str, tuple[PluginArgument, Optional[inmanta_type.Type]]] = {
             arg.arg_name: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
         }
         for k, v in kwargs.items():
@@ -440,7 +440,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 if not is_valid(expected_arg, expected_type, v):
                     return False
             except KeyError:
-                raise RuntimeException(None, "Invalid keyword argument '%s' for '%s()'" % (k, self.__class__.__function_name__))
+                raise RuntimeException(None, "Invalid keyword argument '{}' for '{}()'".format(k, self.__class__.__function_name__))
         return True
 
     def emit_statement(self) -> "DynamicStatement":
@@ -463,7 +463,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 result = p.communicate()
 
                 if len(result[0]) == 0:
-                    raise Exception("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
+                    raise Exception("{} requires {} to be available in $PATH".format(self.__function_name__, _bin))
 
     @classmethod
     def deprecate_function(cls, replaced_by: Optional[str] = None) -> None:
@@ -520,7 +520,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         return value
 
     def get_full_name(self) -> str:
-        return "%s::%s" % (self.ns.get_full_name(), self.__class__.__function_name__)
+        return "{}::{}".format(self.ns.get_full_name(), self.__class__.__function_name__)
 
     def type_string(self) -> str:
         return self.get_full_name()
@@ -539,7 +539,7 @@ class PluginException(Exception):
 @stable_api
 def plugin(
     function: Optional[Callable] = None,
-    commands: Optional[List[str]] = None,
+    commands: Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
 ) -> Callable:
@@ -556,7 +556,7 @@ def plugin(
 
     def curry_name(
         name: Optional[str] = None,
-        commands: Optional[List[str]] = None,
+        commands: Optional[list[str]] = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
     ) -> Callable:

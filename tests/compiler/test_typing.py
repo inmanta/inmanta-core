@@ -315,12 +315,12 @@ entity A:
 end
         """,
     )
-    types: typing.Dict[str, inmanta_type.Type]
+    types: dict[str, inmanta_type.Type]
     (types, scopes) = compiler.do_compile()
     assert "__config__::A" in types
     entity = types["__config__::A"]
     assert isinstance(entity, Entity)
-    attrs: typing.Dict[str, Attribute] = entity.get_attributes()
+    attrs: dict[str, Attribute] = entity.get_attributes()
 
     assert "n" in attrs
     assert isinstance(attrs["n"].type, Number)
@@ -348,7 +348,7 @@ end
 
 @pytest.mark.parametrize("base_type", inmanta_type.TYPES.values())
 def test_types_base_type(snippetcompiler, base_type: inmanta_type.Type) -> None:
-    modified_types: typing.List[inmanta_type.Type] = [
+    modified_types: list[inmanta_type.Type] = [
         base_type,
         inmanta_type.TypedList(base_type),
         inmanta_type.NullableType(base_type),

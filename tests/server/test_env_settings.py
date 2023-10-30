@@ -29,7 +29,7 @@ def get_environment_setting_default(setting: str) -> object:
     return data.Environment._settings[setting].default
 
 
-def check_only_contains_default_setting(settings_dict: Dict[str, object]) -> None:
+def check_only_contains_default_setting(settings_dict: dict[str, object]) -> None:
     """
     Depending on when the background cleanup processes are run, it is possible that environment settings are set, independently
     of the tests below. This method ensures these settings are properly set with their default values.

@@ -24,7 +24,8 @@ import subprocess
 from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+from collections.abc import Iterator
 
 import py
 import pytest
@@ -464,14 +465,14 @@ def test_project_install_logs(
 def test_project_install(
     local_module_package_index: str,
     snippetcompiler_clean,
-    install_module_names: List[str],
-    module_dependencies: List[str],
+    install_module_names: list[str],
+    module_dependencies: list[str],
 ) -> None:
     """
     Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
     as expected.
     """
-    fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
+    fq_mod_names: list[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
@@ -492,7 +493,7 @@ def test_project_install(
     ProjectTool().execute("install", [])
 
     for fq_mod_name in fq_mod_names:
-        module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
@@ -553,7 +554,7 @@ def test_project_install_preinstalled(
     )
 
     def assert_module_install() -> None:
-        module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
@@ -695,7 +696,7 @@ def test_project_install_incompatible_versions(
     v1mod1_path: str = os.path.join(v1_modules_path, "v1mod1")
     shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod1_path)
     with open(os.path.join(v1mod1_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
-        config: Dict[str, object] = yaml.safe_load(fh)
+        config: dict[str, object] = yaml.safe_load(fh)
         config["name"] = "v1mod1"
         config["version"] = str(current_version)
         fh.seek(0)
@@ -703,7 +704,7 @@ def test_project_install_incompatible_versions(
     v1mod2_path: str = os.path.join(v1_modules_path, "v1mod2")
     shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod2_path)
     with open(os.path.join(v1mod2_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
-        config: Dict[str, object] = yaml.safe_load(fh)
+        config: dict[str, object] = yaml.safe_load(fh)
         config["name"] = "v1mod2"
         config["requires"] = [str(req_v1_on_v2), str(req_v1_on_v1)]
         fh.seek(0)
@@ -1089,7 +1090,7 @@ def test_project_install_with_install_mode(
         expected_version = version.Version("1.0.0")
     else:
         expected_version = version.Version("1.0.1.dev0")
-    installed_packages: Dict[str, version.Version] = env.process_env.get_installed_packages()
+    installed_packages: dict[str, version.Version] = env.process_env.get_installed_packages()
     assert package_name in installed_packages
     assert installed_packages[package_name] == expected_version
 
@@ -1275,9 +1276,9 @@ def test_real_time_logging(caplog):
     """
     caplog.set_level(logging.DEBUG)
 
-    cmd: List[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
+    cmd: list[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
     return_code: int
-    output: List[str]
+    output: list[str]
     return_code, output = CommandRunner(LOGGER).run_command_and_stream_output(cmd, shell=True)
     assert return_code == 0
 

@@ -35,7 +35,7 @@ class BaseHttpException(web.HTTPError):
         super().__init__(status_code, message)
         self.details = details
 
-    def to_body(self) -> Dict[str, Any]:
+    def to_body(self) -> dict[str, Any]:
         """
         Return a response body
         """

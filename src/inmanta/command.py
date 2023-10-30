@@ -28,7 +28,7 @@ ParserConfigType = Callable[[argparse.ArgumentParser, abc.Sequence[argparse.Argu
 class CLIException(Exception):
     def __init__(self, *args: str, exitcode: int) -> None:
         self.exitcode = exitcode
-        super(CLIException, self).__init__(*args)
+        super().__init__(*args)
 
 
 class ShowUsageException(Exception):
@@ -37,12 +37,12 @@ class ShowUsageException(Exception):
     """
 
 
-class Commander(object):
+class Commander:
     """
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, object]] = {}
+    __command_functions: dict[str, dict[str, object]] = {}
 
     @classmethod
     def add(
@@ -52,7 +52,7 @@ class Commander(object):
         help_msg: str,
         parser_config: Optional[ParserConfigType],
         require_project: bool = False,
-        aliases: List[str] = [],
+        aliases: list[str] = [],
         add_verbose_flag: bool = True,
     ) -> None:
         """
@@ -80,14 +80,14 @@ class Commander(object):
         cls.__command_functions = {}
 
     @classmethod
-    def commands(cls) -> Dict[str, Dict[str, object]]:
+    def commands(cls) -> dict[str, dict[str, object]]:
         """
         Return a list of commands
         """
         return cls.__command_functions
 
 
-class command(object):  # noqa: N801
+class command:  # noqa: N801
     """
     A decorator that registers an export function
 
@@ -100,7 +100,7 @@ class command(object):  # noqa: N801
         help_msg: str,
         parser_config: Optional[ParserConfigType] = None,
         require_project: bool = False,
-        aliases: List[str] = [],
+        aliases: list[str] = [],
         add_verbose_flag: bool = True,
     ) -> None:
         self.name = name

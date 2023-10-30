@@ -50,7 +50,7 @@ class Server(protocol.ServerSlice):
     information
     """
 
-    _server_storage: Dict[str, str]
+    _server_storage: dict[str, str]
     compiler: "CompilerService"
     _server: protocol.Server
 
@@ -61,22 +61,22 @@ class Server(protocol.ServerSlice):
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_COMPILER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
         self._server = server
-        self._server_storage: Dict[str, str] = self.check_storage()
+        self._server_storage: dict[str, str] = self.check_storage()
         self.compiler: "CompilerService" = cast("CompilerService", server.get_slice(SLICE_COMPILER))
         self._handlers.append(routing.Rule(routing.PathMatches(r"/dashboard"), web.RedirectHandler, dict(url=r"/console")))
         self._handlers.append(
             routing.Rule(routing.PathMatches(r"/dashboard/(.*)"), web.RedirectHandler, dict(url=r"/console/{0}"))
         )
 
-    def check_storage(self) -> Dict[str, str]:
+    def check_storage(self) -> dict[str, str]:
         """
         Check if the server storage is configured and ready to use.
         """

@@ -211,7 +211,7 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
         start = end - (e - s)
 
         r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
-        raise ParserException(r, t.value, "Regex error in %s: '%s'" % (t.value, error))
+        raise ParserException(r, t.value, "Regex error in {}: '{}'".format(t.value, error))
 
 
 # Define a rule so we can track line numbers
@@ -240,7 +240,7 @@ lexer = lex.lex()
 
 
 def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: int = -1) -> str:
-    """
+    r"""
     Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.  # noqa: W605
     This function assumes to be called from within a t_STRING or a t_MLS rule.
 

@@ -31,7 +31,8 @@ from collections.abc import Mapping
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import AsyncIterator, Awaitable, Dict, Hashable, List, Optional, Sequence, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
+from collections.abc import AsyncIterator, Awaitable, Hashable, Sequence
 
 import dateutil
 import dateutil.parser
@@ -61,7 +62,7 @@ LOGGER: Logger = logging.getLogger(__name__)
 COMPILER_LOGGER: Logger = LOGGER.getChild("report")
 
 
-class CompileStateListener(object):
+class CompileStateListener:
     @abc.abstractmethod
     async def compile_done(self, compile: data.Compile) -> None:
         """Receive notification of all completed compiles
@@ -75,7 +76,7 @@ class CompileStateListener(object):
         pass
 
 
-class CompileRun(object):
+class CompileRun:
     """Class encapsulating running the compiler."""
 
     def __init__(self, request: data.Compile, project_dir: str) -> None:
@@ -192,7 +193,7 @@ class CompileRun(object):
 
         return out.decode().strip()
 
-    async def _run_compile_stage(self, name: str, cmd: List[str], cwd: str, env: Dict[str, str] = {}) -> data.Report:
+    async def _run_compile_stage(self, name: str, cmd: list[str], cwd: str, env: dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
         sub_process: Optional[Process] = None
@@ -218,7 +219,7 @@ class CompileRun(object):
                 # The process is still running, kill it
                 sub_process.kill()
 
-    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, Optional[model.CompileData]]:
+    async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
         """
         Runs this compile run.
 
@@ -245,7 +246,7 @@ class CompileRun(object):
                 return False, None
 
             if not os.path.exists(project_dir):
-                await self._info("Creating project directory for environment %s at %s" % (environment_id, project_dir))
+                await self._info("Creating project directory for environment {} at {}".format(environment_id, project_dir))
                 os.mkdir(project_dir)
 
             # Use a separate venv to compile the project to prevent that packages are installed in the
@@ -273,7 +274,7 @@ class CompileRun(object):
                 """
                 Ensure that no protected Inmanta packages are installed in the compiler venv.
                 """
-                cmd: List[str] = PipCommandBuilder.compose_uninstall_command(
+                cmd: list[str] = PipCommandBuilder.compose_uninstall_command(
                     python_path=PythonEnvironment.get_python_path_for_env_path(venv_dir),
                     pkg_names=PythonEnvironment.get_protected_inmanta_packages(),
                 )
@@ -290,7 +291,7 @@ class CompileRun(object):
                 )
 
             async def run_compile_stage_in_venv(
-                stage_name: str, inmanta_args: List[str], cwd: str, env: Dict[str, str] = {}
+                stage_name: str, inmanta_args: list[str], cwd: str, env: dict[str, str] = {}
             ) -> data.Report:
                 """
                 Run a compile stage by executing the given command in the venv `venv_dir`.
@@ -420,7 +421,7 @@ class CompileRun(object):
 
             self.tail_stdout = ""
 
-            env_vars_compile: Dict[str, str] = os.environ.copy()
+            env_vars_compile: dict[str, str] = os.environ.copy()
             env_vars_compile.update(self.request.environment_variables)
 
             result: data.Report = await run_compile_stage_in_venv(
@@ -499,36 +500,36 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     _env_folder: str
 
     def __init__(self) -> None:
-        super(CompilerService, self).__init__(SLICE_COMPILER)
-        self._recompiles: Dict[uuid.UUID, Task] = {}
+        super().__init__(SLICE_COMPILER)
+        self._recompiles: dict[uuid.UUID, Task] = {}
         self._global_lock = asyncio.locks.Lock()
-        self.listeners: List[CompileStateListener] = []
-        self._scheduled_full_compiles: Dict[uuid.UUID, Tuple[TaskMethod, str]] = {}
+        self.listeners: list[CompileStateListener] = []
+        self._scheduled_full_compiles: dict[uuid.UUID, tuple[TaskMethod, str]] = {}
         # In-memory cache to keep track of the total length of all the compile queues on this Inmanta server.
         # This cache is used by the /serverstatus endpoint.
         self._queue_count_cache: int = 0
         self._queue_count_cache_lock = asyncio.locks.Lock()
 
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
+    async def get_status(self) -> dict[str, ArgumentTypes]:
         return {"task_queue": self._queue_count_cache, "listeners": len(self.listeners)}
 
     def add_listener(self, listener: CompileStateListener) -> None:
         self.listeners.append(listener)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT]
 
     async def prestart(self, server: server.protocol.Server) -> None:
-        await super(CompilerService, self).prestart(server)
+        await super().prestart(server)
         state_dir: str = opt.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
 
     async def start(self) -> None:
-        await super(CompilerService, self).start()
+        await super().start()
         await self._recover()
         self.schedule(self._cleanup, opt.server_cleanup_compiler_reports_interval.get(), initial_delay=0, cancel_on_stop=False)
 
@@ -558,12 +559,12 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             del self._scheduled_full_compiles[env.id]
         # set up new schedule
         if schedule_cron:
-            metadata: Dict[str, str] = {
+            metadata: dict[str, str] = {
                 "type": "schedule",
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
 
-            async def _request_recompile_task() -> Tuple[Optional[uuid.UUID], Warnings]:
+            async def _request_recompile_task() -> tuple[Optional[uuid.UUID], Warnings]:
                 """
                 Creates a new task for the full compile schedule.
                 If the environment is halted, the task does nothing.
@@ -593,13 +594,13 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         metadata: Optional[JsonType] = None,
         env_vars: Optional[Mapping[str, str]] = None,
         partial: bool = False,
-        removed_resource_sets: Optional[List[str]] = None,
+        removed_resource_sets: Optional[list[str]] = None,
         exporter_plugin: Optional[str] = None,
         notify_failed_compile: Optional[bool] = None,
         failed_compile_message: Optional[str] = None,
         in_db_transaction: bool = False,
         connection: Optional[Connection] = None,
-    ) -> Tuple[Optional[uuid.UUID], Warnings]:
+    ) -> tuple[Optional[uuid.UUID], Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
@@ -816,7 +817,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         await self._auto_recompile_wait(compile)
 
         compile_merge_key: Hashable = CompilerService._compile_merge_key(compile)
-        merge_candidates: List[data.Compile] = [
+        merge_candidates: list[data.Compile] = [
             c
             for c in await data.Compile.get_next_compiles_for_environment(compile.environment)
             if not c.id == compile.id and CompilerService._compile_merge_key(c) == compile_merge_key
@@ -913,7 +914,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         return compile.to_dto().compile_data
 
     @protocol.handle(methods.get_compile_queue, env="tid")
-    async def get_compile_queue(self, env: data.Environment) -> List[model.CompileRun]:
+    async def get_compile_queue(self, env: data.Environment) -> list[model.CompileRun]:
         """
         Get the current compiler queue on the server
         """
@@ -929,7 +930,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         last_id: Optional[uuid.UUID] = None,
         start: Optional[datetime.datetime] = None,
         end: Optional[datetime.datetime] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "requested.desc",
     ) -> ReturnValue[Sequence[model.CompileReport]]:
         try:
