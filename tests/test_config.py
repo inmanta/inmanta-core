@@ -44,7 +44,9 @@ def test_environment_deprecated_options(caplog):
         Config.set(new_option.section, new_option.name, "23")
         caplog.clear()
         assert new_option.get() == 23
-        assert "Config option {} is deprecated. Use {} instead.".format(deprecated_option.name, new_option.name) not in caplog.text
+        assert (
+            "Config option {} is deprecated. Use {} instead.".format(deprecated_option.name, new_option.name) not in caplog.text
+        )
 
         Config.load_config()  # Reset config options to default values
         assert new_option.get() != 23
@@ -52,7 +54,9 @@ def test_environment_deprecated_options(caplog):
         Config.set(new_option.section, new_option.name, "24")
         caplog.clear()
         assert new_option.get() == 24
-        assert "Config option {} is deprecated. Use {} instead.".format(deprecated_option.name, new_option.name) not in caplog.text
+        assert (
+            "Config option {} is deprecated. Use {} instead.".format(deprecated_option.name, new_option.name) not in caplog.text
+        )
 
 
 def test_options():

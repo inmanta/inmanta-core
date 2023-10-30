@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Iterable, Iterator
 from functools import reduce
 from typing import Optional, Set, cast
-from collections.abc import Iterable, Iterator
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.dataflow import (

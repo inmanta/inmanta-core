@@ -35,8 +35,8 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 from re import Pattern
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 import click
 import more_itertools
@@ -570,7 +570,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            fr"Either \--v1 or \--v2 has to be set.",  # noqa: W605
+            rf"Either \--v1 or \--v2 has to be set.",  # noqa: W605
             parents=parent_parsers,
         )
         add.add_argument(

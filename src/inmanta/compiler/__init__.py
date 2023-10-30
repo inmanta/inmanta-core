@@ -18,9 +18,9 @@
 import logging
 import sys
 from collections import abc
+from collections.abc import Sequence
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
-from collections.abc import Sequence
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -209,7 +209,9 @@ class Compiler:
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
-                    "All plugin modules should be loaded in the {} package not in {}".format(const.PLUGINS_PACKAGE, cls.__module__)
+                    "All plugin modules should be loaded in the {} package not in {}".format(
+                        const.PLUGINS_PACKAGE, cls.__module__
+                    )
                 )
 
             mod_ns = mod_ns[1:]

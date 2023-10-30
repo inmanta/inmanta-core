@@ -28,27 +28,12 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
+from collections.abc import Awaitable, Iterable, Sequence
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    List,
-    NewType,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
-from collections.abc import Awaitable, Iterable, Sequence
 from re import Pattern
+from typing import Any, Callable, Dict, Generic, List, NewType, Optional, Set, Tuple, Type, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -1210,7 +1195,9 @@ class Field(Generic[T]):
             return pydantic.tools.parse_obj_as(pydantic.AnyHttpUrl, value)
 
         raise TypeError(
-            "Field {} should have the correct type ({} instead of {})".format(name, self.field_type.__name__, type(value).__name__)
+            "Field {} should have the correct type ({} instead of {})".format(
+                name, self.field_type.__name__, type(value).__name__
+            )
         )
 
 

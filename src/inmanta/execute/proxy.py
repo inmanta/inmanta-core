@@ -16,10 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from typing import Callable, Dict, List, Optional, Tuple, Union
-from collections.abc import Iterable, Sequence
 
 from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown

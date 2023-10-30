@@ -24,8 +24,8 @@ import shutil
 import subprocess
 import sys
 import warnings
-from typing import Optional, Type
 from collections.abc import Iterator
+from typing import Optional, Type
 
 import py
 import pytest

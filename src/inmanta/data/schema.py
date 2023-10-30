@@ -19,10 +19,10 @@
 import logging
 import pkgutil
 import re
+from collections.abc import Coroutine
 from itertools import takewhile
 from types import ModuleType
 from typing import Any, Callable, List, Optional, Set, Tuple
-from collections.abc import Coroutine
 
 from asyncpg import Connection, UndefinedColumnError, UndefinedTableError
 from asyncpg.protocol import Record

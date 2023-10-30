@@ -18,8 +18,8 @@
 import datetime
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from collections.abc import Sequence
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from inmanta import data, util
 from inmanta.const import ParameterSource

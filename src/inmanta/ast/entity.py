@@ -18,8 +18,8 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 from collections.abc import Sequence
+from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 from inmanta.ast import (
     CompilerException,

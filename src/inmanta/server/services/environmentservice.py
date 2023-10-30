@@ -27,8 +27,8 @@ import warnings
 from collections import defaultdict
 from collections.abc import Set
 from enum import Enum
-from typing import Dict, List, Optional, cast
 from re import Pattern
+from typing import Dict, List, Optional, cast
 
 from asyncpg import StringDataRightTruncationError
 

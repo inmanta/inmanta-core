@@ -16,9 +16,8 @@
     Contact: code@inmanta.com
 """
 import os
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Optional, Union
-from collections.abc import Iterator
 
 import pytest
 

@@ -18,8 +18,8 @@
 import datetime
 import logging
 import uuid
-from typing import Dict, List, Optional, cast
 from collections.abc import Sequence
+from typing import Dict, List, Optional, cast
 
 from asyncpg import Connection
 

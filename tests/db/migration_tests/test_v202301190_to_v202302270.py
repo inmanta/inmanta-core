@@ -17,8 +17,8 @@
 """
 import os
 from collections import abc
-from typing import Callable, List
 from collections.abc import Awaitable
+from typing import Callable, List
 
 import pytest
 

@@ -752,10 +752,7 @@ def version_report(client: Client, environment: str, version: str, show_detailed
 
         for t in sorted(agents[agent].keys()):
             parsed_resource_version_id = Id.parse_id(ResourceVersionIdStr(agents[agent][t][0]["resource_version_id"]))
-            click.echo(
-                click.style("Resource type:", bold=True)
-                + f"{t} ({parsed_resource_version_id.attribute})"
-            )
+            click.echo(click.style("Resource type:", bold=True) + f"{t} ({parsed_resource_version_id.attribute})")
             click.echo("-" * 72)
 
             for res in agents[agent][t]:

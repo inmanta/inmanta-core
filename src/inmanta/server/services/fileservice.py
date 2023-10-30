@@ -18,8 +18,8 @@
 import base64
 import difflib
 import logging
-from typing import List, Optional
 from collections.abc import Iterable
+from typing import List, Optional
 
 from asyncpg.exceptions import UniqueViolationError
 

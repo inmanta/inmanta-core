@@ -26,12 +26,12 @@ import pathlib
 import sys
 import types
 from collections import abc
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain, starmap
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
-from collections.abc import Iterable, Iterator, Sequence
 
 from inmanta import const, module
 from inmanta.stable_api import stable_api
@@ -130,7 +130,9 @@ class CodeManager:
         """
         file_name = self.get_object_source(instance)
         if file_name is None:
-            raise SourceNotFoundException("Unable to locate source code of instance {} for entity {}".format(inspect, type_name))
+            raise SourceNotFoundException(
+                "Unable to locate source code of instance {} for entity {}".format(inspect, type_name)
+            )
 
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()

@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Iterator
 from functools import reduce
 from itertools import chain
 from typing import Callable, Dict, List, Optional, Set, Tuple, Type
-from collections.abc import Iterator
 
 import pytest
 

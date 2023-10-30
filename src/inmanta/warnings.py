@@ -18,9 +18,9 @@
 
 import logging
 import warnings
+from collections.abc import Mapping
 from enum import Enum
 from typing import Dict, List, Literal, Optional, TextIO, Type, Union
-from collections.abc import Mapping
 
 
 class InmantaWarning(Warning):

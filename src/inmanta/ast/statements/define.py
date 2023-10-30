@@ -20,8 +20,8 @@
 import logging
 import typing
 import warnings
-from typing import Dict, List, Optional, Tuple
 from collections.abc import Iterator
+from typing import Dict, List, Optional, Tuple
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -167,7 +167,9 @@ class DefineEntity(TypeDefinitionStatement):
     def get_full_parent_names(self) -> list[str]:
         def resolve_parent(parent: LocatableString) -> str:
             ptype = self.namespace.get_type(parent)
-            assert isinstance(ptype, Entity), "Parents of entities should be entities, but {} is a {}".format(parent, type(ptype))
+            assert isinstance(ptype, Entity), "Parents of entities should be entities, but {} is a {}".format(
+                parent, type(ptype)
+            )
             return ptype.get_full_name()
 
         try:
@@ -600,7 +602,9 @@ class DefineIndex(DefinitionStatement):
         for attribute in self.attributes:
             if attribute not in allattributes:
                 raise NotFoundException(
-                    self, attribute, "Attribute '{}' referenced in index is not defined in entity {}".format(attribute, entity_type)
+                    self,
+                    attribute,
+                    "Attribute '{}' referenced in index is not defined in entity {}".format(attribute, entity_type),
                 )
             else:
                 rattribute = entity_type.get_attribute(attribute)
@@ -608,11 +612,14 @@ class DefineIndex(DefinitionStatement):
                 if rattribute.is_optional():
                     raise IndexException(
                         self,
-                        "Index can not contain optional attributes, Attribute ' {}.{}' is optional".format(attribute, entity_type),
+                        "Index can not contain optional attributes, Attribute ' {}.{}' is optional".format(
+                            attribute, entity_type
+                        ),
                     )
                 if rattribute.is_multi():
                     raise IndexException(
-                        self, "Index can not contain list attributes, Attribute ' {}.{}' is a list".format(attribute, entity_type)
+                        self,
+                        "Index can not contain list attributes, Attribute ' {}.{}' is a list".format(attribute, entity_type),
                     )
 
         entity_type.add_index(self.attributes)

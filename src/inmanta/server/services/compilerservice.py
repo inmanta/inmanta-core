@@ -27,12 +27,11 @@ import traceback
 import uuid
 from asyncio import CancelledError, Task
 from asyncio.subprocess import Process
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequence
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional, Tuple, cast
-from collections.abc import AsyncIterator, Awaitable, Hashable, Sequence
 
 import dateutil
 import dateutil.parser

@@ -84,9 +84,9 @@ import traceback
 import uuid
 import venv
 from collections import abc
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Callable, Dict, List, Optional, Tuple, Union
-from collections.abc import AsyncIterator, Awaitable, Iterator
 
 import asyncpg
 import pkg_resources

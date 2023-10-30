@@ -21,9 +21,9 @@ import os
 import shutil
 import tempfile
 import unittest
+from collections.abc import Mapping
 from importlib.abc import Loader
 from typing import List, Optional, Tuple, Type
-from collections.abc import Mapping
 from unittest import mock
 
 import py

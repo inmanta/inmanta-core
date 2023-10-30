@@ -24,10 +24,10 @@ import os
 import shutil
 import uuid
 from collections import abc
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
 from typing import Any, Dict, Optional, Type, TypeVar, Union
-from collections.abc import Sequence
 
 import pytest
 import yaml
@@ -116,7 +116,9 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
 def assert_graph(graph, expected):
     lines = [
-        "{}: {}".format(f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.resource_requires
+        "{}: {}".format(f.id.get_attribute_value(), t.id.get_attribute_value())
+        for f in graph.values()
+        for t in f.resource_requires
     ]
     lines = sorted(lines)
 

@@ -34,12 +34,12 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
+from collections.abc import Awaitable, Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
 from typing import BinaryIO, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
-from collections.abc import Awaitable, Coroutine, Iterator
 
 import asyncpg
 from tornado import gen

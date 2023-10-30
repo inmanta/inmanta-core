@@ -15,9 +15,9 @@
 
     Contact: code@inmanta.com
 """
+from collections.abc import Iterable
 from itertools import chain
 from typing import FrozenSet, Set
-from collections.abc import Iterable
 
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference
 
@@ -98,14 +98,14 @@ class UnsetRootCauseAnalyzer:
 
             # Find any root for this equivalence
             n_has_root = any(
-                    has_root(subnode)
-                    for peernode in node.equivalence.nodes
-                    for subnode in chain(
-                        self._assignment_step(peernode),
-                        self._parent_instance_step(peernode),
-                        self._child_attribute_step(peernode),
-                    )
-                    if subnode not in node.equivalence.nodes
+                has_root(subnode)
+                for peernode in node.equivalence.nodes
+                for subnode in chain(
+                    self._assignment_step(peernode),
+                    self._parent_instance_step(peernode),
+                    self._child_attribute_step(peernode),
+                )
+                if subnode not in node.equivalence.nodes
             )
 
             # This equivalence is done

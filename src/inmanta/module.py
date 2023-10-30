@@ -33,6 +33,7 @@ import types
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from configparser import ConfigParser
 from dataclasses import dataclass
 from enum import Enum
@@ -43,22 +44,7 @@ from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from typing import (
-    Any,
-    Dict,
-    Generic,
-    List,
-    NewType,
-    Optional,
-    Set,
-    TextIO,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-)
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from typing import Any, Dict, Generic, List, NewType, Optional, Set, TextIO, Tuple, Type, TypeVar, Union, cast
 
 import more_itertools
 import pkg_resources
@@ -2420,8 +2406,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         if isinstance(module, ModuleV1):
             warnings.warn(
                 InmantaWarning(
-                        f"Loaded V1 module {module.name}. The use of V1 modules is deprecated."
-                        " Use the equivalent V2 module instead."
+                    f"Loaded V1 module {module.name}. The use of V1 modules is deprecated."
+                    " Use the equivalent V2 module instead."
                 )
             )
         self.modules[module_name] = module

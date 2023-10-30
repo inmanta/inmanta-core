@@ -20,10 +20,10 @@ import logging
 import re
 import string
 from collections import abc
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import accumulate
 from typing import List, Optional, Tuple, Union
-from collections.abc import Iterable, Iterator
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction

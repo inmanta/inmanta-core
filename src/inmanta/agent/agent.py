@@ -27,10 +27,10 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
+from collections.abc import Awaitable, Iterable, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
-from collections.abc import Awaitable, Iterable, Sequence
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -217,7 +217,9 @@ class ResourceAction(ResourceActionBase):
                 try:
                     if self.is_done():
                         # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "{} {} is no longer active".format(self.gid, self.resource))
+                        self.logger.log(
+                            const.LogLevel.TRACE.to_int, "{} {} is no longer active".format(self.gid, self.resource)
+                        )
                         return
                     result = sum(results, ResourceActionResult(cancel=False))
                     if result.cancel:
@@ -247,7 +249,9 @@ class ResourceAction(ResourceActionBase):
                 try:
                     if self.is_done():
                         # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "{} {} is no longer active".format(self.gid, self.resource))
+                        self.logger.log(
+                            const.LogLevel.TRACE.to_int, "{} {} is no longer active".format(self.gid, self.resource)
+                        )
                         return
 
                     result = sum(results, ResourceActionResult(cancel=False))

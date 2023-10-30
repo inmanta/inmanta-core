@@ -21,9 +21,9 @@ https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.2.md
 Inspired by FastAPI:
 https://github.com/tiangolo/fastapi
 """
+from collections.abc import Sequence
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
-from collections.abc import Sequence
 
 from pydantic import AnyUrl, Field
 

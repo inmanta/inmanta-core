@@ -21,9 +21,9 @@ import socket
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple, Union
-from collections.abc import Sequence
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
@@ -711,7 +711,9 @@ class SessionManager(ServerSlice):
             return session
 
     def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
-        LOGGER.debug("New session with id {} on node {} for env {} with endpoints {}".format(sid, nodename, tid, endpoint_names))
+        LOGGER.debug(
+            "New session with id {} on node {} for env {} with endpoints {}".format(sid, nodename, tid, endpoint_names)
+        )
         return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
     async def expire(self, session: Session, timeout: float) -> None:
