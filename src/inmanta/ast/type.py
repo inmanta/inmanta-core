@@ -251,29 +251,6 @@ class Number(Primitive):
             raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
         return True  # allow this function to be called from a lambda function
 
-    def cast(self, value: Optional[object]) -> object:
-        """
-        Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
-        """
-        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
-
-        if isinstance(value, Unknown):
-            # propagate unknowns
-            return value
-
-        if isinstance(value, NoneValue):
-            raise exception  # raise the exception immediately if the value is NoneValue
-        try:
-            # Try to convert value to float
-            return float(value)
-        except ValueError:
-            pass  # Value cannot be converted to float
-
-        if isinstance(value, bool):
-            return float(int(value))
-
-        raise exception
-
     def is_primitive(self) -> bool:
         return True
 
@@ -303,29 +280,6 @@ class Integer(Number):
         if not isinstance(value, numbers.Integral):
             raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
         return True
-
-    def cast(self, value: Optional[object]) -> object:
-        """
-        Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
-        """
-        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
-
-        if isinstance(value, Unknown):
-            # propagate unknowns
-            return value
-
-        if isinstance(value, NoneValue):
-            raise exception  # raise the exception immediately if the value is NoneValue
-        try:
-            # Try to convert value to int
-            return int(value)
-        except ValueError:
-            pass  # Value cannot be converted to int
-
-        if isinstance(value, bool):
-            return int(value)
-
-        raise exception
 
     def type_string(self) -> str:
         return "int"
@@ -629,7 +583,9 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(self, [Integer(), NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
+        Union.__init__(
+            self, [NullableType(Integer()), NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)]
+        )
 
     def type_string_internal(self) -> str:
         return "Literal"
@@ -734,6 +690,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
 TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     "string": String(),
     "number": Number(),
+    "float": Number(),
     "int": Integer(),
     "bool": Bool(),
     "list": LiteralList(),

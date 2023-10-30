@@ -155,6 +155,51 @@ u = 0.0
     assert Number().validate(u)
 
 
+def test_float_alias_number(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        float i = 0
+    end
+
+    implement Test using std::none
+
+    Test(i = 42)
+    Test(i = -42)
+    Test()
+    Test(i = 42.0)
+    Test(i = false)
+
+    a = float(21)
+    a = 21.0
+    b = float(25.0)
+    b = 25.0
+    x = float("31")
+    x = 31.0
+    y = float("22.0")
+    y = 22.0
+    z = float(true)
+    z = 1.0
+    u = float(false)
+    u = 0.0
+    """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+    x = root.lookup("x").get_value()
+    y = root.lookup("y").get_value()
+    z = root.lookup("z").get_value()
+    u = root.lookup("u").get_value()
+    assert Number().validate(a)
+    assert Number().validate(b)
+    assert Number().validate(x)
+    assert Number().validate(y)
+    assert Number().validate(z)
+    assert Number().validate(u)
+
+
 def test_int_as_index_for_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
@@ -170,7 +215,7 @@ test = A(x=0)
     compiler.do_compile()
 
 
-def test_int_as_index_for_number(snippetcompiler):
+def test_int_as_index_for_number_2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
