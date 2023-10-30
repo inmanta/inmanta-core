@@ -399,6 +399,7 @@ class ResourceService(protocol.ServerSlice):
             "timestamp": util.datetime_iso_format(timestamp),
             "args": [],
         }
+
         await self.resource_action_update(
             env,
             resources_version_ids,

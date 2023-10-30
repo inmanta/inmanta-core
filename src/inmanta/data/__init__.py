@@ -2840,10 +2840,18 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(
-        self, only_content: bool = False, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
+        Completely remove this environment from the db
+        """
+        async with self.get_connection(connection=connection) as con:
+            await self.clear(connection=con)
+            await self.delete(connection=con)
+
+    async def clear(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Delete everything related to this environment from the db, except the entry in the Environment table.
+
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         This is especially true for the tables resourceaction_resource, resource and resourceaction, because they
         have a high read/write load. As such, we perform the deletes on each table in a separate transaction.
@@ -2866,8 +2874,6 @@ class Environment(BaseDocument):
             await ResourceAction.delete_all(environment=self.id, connection=con)
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
-            if not only_content:
-                await self.delete(connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
@@ -6148,7 +6154,7 @@ class DiscoveredResource(BaseDocument):
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
-    values: dict[str, str]
+    values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
@@ -6261,9 +6267,6 @@ async def connect(
         min_size=connection_pool_min_size,
         max_size=connection_pool_max_size,
         timeout=connection_timeout,
-        server_settings={
-            "client_connection_check_interval": "1000",  # make server check the tpc connection every 1 second
-        },
     )
     try:
         set_connection_pool(pool)

@@ -34,7 +34,7 @@ from inmanta import const, data, protocol, resources
 from inmanta.agent import io
 from inmanta.agent.cache import AgentCache
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, DiscoveredResource, ResourceIdStr
+from inmanta.data.model import AttributeStateChange, BaseModel, DiscoveredResource, ResourceIdStr
 from inmanta.protocol import Result, json_encode
 from inmanta.stable_api import stable_api
 from inmanta.types import SimpleTypes
@@ -51,7 +51,7 @@ T = TypeVar("T")
 # A resource present in the model that describes the resources that should be discovered
 TDiscovery = TypeVar("TDiscovery", bound=resources.DiscoveryResource)
 # The type of elements produced by the resource discovery process.
-TDiscovered = TypeVar("TDiscovered")
+TDiscovered = TypeVar("TDiscovered", bound=BaseModel)
 T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 TResource = TypeVar("TResource", bound=resources.Resource)
 
@@ -979,10 +979,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
           conventional resource type expected to be deployed on a network, but rather a way to express
           the intent to discover resources of the second type TDiscovered already present on the network.
         - TDiscovered denotes the handler's Unmanaged Resource type. This is the type of the resources that have been
-          discovered and reported to the server. Objects of this type must be either:
-             1. A pydantic object
-             2. An object that has a `to_dict()` method that returns a serializable dictionary
-             3. A serializable dictionary
+          discovered and reported to the server. Objects of this type must a pydantic object.
     """
 
     def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> Dict[str, object]:
@@ -1019,7 +1016,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
 
             discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
             discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values)
+                DiscoveredResource(discovered_resource_id=resource_id, values=values.dict())
                 for resource_id, values in discovered_resources_raw.items()
             ]
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))

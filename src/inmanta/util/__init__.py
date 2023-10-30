@@ -1,5 +1,5 @@
 """
-    Copyright 2022 Inmanta
+    Copyright 2023 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -398,6 +398,7 @@ def datetime_iso_format(timestamp: datetime.datetime, *, tz_aware: bool = True) 
     """
     Returns a timestamp ISO string.
 
+
     :param timestamp: The timestamp to get the ISO string for.
     :param tz_aware: Whether to return timezone aware timestamps or naive, implicit UTC timestamp.
     """
@@ -455,7 +456,11 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
 
 @stable_api
+<<<<<<< HEAD:src/inmanta/util.py
 def api_boundary_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, "JSONSerializable"]:
+=======
+def api_boundary_json_encoder(o: object, tz_aware: bool = False) -> Union[ReturnTypes, "JSONSerializable"]:
+>>>>>>> master:src/inmanta/util/__init__.py
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
     encoder is meant to be used for API boundaries.
