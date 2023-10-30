@@ -8,6 +8,7 @@ Technical Story: [
     https://github.com/inmanta/inmanta-core/issues/2919,
     https://github.com/inmanta/inmanta-core/pull/2953,
     https://github.com/inmanta/inmanta-lsm/pull/621,
+    https://github.com/inmanta/inmanta-core/issues/6428
 ]
 
 ## Context and Problem Statement
@@ -22,6 +23,9 @@ How do we deal with timezones when it comes to datetime data? This data is passe
 various places in the database and manipulated throughout the code. Which invariants do we uphold with regards to explicit
 timezone information for these datetime objects? And how / to what extent do we remain compatible with older API clients, which
 will always send naive timestamps, and might not be able to interpret timezone-aware timestamps in the response?
+
+https://github.com/inmanta/inmanta-core/issues/6428 adds a config option to set whether the timestamps returned by
+the API are aware or not.
 
 ## Decision Drivers
 
@@ -42,7 +46,8 @@ will always send naive timestamps, and might not be able to interpret timezone-a
 Chosen option: option 3 with timezone-aware internal representation.
 * Support both timezone aware and naive timestamps as API input,
 * Any timezone-naive timestamps represent a timestamp in UTC.
-* Use timezone-naive timestamps in API return values.
+* Use timezone-naive timestamps in API return values for iso<6.5. For iso>=6.5 this can be configured through the server.tz_aware_timestamps option.
+For iso>=7 use timezone aware timestamps in API return values by default.
 * Internally (database + code), always use timezone-aware timestamps (objects are converted at
 the API boundary).
 

@@ -28,6 +28,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from enum import Enum
+from functools import partial
 from inspect import Parameter
 from typing import (
     TYPE_CHECKING,
@@ -963,7 +964,7 @@ class UrlMethod(object):
 
 
 # Util functions
-def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
+def custom_json_encoder(o: object, tz_aware: bool = False) -> Union[ReturnTypes, util.JSONSerializable]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
@@ -971,7 +972,7 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
         return const.UNKNOWN_STRING
 
     # handle common python types
-    return util.api_boundary_json_encoder(o)
+    return util.api_boundary_json_encoder(o, tz_aware)
 
 
 def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
@@ -984,10 +985,10 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[Lis
     return code, value
 
 
-def json_encode(value: ReturnTypes) -> str:
+def json_encode(value: ReturnTypes, tz_aware: bool = False) -> str:
     """Our json encode is able to also serialize other types than a dict."""
     # see json_encode in tornado.escape
-    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+    return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
 def gzipped_json(value: JsonType) -> Tuple[bool, Union[bytes, str]]:
