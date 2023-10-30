@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+from inmanta import ast
 from inmanta.plugins import plugin
 
 

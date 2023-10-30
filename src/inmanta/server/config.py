@@ -20,7 +20,20 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
+from inmanta.config import (
+    Config,
+    Option,
+    is_bool,
+    is_float,
+    is_int,
+    is_list,
+    is_map,
+    is_str,
+    is_str_opt,
+    is_time,
+    log_dir,
+    state_dir,
+)
 
 LOGGER = logging.getLogger(__name__)
 
