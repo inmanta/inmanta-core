@@ -25,7 +25,6 @@ class AnyType:
     Supertype for objects that are an instance of all types
     """
 
-    pass
 
 
 @stable_api

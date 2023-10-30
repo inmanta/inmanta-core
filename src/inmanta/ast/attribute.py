@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from typing import List, Optional, Set, Tuple
+from typing import Optional, Tuple
 
 from inmanta.ast import CompilerException, Locatable, Location, RuntimeException, TypingException
 from inmanta.ast.type import NullableType, TypedList

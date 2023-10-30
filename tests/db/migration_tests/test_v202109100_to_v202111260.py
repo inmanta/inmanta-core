@@ -17,7 +17,7 @@
 """
 import os
 from collections.abc import AsyncIterator, Awaitable
-from typing import Callable, List
+from typing import Callable
 
 import pytest
 from asyncpg import Connection

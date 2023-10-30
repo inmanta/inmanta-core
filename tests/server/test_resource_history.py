@@ -20,7 +20,6 @@ import json
 import uuid
 from collections import defaultdict
 from operator import itemgetter
-from typing import Dict
 from uuid import UUID
 
 import pytest

@@ -25,7 +25,7 @@ import shutil
 import sys
 from logging import INFO
 from types import ModuleType
-from typing import List, Optional, Set
+from typing import Optional
 
 import py
 import pytest

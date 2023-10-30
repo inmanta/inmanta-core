@@ -17,7 +17,7 @@
 """
 import logging
 import os
-from typing import List, Optional
+from typing import Optional
 
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement

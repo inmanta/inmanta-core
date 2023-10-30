@@ -33,7 +33,7 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from re import Pattern
-from typing import Any, Callable, Dict, Generic, List, NewType, Optional, Set, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Generic, NewType, Optional, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg
@@ -465,22 +465,18 @@ class DatabaseOrderV2(ABC):
             we consider the null not a value and filter only on `id_value`
 
         """
-        pass
 
     @abstractmethod
     def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
         """Get this order as an order_by statement"""
-        pass
 
     @abstractmethod
     def get_order(self) -> PagingOrder:
         """Return the order of this paging request"""
-        pass
 
     @abstractmethod
     def get_paging_boundaries(self, first: abc.Mapping[str, object], last: abc.Mapping[str, object]) -> PagingBoundaries:
         """Return the page boundaries, given the first and last record of the page"""
-        pass
 
 
 T_SELF = TypeVar("T_SELF", bound="SingleDatabaseOrder")
@@ -621,7 +617,6 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
     @abstractmethod
     def id_column(self) -> tuple[ColumnNameStr, ColumnType]:
         """Name and type of the id column of this database order"""
-        pass
 
     # External API
     def as_filter(

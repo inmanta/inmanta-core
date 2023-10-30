@@ -18,10 +18,9 @@
 # pylint: disable-msg=R0923,W0613
 
 import logging
-import typing
 import warnings
 from collections.abc import Iterator
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -646,7 +645,6 @@ class PluginStatement(TypeDefinitionStatement):
         """
         Evaluate this plugin
         """
-        pass
 
 
 class DefineImport(TypeDefinitionStatement, Import):

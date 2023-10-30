@@ -17,7 +17,7 @@
 """
 import datetime
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Callable, Optional, TypeVar
 
 import dateutil
 import more_itertools
@@ -115,7 +115,6 @@ class Filter(ABC, BaseModel):
     @abstractmethod
     def to_query_type(self) -> Optional[tuple[QueryType, object]]:
         """Get the value of the filter with the correct query type"""
-        pass
 
 
 class BooleanEqualityFilter(Filter):

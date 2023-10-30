@@ -25,7 +25,7 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from concurrent.futures import Future
 from functools import partial
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -457,7 +457,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         Override this method to implement custom logic called by the agent on handler deactivation. i.e. when the
         instantiated handler will no longer be used by the agent.
         """
-        pass
 
     def deploy(
         self,
@@ -544,7 +543,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param resource: The resource to deploy.
         :param dry_run: If set to true, the intent is not enforced, only the set of changes it would bring is computed.
         """
-        pass
 
     def available(self, resource: TResource) -> bool:
         """
@@ -591,7 +589,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource to reload.
         """
-        pass
 
     def pre(self, ctx: HandlerContext, resource: TResource) -> None:
         """
@@ -601,7 +598,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource being handled.
         """
-        pass
 
     def post(self, ctx: HandlerContext, resource: TResource) -> None:
         """
@@ -610,7 +606,6 @@ class HandlerAPI(ABC, Generic[TResource]):
         :param ctx: Context object to report changes and logs to the agent and server.
         :param resource: The resource being handled.
         """
-        pass
 
     def facts(self, ctx: HandlerContext, resource: TResource) -> dict[str, object]:
         """

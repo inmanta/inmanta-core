@@ -18,7 +18,7 @@
 import warnings
 from collections.abc import Iterable, Iterator, Sequence, Set
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, FrozenSet, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
 from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise

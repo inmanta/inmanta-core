@@ -18,7 +18,7 @@
 
 import logging
 import warnings
-from typing import Optional, Type, Union
+from typing import Optional, Union
 
 import pytest
 

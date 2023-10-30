@@ -19,7 +19,7 @@ import datetime
 import uuid
 from enum import Enum
 from itertools import chain
-from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
+from typing import Any, ClassVar, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema

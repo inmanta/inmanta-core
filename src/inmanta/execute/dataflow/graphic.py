@@ -18,7 +18,7 @@
 
 from collections.abc import Iterable, Iterator
 from functools import reduce
-from typing import Optional, Set, cast
+from typing import Optional, cast
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.dataflow import (

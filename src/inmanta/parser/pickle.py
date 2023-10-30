@@ -17,7 +17,7 @@
 """
 from io import BytesIO
 from pickle import Pickler, Unpickler, UnpicklingError
-from typing import Optional, Tuple
+from typing import Optional
 
 from inmanta.ast import Namespace
 

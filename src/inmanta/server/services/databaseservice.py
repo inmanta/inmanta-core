@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Optional
 
 import asyncpg
 from pyformance import gauge

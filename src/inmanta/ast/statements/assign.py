@@ -21,7 +21,7 @@ import typing
 from collections import abc
 from itertools import chain
 from string import Formatter
-from typing import Dict, Optional, Tuple, TypeVar
+from typing import Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (

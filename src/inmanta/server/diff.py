@@ -17,7 +17,7 @@
 """
 
 import json
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 from inmanta import resources
 from inmanta.data.model import AttributeDiff, ResourceDiff, ResourceDiffStatus, ResourceIdStr

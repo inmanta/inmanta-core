@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import List
 
 from pkg_resources import Requirement
 

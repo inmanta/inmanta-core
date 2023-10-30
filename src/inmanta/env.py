@@ -37,7 +37,7 @@ from itertools import chain
 from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
-from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, TypeVar
+from typing import Any, NamedTuple, Optional, TypeVar
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement

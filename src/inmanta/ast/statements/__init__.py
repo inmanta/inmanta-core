@@ -19,7 +19,7 @@ from collections import abc
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (

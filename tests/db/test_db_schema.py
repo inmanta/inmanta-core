@@ -21,7 +21,7 @@ import logging
 import pkgutil
 import types
 from asyncio import Semaphore
-from typing import Optional, Set
+from typing import Optional
 
 import asyncpg
 import pytest

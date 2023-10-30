@@ -22,7 +22,7 @@ import pkgutil
 from collections.abc import Generator
 from pkgutil import ModuleInfo
 from types import ModuleType
-from typing import Dict, List, Optional
+from typing import Optional
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config

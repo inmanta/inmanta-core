@@ -28,7 +28,7 @@ from collections import defaultdict
 from collections.abc import Set
 from enum import Enum
 from re import Pattern
-from typing import Dict, List, Optional, cast
+from typing import Optional, cast
 
 from asyncpg import StringDataRightTruncationError
 
@@ -85,7 +85,6 @@ class EnvironmentListener:
 
         :param env: The new environment
         """
-        pass
 
     async def environment_action_cleared(self, env: model.Environment) -> None:
         """
@@ -93,7 +92,6 @@ class EnvironmentListener:
 
         :param env: The environment that is cleared
         """
-        pass
 
     async def environment_action_deleted(self, env: model.Environment) -> None:
         """
@@ -101,7 +99,6 @@ class EnvironmentListener:
 
         :param env: The environment that is deleted
         """
-        pass
 
     async def environment_action_updated(self, updated_env: model.Environment, original_env: model.Environment) -> None:
         """
@@ -109,7 +106,6 @@ class EnvironmentListener:
         :param updated_env: The updated environment
         :param original_env: The original environment
         """
-        pass
 
 
 class EnvironmentService(protocol.ServerSlice):

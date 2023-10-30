@@ -18,7 +18,7 @@
 import os
 import subprocess
 from subprocess import CalledProcessError
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import yaml
 

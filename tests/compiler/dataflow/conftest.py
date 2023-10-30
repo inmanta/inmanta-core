@@ -19,7 +19,7 @@
 from collections.abc import Iterator
 from functools import reduce
 from itertools import chain
-from typing import Callable, Dict, List, Optional, Set, Tuple, Type
+from typing import Callable, Optional
 
 import pytest
 

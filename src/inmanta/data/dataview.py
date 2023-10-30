@@ -21,7 +21,7 @@ import json
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast
+from typing import Generic, Optional, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
@@ -180,7 +180,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         e.g. "/api/v2/resource"
         """
-        pass
 
     def get_extra_url_parameters(self) -> dict[str, str]:
         """
@@ -217,7 +216,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         Convert the sequence of records into a sequence of DTO's
         """
-        pass
 
     @abc.abstractmethod
     def get_base_query(self) -> SimpleQueryBuilder:
@@ -226,7 +224,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         Must contain select, from and where clause if specific filtering is required
         """
-        pass
 
     @property
     @abc.abstractmethod
@@ -234,7 +231,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         Return the specification of the allowed filters, see FilterValidator
         """
-        pass
 
     def clip_to_page(self, query_builder: SimpleQueryBuilder) -> SimpleQueryBuilder:
         """

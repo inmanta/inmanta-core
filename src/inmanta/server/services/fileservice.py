@@ -19,7 +19,7 @@ import base64
 import difflib
 import logging
 from collections.abc import Iterable
-from typing import List, Optional
+from typing import Optional
 
 from asyncpg.exceptions import UniqueViolationError
 

@@ -19,7 +19,7 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model

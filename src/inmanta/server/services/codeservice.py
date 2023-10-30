@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
-from typing import Dict, List, cast
+from typing import cast
 
 from inmanta import data
 from inmanta.data import model

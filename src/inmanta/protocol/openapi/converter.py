@@ -18,7 +18,7 @@
 import inspect
 import json
 import re
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Optional, Union
 
 from pydantic.schema import model_schema
 from pydantic.typing import NoneType

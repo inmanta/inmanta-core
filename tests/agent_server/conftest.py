@@ -21,7 +21,7 @@ import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
-from typing import Dict, Generic
+from typing import Generic
 
 from pytest import fixture
 

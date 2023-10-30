@@ -22,7 +22,7 @@ import re
 from collections.abc import Coroutine
 from itertools import takewhile
 from types import ModuleType
-from typing import Any, Callable, List, Optional, Set, Tuple
+from typing import Any, Callable, Optional
 
 from asyncpg import Connection, UndefinedColumnError, UndefinedTableError
 from asyncpg.protocol import Record
@@ -47,13 +47,11 @@ CREATE TABLE IF NOT EXISTS public.schemamanager (
 class TableNotFound(Exception):
     """Raised when a table is not found in the database"""
 
-    pass
 
 
 class ColumnNotFound(Exception):
     """Raised when a column is not found in the database"""
 
-    pass
 
 
 class Version:

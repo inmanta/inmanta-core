@@ -18,7 +18,7 @@
 
 import json
 from pathlib import Path
-from typing import Callable, Optional, Type
+from typing import Callable, Optional
 
 import pytest
 

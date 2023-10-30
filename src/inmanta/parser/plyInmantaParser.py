@@ -23,7 +23,7 @@ from collections import abc
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import accumulate
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -139,7 +139,6 @@ def p_main(p: YaccProduction) -> None:
 # - simple placeholder to unify multiple similar rules with optional tokens under one production
 def p_empty(p: YaccProduction) -> None:
     "empty : %prec LOW"
-    pass
 
 
 def p_main_head(p: YaccProduction) -> None:

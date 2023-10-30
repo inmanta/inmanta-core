@@ -27,7 +27,7 @@ import uuid
 import warnings
 from collections import abc, defaultdict
 from configparser import ConfigParser, Interpolation, SectionProxy
-from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, overload
+from typing import Callable, Generic, Optional, TypeVar, Union, overload
 from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend

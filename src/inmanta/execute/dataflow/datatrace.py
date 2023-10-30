@@ -18,7 +18,7 @@
 
 from collections.abc import Iterable
 from itertools import chain
-from typing import List, Optional
+from typing import Optional
 
 from inmanta.ast import Locatable, NotFoundException
 from inmanta.ast.statements import Statement

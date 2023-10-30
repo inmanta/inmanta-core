@@ -39,7 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import BinaryIO, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import BinaryIO, Callable, Optional, TypeVar, Union
 
 import asyncpg
 from tornado import gen

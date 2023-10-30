@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 

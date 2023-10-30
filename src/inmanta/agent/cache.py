@@ -22,7 +22,7 @@ import logging
 import sys
 import time
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from inmanta.resources import Resource
 from inmanta.stable_api import stable_api

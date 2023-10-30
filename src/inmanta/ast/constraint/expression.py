@@ -20,7 +20,7 @@ import re
 from abc import ABCMeta, abstractmethod
 from collections import abc
 from itertools import chain
-from typing import Dict, List, Optional, Type
+from typing import Optional, Type
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api

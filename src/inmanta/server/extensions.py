@@ -18,7 +18,7 @@
 import logging
 import os
 from collections import defaultdict
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 import pkg_resources
 import yaml

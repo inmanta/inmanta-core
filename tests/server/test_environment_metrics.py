@@ -19,7 +19,7 @@ import uuid
 from collections import abc, defaultdict
 from collections.abc import AsyncIterator, Awaitable, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Callable, List, Optional, cast
+from typing import Callable, Optional, cast
 
 import asyncpg
 import pytest
