@@ -48,10 +48,8 @@ class TableNotFound(Exception):
     """Raised when a table is not found in the database"""
 
 
-
 class ColumnNotFound(Exception):
     """Raised when a column is not found in the database"""
-
 
 
 class Version:

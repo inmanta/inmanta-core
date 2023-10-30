@@ -74,7 +74,6 @@ class AttributeNotFound(NotFoundException, AttributeError):
     """
 
 
-
 @stable_api
 class DynamicProxy:
     """

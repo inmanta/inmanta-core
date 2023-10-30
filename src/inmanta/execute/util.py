@@ -26,7 +26,6 @@ class AnyType:
     """
 
 
-
 @stable_api
 class Unknown(AnyType):
     """
