@@ -92,8 +92,8 @@ Literal values can be assigned to variables
 
 .. code-block:: inmanta
 
-    var1 = 1 # assign an integer, var1 contains now a number
-    var2 = 3.14 # assign a float, var2 also contains a number
+    var1 = 1 # assign an integer, var1 contains now an integer
+    var2 = 3.14 # assign a float, var2 now contains a float
     var3 = "This is a string" # var3 contains a string
     var4 = r"This is a raw string" # var4 contains a raw string
 
@@ -125,14 +125,14 @@ Literal values can be assigned to variables
 Primitive types
 ==============================
 
-The basic primitive types are ``string``, ``number``, ``int`` or ``bool``. These basic types also support type casts:
+The basic primitive types are ``string``, ``float``, ``int`` or ``bool``. These basic types also support type casts:
 
 .. code-block:: inmanta
 
     assert = true
     assert = int("1") == 1
-    assert = number("1.2") == 1.2
-    assert = number(true) == 1
+    assert = float("1.2") == 1.2
+    assert = float(true) == 1
     assert = bool(1.2) == true
     assert = bool(0) == false
     assert = bool(null) == false
@@ -164,7 +164,7 @@ For example
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
 
 
-Lists of primitive types are also primitive types: ``string[]``, ``number[]``, ``bool[]`` or ``mac_addr[]``
+Lists of primitive types are also primitive types: ``string[]``, ``float[]``, ``bool[]`` or ``mac_addr[]``
 
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
