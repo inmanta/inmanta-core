@@ -21,6 +21,7 @@ import pytest
 
 import inmanta.compiler as compiler
 from inmanta.ast import (
+    DoubleSetException,
     DuplicateException,
     IndexException,
     NotFoundException,
