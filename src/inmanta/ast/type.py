@@ -597,7 +597,7 @@ class Literal(Union):
 
     def __init__(self) -> None:
         Union.__init__(
-            self, [NullableType(Integer()), NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)]
+            self, [NullableType(Integer()), NullableType(Float()), Bool(), String(), TypedList(self), TypedDict(self)]
         )
 
     def type_string_internal(self) -> str:
