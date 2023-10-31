@@ -254,7 +254,7 @@ def test_fstring_numbering_logic():
         """
 std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
 #                |   |           |           |                          |
-#                [[ [-[        [---[      [-----[                     [---[     <--- expected ranges
+#               [-][--]       [----]     [------]                    [----]    <--- expected ranges
         """
     )
 
