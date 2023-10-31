@@ -265,6 +265,19 @@ class Number(Primitive):
 
 
 @stable_api
+class Float(Number):
+    """
+    This class represents a float in the configuration model. On
+    these numbers the following operations are supported:
+
+    +, -, /, *
+    """
+
+    def type_string(self) -> str:
+        return "float"
+
+
+@stable_api
 class Integer(Number):
     """
     An instance of this class represents the int type in the configuration model.
@@ -690,6 +703,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
 TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     "string": String(),
     "number": Number(),
+    "float": Float(),
     "int": Integer(),
     "bool": Bool(),
     "list": LiteralList(),
