@@ -381,7 +381,6 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-        # attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
         attributes = {}
         for k, v in instance.slots.items():
             if v.is_ready():

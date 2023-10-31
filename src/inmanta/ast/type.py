@@ -267,8 +267,8 @@ class Number(Primitive):
 @stable_api
 class Float(Number):
     """
-    This class represents a float in the configuration model. On
-    these numbers the following operations are supported:
+    This class is an alias for the Number class and represents a float in
+    the configuration model. On these numbers, the following operations are supported:
 
     +, -, /, *
     """
