@@ -703,7 +703,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
 TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     "string": String(),
     "number": Number(),
-    "float": Float(),
+    # "float": Float(),
     "int": Integer(),
     "bool": Bool(),
     "list": LiteralList(),
