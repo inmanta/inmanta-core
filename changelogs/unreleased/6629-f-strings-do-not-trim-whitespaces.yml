@@ -2,3 +2,5 @@ description: Fix bug in f-strings not working when whitespaces surround the vari
 issue-nr: 6629
 change-type: patch
 destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"
