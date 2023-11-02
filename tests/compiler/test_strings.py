@@ -291,6 +291,7 @@ std::print(f"---{s}----{s}")
 #               [-]    [-] <--- expected ranges
         """
     )
+
     def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
         assert variable.location.start_char == start
         assert variable.location.end_char == end
@@ -299,7 +300,6 @@ std::print(f"---{s}----{s}")
     ranges = [
         (len('std::print(f"---{s'), len('std::print(f"---{s}')),
         (len('std::print(f"---{s}----{s'), len('std::print(f"---{s}----{s}')),
-
     ]
     variables = statements[0].children[0]._variables
 
@@ -345,7 +345,9 @@ std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
     )
 
     def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start, print(f"error for {variable} got {variable.location.start_char} expected {start}")
+        assert variable.location.start_char == start, print(
+            f"error for {variable} got {variable.location.start_char} expected {start}"
+        )
         assert variable.location.end_char == end, print(f"error for {variable} got {variable.location.end_char} expected {end}")
 
     # Ranges are 1-indexed [start:end[
