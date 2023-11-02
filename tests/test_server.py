@@ -764,8 +764,8 @@ async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
 
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     assert result.code == 200
-
     metadata = {"key1": "val1", "key2": "val2"}
+
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
     await client.set_param(environment, "param2", ParameterSource.user, "val2", "", {"a": "b"}, False)
 

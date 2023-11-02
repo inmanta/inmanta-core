@@ -964,7 +964,7 @@ class UrlMethod(object):
 
 
 # Util functions
-def custom_json_encoder(o: object, tz_aware: bool = False) -> Union[ReturnTypes, util.JSONSerializable]:
+def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
@@ -985,7 +985,7 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[Lis
     return code, value
 
 
-def json_encode(value: ReturnTypes, tz_aware: bool = False) -> str:
+def json_encode(value: ReturnTypes, tz_aware: bool = True) -> str:
     """Our json encode is able to also serialize other types than a dict."""
     # see json_encode in tornado.escape
     return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
