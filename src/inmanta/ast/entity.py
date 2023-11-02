@@ -438,7 +438,7 @@ class Entity(NamedType, WithComment):
 
         # Convert integers to floats in the key, similar to add_to_index
         key = ", ".join(
-            ["%s=%s" % (k, str(float(v)) if isinstance(v, int) else repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])]
+            ["%s=%s" % (k, repr(float(v)) if isinstance(v, int) else repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])]
         )
 
         if target is None:
