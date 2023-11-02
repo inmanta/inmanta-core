@@ -80,7 +80,7 @@ def test_kwargs_in_plugin_call_missing_arg(snippetcompiler):
         """
 std::equals(42, desc="they differ")
         """,
-        "Missing 1 required arguments for equals(): arg2" " (reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
+        "equals() missing 1 required positional argument: 'arg2' (reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
     )
 
 
@@ -89,7 +89,7 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
         """
 std::equals(42, 42, arg1=42)
         """,
-        "Multiple values for arg1 in equals() (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+        "equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
     )
 
 
@@ -220,8 +220,8 @@ def test_1778_context_as_kwarg_reject(snippetcompiler):
         """
 std::generate_password("pw_id", context=42)
         """,
-        "Invalid keyword argument 'context' for 'generate_password()'"
-        " (reported in std::generate_password('pw_id',context=42) ({dir}/main.cf:2))",
+        "generate_password() got multiple values for argument 'context' "
+        "(reported in std::generate_password('pw_id',context=42) ({dir}/main.cf:2))",
     )
 
 
@@ -317,4 +317,4 @@ keyword_only_arguments::sum_all(1, 2)
     )
     with pytest.raises(RuntimeException) as exc_info:
         compiler.do_compile()
-    assert "Missing 1 required arguments for sum_all(): c" in exc_info.value.msg
+    assert "sum_all() missing 1 required keyword-only argument: 'c'" in exc_info.value.msg

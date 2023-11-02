@@ -328,6 +328,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Save all positional arguments
         defaults_start_at = len(arg_spec.args) - len(arg_spec.defaults or [])
         for position, arg in enumerate(arg_spec.args):
+            if arg not in arg_spec.annotations:
+                raise CompilerException(f"All arguments of plugin '{function.__name__}' should be annotated")
+
             annotation = arg_spec.annotations[arg]
             if annotation == Context:
                 self._context = position
@@ -355,6 +358,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         # Save all key-word arguments
         for arg in arg_spec.kwonlyargs:
+            if arg not in arg_spec.annotations:
+                raise CompilerException(f"All arguments of plugin '{function.__name__}' should be annotated")
+
             key_word_args[arg] = PluginArgument(
                 arg_name=arg,
                 arg_type=arg_spec.annotations[arg],
