@@ -991,8 +991,8 @@ def json_encode(value: ReturnTypes, tz_aware: bool = True) -> str:
     return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
-def gzipped_json(value: JsonType, tz_aware: bool = True) -> Tuple[bool, Union[bytes, str]]:
-    json_string = json_encode(value, tz_aware=tz_aware)
+def gzipped_json(value: JsonType) -> Tuple[bool, Union[bytes, str]]:
+    json_string = json_encode(value)
     if len(json_string) < web.GZipContentEncoding.MIN_LENGTH:
         return False, json_string
 

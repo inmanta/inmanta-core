@@ -49,10 +49,10 @@ from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
 
 
-def openapi_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
+def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
-    return util.api_boundary_json_encoder(o, tz_aware=tz_aware)
+    return util.api_boundary_json_encoder(o)
 
 
 class OpenApiConverter:
