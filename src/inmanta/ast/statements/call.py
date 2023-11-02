@@ -212,6 +212,8 @@ class PluginFunction(Function):
         else:
             try:
                 return self.plugin(*args, **kwargs)
+            except TypeError as e:
+                raise RuntimeException(None, str(e)) from e
             except RuntimeException as e:
                 raise WrappingRuntimeException(
                     self.ast_node, "Exception in direct execution for plugin %s" % self.ast_node.name, e
@@ -241,6 +243,8 @@ class PluginFunction(Function):
             try:
                 value = self.plugin(*args, **kwargs)
                 result.set_value(value if value is not None else NoneValue(), self.ast_node.location)
+            except TypeError as e:
+                raise RuntimeException(None, str(e)) from e
             except UnknownException as e:
                 result.set_value(e.unknown, self.ast_node.location)
             except UnsetException as e:

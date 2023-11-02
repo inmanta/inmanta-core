@@ -15,8 +15,8 @@
 
     Contact: code@inmanta.com
 """
-import collections
 import asyncio
+import collections
 import inspect
 import os
 import subprocess
@@ -201,10 +201,11 @@ class PluginArgument:
     NO_DEFAULT_VALUE_SET = object()
 
     def __init__(
-        self, arg_name: str, arg_type: object, default_value: object = NO_DEFAULT_VALUE_SET
+        self, arg_name: str, arg_type: object, is_kw_only_argument: bool, default_value: object = NO_DEFAULT_VALUE_SET
     ) -> None:
         self.arg_name = arg_name
         self.arg_type = arg_type
+        self.is_kw_only_argument = is_kw_only_argument
         self._default_value = default_value
 
     @property
@@ -258,9 +259,32 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         self.location = Location(filename, line)
 
+    @property
+    def arguments(self) -> list[PluginArgument]:
+        """
+        For backward compatibility
+        TODO: throw deprecation warning
+        """
+        args = list(self.positional_arguments.values())
+        args.extend(arg for arg in self.keyword_arguments.values() if arg.is_kw_only_argument)
+        return args
+
+    @property
+    def argtypes(self) -> list[Optional[inmanta_type.Type]]:
+        """
+        For backward compatibility
+        TODO: throw a deprecation warning
+        """
+        types = list(self.args_types.values())
+        types.extend(arg for name, arg in self.kwargs_types.items() if self.keyword_arguments[name].is_kw_only_argument)
+        return types
+
     def normalize(self) -> None:
         self.resolver = self.namespace
-        self.argtypes = [self.to_type(arg.arg_type, self.namespace) for arg in self.arguments]
+
+        # Resolve all the types that we expect to receive as input or our plugin
+        self.args_types = {pos: self.to_type(arg.arg_type, self.namespace) for pos, arg in self.positional_arguments.items()}
+        self.kwargs_types = {name: self.to_type(arg.arg_type, self.namespace) for name, arg in self.keyword_arguments.items()}
         self.returntype = self.to_type(self._return, self.namespace)
 
     def _load_signature(
@@ -285,9 +309,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             catch_all = PluginArgument(
                 arg_name=arg_spec.varargs,
                 arg_type=arg_spec.annotations[arg_spec.varargs],
+                is_kw_only_argument=False,
             )
             positional_args = collections.defaultdict(lambda: catch_all)
-        
+
         key_word_args: dict[str, PluginArgument]
         if arg_spec.varkw is None:
             key_word_args = dict()
@@ -296,36 +321,46 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             catch_all = PluginArgument(
                 arg_name=arg_spec.varkw,
                 arg_type=arg_spec.annotations[arg_spec.varkw],
+                is_kw_only_argument=True,
             )
             key_word_args = collections.defaultdict(lambda: catch_all)
-        
+
         # Save all positional arguments
-        for position, arg in arg_spec.args:
+        defaults_start_at = len(arg_spec.args) - len(arg_spec.defaults or [])
+        for position, arg in enumerate(arg_spec.args):
+            annotation = arg_spec.annotations[arg]
+            if annotation == Context:
+                self._context = position
+                continue
+
+            if self._context != -1:
+                # If we have a context argument, the position index
+                # needs to be adapted as this context object can never be passed
+                # from the model.
+                position -= 1
+
             positional_args[position] = PluginArgument(
                 arg_name=arg,
-                arg_type=arg_spec.annotations[arg],
+                arg_type=annotation,
+                is_kw_only_argument=False,
                 default_value=(
-                    arg_spec.defaults[-position]
-                    if position < len(arg_spec.defaults)
+                    arg_spec.defaults[position - defaults_start_at]
+                    if position >= defaults_start_at
                     else PluginArgument.NO_DEFAULT_VALUE_SET,
                 ),
             )
 
             # All positional arguments can also be assigned as kwargs
-            key_word_args[arg] = PluginArgument(
-                arg_name=arg,
-                arg_type=arg_spec.annotations[arg],
-            )
-        
+            key_word_args[arg] = positional_args[position]
+
         # Save all key-word arguments
         for arg in arg_spec.kwonlyargs:
             key_word_args[arg] = PluginArgument(
                 arg_name=arg,
                 arg_type=arg_spec.annotations[arg],
+                is_kw_only_argument=True,
                 default_value=(
-                    arg_spec.kwonlydefaults[arg]
-                    if arg in arg_spec.kwonlydefaults
-                    else PluginArgument.NO_DEFAULT_VALUE_SET
+                    arg_spec.kwonlydefaults[arg] if arg in arg_spec.kwonlydefaults else PluginArgument.NO_DEFAULT_VALUE_SET
                 ),
             )
 
@@ -408,33 +443,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
         """
-        Check if the arguments of the call match the function signature
+        Check if the arguments of the call match the function signature.
+        We only need to check the types of each argument as the rest (count, duplicates, etc)
+        is already checked by python.
         """
-        return True
-        max_arg = len(self.arguments)
-        if len(args) + len(kwargs) > max_arg:
-            raise Exception(
-                "Incorrect number of arguments for %s. Expected at most %d, got %d"
-                % (self.get_signature(), max_arg, len(args) + len(kwargs))
-            )
-        # check for missing arguments
-        required_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments if not arg.has_default_value())
-        present_positional_args: FrozenSet[str] = frozenset(arg.arg_name for arg in self.arguments[: len(args)])
-        present_kwargs: FrozenSet[str] = frozenset(kwargs.keys())
-        missing_args = required_args.difference({*present_positional_args, *present_kwargs})
-        if missing_args:
-            raise RuntimeException(
-                None,
-                "Missing %d required arguments for %s(): %s"
-                % (len(missing_args), self.__class__.__function_name__, ",".join(missing_args)),
-            )
-        # check for kwargs overlap with positional arguments
-        overlapping_args: FrozenSet[str] = present_kwargs.intersection(present_positional_args)
-        if overlapping_args:
-            raise RuntimeException(
-                None,
-                "Multiple values for %s in %s()" % (",".join(overlapping_args), self.__class__.__function_name__),
-            )
 
         def is_valid(expected_arg: PluginArgument, expected_type: Type[object], arg: object) -> bool:
             if isinstance(arg, Unknown):
@@ -447,19 +459,36 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 )
             return True
 
-        for i in range(len(args)):
-            if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
-                return False
-        arg_types: Dict[str, Tuple[PluginArgument, Optional[inmanta_type.Type]]] = {
-            arg.arg_name: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
-        }
-        for k, v in kwargs.items():
+        # Validate all positional arguments
+        for position, arg in enumerate(args):
             try:
-                (expected_arg, expected_type) = arg_types[k]
-                if not is_valid(expected_arg, expected_type, v):
+                if not is_valid(
+                    self.positional_arguments[position],
+                    self.args_types[position],
+                    arg,
+                ):
                     return False
             except KeyError:
-                raise RuntimeException(None, "Invalid keyword argument '%s' for '%s()'" % (k, self.__class__.__function_name__))
+                # We have more positional arguments than we can
+                # handle, we stop the verification here and let python
+                # raise a proper exception when the function is called
+                break
+
+        # Validate all kw arguments
+        for name, arg in kwargs.items():
+            try:
+                if not is_valid(
+                    self.keyword_arguments[name],
+                    self.kwargs_types[name],
+                    arg,
+                ):
+                    return False
+            except KeyError:
+                # We have an unexpected key-word argument, we stop the
+                # verification here and let python raise a proper exception
+                # when the function is called
+                break
+
         return True
 
     def emit_statement(self) -> "DynamicStatement":
