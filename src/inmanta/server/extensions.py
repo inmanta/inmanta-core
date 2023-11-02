@@ -20,9 +20,10 @@ import os
 from collections import defaultdict
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
+import pkg_resources
 import yaml
 
-from inmanta import __version__, data
+from inmanta import data
 from inmanta.config import feature_file_config
 from inmanta.data.model import ExtensionStatus
 from inmanta.server.protocol import ServerSlice
@@ -133,8 +134,19 @@ class FeatureManager:
             product="Inmanta Service Orchestrator",
             edition="Open Source Edition",
             license="Apache Software License 2",
-            version=__version__,
+            version=self._get_product_version(),
         )
+
+    def _get_product_version(self) -> str:
+        packages = ["inmanta-oss", "inmanta", "inmanta-core"]
+        for package in packages:
+            try:
+                return pkg_resources.get_distribution(package).version
+            except pkg_resources.DistributionNotFound:
+                pass
+
+        LOGGER.warning("Couldn't determine product version. Make sure inmanta is properly installed.")
+        return "0.0.0"
 
     def add_slice(self, slice: ServerSlice) -> None:
         for feature in slice.define_features():
