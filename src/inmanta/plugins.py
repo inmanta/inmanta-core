@@ -283,6 +283,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.resolver = self.namespace
 
         # Resolve all the types that we expect to receive as input or our plugin
+        # TODO handle catch-all
         self.args_types = {pos: self.to_type(arg.arg_type, self.namespace) for pos, arg in self.positional_arguments.items()}
         self.kwargs_types = {name: self.to_type(arg.arg_type, self.namespace) for name, arg in self.keyword_arguments.items()}
         self.returntype = self.to_type(self._return, self.namespace)
