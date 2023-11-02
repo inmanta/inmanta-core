@@ -699,6 +699,7 @@ class PythonEnvironment:
             constraints_files=constraint_files,
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
+            paths=paths,
         )
 
     def install_from_index(
@@ -716,13 +717,17 @@ class PythonEnvironment:
             raise Exception("install_from_index requires at least one requirement to install")
 
         if not index_urls:
-            index_urls = []
+            index_url = None
+            extra_index_url = []
+        else:
+            index_url = index_urls[0]
+            extra_index_url = index_urls[1:]
 
         self.install_for_config(
             requirements=requirements,
             config=PipConfig(
-                index_url=index_urls[0],
-                extra_index_url=index_urls[1:],
+                index_url=index_url,
+                extra_index_url=extra_index_url,
                 pre=allow_pre_releases,
                 use_system_config=use_pip_config or True,
             ),
@@ -743,9 +748,8 @@ class PythonEnvironment:
         """
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
-        constraint_files = constraint_files if constraint_files is not None else []
-        inmanta_requirements = self._get_requirements_on_inmanta_package()
         self.install_for_config(
+            requirements=[],
             paths=paths,
             config=PipConfig(use_system_config=True),
             constraint_files=constraint_files,
@@ -900,7 +904,7 @@ class ActiveEnv(PythonEnvironment):
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: List[LocalPackagePath] = [],
     ) -> None:
-        if not upgrade and self.are_installed(requirements):
+        if (not upgrade and self.are_installed(requirements)) and not paths:
             return
         try:
             super(ActiveEnv, self).install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)

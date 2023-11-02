@@ -202,10 +202,14 @@ def test_process_env_install_from_index(
     assert package_name in installed
     if version is not None:
         assert installed[package_name] == version
+    # legacy method
+    env.process_env.install_from_index(
+        [Requirement.parse(package_name + (f"=={version}" if version is not None else ""))],
+        use_pip_config=True,
+    )
 
 
 @pytest.mark.slowtest
-# TODO: depends on deciding exception structure
 def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
@@ -348,6 +352,10 @@ def test_active_env_get_module_file_editable_namespace_package(
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file
+    # legacy api
+    env.process_env.install_from_source(
+        paths=[env.LocalPackagePath(path=project_dir, editable=True)],
+    )
 
 
 def create_install_package(name: str, version: version.Version, requirements: List[Requirement]) -> None:

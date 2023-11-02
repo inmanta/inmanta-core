@@ -1031,7 +1031,7 @@ version: 0.0.1dev0"""
         def install(install_path: str) -> None:
             try:
                 env.process_env.install_for_config(
-                    requirements=[], paths=[env.LocalPackagePath(path=install_path, editable=editable)], pip_config=pip_config
+                    requirements=[], paths=[env.LocalPackagePath(path=install_path, editable=editable)], config=pip_config
                 )
             except env.ConflictingRequirements as e:
                 raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
