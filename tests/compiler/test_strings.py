@@ -183,11 +183,11 @@ std::print(z)
     "f_string,expected_output",
     [
         (r"f'{   arg}'", "123\n"),
-        # (r"f'{arg}'", "123\n"),
-        # (r"f'{arg}{arg}{arg}'", "123123123\n"),
-        # (r"f'{arg:@>5}'", "@@123\n"),
-        # (r"f'{arg:^5}'", " 123 \n"),
-        # (r"f' {  \t\narg  \n  } '", " 123 \n"),
+        (r"f'{arg}'", "123\n"),
+        (r"f'{arg}{arg}{arg}'", "123123123\n"),
+        (r"f'{arg:@>5}'", "@@123\n"),
+        (r"f'{arg:^5}'", " 123 \n"),
+        (r"f' {  \t\narg  \n  } '", " 123 \n"),
     ],
 )
 def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
@@ -280,6 +280,33 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
         check_range(var, *range)
 
 
+def test_fstring_numbering_logic_multiple_refs():
+    """
+    Check that variable ranges in f-strings are correctly computed
+    """
+    statements = parse_code(
+        """
+std::print(f"---{s}----{s}")
+#                |      |
+#               [-]    [-] <--- expected ranges
+        """
+    )
+    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
+        assert variable.location.start_char == start
+        assert variable.location.end_char == end
+
+    # Ranges are 1-indexed [start:end[
+    ranges = [
+        (len('std::print(f"---{s'), len('std::print(f"---{s}')),
+        (len('std::print(f"---{s}----{s'), len('std::print(f"---{s}----{s}')),
+
+    ]
+    variables = statements[0].children[0]._variables
+
+    for var, range in zip(variables, ranges):
+        check_range(var, *range)
+
+
 def test_fstring_float_nested_formatting(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
@@ -318,8 +345,8 @@ std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
     )
 
     def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start, print(variable)
-        assert variable.location.end_char == end, print(variable)
+        assert variable.location.start_char == start, print(f"error for {variable} got {variable.location.start_char} expected {start}")
+        assert variable.location.end_char == end, print(f"error for {variable} got {variable.location.end_char} expected {end}")
 
     # Ranges are 1-indexed [start:end[
     ranges = [

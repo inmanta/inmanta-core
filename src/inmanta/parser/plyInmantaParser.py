@@ -907,7 +907,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
 
         range: Range = Range(p[1].location.file, start_lnr, start_char_pos + left_spaces, start_lnr, end_char - right_spaces)
         locatable_string = LocatableString(field_name_full_trim, range, p[1].lexpos, p[1].namespace)
-        locatable_matches.append((field_name_full_trim, locatable_string))
+        locatable_matches.append((match[1], locatable_string))
 
     for match in parsed:
         if not match[1]:
@@ -1004,7 +1004,7 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
             (ex. LocatableString("a.b", range(a.b), lexpos, namespace))
 
         For f-strings:
-            - The string is the plain variable name without brackets (ex: 'a.b')
+            - The string is the plain variable name without brackets (ex: 'a.b') and including any potential whitespaces.
             - The LocatableString is the same as for regular string interpolation
     :returns: A tuple where all LocatableString have been converted to Reference. The matching str holding the variable
         name is left untouched
@@ -1029,7 +1029,7 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
                 range_attr: Range = Range(
                     var.location.file, var.location.lnr, char_offset, var.location.lnr, char_offset + len(attr)
                 )
-                attr_locatable_string: LocatableString = LocatableString(attr, range_attr, var.lexpos, var.namespace)
+                attr_locatable_string: LocatableString = LocatableString(attr.strip(), range_attr, var.lexpos, var.namespace)
                 ref = AttributeReference(ref, attr_locatable_string)
                 ref.location = range_attr
                 ref.namespace = namespace
