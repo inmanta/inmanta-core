@@ -25,7 +25,6 @@ import subprocess
 import sys
 import tempfile
 from importlib.abc import Loader
-from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
 
@@ -35,7 +34,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta import env, loader, module
-from inmanta.env import PipConfig
+from inmanta.env import Pip, PipConfig
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
@@ -660,10 +659,11 @@ inmanta-module-net
                 """
             )
         caplog.clear()
-        tmpvenv_active_inherit._run_pip_install_command(
+        Pip.run_pip_install_command_from_config(
             python_path=env.process_env.python_path,
             constraints_files=[constraint1, constraint2],
             requirements_files=[requirement1, requirement2],
+            config=PipConfig(use_system_config=True),
         )
 
         assert all(record.name == "inmanta.pip" for record in caplog.records)

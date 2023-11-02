@@ -18,7 +18,6 @@
 import os
 
 import common
-from inmanta.loader import SourceInfo
 from inmanta.module import Project
 
 
