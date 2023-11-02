@@ -212,7 +212,7 @@ def test_module_update_dependencies(
     )
 
     # install b-1.0.0 and c-1.0.0
-    process_env.install_from_index(
+    process_env.install_for_config(
         [Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")],
         config=PipConfig(
             index_url=index.url,

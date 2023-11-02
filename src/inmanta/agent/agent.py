@@ -1365,7 +1365,7 @@ class Agent(SessionEndpoint):
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 self.thread_pool,
-                self._env.install_from_index,
+                self._env.install_for_config,
                 list(pkg_resources.parse_requirements(requirements)),
                 PipConfig(use_system_config=True),
             )

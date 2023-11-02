@@ -483,7 +483,7 @@ compatible with the dependencies specified by the updated modules.
                 # These could be constraints (-c) as well, but that requires additional sanitation
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
-                env.process_env.install_from_index(
+                env.process_env.install_for_config(
                     v2_python_specs + [Requirement.parse(r) for r in current_requires],
                     my_project.metadata.pip,
                     upgrade=True,
@@ -1030,8 +1030,8 @@ version: 0.0.1dev0"""
 
         def install(install_path: str) -> None:
             try:
-                env.process_env.install_from_source(
-                    [env.LocalPackagePath(path=install_path, editable=editable)], pip_config=pip_config
+                env.process_env.install_for_config(
+                    requirements=[], paths=[env.LocalPackagePath(path=install_path, editable=editable)], pip_config=pip_config
                 )
             except env.ConflictingRequirements as e:
                 raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e

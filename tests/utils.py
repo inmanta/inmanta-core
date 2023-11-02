@@ -470,8 +470,10 @@ author = Inmanta <code@inmanta.com>
                 fd.write(f"\n{option_name} ={requirements_as_string}")
 
     if install:
-        env.process_env.install_from_source(
-            [env.LocalPackagePath(path=path, editable=editable)], PipConfig(use_system_config=True)
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=path, editable=editable)],
+            config=PipConfig(use_system_config=True),
         )
     if publish_index is not None:
         with build.env.DefaultIsolatedEnv() as build_env:

@@ -19,6 +19,7 @@
 import configparser
 import glob
 import importlib
+import itertools
 import logging
 import operator
 import os
@@ -739,7 +740,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         try:
             self.log_pre_install_information(module_name, module_spec)
             modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
-            env.process_env.install_from_index(
+            env.process_env.install_for_config(
                 requirements,
                 project.metadata.pip,
             )
@@ -1694,6 +1695,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         """
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
+    def get_index_urls(self) -> List[str]:
+        """For backward compatibility with ISO6"""
+        # This ensures no duplicates are returned and insertion order is preserved.
+        # i.e. the left-most index will be passed to pip as --index-url and the others as --extra-index-url
+        return list({value: None for value in itertools.chain([self.pip.index_url], self.pip.extra_index_url)})
+
 
 @stable_api
 class ModuleLike(ABC, Generic[TMetadata]):
@@ -2109,7 +2116,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            self.virtualenv.install_from_index(
+            self.virtualenv.install_for_config(
                 pyreq,
                 config=self.metadata.pip,
                 upgrade=update_dependencies,

@@ -678,16 +678,17 @@ class PythonEnvironment:
         output = CommandRunner(LOGGER_PIP).run_command_and_log_output(cmd, stderr=subprocess.DEVNULL, env=os.environ.copy())
         return {r["name"]: version.Version(r["version"]) for r in json.loads(output)}
 
-    def install_from_index(
+    def install_for_config(
         self,
         requirements: List[Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        paths: List[LocalPackagePath] = [],
     ) -> None:
-        if len(requirements) == 0:
-            raise Exception("install_from_index requires at least one requirement to install")
+        if len(requirements) == 0 and len(paths) == 0:
+            raise Exception("install_for_config requires at least one requirement or path to install")
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
 
@@ -700,25 +701,79 @@ class PythonEnvironment:
             upgrade_strategy=upgrade_strategy,
         )
 
+    def install_from_index(
+        self,
+        requirements: List[Requirement],
+        index_urls: Optional[List[str]] = None,
+        upgrade: bool = False,
+        allow_pre_releases: bool = False,
+        constraint_files: Optional[List[str]] = None,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
+    ) -> None:
+        """This method provides backward compatibility with ISO6"""
+        if len(requirements) == 0:
+            raise Exception("install_from_index requires at least one requirement to install")
+
+        if not index_urls:
+            index_urls = []
+
+        self.install_for_config(
+            requirements=requirements,
+            config=PipConfig(
+                index_url=index_urls[0],
+                extra_index_url=index_urls[1:],
+                pre=allow_pre_releases,
+                use_system_config=use_pip_config or True,
+            ),
+            upgrade=upgrade,
+            constraint_files=constraint_files,
+            upgrade_strategy=upgrade_strategy,
+        )
+
     def install_from_source(
         self,
         paths: List[LocalPackagePath],
-        pip_config: PipConfig,
         constraint_files: Optional[List[str]] = None,
     ) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
+
+        This method provides backward compatibility with ISO6
         """
         if len(paths) == 0:
             raise Exception("install_from_source requires at least one package to install")
         constraint_files = constraint_files if constraint_files is not None else []
         inmanta_requirements = self._get_requirements_on_inmanta_package()
-        Pip.run_pip_install_command_from_config(
-            python_path=self.python_path,
-            config=pip_config,
+        self.install_for_config(
             paths=paths,
-            constraints_files=constraint_files,
-            requirements=inmanta_requirements,
+            config=PipConfig(use_system_config=True),
+            constraint_files=constraint_files,
+        )
+
+    def install_from_list(
+        self,
+        requirements_list: Sequence[str],
+        *,
+        upgrade: bool = False,
+        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        use_pip_config: Optional[bool] = False,
+    ) -> None:
+        """
+        Install requirements from a list of requirement strings. This method uses the Python package repositories
+        configured on the host.
+        :param requirements_list: List of requirement strings to install.
+        :param upgrade: Upgrade requirements to the latest compatible version.
+        :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
+        :param use_pip_config: Whether the pip config file specified in the PIP_CONFIG_FILE env var should be used
+
+        This method provides backward compatibility with ISO6
+        """
+        self.install_from_index(
+            requirements=[Requirement.parse(r) for r in requirements_list],
+            upgrade=upgrade,
+            upgrade_strategy=upgrade_strategy,
+            use_pip_config=use_pip_config,
         )
 
     @classmethod
@@ -836,29 +891,19 @@ class ActiveEnv(PythonEnvironment):
         """
         return PythonWorkingSet.are_installed(requirements)
 
-    def install_from_index(
+    def install_for_config(
         self,
         requirements: List[Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        paths: List[LocalPackagePath] = [],
     ) -> None:
         if not upgrade and self.are_installed(requirements):
             return
         try:
-            super(ActiveEnv, self).install_from_index(requirements, config, upgrade, constraint_files, upgrade_strategy)
-        finally:
-            self.notify_change()
-
-    def install_from_source(
-        self,
-        paths: List[LocalPackagePath],
-        pip_config: PipConfig,
-        constraint_files: Optional[List[str]] = None,
-    ) -> None:
-        try:
-            super().install_from_source(paths, pip_config, constraint_files)
+            super(ActiveEnv, self).install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)
         finally:
             self.notify_change()
 
@@ -1244,27 +1289,18 @@ import sys
         sys.prefix = base
         self._update_sys_path()
 
-    def install_from_index(
+    def install_for_config(
         self,
         requirements: List[Requirement],
         config: PipConfig,
         upgrade: bool = False,
         constraint_files: Optional[List[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
+        paths: List[LocalPackagePath] = [],
     ) -> None:
         if not self._using_venv:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_index(requirements, config, upgrade, constraint_files, upgrade_strategy)
-
-    def install_from_source(
-        self,
-        paths: List[LocalPackagePath],
-        pip_config: PipConfig,
-        constraint_files: Optional[List[str]] = None,
-    ) -> None:
-        if not self._using_venv:
-            raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
-        super(VirtualEnv, self).install_from_source(paths, pip_config, constraint_files)
+        super(VirtualEnv, self).install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)
 
 
 class VenvCreationFailedError(Exception):

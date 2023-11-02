@@ -362,8 +362,8 @@ def test_module_v2_incorrect_install_warning(
         assert cause.msg == expected
 
     # install module from source without using `inmanta module install`
-    env.process_env.install_from_source(
-        [env.LocalPackagePath(path=module_dir, editable=False)], PipConfig(use_system_config=True)
+    env.process_env.install_for_config(
+        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
     )
     module_path = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     verify_exception(
@@ -375,8 +375,8 @@ def test_module_v2_incorrect_install_warning(
 
     # include setup.cfg in package to circumvent error
     shutil.copy(os.path.join(module_dir, "setup.cfg"), os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module"))
-    env.process_env.install_from_source(
-        [env.LocalPackagePath(path=module_dir, editable=False)], PipConfig(use_system_config=True)
+    env.process_env.install_for_config(
+        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
     )
     verify_exception(
         "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"

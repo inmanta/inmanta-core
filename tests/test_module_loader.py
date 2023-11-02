@@ -559,7 +559,7 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
     """
     # set up venv
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
-    process_env.install_from_index(
+    process_env.install_for_config(
         [InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()],
         config=PipConfig(
             index_url=local_module_package_index,
@@ -1374,7 +1374,9 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     module_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     # start with non-editable install to populate site-packages with appropriate metadata (editable install would create pth
     # files if a different mechanism is picked so we want to avoid that).
-    process_env.install_from_source([LocalPackagePath(path=module_dir, editable=False)], PipConfig(use_system_config=True))
+    process_env.install_for_config(
+        requirements=[], paths=[LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
+    )
     # replace module dir in site-packages with symlink
     rel_path_src: str = os.path.join(const.PLUGINS_PACKAGE, "minimalv2module")
     module_dir_site_packages: str = os.path.join(process_env.site_packages_dir, rel_path_src)

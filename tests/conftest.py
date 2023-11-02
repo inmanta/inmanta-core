@@ -1218,8 +1218,10 @@ class SnippetCompilationTest(KeepOnFail):
                     install_path = mod.path
                 else:
                     install_path = module_tool.build(mod.path, build_dir)
-                self.project.virtualenv.install_from_source(
-                    paths=[LocalPackagePath(path=install_path, editable=mod.editable)], pip_config=self.project.metadata.pip
+                self.project.virtualenv.install_for_config(
+                    requirements=[],
+                    paths=[LocalPackagePath(path=install_path, editable=mod.editable)],
+                    config=self.project.metadata.pip,
                 )
 
     def reset(self):
