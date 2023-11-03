@@ -186,7 +186,7 @@ class PluginMeta(type):
 def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Optional[inmanta_type.Type]:
     """
     Convert a locatable type string, into a real inmanta type, that can be used for validation.
-    Alternatively, the locatable string defines a type that doesn't have any constraint, return None.
+    Alternatively, if the locatable string defines a type that doesn't have any constraint, return None.
 
     :param locatable_type: An object pointing to the type annotation string.
     :param resolver: The namespace that can be used to resolve the type annotation of this
@@ -271,8 +271,8 @@ class PluginIO:
 
         if not isinstance(self.type_expression, str):
             raise CompilerException(
-                "Bad annotation in plugin %s, expected str but got %s (%s)"
-                % (plugin.get_full_name(), type(self.type_expression).__name__, self.type_expression)
+                "Bad annotation in plugin %s for %s, expected str but got %s (%s)"
+                % (plugin.get_full_name(), self.IO_NAME, type(self.type_expression).__name__, self.type_expression)
             )
 
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
@@ -545,6 +545,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         Get the argument at a given position, raise a KeyError if it doesn't exists.
         If a catch-all positional argument is defined, it will never raise a KeyError.
+
+        :param position: The position of the argument (excluding any Context argument)
         """
         if self.var_args is not None:
             return self.args.get(position, self.var_args)
@@ -555,6 +557,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         Get the argument with a given name, raise a KeyError if it doesn't exists.
         If a catch-all keyword argument is defined, it will never raise a KeyError.
+
+        :param name: The name of the argument
         """
         if self.var_kwargs is not None:
             return self.kwargs.get(name, self.var_kwargs)
