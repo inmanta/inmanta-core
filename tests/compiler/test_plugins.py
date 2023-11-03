@@ -318,3 +318,18 @@ keyword_only_arguments::sum_all(1, 2)
     with pytest.raises(RuntimeException) as exc_info:
         compiler.do_compile()
     assert "sum_all() missing 1 required keyword-only argument: 'c'" in exc_info.value.msg
+
+
+def test_catch_all_arguments(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+"""
+import catch_all_arguments
+
+# Test regular case.  No extra argument is provided
+std::equals(catch_all_arguments::sum_all(1, b=2), 3)
+
+# Test with extra values provided
+std::equals(catch_all_arguments::sum_all(1, 2, 3, b=4, c=5, d=6), 21)
+"""
+    )
+    compiler.do_compile()
