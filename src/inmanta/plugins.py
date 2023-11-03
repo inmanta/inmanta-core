@@ -17,13 +17,14 @@
 """
 import asyncio
 import collections
+import copy
 import inspect
 import os
 import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -33,7 +34,6 @@ from inmanta.ast import (
     Location,
     Namespace,
     Range,
-    RuntimeException,
     TypeNotFoundException,
     WithComment,
 )
@@ -192,21 +192,158 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
-class PluginArgument:
+def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Optional[inmanta_type.Type]:
+    """
+    Convert a locatable type string, into a real inmanta type, that can be used for validation.
+    Alternatively, the locatable string defines a type that doesn't have any constraint, return None.
+
+    :param locatable_type: An object pointing to the type annotation string.
+    :param resolver: The namespace that can be used to resolve the type annotation of this
+        argument.
+    """
+    if locatable_type.value == "any":
+        return None
+
+    if locatable_type.value == "expression":
+        return None
+
+    # quickfix issue #1774
+    allowed_element_type: inmanta_type.Type = inmanta_type.Type()
+    if locatable_type.value == "list":
+        return inmanta_type.TypedList(allowed_element_type)
+    if locatable_type.value == "dict":
+        return inmanta_type.TypedDict(allowed_element_type)
+
+    # stack of transformations to be applied to the base inmanta_type.Type
+    # transformations will be applied right to left
+    transformation_stack: List[Callable[[inmanta_type.Type], inmanta_type.Type]] = []
+
+    if locatable_type.value.endswith("?"):
+        # We don't want to modify the object we received as argument
+        locatable_type = copy.copy(locatable_type)
+        locatable_type.value = locatable_type.value[0:-1]
+        transformation_stack.append(inmanta_type.NullableType)
+
+    if locatable_type.value.endswith("[]"):
+        # We don't want to modify the object we received as argument
+        locatable_type = copy.copy(locatable_type)
+        locatable_type.value = locatable_type.value[0:-2]
+        transformation_stack.append(inmanta_type.TypedList)
+
+    return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
+
+
+class PluginIO:
+    """
+    Base class for all values that go in and out of a plugin: arguments and return value.
+
+    The class has two class attributes that should be set in the different subclasses:
+    :attr IO_TYPE: The type of io value it is, argument or return value
+    :attr IO_NAME: The name of the io value, the argument name or "return value"
+
+    These attributes are only used for better error reporting.
+    """
+
+    IO_TYPE: str = ""
+    IO_NAME: str = ""
+
+    def __init__(self, type_expression: object) -> None:
+        self.type_expression = type_expression
+
+        # We define the attribute but don't set it yet, this will be done when
+        # the type is resolved.  This allows to differentiate between a type that
+        # has not been resolved and a type that is a match for "any" (None).
+        self._resolved_type: Optional[inmanta_type.Type]
+
+    @property
+    def resolved_type(self) -> Optional[inmanta_type.Type]:
+        if not hasattr(self, "_resolved_type"):
+            raise CompilerException(
+                f"{type(self).__name__} {self.IO_NAME} ({repr(self.type_expression)}) has not been normalized, "
+                "its resolved type can't be accessed."
+            )
+        return self._resolved_type
+
+    def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> Optional[inmanta_type.Type]:
+        """
+        Convert the string representation of this argument's type to a type.
+        If no type annotation is present or if the type annotation allows any type to be passed
+        as argument, then None is returned.
+
+        :param plugin: The plugin that this argument is part of.
+        :param resolver: The namespace that can be used to resolve the type annotation of this
+            argument.
+        """
+        if self.type_expression is None:
+            self._resolved_type = None
+            return self._resolved_type
+
+        if not isinstance(self.type_expression, str):
+            raise CompilerException(
+                "bad annotation in plugin %s::%s, expected str but got %s (%s)"
+                % (plugin.ns, plugin.__class__.__function_name__, type(self.type_expression).__name__, self.type_expression)
+            )
+
+        plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
+        locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, None)
+        self._resolved_type = resolve_type(locatable_type, resolver)
+        return self._resolved_type
+
+    def validate(self, value: object) -> bool:
+        """
+        Validate that the given value can be passed to this argument.  Returns True if the value is known
+        and valid, False if the value is unknown, and raises a ValueError is the value is not of the
+        expected type.
+
+        :param value: The value to validate
+        """
+        if isinstance(value, Unknown):
+            # Value is not known, it can not be validated
+            return False
+
+        if self.resolved_type is None:
+            # Any value is valid
+            return True
+
+        # Validate the value, use custom validate method of the type if it exists
+        if hasattr(self.resolved_type, "validate"):
+            valid = getattr(self.resolved_type, "validate")(value)
+        else:
+            valid = isinstance(value, self.resolved_type)
+
+        if not valid:
+            # Validation fail, we should raise an exception
+            raise ValueError(
+                "Invalid %s for %s: value %s has type %s (expected %s)"
+                % (self.IO_TYPE, self.IO_NAME, repr(value), type(value).__name__, type(self.resolved_type).__name__)
+            )
+
+        return True
+
+
+class PluginArgument(PluginIO):
     """
     Represents the argument of an Inmanta plugin.
     """
+
+    IO_TYPE = "argument value"
 
     # Marker used to indicate that a plugin argument has no default value.
     NO_DEFAULT_VALUE_SET = object()
 
     def __init__(
-        self, arg_name: str, arg_type: object, is_kw_only_argument: bool, default_value: object = NO_DEFAULT_VALUE_SET
+        self,
+        arg_name: str,
+        arg_type: object,
+        is_kw_only_argument: bool,
+        default_value: object = NO_DEFAULT_VALUE_SET,
     ) -> None:
+        super().__init__(arg_type)
         self.arg_name = arg_name
-        self.arg_type = arg_type
+        self.arg_type = self.type_expression
         self.is_kw_only_argument = is_kw_only_argument
         self._default_value = default_value
+        self.IO_NAME = self.arg_name
 
     @property
     def default_value(self) -> Optional[object]:
@@ -219,6 +356,11 @@ class PluginArgument:
         Return True iff this plugin argument has a default value set.
         """
         return self._default_value is not self.NO_DEFAULT_VALUE_SET
+
+
+class PluginReturn(PluginIO):
+    IO_TYPE = "returned value"
+    IO_NAME = "return value"
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
@@ -235,14 +377,17 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         # The index of the Context attribute.
         self._context: int = -1
-        self._return = None
 
+        # Load the signature and build all the PluginArgument objects corresponding to it
         self.positional_arguments: dict[int, PluginArgument]
         self.keyword_arguments: dict[str, PluginArgument]
+        self.return_type: PluginReturn
         if hasattr(self.__class__, "__function__"):
-            self.positional_arguments, self.keyword_arguments = self._load_signature(self.__class__.__function__)
+            self.positional_arguments, self.keyword_arguments, self.return_type = self._load_signature(
+                self.__class__.__function__
+            )
         else:
-            self.positional_arguments, self.keyword_arguments = {}, {}
+            self.positional_arguments, self.keyword_arguments, self.return_type = {}, {}, None
 
         self.new_statement = None
 
@@ -259,34 +404,16 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         self.location = Location(filename, line)
 
-    @property
-    def arguments(self) -> list[PluginArgument]:
-        """
-        For backward compatibility
-        TODO: throw deprecation warning
-        """
-        args = list(self.positional_arguments.values())
-        args.extend(arg for arg in self.keyword_arguments.values() if arg.is_kw_only_argument)
-        return args
-
-    @property
-    def argtypes(self) -> list[Optional[inmanta_type.Type]]:
-        """
-        For backward compatibility
-        TODO: throw a deprecation warning
-        """
-        types = list(self.args_types.values())
-        types.extend(arg for name, arg in self.kwargs_types.items() if self.keyword_arguments[name].is_kw_only_argument)
-        return types
-
     def normalize(self) -> None:
         self.resolver = self.namespace
 
-        # Resolve all the types that we expect to receive as input or our plugin
-        # TODO handle catch-all
-        self.args_types = {pos: self.to_type(arg.arg_type, self.namespace) for pos, arg in self.positional_arguments.items()}
-        self.kwargs_types = {name: self.to_type(arg.arg_type, self.namespace) for name, arg in self.keyword_arguments.items()}
-        self.returntype = self.to_type(self._return, self.namespace)
+        # Resolve all the types that we expect to receive as input of our plugin
+        for arg in self.positional_arguments.values():
+            arg.resolve_type(self, self.resolver)
+        for arg in self.keyword_arguments.values():
+            arg.resolve_type(self, self.resolver)
+
+        self.return_type.resolve_type(self, self.resolver)
 
     def _load_signature(
         self,
@@ -301,6 +428,18 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         arg_spec = inspect.getfullargspec(function)
 
+        def get_annotation(arg: str) -> object:
+            """
+            Get the annotation for a specific argument, and if none exists, raise an exception
+            """
+            if arg not in arg_spec.annotations:
+                raise CompilerException(
+                    f"All arguments of plugin {repr(self.get_full_name())} should be annotated: "
+                    f"{repr(arg)} has no annotation"
+                )
+
+            return arg_spec.annotations[arg]
+
         positional_args: dict[int, PluginArgument]
         if arg_spec.varargs is None:
             positional_args = dict()
@@ -309,10 +448,11 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # for args
             catch_all = PluginArgument(
                 arg_name=arg_spec.varargs,
-                arg_type=arg_spec.annotations[arg_spec.varargs],
+                arg_type=get_annotation(arg_spec.varargs),
                 is_kw_only_argument=False,
             )
             positional_args = collections.defaultdict(lambda: catch_all)
+            _ = positional_args[-1]  # Make sure the catch_all arg is part of the dict
 
         key_word_args: dict[str, PluginArgument]
         if arg_spec.varkw is None:
@@ -321,18 +461,16 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # There is a catch all, define it as default arg for kwargs
             catch_all = PluginArgument(
                 arg_name=arg_spec.varkw,
-                arg_type=arg_spec.annotations[arg_spec.varkw],
+                arg_type=get_annotation(arg_spec.varkw),
                 is_kw_only_argument=True,
             )
             key_word_args = collections.defaultdict(lambda: catch_all)
+            _ = key_word_args[""]  # Make sure the catch_all arg is part of the dict
 
         # Save all positional arguments
         defaults_start_at = len(arg_spec.args) - len(arg_spec.defaults or [])
         for position, arg in enumerate(arg_spec.args):
-            if arg not in arg_spec.annotations:
-                raise CompilerException(f"All arguments of plugin '{function.__name__}' should be annotated")
-
-            annotation = arg_spec.annotations[arg]
+            annotation = get_annotation(arg)
             if annotation == Context:
                 self._context = position
                 continue
@@ -359,22 +497,19 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         # Save all key-word arguments
         for arg in arg_spec.kwonlyargs:
-            if arg not in arg_spec.annotations:
-                raise CompilerException(f"All arguments of plugin '{function.__name__}' should be annotated")
-
             key_word_args[arg] = PluginArgument(
                 arg_name=arg,
-                arg_type=arg_spec.annotations[arg],
+                arg_type=get_annotation(arg),
                 is_kw_only_argument=True,
                 default_value=(
                     arg_spec.kwonlydefaults[arg] if arg in arg_spec.kwonlydefaults else PluginArgument.NO_DEFAULT_VALUE_SET
                 ),
             )
 
-        if "return" in arg_spec.annotations:
-            self._return = arg_spec.annotations["return"]
+        # Get the expected return value type
+        return_value = PluginReturn(arg_spec.annotations.get("return", None))
 
-        return positional_args, key_word_args
+        return positional_args, key_word_args, return_value
 
     def get_signature(self) -> str:
         """
@@ -393,108 +528,35 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             return "%s(%s)" % (self.__class__.__function_name__, args)
         return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
-    def to_type(self, arg_type: Optional[object], resolver: Namespace) -> Optional[inmanta_type.Type]:
-        """
-        Convert a string representation of a type to a type
-        """
-        if arg_type is None:
-            return None
-
-        if not isinstance(arg_type, str):
-            raise CompilerException(
-                "bad annotation in plugin %s::%s, expected str but got %s (%s)"
-                % (self.ns, self.__class__.__function_name__, type(arg_type), arg_type)
-            )
-
-        if arg_type == "any":
-            return None
-
-        if arg_type == "expression":
-            return None
-
-        # quickfix issue #1774
-        allowed_element_type: inmanta_type.Type = inmanta_type.Type()
-        if arg_type == "list":
-            return inmanta_type.TypedList(allowed_element_type)
-        if arg_type == "dict":
-            return inmanta_type.TypedDict(allowed_element_type)
-
-        plugin_line: Range = Range(self.location.file, self.location.lnr, 1, self.location.lnr + 1, 1)
-        locatable_type: LocatableString = LocatableString(arg_type, plugin_line, 0, None)
-
-        # stack of transformations to be applied to the base inmanta_type.Type
-        # transformations will be applied right to left
-        transformation_stack: List[Callable[[inmanta_type.Type], inmanta_type.Type]] = []
-
-        if locatable_type.value.endswith("?"):
-            locatable_type.value = locatable_type.value[0:-1]
-            transformation_stack.append(inmanta_type.NullableType)
-
-        if locatable_type.value.endswith("[]"):
-            locatable_type.value = locatable_type.value[0:-2]
-            transformation_stack.append(inmanta_type.TypedList)
-
-        return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
-
-    def _is_instance(self, value: object, arg_type: Type[object]) -> bool:
-        """
-        Check if value is of arg_type
-        """
-        if arg_type is None:
-            return True
-
-        if hasattr(arg_type, "validate"):
-            return arg_type.validate(value)
-
-        return isinstance(value, arg_type)
-
     def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature.
         We only need to check the types of each argument as the rest (count, duplicates, etc)
         is already checked by python.
         """
-
-        def is_valid(expected_arg: PluginArgument, expected_type: Type[object], arg: object) -> bool:
-            if isinstance(arg, Unknown):
-                return False
-
-            if not self._is_instance(arg, expected_type):
-                raise Exception(
-                    "Invalid type for argument %s of '%s', it should be %s and %s given."
-                    % (expected_arg.arg_name, self.__class__.__function_name__, expected_arg.arg_type, arg.__class__.__name__)
-                )
-            return True
-
         # Validate all positional arguments
         for position, arg in enumerate(args):
             try:
-                if not is_valid(
-                    self.positional_arguments[position],
-                    self.args_types[position],
-                    arg,
-                ):
+                if not self.positional_arguments[position].validate(arg):
                     return False
             except KeyError:
                 # We have more positional arguments than we can
                 # handle, we stop the verification here and let python
                 # raise a proper exception when the function is called
+                # There is no point validating the other arguments as there
+                # won't be any available anyway.
                 break
 
         # Validate all kw arguments
         for name, arg in kwargs.items():
             try:
-                if not is_valid(
-                    self.keyword_arguments[name],
-                    self.kwargs_types[name],
-                    arg,
-                ):
+                if not self.keyword_arguments[name].validate(arg):
                     return False
             except KeyError:
                 # We have an unexpected key-word argument, we stop the
                 # verification here and let python raise a proper exception
                 # when the function is called
-                break
+                pass
 
         return True
 
@@ -530,7 +592,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         The function call itself
         """
         if self.deprecated:
-            msg: str = f"Plugin '{self.__function_name__}' in module '{self.__module__}' is deprecated."
+            msg: str = f"Plugin {self.get_full_name()} in module '{self.__module__}' is deprecated."
             if self.replaced_by:
                 msg += f" It should be replaced by '{self.replaced_by}'."
             warnings.warn(PluginDeprecationWarning(msg))
@@ -551,26 +613,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(value)
 
-        if self.returntype is not None and not isinstance(value, Unknown):
-            valid = False
-            exception = None
-
-            try:
-                valid = value is None or self._is_instance(value, self.returntype)
-            except RuntimeException as e:
-                raise e
-            except Exception as exp:
-                exception = exp
-
-            if not valid:
-                msg = ""
-                if exception is not None:
-                    msg = "\n\tException details: " + str(exception)
-
-                raise Exception(
-                    "Plugin %s should return value of type %s ('%s' was returned) %s"
-                    % (self.__class__.__function_name__, self.returntype, value, msg)
-                )
+        if not isinstance(value, Unknown):
+            self.return_type.validate(value)
 
         return value
 
