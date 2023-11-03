@@ -237,7 +237,7 @@ a = A(b=b)
 b = B(c=c)
 c = C()
 
-std::print(f"{  a.b.c. n_c }")
+std::print(f"{  a .b . c . n_c }")
         """
     )
 
