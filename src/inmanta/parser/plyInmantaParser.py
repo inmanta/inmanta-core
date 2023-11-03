@@ -1037,9 +1037,9 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
             )
             for attr, char_offset in zip(var_parts[1:], attribute_offsets):
                 field_name_left_trim = attr.lstrip()
-                left_spaces: int = len(attr) - len(field_name_left_trim)
+                left_spaces = len(attr) - len(field_name_left_trim)
                 field_name_full_trim = field_name_left_trim.rstrip()
-                right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
+                right_spaces = len(field_name_left_trim) - len(field_name_full_trim)
 
                 range_attr: Range = Range(
                     var.location.file,
