@@ -1001,8 +1001,9 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
         For f-strings:
             - The string is the plain variable name without brackets (ex: 'a.b') and including any potential whitespaces.
             - The LocatableString is the same as for regular string interpolation
-    :returns: A tuple where all LocatableString have been converted to Reference. The matching str holding the variable
-        name is left untouched
+    :returns: A tuple where all LocatableString have been converted to Reference. These references are cleaned up of any
+        eventual whitespace character. The matching str holding the variable name is left untouched i.e. will still contain
+        eventual whitespace characters.
     """
     assert namespace
     _vars: List[Tuple[Reference, str]] = []
@@ -1041,7 +1042,9 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
                     var.location.lnr,
                     char_offset + len(attr) - right_spaces,
                 )
-                attr_locatable_string: LocatableString = LocatableString(attr.strip(), range_attr, var.lexpos, var.namespace)
+                attr_locatable_string: LocatableString = LocatableString(
+                    field_name_full_trim, range_attr, var.lexpos, var.namespace
+                )
                 ref = AttributeReference(ref, attr_locatable_string)
                 ref.location = range_attr
                 ref.namespace = namespace
