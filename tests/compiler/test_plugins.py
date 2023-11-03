@@ -99,7 +99,7 @@ def test_plugin_has_no_type_annotation(snippetcompiler):
 import plugin_missing_type_annotation
 plugin_missing_type_annotation::no_type_annotation(42)
         """,
-        "All arguments of plugin 'no_type_annotation' should be annotated",
+        "All arguments of plugin 'plugin_missing_type_annotation::no_type_annotation' should be annotated: 'a' has no annotation",
     )
 
 
