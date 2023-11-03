@@ -1703,7 +1703,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         """For backward compatibility with ISO6"""
         # This ensures no duplicates are returned and insertion order is preserved.
         # i.e. the left-most index will be passed to pip as --index-url and the others as --extra-index-url
-        return list({value: None for value in itertools.chain([self.pip.index_url], self.pip.extra_index_url)})
+        return list(
+            {
+                value: None
+                for value in itertools.chain([self.pip.index_url] if self.pip.index_url else [], self.pip.extra_index_url)
+            }
+        )
 
 
 @stable_api

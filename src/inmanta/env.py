@@ -320,7 +320,8 @@ class PipConfig(BaseModel):
             but otherwise respect any pip environment variables and/or config in the pip config file,
             including any extra-index-urls.
 
-        If no indexes are configured in pip.index-url/pip.extra-index-url with this option enabled means to fall back to pip's default behavior:
+        If no indexes are configured in pip.index-url/pip.extra-index-url
+        with this option enabled means to fall back to pip's default behavior:
         use the pip index url from the environment, the config file, or PyPi, in that order.
 
         For development, it is recommended to set this option to false, both for portability
