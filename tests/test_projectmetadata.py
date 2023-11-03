@@ -178,6 +178,6 @@ def test_pip_config_warnings(tmp_path):
     """
         )
     with pytest.warns(
-        ProjectConfigurationWarning, match=re.escape("Found unexpected configuration value 'pip.index_ur in 'project.yaml'")
+        ProjectConfigurationWarning, match=re.escape("Found unexpected configuration value 'pip.index_ur' in 'project.yml'")
     ):
         Project(tmp_path, autostd=False)
