@@ -346,8 +346,7 @@ class PipConfig(BaseModel):
                 f"indexes to the project config file. e.g. to add PyPi as a module source, add the following "
                 "to `project.yml`:"
                 "\npip:"
-                "\n  index_url:"
-                "\n    - https://pypi.org/simple"
+                "\n  index_url: https://pypi.org/simple"
                 "\nAnother option is to set `pip.use_system_config = true` to use the system's pip config."
             )
 
@@ -356,78 +355,6 @@ class PipCommandBuilder:
     """
     Class used to compose pip commands.
     """
-
-    @classmethod
-    def compose_install_command(
-        cls,
-        python_path: str,
-        requirements: Optional[List[Requirement]] = None,
-        paths: Optional[List[LocalPackagePath]] = None,
-        index_urls: Optional[List[str]] = None,
-        upgrade: bool = False,
-        upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        allow_pre_releases: bool = False,
-        constraints_files: Optional[List[str]] = None,
-        requirements_files: Optional[List[str]] = None,
-        use_pip_config: bool = False,
-    ) -> List[str]:
-        """
-        Generate `pip install` command from the given arguments.
-
-        :param python_path: The python interpreter to use in the command
-        :param requirements: The requirements that should be installed
-        :param paths: Paths to python projects on disk that should be installed in the venv.
-        :param index_urls: The Python package repositories to use. When set to None, the system default will be used.
-        :param upgrade: Upgrade the specified packages to the latest version.
-        :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
-        :param allow_pre_releases: Allow the installation of packages with pre-releases and development versions.
-        :param constraints_files: Files that should be passed to pip using the `-c` option.
-        :param requirements_files: Files that should be passed to pip using the `-r` option.
-        :param use_pip_config: Whether the pip config file specified in the PIP_CONFIG_FILE env var should be used
-        """
-        requirements = requirements if requirements is not None else []
-        paths = paths if paths is not None else []
-        local_paths: Iterator[LocalPackagePath] = (
-            # make sure we only try to install from a local source: add leading `./` and trailing `/` to explicitly tell pip
-            # we're pointing to a local directory.
-            LocalPackagePath(path=os.path.join(".", path.path, ""), editable=path.editable)
-            for path in paths
-        )
-        index_args: list[str] = []
-
-        if use_pip_config:
-            if index_urls:
-                # Use only --extra-index-url arguments
-                for url in index_urls:
-                    index_args.append("--extra-index-url")
-                    index_args.append(url)
-        elif index_urls is None:
-            pass
-        elif index_urls:
-            # Use separate --index-url and --extra-index-url arguments
-            index_args.append("--index-url")
-            index_args.append(index_urls[0])
-            for url in index_urls[1:]:
-                index_args.append("--extra-index-url")
-                index_args.append(url)
-        else:
-            index_args = ["--no-index"]
-
-        constraints_files = constraints_files if constraints_files is not None else []
-        requirements_files = requirements_files if requirements_files is not None else []
-        return [
-            python_path,
-            "-m",
-            "pip",
-            "install",
-            *(["--upgrade", "--upgrade-strategy", upgrade_strategy.value] if upgrade else []),
-            *(["--pre"] if allow_pre_releases else []),
-            *chain.from_iterable(["-c", f] for f in constraints_files),
-            *chain.from_iterable(["-r", f] for f in requirements_files),
-            *(str(requirement) for requirement in requirements),
-            *chain.from_iterable(["-e", path.path] if path.editable else [path.path] for path in local_paths),
-            *index_args,
-        ]
 
     @classmethod
     def compose_uninstall_command(cls, python_path: str, pkg_names: Sequence[str]) -> List[str]:
@@ -769,15 +696,16 @@ class PythonEnvironment:
         :param requirements_list: List of requirement strings to install.
         :param upgrade: Upgrade requirements to the latest compatible version.
         :param upgrade_strategy: The upgrade strategy to use for requirements' dependencies.
-        :param use_pip_config: Whether the pip config file specified in the PIP_CONFIG_FILE env var should be used
+        :param use_pip_config: ignored
 
         This method provides backward compatibility with ISO6
+        use_pip_config was ignored on ISO6 and it still is
         """
         self.install_from_index(
             requirements=[Requirement.parse(r) for r in requirements_list],
             upgrade=upgrade,
             upgrade_strategy=upgrade_strategy,
-            use_pip_config=use_pip_config,
+            use_pip_config=True,
         )
 
     @classmethod
