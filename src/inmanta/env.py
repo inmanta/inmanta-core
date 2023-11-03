@@ -232,7 +232,7 @@ class PythonWorkingSet:
         return {
             dist_info.key: version.Version(dist_info.version)
             for dist_info in pkg_resources.working_set
-            if not inmanta_modules_only or dist_info.key.startswith(const.V2_PKG_NAME_PREFIX)
+            if not inmanta_modules_only or dist_info.key.startswith(const.MODULE_PKG_NAME_PREFIX)
         }
 
     @classmethod
@@ -404,6 +404,22 @@ class Pip(PipCommandBuilder):
         constraints_files: Optional[List[str]] = None,
         paths: Optional[List[LocalPackagePath]] = None,
     ) -> None:
+        """
+        Perform a pip installaccording to the given config
+
+        :param python_path: the python path to use
+        :param config: the pip config to use
+
+        :param requirements: which requirements to install
+        :param requirements_files: which requirements_files to install (-r)
+        :param paths: which paths to install
+
+        :param constraints_files: pass along the following constraint files
+
+        :param upgrade: make pip do an upgrade
+        :param upgrade_strategy: what upgrade strategy to use
+        """
+
         # What
         requirements = requirements if requirements is not None else []
         requirements_files = requirements_files if requirements_files is not None else []
@@ -614,6 +630,16 @@ class PythonEnvironment:
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: List[LocalPackagePath] = [],
     ) -> None:
+        """
+        Perform a pip install in this environment, according to the given config
+
+        :param requirements: which requirements to install
+        :param paths: which paths to install
+        :param config: the pip config to use
+        :param constraint_files: pass along the following constraint files
+        :param upgrade: make pip do an upgrade
+        :param upgrade_strategy: what upgrade strategy to use
+        """
         if len(requirements) == 0 and len(paths) == 0:
             raise Exception("install_for_config requires at least one requirement or path to install")
         constraint_files = constraint_files if constraint_files is not None else []
@@ -656,7 +682,7 @@ class PythonEnvironment:
                 index_url=index_url,
                 extra_index_url=extra_index_url,
                 pre=allow_pre_releases,
-                use_system_config=use_pip_config or True,
+                use_system_config=use_pip_config if use_pip_config is not None else True,
             ),
             upgrade=upgrade,
             constraint_files=constraint_files,
