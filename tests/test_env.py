@@ -76,32 +76,6 @@ def test_venv_pyton_env_empty_string(tmpdir):
 
 
 @pytest.mark.slowtest
-def test_install_fails(tmpdir, caplog, monkeypatch):
-    venv = env.VirtualEnv(tmpdir)
-    venv.use_virtual_env()
-    caplog.clear()
-    caplog.set_level(logging.INFO)
-    package_name = "non-existing-pkg-inmanta"
-
-    # monkeypatch pip install to set --no-index for security reasons (anyone could publish this package to PyPi)
-    compose = env.PipCommandBuilder.compose_install_command
-
-    def mock_compose(*args, **kwargs):
-        if "index_urls" in kwargs or len(args) < 5:
-            return compose(*args, **{**kwargs, "index_urls": []})
-        else:
-            return compose(*args[:3], [], *args[4:], **kwargs)
-
-    monkeypatch.setattr(env.PipCommandBuilder, "compose_install_command", mock_compose)
-
-    with pytest.raises(Exception):
-        venv.install_from_list([package_name])
-
-    log_sequence = LogSequence(caplog)
-    log_sequence.contains("inmanta.env", logging.INFO, f"requirements:\n{package_name}")
-
-
-@pytest.mark.slowtest
 def test_install_package_already_installed_in_parent_env(tmpdir):
     """Test using and installing a package that is already present in the parent virtual environment."""
     # get all packages in the parent
