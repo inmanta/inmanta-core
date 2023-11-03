@@ -439,21 +439,27 @@ class Pip(PipCommandBuilder):
         ]
 
         # From where
-        index_args: list[str] = []
-        if config.index_url:
-            index_args.append("--index-url")
-            index_args.append(config.index_url)
-
-        for extra_index_url in config.extra_index_url:
-            index_args.append("--extra-index-url")
-            index_args.append(extra_index_url)
-
         if paths:
             # For local installs, we allow not having an index set.
             pass
         else:
             # All others need an index
             config.assert_has_source(" ".join(install_args))
+
+        index_args: list[str] = []
+        if config.index_url:
+            index_args.append("--index-url")
+            index_args.append(config.index_url)
+        elif not config.use_system_config:
+            # If the config doesn't set index url
+            # and we are not using system config,
+            # then we need to disable the index.
+            # This can only happen if paths is also set.
+            index_args.append("--no-index-url")
+
+        for extra_index_url in config.extra_index_url:
+            index_args.append("--extra-index-url")
+            index_args.append(extra_index_url)
 
         constraints_files = constraints_files if constraints_files is not None else []
 
