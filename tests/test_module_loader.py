@@ -562,7 +562,6 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
         [InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()],
         config=PipConfig(
             index_url=local_module_package_index,
-            use_system_config=True,  # we need an upstream for some packages
         ),
     )
 

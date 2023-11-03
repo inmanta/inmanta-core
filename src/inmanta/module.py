@@ -680,6 +680,12 @@ class ModuleSource(Generic[TModule]):
 
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
+    def __init__(self, urls: List[str] = []) -> None:
+        """
+        :param urls: retained for backward compatiblity
+        """
+        self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
+
     @classmethod
     def get_installed_version(cls, module_name: str) -> Optional[version.Version]:
         """
@@ -1537,8 +1543,6 @@ def hyphenize(field: str) -> str:
 @stable_api
 class ProjectPipConfig(env.PipConfig):
     """
-    :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
-        Python packages.
     :param index_url: one pip index url for this project.
     :param extra_index_url:  additional pip index urls for this project. This is generally only
         recommended if all configured indexes are under full control of the end user to protect against dependency

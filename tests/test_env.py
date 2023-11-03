@@ -413,7 +413,7 @@ build-backend = "setuptools.build_meta"
         env.process_env.install_for_config(
             requirements=[],
             paths=[env.LocalPackagePath(path=str(tmpdir), editable=False)],
-            config=PipConfig(use_system_config=True),
+            config=PipConfig(use_system_config=False),
         )
 
 
@@ -579,7 +579,6 @@ def test_cache_on_active_env(tmpvenv_active_inherit: env.ActiveEnv, local_module
         requirements=[Requirement.parse("inmanta-module-elaboratev2module==1.2.3")],
         config=PipConfig(
             index_url=local_module_package_index,
-            use_system_config=True,  # we need an upstream for some packages
         ),
     )
     _assert_install("inmanta-module-elaboratev2module==1.2.3", installed=True)
@@ -639,7 +638,6 @@ def test_are_installed_dependency_cycle_on_extra(tmpdir, tmpvenv_active_inherit:
         requirements=requirements,
         config=PipConfig(
             index_url=pip_index.url,
-            use_system_config=True,  # we need an upstream for some packages
         ),
     )
     assert tmpvenv_active_inherit.are_installed(requirements=requirements)
