@@ -80,7 +80,8 @@ def test_kwargs_in_plugin_call_missing_arg(snippetcompiler):
         """
 std::equals(42, desc="they differ")
         """,
-        "equals() missing 1 required positional argument: 'arg2' (reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
+        "equals() missing 1 required positional argument: 'arg2' "
+        "(reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
     )
 
 
@@ -99,7 +100,8 @@ def test_plugin_has_no_type_annotation(snippetcompiler):
 import plugin_missing_type_annotation
 plugin_missing_type_annotation::no_type_annotation(42)
         """,
-        "All arguments of plugin 'plugin_missing_type_annotation::no_type_annotation' should be annotated: 'a' has no annotation",
+        "All arguments of plugin 'plugin_missing_type_annotation::no_type_annotation' "
+        "should be annotated: 'a' has no annotation",
     )
 
 
@@ -322,7 +324,7 @@ keyword_only_arguments::sum_all(1, 2)
 
 def test_catch_all_arguments(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
-"""
+        """
 import catch_all_arguments
 
 # Test regular case.  No extra argument is provided
