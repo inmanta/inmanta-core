@@ -350,6 +350,10 @@ class PluginArgument(PluginIO):
 
 
 class PluginReturn(PluginIO):
+    """
+    Represent the return type of an Inmanta plugin.
+    """
+
     IO_TYPE = "returned value"
     IO_NAME = "return value"
 
@@ -486,7 +490,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 arg_type=get_annotation(arg),
                 is_kw_only_argument=True,
                 default_value=(
-                    arg_spec.kwonlydefaults[arg] if arg in arg_spec.kwonlydefaults else PluginArgument.NO_DEFAULT_VALUE_SET
+                    arg_spec.kwonlydefaults[arg]
+                    if arg_spec.kwonlydefaults is not None and arg in arg_spec.kwonlydefaults
+                    else PluginArgument.NO_DEFAULT_VALUE_SET
                 ),
             )
 
