@@ -900,13 +900,15 @@ def p_constant_fstring(p: YaccProduction) -> None:
         Associates a parsed field name with a locatable string
         """
         assert match[1]  # make mypy happy
-        field_name_left_trim = match[1].lstrip()
-        left_spaces: int = len(match[1]) - len(field_name_left_trim)
-        field_name_full_trim = field_name_left_trim.rstrip()
-        right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
+        # field_name_left_trim = match[1].lstrip()
+        # left_spaces: int = len(match[1]) - len(field_name_left_trim)
+        # field_name_full_trim = field_name_left_trim.rstrip()
+        # right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
 
-        range: Range = Range(p[1].location.file, start_lnr, start_char_pos + left_spaces, start_lnr, end_char - right_spaces)
-        locatable_string = LocatableString(field_name_full_trim, range, p[1].lexpos, p[1].namespace)
+        # range: Range = Range(p[1].location.file, start_lnr, start_char_pos + left_spaces, start_lnr, end_char - right_spaces)
+        # locatable_string = LocatableString(field_name_full_trim, range, p[1].lexpos, p[1].namespace)
+        range: Range = Range(p[1].location.file, start_lnr, start_char_pos, start_lnr, end_char)
+        locatable_string = LocatableString(match[1], range, p[1].lexpos, p[1].namespace)
         locatable_matches.append((match[1], locatable_string))
 
     for match in parsed:
@@ -1016,8 +1018,16 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
         var_parts: List[str] = var_name.split(".")
         start_char = var.location.start_char
         end_char = start_char + len(var_parts[0])
-        range: Range = Range(var.location.file, var.location.lnr, start_char, var.location.lnr, end_char)
-        ref_locatable_string = LocatableString(var_parts[0], range, var.lexpos, var.namespace)
+
+        field_name_left_trim = var_parts[0].lstrip()
+        left_spaces: int = len(var_parts[0]) - len(field_name_left_trim)
+        field_name_full_trim = field_name_left_trim.rstrip()
+        right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
+
+        range: Range = Range(
+            var.location.file, var.location.lnr, start_char + left_spaces, var.location.lnr, end_char - right_spaces
+        )
+        ref_locatable_string = LocatableString(field_name_full_trim, range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
         ref.location = ref_locatable_string.location
         ref.namespace = namespace
@@ -1026,8 +1036,17 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
                 var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1
             )
             for attr, char_offset in zip(var_parts[1:], attribute_offsets):
+                field_name_left_trim = attr.lstrip()
+                left_spaces: int = len(attr) - len(field_name_left_trim)
+                field_name_full_trim = field_name_left_trim.rstrip()
+                right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
+
                 range_attr: Range = Range(
-                    var.location.file, var.location.lnr, char_offset, var.location.lnr, char_offset + len(attr)
+                    var.location.file,
+                    var.location.lnr,
+                    char_offset + left_spaces,
+                    var.location.lnr,
+                    char_offset + len(attr) - right_spaces,
                 )
                 attr_locatable_string: LocatableString = LocatableString(attr.strip(), range_attr, var.lexpos, var.namespace)
                 ref = AttributeReference(ref, attr_locatable_string)

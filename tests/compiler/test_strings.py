@@ -182,7 +182,7 @@ std::print(z)
 @pytest.mark.parametrize(
     "f_string,expected_output",
     [
-        (r"f'{   arg}'", "123\n"),
+        (r"f'{   arg }'", "123\n"),
         (r"f'{arg}'", "123\n"),
         (r"f'{arg}{arg}{arg}'", "123123123\n"),
         (r"f'{arg:@>5}'", "@@123\n"),
@@ -253,6 +253,8 @@ def test_fstring_numbering_logic():
     """
     statements = parse_code(
         """
+#        10        20        30        40        50        60        70        80
+#        |         |         |         |         |         |         |         |
 std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
 #                |   |           |           |                          |
 #               [-][--]       [----]     [------]                    [----]    <--- expected ranges
@@ -260,8 +262,10 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
     )
 
     def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start
-        assert variable.location.end_char == end
+        assert variable.location.start_char == start, print(
+            f"{variable=} expected {start=} got {variable.location.start_char=}"
+        )
+        assert variable.location.end_char == end, print(f"{variable=} expected {end=} got {variable.location.end_char=}")
 
     # Ranges are 1-indexed [start:end[
     ranges = [
