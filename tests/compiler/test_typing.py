@@ -200,11 +200,12 @@ def test_float_alias_number(snippetcompiler):
     assert Number().validate(u)
 
 
-def test_int_as_index_for_number(snippetcompiler):
+@pytest.mark.parametrize_any("type", ["number", "float"])
+def test_int_as_index_for_number(snippetcompiler, type):
     snippetcompiler.setup_for_snippet(
-        """
+        f"""
 entity A:
-    number x
+    {type} x
 end
 
 implement A using std::none
@@ -215,11 +216,12 @@ test = A(x=0)
     compiler.do_compile()
 
 
-def test_int_as_index_for_number_2(snippetcompiler):
+@pytest.mark.parametrize_any("type", ["number", "float"])
+def test_int_as_index_for_number_2(snippetcompiler, type):
     snippetcompiler.setup_for_snippet(
-        """
+        f"""
 entity A:
-    number x
+    {type} x
 end
 
 implement A using std::none
