@@ -237,6 +237,28 @@ test = (A(x=0) == A(x=0.0))
     assert test
 
 
+def test_lookup_on_float_with_int(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        f"""
+entity A:
+    float x
+end
+
+implement A using std::none
+
+index A(x)
+
+a = A(x=1.0)
+y = A[x=1]
+        """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    y = root.lookup("y").get_value()
+    assert a is y
+
+
 def test_cast_to_int(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
