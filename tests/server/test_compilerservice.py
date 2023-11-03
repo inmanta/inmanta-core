@@ -1503,7 +1503,6 @@ async def test_uninstall_python_packages(
         requirements=[pkg_resources.Requirement.parse(name_protected_pkg)],
         config=PipConfig(
             index_url=local_module_package_index,
-            use_system_config=True,  # we need an upstream for some packages
         ),
     )
     assert name_protected_pkg in venv.get_installed_packages()

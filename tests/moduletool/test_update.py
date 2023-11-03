@@ -216,7 +216,7 @@ def test_module_update_dependencies(
         [Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")],
         config=PipConfig(
             index_url=index.url,
-            use_system_config=True,  # we need an upstream for some packages
+            use_system_config=False,
         ),
     )
 

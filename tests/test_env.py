@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 from importlib.abc import Loader
+from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Pattern, Tuple
 from unittest.mock import patch
 
@@ -73,6 +74,47 @@ def test_venv_pyton_env_empty_string(tmpdir):
     with pytest.raises(ValueError) as e:
         env.PythonEnvironment(env_path="")
     assert e.value.args[0] == "The env_path cannot be an empty string."
+
+
+@pytest.mark.slowtest
+def test_basic_install(tmpdir):
+    """If this test fails, try running "pip uninstall lorem dummy-yummy iplib" before running it."""
+    env_dir1 = tmpdir.mkdir("env1").strpath
+
+    with pytest.raises(ImportError):
+        import lorem  # NOQA
+
+    venv1 = env.VirtualEnv(env_dir1)
+
+    venv1.use_virtual_env()
+    venv1.install_from_list(["lorem"])
+    import lorem  # NOQA
+
+    lorem.sentence()
+
+    with pytest.raises(ImportError):
+        import yummy  # NOQA
+
+    venv1 = env.VirtualEnv(env_dir1)
+
+    venv1.use_virtual_env()
+    venv1.install_from_list(["dummy-yummy"])
+    import yummy  # NOQA
+
+    with pytest.raises(ImportError):
+        import iplib  # NOQA
+
+    venv1 = env.VirtualEnv(env_dir1)
+
+    venv1.use_virtual_env()
+    try:
+        venv1.install_from_list(
+            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem", "iplib >=0.0.1"]
+        )
+    except CalledProcessError as ep:
+        print(ep.stdout)
+        raise
+    import iplib  # NOQA
 
 
 @pytest.mark.slowtest
@@ -177,6 +219,10 @@ def test_process_env_install_from_index(
     if version is not None:
         assert installed[package_name] == version
     # legacy method
+    # We call it here to make sure the legacy compatibility works
+    # It massages the inputs to get to the same call as the one above.
+    # It should hit the cache there and return here.
+    # Cheap and fast test
     env.process_env.install_from_index(
         [Requirement.parse(package_name + (f"=={version}" if version is not None else ""))],
         use_pip_config=True,
@@ -184,16 +230,18 @@ def test_process_env_install_from_index(
 
 
 @pytest.mark.slowtest
-def test_process_env_install_from_index_not_found(tmpvenv_active: Tuple[py.path.local, py.path.local]) -> None:
+def test_process_env_install_from_index_not_found(
+    tmpvenv_active: Tuple[py.path.local, py.path.local], local_module_package_index: str
+) -> None:
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
     """
-    with pytest.raises(env.PackageNotFound):
-        # pass empty index list for security reasons (anyone could publish this package to PyPi)
+    with pytest.raises(env.PackageNotFound, match="Packages this-package-does-not-exist were not found in the given indexes."):
+        # pass use_system_config=False for security reasons (anyone could publish this package to PyPi)
         env.process_env.install_for_config(
             [Requirement.parse("this-package-does-not-exist")],
             config=PipConfig(
-                use_system_config=False,
+                index_url=local_module_package_index,
             ),
         )
 
@@ -231,11 +279,7 @@ def test_process_env_install_from_source(
     package_name: str = "inmanta-module-minimalv2module"
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     assert package_name not in env.process_env.get_installed_packages()
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=project_dir, editable=editable)],
-        config=PipConfig(use_system_config=True),
-    )
+    env.process_env.install_from_source([env.LocalPackagePath(path=project_dir, editable=editable)])
     assert package_name in env.process_env.get_installed_packages()
     if editable:
         assert package_name in env.process_env.get_installed_packages(only_editable=True)
@@ -264,7 +308,6 @@ def test_active_env_get_module_file(
         index = str(local_module_package_index)
         pip_config = PipConfig(
             index_url=index,
-            use_system_config=True,  # we need an upstream for some packages
         )
 
     else:
@@ -314,7 +357,7 @@ def test_active_env_get_module_file_editable_namespace_package(
     assert env.ActiveEnv.get_module_file(module_name) is None
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     env.process_env.install_for_config(
-        requirements=[], paths=[env.LocalPackagePath(path=project_dir, editable=True)], config=PipConfig(use_system_config=True)
+        requirements=[], paths=[env.LocalPackagePath(path=project_dir, editable=True)], config=PipConfig()
     )
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
@@ -326,7 +369,11 @@ def test_active_env_get_module_file_editable_namespace_package(
     importlib.import_module(module_name)
     assert module_name in sys.modules
     assert sys.modules[module_name].__file__ == module_file
-    # legacy api
+    # legacy method
+    # We call it here to make sure the legacy compatibility works
+    # It massages the inputs to get to the same call as the one above.
+    # It should hit the cache there and return here.
+    # Cheap and fast test
     env.process_env.install_from_source(
         paths=[env.LocalPackagePath(path=project_dir, editable=True)],
     )
