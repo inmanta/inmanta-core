@@ -247,6 +247,11 @@ std::print(f"{  a .b . c . n_c }")
     assert out == expected_output
 
 
+def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
+    assert variable.location.start_char == start, f"{variable=} expected {start=} got {variable.location.start_char=}"
+    assert variable.location.end_char == end, f"{variable=} expected {end=} got {variable.location.end_char=}"
+
+
 def test_fstring_numbering_logic():
     """
     Check that variable ranges in f-strings are correctly computed
@@ -260,12 +265,6 @@ std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
 #               [-][--]       [----]     [------]                    [----]    <--- expected ranges
         """
     )
-
-    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start, print(
-            f"{variable=} expected {start=} got {variable.location.start_char=}"
-        )
-        assert variable.location.end_char == end, print(f"{variable=} expected {end=} got {variable.location.end_char=}")
 
     # Ranges are 1-indexed [start:end[
     ranges = [
@@ -295,10 +294,6 @@ std::print(f"---{s}----{s}")
 #               [-]    [-] <--- expected ranges
         """
     )
-
-    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start
-        assert variable.location.end_char == end
 
     # Ranges are 1-indexed [start:end[
     ranges = [
@@ -347,12 +342,6 @@ def test_fstring_numbering_logic_complex():
 std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
         """
     )
-
-    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start, print(
-            f"error for {variable} got {variable.location.start_char} expected {start}"
-        )
-        assert variable.location.end_char == end, print(f"error for {variable} got {variable.location.end_char} expected {end}")
 
     # Ranges are 1-indexed [start:end[
     ranges = [
