@@ -23,7 +23,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Protocol
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -497,7 +497,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             )
 
         # Get the expected return value type
-        self.return_value = PluginReturn(arg_spec.annotations.get("return", None))
+        self.return_type = PluginReturn(arg_spec.annotations.get("return", None))
 
     def get_signature(self) -> str:
         """
@@ -632,7 +632,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         The function call itself
         """
         if self.deprecated:
-            msg: str = f"Plugin {self.get_full_name()} in module '{self.__module__}' is deprecated."
+            msg: str = f"Plugin '{self.get_full_name()}' in module '{self.__module__}' is deprecated."
             if self.replaced_by:
                 msg += f" It should be replaced by '{self.replaced_by}'."
             warnings.warn(PluginDeprecationWarning(msg))
@@ -653,8 +653,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         value = DynamicProxy.unwrap(value)
 
-        if not isinstance(value, Unknown):
-            self.return_type.validate(value)
+        # Validate the returned value
+        self.return_type.validate(value)
 
         return value
 

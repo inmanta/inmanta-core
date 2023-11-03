@@ -481,11 +481,13 @@ def get_one() -> "int":
                     has_warning = True
                     if replaced_by:
                         assert (
-                            f"Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated. It should be "
-                            f"replaced by '{replaced_by}'" in str(warning.message)
+                            f"Plugin 'test_module::get_one' in module 'inmanta_plugins.test_module' is deprecated. "
+                            f"It should be replaced by '{replaced_by}'" in str(warning.message)
                         )
                     else:
-                        assert "Plugin 'get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+                        assert "Plugin 'test_module::get_one' in module 'inmanta_plugins.test_module' is deprecated." in str(
+                            warning.message
+                        )
             assert has_warning
         else:
             assert not any(issubclass(warning.category, PluginDeprecationWarning) for warning in w)
@@ -644,5 +646,7 @@ def get_one() -> "int":
         for warning in w:
             if issubclass(warning.category, PluginDeprecationWarning):
                 has_warning = True
-                assert "Plugin 'custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(warning.message)
+                assert "Plugin 'test_module::custom_name' in module 'inmanta_plugins.test_module' is deprecated." in str(
+                    warning.message
+                )
         assert has_warning
