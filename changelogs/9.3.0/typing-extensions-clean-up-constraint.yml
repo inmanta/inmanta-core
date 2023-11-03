@@ -1,0 +1,7 @@
+description: "Cleaned up typing-extensions constraint with comment and allowing patches"
+change-type: patch
+destination-branches:
+  - master
+  - iso6
+  - iso5
+  - iso4

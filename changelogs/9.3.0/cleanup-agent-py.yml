@@ -1,0 +1,4 @@
+---
+description: Cleanup code in `agent.py`.
+change-type: patch
+destination-branches: [master, iso6]

@@ -1,0 +1,5 @@
+description: Allow cron expressions in the agent_repair_interval so that we can specify a time-interval where the repair runs happen.
+destination-branches: [master, iso6]
+change-type: minor
+sections:
+  feature: "{{description}}"

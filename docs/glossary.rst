@@ -38,7 +38,7 @@ Glossary
         A resource needs to have a unique identifier in an environment. This identifier needs to be
         derived from attributes of the resource. This ensures that the orchestrator can (co-)manage
         existing resources and allows quick recovery of the orchestrator in failure conditions. This
-        unique identifier is consists of multiple fields. For example,
+        unique identifier consists of multiple fields. For example,
         ``std::File[vm1,path="/etc/motd"]`` This id contains the type of the resource, the name of
         the :term:`agent` and the unique id with its value for this resource. The resource designer
         determines how this id is derived.
@@ -49,7 +49,7 @@ Glossary
         * The second field is the name of the agent that manages/groups the resource. For example:
           the name of the machine on  which the file is defined ``vm1``
         * The third field is the identifying attribute and the value of this attribute. For example:
-          the ``path`` of the file uniquely idenfies a file on a machine.
+          the ``path`` of the file uniquely identifies a file on a machine.
 
     module
         A :term:`configuration model` consists of multiple configuration modules. A module provides
@@ -124,7 +124,7 @@ Glossary
         server.
 
     infrastructure
-        That what Inmanta manages. This could be virtual machines with resources in these virtual
+        This is what Inmanta manages. This could be virtual machines with resources in these virtual
         machines. Physical servers and their os. Containers or resources at a cloud provider without
         any servers (e.g. "serverless")
 

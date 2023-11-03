@@ -1,0 +1,6 @@
+---
+description: Fix issue where the documentation of the `inmanta module release` command is incorrectly formatted on the documentation pages.
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

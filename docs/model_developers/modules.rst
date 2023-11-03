@@ -343,9 +343,11 @@ Add the following content to the file:
   machine <hostname of the private repository>
   login <username>
   password <password>
-  
-For more information, please refer to the documentation about `pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
+
+For more information see the doc about`pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
 
 You will also need to specify the url of the repository in the ``project.yml`` file of your project (See: :ref:`specify_location_pip`).
 
 By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
+
+

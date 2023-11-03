@@ -38,7 +38,7 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:] Test2 test2
+Test1.test2 [0:] -- Test2.test1 [1]
 
 t = Test1()
 t2a = Test2(test1=t)
@@ -67,8 +67,8 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:] Test2 test2
-Test1 test1 [1] -- [0:] Test2 floem
+Test1.test2 [0:] -- Test2.test1 [1]
+Test1.floem [0:] -- Test2.test1 [1]
 """
     )
     with pytest.raises(DuplicateException):
@@ -87,8 +87,8 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:] Test2 test2
-Test1 test1 [1] -- [0:] Test1 test2
+Test1.test2 [0:] -- Test2.test1 [1]
+Test1.test2 [0:] -- Test1.test1 [1]
 """
     )
     with pytest.raises(DuplicateException):
@@ -112,8 +112,8 @@ end
 entity Agent:
 end
 
-Agent inmanta_agent   [1] -- [1] Oshost os_host
-Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
+Agent.os_host [1] -- Oshost.inmanta_agent [1]
+Stdhost.inmanta_agent [0:1] -- Agent.deploy_host [1]
 """
     )
     with pytest.raises(DuplicateException):
@@ -137,9 +137,9 @@ end
 entity Agent:
 end
 
-Oshost os_host [1] -- [1] Agent inmanta_agent
+Oshost.inmanta_agent [1] -- Agent.os_host [1]
 
-Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
+Stdhost.inmanta_agent [0:1] -- Agent.deploy_host [1]
 """
     )
     with pytest.raises(DuplicateException):
@@ -155,7 +155,7 @@ entity SpecialService extends std::Service:
 
 end
 
-std::Host host [1] -- [0:] SpecialService services_list"""
+std::Host.services_list [0:] -- SpecialService.host [1]"""
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
@@ -177,7 +177,7 @@ end
 
 implement LogCollector using std::none
 
-LogCollector collectors [0:] -- [0:] LogFile logfiles
+LogCollector.logfiles [0:] -- LogFile.collectors [0:]
 
 lf1 = LogFile(name="lf1", collectors = [c1, c2], members=3)
 lf2 = LogFile(name="lf2", collectors = [c1, c2], members=2)
@@ -203,7 +203,7 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
         assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
 
-def test_new_relation_syntax(snippetcompiler):
+def test_relation_syntax(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -230,7 +230,7 @@ Test2(test1 = b)
     assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
 
 
-def test_new_relation_with_annotation_syntax(snippetcompiler):
+def test_relation_with_annotation_syntax(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -259,7 +259,7 @@ Test2(test1 = b)
     assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
 
 
-def test_new_relation_uni_dir(snippetcompiler):
+def test_relation_uni_dir(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:
@@ -284,7 +284,7 @@ a = Test1(tests=[Test2(),Test2()])
     assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
 
 
-def test_new_relation_uni_dir_double_define(snippetcompiler):
+def test_relation_uni_dir_double_define(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test1:

@@ -1,0 +1,6 @@
+---
+description: Mention in the documentation that it's no longer required to define an index on an embedded entity if the upper arity of the relationship towards that embedded entity is one.
+issue-nr: 592
+issue-repo: lsm
+change-type: patch
+destination-branches: [master, iso6]

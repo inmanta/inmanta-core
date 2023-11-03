@@ -1,0 +1,4 @@
+description: Added iso6 to dependabot config after divergence
+change-type: patch
+destination-branches:
+  - master

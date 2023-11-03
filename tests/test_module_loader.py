@@ -174,9 +174,14 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
                 InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
             ],
         )
+
     message: str = (
-        "Attempting to install a v2 module non_existing_module but no v2 module source is configured. Add at least one repo of "
-        'type "package" to the project config file.'
+        "Attempting to install a v2 module non_existing_module but no v2 module source is configured. Add the relevant pip "
+        "indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
+        "the `pip` section of the project's `project.yml`:"
+        "\n\t  index_urls:"
+        "\n\t\t  - https://pypi.org/simple"
+        "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
     )
     assert message in e.value.format_trace()
 

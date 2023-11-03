@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump more-itertools from 9.1.0 to 10.0.0
+destination-branches:
+- master
+sections: {}

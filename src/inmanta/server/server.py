@@ -90,7 +90,6 @@ class Server(protocol.ServerSlice):
         state_dir = opt.state_dir.get()
         server_state_dir = os.path.join(state_dir, "server")
         dir_map = {"server": _ensure_directory_exist(state_dir, "server")}
-        dir_map["files"] = _ensure_directory_exist(server_state_dir, "files")
         dir_map["environments"] = _ensure_directory_exist(server_state_dir, "environments")
         dir_map["agents"] = _ensure_directory_exist(server_state_dir, "agents")
         dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())

@@ -35,6 +35,23 @@ from . import common
 from .rest import client
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+TORNADO_LOGGER: logging.Logger = logging.getLogger("tornado.general")
+TORNADO_LOGGER.setLevel(logging.DEBUG)
+
+
+# Create a custom log handler for Tornados 'max_clients limit reached' debug logs
+class TornadoDebugLogHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        if (
+            record.levelno == logging.DEBUG
+            and record.name.startswith("tornado.general")
+            and record.msg.startswith("max_clients limit reached")
+        ):
+            LOGGER.warning(record.msg)  # Log Tornado log as inmanta warnings
+
+
+tornado_logger = TornadoDebugLogHandler()
+TORNADO_LOGGER.addHandler(tornado_logger)
 
 
 class CallTarget(object):
@@ -149,6 +166,7 @@ class SessionEndpoint(Endpoint, CallTarget):
     """
 
     _client: "SessionClient"
+    _heartbeat_client: "SessionClient"
 
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
@@ -192,10 +210,12 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
+        self._heartbeat_client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout, force_instance=True)
         await self.start_connected()
         self.add_background_task(self.perform_heartbeat())
 
     async def stop(self) -> None:
+        self._heartbeat_client.close()
         await self._sched.stop()
         await super(SessionEndpoint, self).stop()
 
@@ -216,14 +236,14 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         Start a continuous heartbeat call
         """
-        if self._client is None:
+        if self._heartbeat_client is None or self._client is None:
             raise Exception("AgentEndpoint not started")
 
         connected: bool = False
         try:
             while True:
                 LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
-                result = await self._client.heartbeat(
+                result = await self._heartbeat_client.heartbeat(
                     sid=str(self.sessionid),
                     tid=str(self._env_id),
                     endpoint_names=list(self.end_point_names),
@@ -334,16 +354,23 @@ class Client(Endpoint):
         version_match: VersionMatch = VersionMatch.lowest,
         exact_version: int = 0,
         with_rest_client: bool = True,
+        force_instance: bool = False,
     ) -> None:
         super().__init__(name)
         assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
         if with_rest_client:
-            self._transport_instance = client.RESTClient(self, connection_timout=timeout)
+            self._transport_instance = client.RESTClient(self, connection_timout=timeout, force_instance=force_instance)
         else:
             self._transport_instance = None
         self._version_match = version_match
         self._exact_version = exact_version
+
+    def close(self):
+        """
+        Closes the RESTclient instance manually. This is only needed when it is started with force_instance set to true
+        """
+        self._transport_instance.close()
 
     async def _call(
         self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
@@ -447,8 +474,8 @@ class SessionClient(Client):
     A client that communicates with server endpoints over a session.
     """
 
-    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
-        super().__init__(name, timeout)
+    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120, force_instance: bool = False) -> None:
+        super().__init__(name, timeout, force_instance=force_instance)
         self._sid = sid
 
     async def _call(

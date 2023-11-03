@@ -561,7 +561,7 @@ def test_init_project(tmpdir):
     assert any("already exists" in error for error in stderr)
 
 
-def test_compiler_summary_reporter(capsys) -> None:
+def test_compiler_summary_reporter(monkeypatch, capsys) -> None:
     """
     Test whether the CompileSummaryReporter class produces correct output.
     """

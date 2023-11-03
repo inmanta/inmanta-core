@@ -21,14 +21,14 @@ import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
-from typing import Dict
+from typing import Dict, Generic
 
 from pytest import fixture
 
 from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.agent.handler import CRUDHandlerGeneric as CRUDHandler
-from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, provider
+from inmanta.agent.handler import HandlerContext, ResourceHandler, ResourcePurged, SkipResource, TResource, provider
 from inmanta.data.model import ResourceIdStr
 from inmanta.resources import IgnoreResourceException, PurgeableResource, Resource, resource
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -38,7 +38,7 @@ from utils import retry_limited
 logger = logging.getLogger("inmanta.test.server_agent")
 
 
-async def get_agent(server, environment, *endpoints, hostname="nodes1"):
+async def get_agent(server, environment, *endpoints, hostname="nodes1") -> Agent:
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     prelen = len(agentmanager.sessions)
     agent = Agent(
@@ -213,8 +213,7 @@ def resource_container():
     _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
     _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
 
-    @provider("test::Resource", name="test_resource")
-    class Provider(ResourceHandler):
+    class Provider(ResourceHandler[TResource], Generic[TResource]):
         def check_resource(self, ctx, resource):
             self.read(resource.id.get_agent_name(), resource.key)
             assert resource.value != const.UNKNOWN_STRING
@@ -334,11 +333,11 @@ def resource_container():
             _RELOAD_COUNT.clear()
 
     @provider("test::Resource", name="test_resource")
-    class ResourceProvider(Provider):
+    class ResourceProvider(Provider[MyResource]):
         pass
 
     @provider("test::Fail", name="test_fail")
-    class Fail(ResourceHandler):
+    class Fail(ResourceHandler[FailR]):
         def check_resource(self, ctx, resource):
             current = resource.clone()
             current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
@@ -354,7 +353,7 @@ def resource_container():
             raise Exception()
 
     @provider("test::FailFast", name="test_failfast")
-    class FailFast(ResourceHandler):
+    class FailFast(ResourceHandler[FailFastR]):
         def check_resource(self, ctx: HandlerContext, resource: Resource) -> Resource:
             raise Exception("An\nError\tMessage")
 
@@ -364,7 +363,7 @@ def resource_container():
             raise Exception("An\nError\tMessage")
 
     @provider("test::Fact", name="test_fact")
-    class Fact(ResourceHandler):
+    class Fact(ResourceHandler[FactResource]):
         def check_resource(self, ctx, resource):
             current = resource.clone()
             current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
@@ -428,7 +427,7 @@ def resource_container():
         pass
 
     @provider("test::BadLogging", name="test_bad_logging")
-    class BadLogging(ResourceHandler):
+    class BadLogging(ResourceHandler[BadLoggingR]):
         def check_resource(self, ctx, resource):
             current = resource.clone()
             return current
@@ -535,7 +534,7 @@ def resource_container():
             await asyncio.sleep(0.1)
 
     @provider("test::Wait", name="test_wait")
-    class Wait(Provider):
+    class Wait(Provider[WaitR]):
         def __init__(self, agent, io=None):
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()

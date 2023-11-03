@@ -71,7 +71,7 @@ class CodeService(protocol.ServerSlice):
 
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
-        val = self.file_slice.stat_file_internal(allrefs)
+        val = await self.file_slice.stat_file_internal(allrefs)
 
         if len(val) != 0:
             raise BadRequest("Not all file references provided are valid", details={"references": val})
@@ -106,7 +106,7 @@ class CodeService(protocol.ServerSlice):
         if code.source_refs is not None:
             for code_hash, (file_name, module, req) in code.source_refs.items():
                 try:
-                    content = self.file_slice.get_file_internal(code_hash)
+                    content = await self.file_slice.get_file_internal(code_hash)
                     sources[code_hash] = (file_name, module, content.decode(), req)
                 except UnicodeDecodeError:
                     raise BadRequest(

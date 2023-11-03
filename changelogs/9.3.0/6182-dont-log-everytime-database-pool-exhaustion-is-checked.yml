@@ -1,0 +1,4 @@
+description: Add quiet_mode to add_action to avoid pollution in the server logs for actions called with a high frequency.
+issue-nr: 6182
+change-type: patch
+destination-branches: [master, iso6]

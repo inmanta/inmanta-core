@@ -21,7 +21,7 @@ from typing import List, Optional
 import pytest
 
 from inmanta.module import ModuleRepoType, Project, ProjectMetadata, RelationPrecedenceRule
-from utils import assert_no_warning
+from utils import assert_no_warning, log_contains
 
 
 @pytest.mark.parametrize(
@@ -90,11 +90,72 @@ def test_no_module_path(tmp_path, caplog):
                 """
     name: testproject
     downloadpath: libs
-    repo:
-        - url: https://pypi.org/simple
-          type: package
+    pip:
+        index_urls:
+            - https://pypi.org/simple
     """
             )
 
         Project(tmp_path, autostd=False)
     assert_no_warning(caplog)
+
+
+def test_deprecation_warning_repo_of_type_package(tmp_path, caplog):
+    with caplog.at_level(logging.WARNING):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                """
+    name: testproject
+    downloadpath: libs
+    repo:
+       - url: https://pypi.org/simple
+         type: package
+    pip:
+        index_urls:
+            - https://pypi.org/simple
+    """
+            )
+
+        Project(tmp_path, autostd=False)
+    log_contains(
+        caplog,
+        "inmanta.module",
+        logging.WARNING,
+        (
+            "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file is deprecated. "
+            "Please set the pip index url through the `pip -> index_urls` option instead."
+        ),
+    )
+
+
+@pytest.mark.parametrize("use_pip_config_file, value", [(True, True), (True, False), (False, False)])
+def test_pip_config(tmp_path, caplog, use_pip_config_file, value):
+    """
+    Verify that "use_config_file" can be specified in a project.yml file but that it isn't mandatory
+    If it is not specified, verify that the default value "False" is used in the project.
+    """
+    pip_config_file = """
+    pip:
+        index_urls:
+            - https://pypi.org/simple
+
+    """
+    pip_config_file += (
+        f"""
+        use_config_file: {value}
+        """
+        if use_pip_config_file
+        else ""
+    )
+    with caplog.at_level(logging.WARNING):
+        with (tmp_path / "project.yml").open("w") as fh:
+            fh.write(
+                f"""
+    name: testproject
+    downloadpath: libs
+    {pip_config_file}
+    """
+            )
+    project = Project(tmp_path, autostd=False)
+    assert_no_warning(caplog)
+    assert project.metadata.pip.use_config_file == value

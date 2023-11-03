@@ -1,0 +1,5 @@
+description: Implement storage backend for the unmanaged resources
+issue-nr: 5690
+change-type: minor
+destination-branches: [iso6, master]
+

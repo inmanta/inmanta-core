@@ -33,6 +33,7 @@ requires = [
     "pyyaml~=6.0",
     "texttable~=1.0",
     "tornado~=6.0",
+    "typing-extensions~=4.8.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
@@ -45,7 +46,9 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "8.7.0"
+# This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
+# (See the bumpversion.cfg file for relevant locations).
+version = "10.1.0"
 
 setup(
     version=version,

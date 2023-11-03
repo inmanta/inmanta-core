@@ -2436,7 +2436,6 @@ AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 AUTO_FULL_COMPILE = "auto_full_compile"
 RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
-PURGE_ON_DELETE = "purge_on_delete"
 PROTECTED_ENVIRONMENT = "protected_environment"
 NOTIFICATION_RETENTION = "notification_retention"
 AVAILABLE_VERSIONS_TO_KEEP = "available_versions_to_keep"
@@ -2708,20 +2707,12 @@ class Environment(BaseDocument):
             validator=convert_int,
             doc="The number of versions to keep stored in the database",
         ),
-        PURGE_ON_DELETE: Setting(
-            name=PURGE_ON_DELETE,
-            default=False,
-            typ="bool",
-            validator=convert_boolean,
-            doc="Enable purge on delete. When set to true, the server will detect the absence of resources with purge_on_delete"
-            " set to true and automatically purges them.",
-        ),
         PROTECTED_ENVIRONMENT: Setting(
             name=PROTECTED_ENVIRONMENT,
             default=False,
             typ="bool",
             validator=convert_boolean,
-            doc="When set to true, this environment cannot be cleared, deleted or decommissioned.",
+            doc="When set to true, this environment cannot be cleared or deleted.",
         ),
         NOTIFICATION_RETENTION: Setting(
             name=NOTIFICATION_RETENTION,
@@ -4864,102 +4855,6 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    async def get_deleted_resources(
-        cls,
-        environment: uuid.UUID,
-        current_version: int,
-        current_resources: Sequence[m.ResourceIdStr],
-        *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> List["Resource"]:
-        """
-        This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
-        the latest version of the resource from a released model.
-
-        :param environment:
-        :param current_version:
-        :param current_resources: A Sequence of all resource ids in the current version.
-        """
-        LOGGER.debug("Starting purge_on_delete queries")
-
-        # get all models that have been released
-        query = (
-            "SELECT version FROM "
-            + ConfigurationModel.table_name()
-            + " WHERE environment=$1 AND released=TRUE ORDER BY version DESC LIMIT "
-            + str(DBLIMIT)
-        )
-        versions = set()
-        latest_version = None
-        async with cls.get_connection(connection) as con:
-            async with con.transaction():
-                async for record in con.cursor(query, cls._get_value(environment)):
-                    version = record["version"]
-                    versions.add(version)
-                    if latest_version is None:
-                        latest_version = version
-
-        LOGGER.debug("  All released versions: %s", versions)
-        LOGGER.debug("  Latest released version: %s", latest_version)
-
-        # find all resources in previous versions that have "purge_on_delete" set
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=latest_version)
-        query = (
-            "SELECT DISTINCT resource_id FROM "
-            + cls.table_name()
-            + " WHERE "
-            + filter_statement
-            + " AND attributes @> $"
-            + str(len(values) + 1)
-        )
-        values.append(cls._get_value({"purge_on_delete": True}))
-        resources_records = await cls._fetch_query(query, *values, connection=connection)
-        resources = [r["resource_id"] for r in resources_records]
-
-        LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
-
-        # all resources on current model
-        LOGGER.debug("  All resource in current version (%s): %s", current_version, current_resources)
-
-        # determined deleted resources
-
-        deleted = set(resources) - set(current_resources)
-        LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
-
-        # filter out resources that should not be purged:
-        # 1- resources from versions that have not been deployed
-        # 2- resources that are already recorded as purged (purged and deployed)
-        should_purge = []
-        for deleted_resource in deleted:
-            # get the full resource history, and determine the purge status of this resource
-            (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=deleted_resource)
-            query = (
-                "SELECT *"
-                + " FROM "
-                + cls.table_name()
-                + " WHERE "
-                + filter_statement
-                + " AND model < $"
-                + str(len(values) + 1)
-                + " ORDER BY model DESC"
-            )
-            values.append(cls._get_value(current_version))
-
-            async with cls.get_connection(connection) as con:
-                async with con.transaction():
-                    async for obj in con.cursor(query, *values):
-                        # if a resource is part of a released version and it is deployed (this last condition is actually enough
-                        # at the moment), we have found the last status of the resource. If it was not purged in that version,
-                        # add it to the should purge list.
-                        if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
-                            attributes = json.loads(str(obj["attributes"]))
-                            if not attributes["purged"]:
-                                should_purge.append(cls(from_postgres=True, **obj))
-                            break
-
-        return should_purge
-
-    @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
         status_subquery = """
         (CASE WHEN
@@ -6259,12 +6154,50 @@ class DiscoveredResource(BaseDocument):
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
-    values: dict[str, str]
+    values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 
     def to_dto(self) -> m.DiscoveredResource:
         return m.DiscoveredResource(discovered_resource_id=self.discovered_resource_id, values=self.values)
+
+
+class File(BaseDocument):
+    content_hash: str
+    content: bytes
+
+    @classmethod
+    async def has_file_with_hash(cls, content_hash: str) -> bool:
+        """
+        Return True iff a file exists with the given content_hash.
+        """
+        query = f"""
+            SELECT EXISTS (
+                SELECT 1 FROM {cls.table_name()} WHERE content_hash=$1
+            )
+        """
+        result = await cls._fetchval(query, content_hash)
+        assert isinstance(result, bool)
+        return result
+
+    @classmethod
+    async def get_non_existing_files(cls, content_hashes: Iterable[str]) -> set[str]:
+        """
+        Return a sub-list of content_hashes, with only those hashes that are not present in this database table.
+        The returned list will not contain duplicates.
+        """
+        query = f"""
+            SELECT DISTINCT tmp_table.h_content_hash AS content_hash
+            FROM (
+                SELECT f.content_hash AS f_content_hash, h.content_hash as h_content_hash
+                FROM {cls.table_name()} AS f RIGHT OUTER JOIN unnest($1::varchar[]) AS h(content_hash)
+                     ON f.content_hash = h.content_hash
+            ) as tmp_table
+            -- Only keep records for which no matching hash was found in the file table
+            WHERE tmp_table.f_content_hash IS NULL
+        """
+        result = await cls._fetch_query(query, content_hashes)
+        return set(cast(str, r["content_hash"]) for r in result)
 
 
 _classes = [
@@ -6287,6 +6220,7 @@ _classes = [
     EnvironmentMetricsTimer,
     User,
     DiscoveredResource,
+    File,
 ]
 
 

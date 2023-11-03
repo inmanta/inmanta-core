@@ -19,7 +19,6 @@ import asyncio
 import base64
 import datetime
 import json
-import os
 import random
 import time
 import urllib.parse
@@ -184,36 +183,6 @@ async def test_client_files_bad(server, client):
     # Create the file
     result = await client.upload_file(id=hash + "a", content=body)
     assert result.code == 400
-
-
-async def test_client_files_corrupt(client):
-    (hash, content, body) = make_random_file()
-    # Create the file
-    result = await client.upload_file(id=hash, content=body)
-    assert result.code == 200
-
-    state_dir = opt.state_dir.get()
-
-    file_dir = os.path.join(state_dir, "server", "files")
-
-    file_name = os.path.join(file_dir, hash)
-
-    with open(file_name, "wb+") as fd:
-        fd.write("Haha!".encode())
-
-    opt.server_delete_currupt_files.set("false")
-    result = await client.get_file(id=hash)
-    assert result.code == 500
-
-    result = await client.upload_file(id=hash, content=body)
-    assert result.code == 500
-
-    opt.server_delete_currupt_files.set("true")
-    result = await client.get_file(id=hash)
-    assert result.code == 500
-
-    result = await client.upload_file(id=hash, content=body)
-    assert result.code == 200
 
 
 async def test_gzip_encoding(server):

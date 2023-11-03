@@ -1,0 +1,8 @@
+---
+description: Added support for keyword-only arguments in plugins
+issue-nr: 5706
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"

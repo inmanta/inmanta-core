@@ -1,0 +1,5 @@
+description: Fixes some issues with the unmanaged resources storage backend
+issue-nr: 6023
+change-type: patch
+destination-branches: [iso6, master]
+

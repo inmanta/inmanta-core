@@ -212,10 +212,6 @@ async def test_project_api_v2(client_v2):
     result = await client_v2.environment_delete(id=uuid.uuid4())
     assert result.code == 404
 
-    # Decommission
-    result = await client_v2.environment_decommission(id=env1_id)
-    assert result.code == 200
-
 
 async def test_modify_environment_project(client_v2):
     """Test modifying the project of an environment"""
@@ -422,10 +418,6 @@ async def test_environment_listener(server, client_v2, caplog):
 
     result = await client_v2.environment_delete(id=uuid.uuid4())
     assert result.code == 404
-
-    # Decommission
-    result = await client_v2.environment_decommission(id=env1_id)
-    assert result.code == 200
 
     # Clear
     result = await client_v2.environment_clear(id=env1_id)

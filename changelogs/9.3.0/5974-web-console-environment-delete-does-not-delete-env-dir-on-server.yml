@@ -1,0 +1,6 @@
+description: The environment_delete endpoint now correctly removes the environment directory on the server.
+issue-nr: 5974
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

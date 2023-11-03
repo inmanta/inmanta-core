@@ -1,0 +1,3 @@
+description: Resolved a bug where the AST cache was not invalidated after a module installation/update, leading to unrefreshed dependencies for the said module.
+change-type: patch
+destination-branches: [master, iso6]

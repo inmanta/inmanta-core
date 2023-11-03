@@ -1,0 +1,8 @@
+---
+description: Add support to the compilerservice to request a compile that is part of a database transaction.
+issue-nr: 1249
+issue-repo: inmanta-lsm
+change-type: minor
+destination-branches: [master]
+sections:
+  minor-improvement: "{{description}}"

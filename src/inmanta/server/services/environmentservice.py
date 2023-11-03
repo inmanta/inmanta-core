@@ -54,7 +54,6 @@ from inmanta.server.services import compilerservice
 from inmanta.server.services.orchestrationservice import OrchestrationService
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.types import Apireturn, JsonType, Warnings
-from inmanta.util import get_compiler_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -288,15 +287,6 @@ class EnvironmentService(protocol.ServerSlice):
             await self.autostarted_agent_manager.restart_agents(refreshed_env)
         await self.server_slice.compiler.resume_environment(refreshed_env.id)
 
-    @handle(methods.decomission_environment, env="id")
-    async def decommission_environment(self, env: data.Environment, metadata: Optional[JsonType]) -> Apireturn:
-        data: Optional[model.ModelMetadata] = None
-        if metadata:
-            data = model.ModelMetadata(message=metadata.get("message", ""), type=metadata.get("type", ""))
-
-        version = await self.environment_decommission(env, data)
-        return 200, {"version": version}
-
     @handle(methods.clear_environment, env="id")
     async def clear_environment(self, env: data.Environment) -> Apireturn:
         await self.environment_clear(env)
@@ -498,17 +488,7 @@ class EnvironmentService(protocol.ServerSlice):
         await self.notify_listeners(EnvironmentAction.deleted, env.to_dto())
         self._delete_environment_dir(environment_id)
 
-    @handle(methods_v2.environment_decommission, env="id")
-    async def environment_decommission(self, env: data.Environment, metadata: Optional[model.ModelMetadata]) -> int:
-        is_protected_environment = await env.get(data.PROTECTED_ENVIRONMENT)
-        if is_protected_environment:
-            raise Forbidden(f"Environment {env.id} is protected. See environment setting: {data.PROTECTED_ENVIRONMENT}")
-        version = await env.get_next_version()
-        if metadata is None:
-            metadata = model.ModelMetadata(message="Decommission of environment", type="api")
-        version_info = model.ModelVersionInfo(export_metadata=metadata)
-        await self.orchestration_service.put_version(env, version, [], {}, [], version_info.dict(), get_compiler_version())
-        return version
+        self._delete_environment_dir(environment_id)
 
     @handle(methods_v2.environment_clear, env="id")
     async def environment_clear(self, env: data.Environment) -> None:

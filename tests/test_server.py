@@ -764,8 +764,8 @@ async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
 
     result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
     assert result.code == 200
-
     metadata = {"key1": "val1", "key2": "val2"}
+
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
     await client.set_param(environment, "param2", ParameterSource.user, "val2", "", {"a": "b"}, False)
 
@@ -1487,6 +1487,13 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     await env1.set(data.AUTOSTART_AGENT_MAP, {"agent3": "", "internal": ""})
     await env2.set(data.AUTOSTART_AGENT_MAP, {"agent1": "", "internal": ""})
 
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
     if env1_halted:
         result = await client.halt_environment(env1.id)
         assert result.code == 200
@@ -1559,7 +1566,22 @@ async def test_cleanup_old_agents(server, client, env1_halted, env2_halted):
     agents_before_purge = await data.Agent.get_list()
     assert len(agents_before_purge) == 6
 
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
+
+    # these checks are here to investigate the fact that the test case is flaky and that we have a suspicion
+    # that it is an issue with the agent map
+    agentmap_env1 = await client.get_setting(tid=env1.id, id=data.AUTOSTART_AGENT_MAP)
+    agentmap_env2 = await client.get_setting(tid=env2.id, id=data.AUTOSTART_AGENT_MAP)
+    assert agentmap_env1.result["value"] == {"agent3": "", "internal": ""}
+    assert agentmap_env2.result["value"] == {"agent1": "", "internal": ""}
+
     agents_after_purge = [(agent.environment, agent.name) for agent in await data.Agent.get_list()]
     number_agents_env1_after_purge = 4 if env1_halted else 3
     number_agents_env2_after_purge = 2 if env2_halted else 1

@@ -30,15 +30,7 @@ LOGGER = logging.getLogger("test")
 @pytest.mark.slowtest
 @pytest.mark.parametrize("change_state", [False, True])
 async def test_6475_deploy_with_failure_masking(
-    server,
-    agent: Agent,
-    environment,
-    resource_container,
-    clienthelper,
-    client,
-    monkeypatch,
-    no_agent_backoff,
-    change_state: bool,
+    server, agent: Agent, environment, resource_container, clienthelper, client, monkeypatch, change_state: bool
 ):
     """
     Consider:
@@ -86,9 +78,9 @@ async def test_6475_deploy_with_failure_masking(
 
     assert resource_container.Provider.readcount("agent1", "key2") == 0
     # deploy resource: success
-    result = await client.release_version(environment, v1, push=True)
+    result = await client.release_version(environment, v1, True)
     assert result.code == 200
-    await resource_container.wait_for_done_with_waiters(client, environment, v1, wait_for_this_amount_of_resources_in_done=2)
+    await resource_container.wait_for_done_with_waiters(client, environment, v1, 2)
 
     # start deploy but hang
     # Make it fail
@@ -99,24 +91,20 @@ async def test_6475_deploy_with_failure_masking(
 
     # add new version
     # hammer it with new versions!
-    # We use only 5 versions here (iso6), instead of the 20 version on iso7.
-    # This is done because iso6 doesn't use a different Tornado connection pool for the agent session.
-    # Using 20 versions here would result in hitting the max_client limit of Tornado, which would cause the
-    # session of the agent to expire, which would fail the test case.
-    new_versions_to_add = 5
+    new_versions_to_add = 20
     new_versions_pre = 1
 
-    versions = [await make_version() for _ in range(new_versions_to_add)]
+    versions = [await make_version() for i in range(new_versions_to_add)]
 
     for version in versions[0:new_versions_pre]:
-        result = await client.release_version(environment, version, push=False)
+        result = await client.release_version(environment, version, False)
         assert result.code == 200
 
     slowdown_queries(monkeypatch, delay=0.01)
 
     # let some run in parallel
     tasks = [
-        asyncio.create_task(client.release_version(environment, version, push=False)) for version in versions[new_versions_pre:]
+        asyncio.create_task(client.release_version(environment, version, False)) for version in versions[new_versions_pre:]
     ]
 
     # fail deploy

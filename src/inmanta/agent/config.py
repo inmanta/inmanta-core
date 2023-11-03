@@ -147,7 +147,7 @@ This option is ignored and a splay of 0 is used if 'agent_repair_interval' is a 
 agent_get_resource_backoff = Option(
     "config",
     "agent-get-resource-backoff",
-    5,
+    3,
     "This is a load management feature. It ensures that the agent will not pull resources from the inmanta server"
     " `<agent-get-resource-backoff>*<duration-last-pull-in-seconds>` seconds after the last time the agent pulled resources"
     " from the server. Setting this option too low may result in a high load on the Inmanta server. Setting it too high"

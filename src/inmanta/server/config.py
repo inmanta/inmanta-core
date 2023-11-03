@@ -123,7 +123,7 @@ def get_bind_port() -> int:
 server_tz_aware_timestamps = Option(
     "server",
     "tz_aware_timestamps",
-    False,
+    True,
     "Whether the server should return timezone aware timestamps. "
     "If False, the server will serialize timestamps in a time zone naive way (in implicit UTC). "
     "If True, timestamps are serialized as time zone aware objects.",
@@ -243,16 +243,6 @@ server_wait_after_param = Option(
 )
 
 agent_timeout = Option("server", "agent-timeout", 30, "Time before an agent is considered to be offline", is_time)
-
-server_delete_currupt_files = Option(
-    "server",
-    "delete_currupt_files",
-    True,
-    "The server logs an error when it detects a file got corrupted. When set to true, the "
-    "server will also delete the file, so on subsequent compiles the missing file will be "
-    "recreated.",
-    is_bool,
-)
 
 server_purge_resource_action_logs_interval = Option(
     "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log purging", is_time

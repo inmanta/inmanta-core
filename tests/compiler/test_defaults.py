@@ -46,8 +46,8 @@ entity Test2:
 end
 implement Test2 using std::none
 
-Test1 test1 [1] -- [0:] Test2 test2
-Test1 test1 [0:1] -- [0:] Test2 test2
+Test1.test2 [0:] -- Test2.test1 [1]
+Test1.test2 [0:] -- Test2.test1 [0:1]
 """
     )
     with pytest.raises(DuplicateException):
@@ -274,6 +274,6 @@ entity Test:
     std::date d = "nodatevalue"
 end
         """,
-        "Invalid value 'nodatevalue', does not match constraint `(std::validate_type('datetime.date',self) == true)`"
+        "Invalid value 'nodatevalue', does not match constraint `std::validate_type('datetime.date',self)`"
         " (reported in std::date d = 'nodatevalue' ({dir}/main.cf:3:15))",
     )

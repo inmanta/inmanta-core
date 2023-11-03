@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import datetime
 import uuid
 from collections import abc
 from typing import Optional
@@ -24,7 +23,7 @@ from typing import Optional
 import utils
 from inmanta import const, data
 from inmanta.protocol.common import Result
-from inmanta.resources import Id, ResourceIdStr
+from inmanta.resources import ResourceIdStr
 from inmanta.util import get_compiler_version
 
 
@@ -1720,188 +1719,6 @@ async def test_put_partial_inter_set_dependency(server, client, environment, cli
         "Invalid request: The model should have a dependency graph that is closed and no dangling dependencies: "
         "{'test::Resource[agent1,key=key1]'}" in result.result["message"]
     )
-
-
-async def test_put_partial_purge_on_delete(server, client, environment, clienthelper, agent_factory) -> None:
-    """
-    Verify whether the put_partial endpoint composes the new version of the model correctly when resources are deleted that
-    had the purge_on_delete flag set to true.
-    """
-    # Enable purge_on_delete
-    await client.set_setting(environment, data.PURGE_ON_DELETE, True)
-
-    agent1 = await agent_factory(environment=environment, hostname="agent1", code_loader=False)
-    aclient1 = agent1._client
-    agent2 = await agent_factory(environment=environment, hostname="agent2", code_loader=False)
-    aclient2 = agent2._client
-
-    version = await clienthelper.get_version()
-    rid_shared = "test::Resource[agent1,key=shared]"
-    rid_updated1 = "test::Resource[agent1,key=updated1]"
-    rid_updated2 = "test::Resource[agent1,key=updated2]"
-    rid_unmodified1 = "test::Resource[agent1,key=unmodified1]"
-    rid_deleted1 = "test::Resource[agent1,key=deleted1]"
-    rid_deleted2 = "test::Resource[agent2,key=deleted2]"
-    resources = [
-        {
-            "key": "shared",
-            "version": version,
-            "id": f"{rid_shared},v={version}",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [],
-        },
-        {
-            "key": "updated_set1",
-            "version": version,
-            "id": f"{rid_updated1},v={version}",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [f"{rid_shared},v={version}"],
-        },
-        {
-            "key": "updated_set2",
-            "version": version,
-            "id": f"{rid_updated2},v={version}",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [f"{rid_shared},v={version}", f"{rid_updated1},v={version}"],
-        },
-        {
-            "key": "unmodified_set1",
-            "version": version,
-            "id": f"{rid_unmodified1},v={version}",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [f"{rid_shared},v={version}"],
-        },
-        {
-            "key": "deleted_set1",
-            "version": version,
-            "id": f"{rid_deleted1},v={version}",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [f"{rid_shared},v={version}"],
-        },
-        {
-            "key": "deleted_set2",
-            "version": version,
-            "id": f"{rid_deleted2},v={version}",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [f"{rid_deleted1},v={version}"],  # Cross-agent dependency
-        },
-    ]
-    resource_sets = {
-        rid_updated1: "updated",
-        rid_updated2: "updated",
-        rid_unmodified1: "unmodified",
-        rid_deleted1: "deleted",
-        rid_deleted2: "deleted",
-    }
-    resource_states = {
-        rid_shared: const.ResourceState.available,
-        rid_updated1: const.ResourceState.available,
-        rid_updated2: const.ResourceState.available,
-        rid_unmodified1: const.ResourceState.available,
-        rid_deleted1: const.ResourceState.available,
-        rid_deleted2: const.ResourceState.available,
-    }
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info={},
-        compiler_version=get_compiler_version(),
-        resource_sets=resource_sets,
-    )
-    assert result.code == 200
-
-    # Release
-    result = await client.release_version(environment, version)
-    assert result.code == 200
-
-    # Mark resources as deployed
-    for aclient, resource_ids in [
-        (aclient1, [rid_shared, rid_updated1, rid_updated2, rid_unmodified1, rid_deleted1]),
-        (aclient2, [rid_deleted2]),
-    ]:
-        result = await aclient.resource_action_update(
-            tid=environment,
-            resource_ids=[Id.set_version_in_id(rid, new_version=1) for rid in resource_ids],
-            action_id=uuid.uuid4(),
-            action=const.ResourceAction.deploy,
-            started=datetime.datetime.now(),
-            finished=datetime.datetime.now(),
-            status=const.ResourceState.deployed,
-            change=const.Change.updated,
-        )
-        assert result.code == 200
-
-    # Partial compile
-    resources_partial = [
-        {
-            "key": "shared",
-            "version": 0,
-            "id": f"{rid_shared},v=0",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [],
-        },
-        {
-            "key": "updated_set2",
-            "version": 0,
-            "id": f"{rid_updated2},v=0",
-            "send_event": False,
-            "purged": False,
-            "purge_on_delete": True,
-            "requires": [f"{rid_shared},v=0"],
-        },
-    ]
-    resource_sets = {rid_updated2: "updated"}
-    resource_states = {rid_shared: const.ResourceState.available, rid_updated2: const.ResourceState.available}
-    result = await client.put_partial(
-        tid=environment,
-        resources=resources_partial,
-        resource_state=resource_states,
-        unknowns=[],
-        version_info=None,
-        resource_sets=resource_sets,
-        removed_resource_sets=["deleted"],
-    )
-    assert result.code == 200
-
-    resources_in_model = await data.Resource.get_list(model=2)
-    assert len(resources_in_model) == 6
-
-    rid_to_resource = {res.resource_id: res for res in resources_in_model}
-    # rid_shared
-    assert sorted(rid_to_resource[rid_shared].attributes["requires"]) == sorted([rid_updated1, rid_deleted1])
-    assert rid_to_resource[rid_shared].provides == []
-    # rid_updated1
-    assert rid_to_resource[rid_updated1].attributes["requires"] == []
-    assert rid_to_resource[rid_updated1].provides == []
-    # rid_updated2
-    assert rid_to_resource[rid_updated2].attributes["requires"] == [rid_shared]
-    assert rid_to_resource[rid_updated2].provides == []
-    # rid_unmodified1
-    assert rid_to_resource[rid_unmodified1].attributes["requires"] == [rid_shared]
-    assert rid_to_resource[rid_unmodified1].provides == []
-    # rid_deleted1
-    assert rid_to_resource[rid_deleted1].attributes["requires"] == [rid_deleted2]
-    assert rid_to_resource[rid_deleted1].provides == []
-    # rid_deleted2
-    assert rid_to_resource[rid_deleted2].attributes["requires"] == []
-    assert rid_to_resource[rid_deleted2].provides == [rid_deleted1]
 
 
 async def test_is_suitable_for_partial_compiles(server, client, environment, clienthelper) -> None:

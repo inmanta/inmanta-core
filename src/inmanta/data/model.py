@@ -308,17 +308,6 @@ class ModelMetadata(BaseModel):
         fields = {"inmanta_compile_state": {"alias": "inmanta:compile:state"}}
 
 
-class ModelVersionInfo(BaseModel):
-    """Version information that can be associated with an orchestration model
-
-    :param export_metadata: Metadata associated with this version
-    :param model: A serialization of the complete orchestration model
-    """
-
-    export_metadata: ModelMetadata
-    model: Optional[JsonType]
-
-
 class ResourceMinimal(BaseModel):
     """
     Represents a resource object as it comes in over the API. Provides strictly required validation only.
@@ -736,7 +725,7 @@ class DiscoveredResource(BaseModel):
     """
 
     discovered_resource_id: ResourceIdStr
-    values: JsonType
+    values: dict[str, object]
 
     @validator("discovered_resource_id")
     @classmethod

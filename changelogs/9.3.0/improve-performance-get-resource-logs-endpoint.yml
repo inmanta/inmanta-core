@@ -1,0 +1,8 @@
+---
+description: Improve the performance of the `GET /api/v2/resource/<resource_id>/logs` endpoint.
+issue-nr: 6147
+issue-repo: inmanta-core
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"

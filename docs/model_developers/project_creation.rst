@@ -44,10 +44,12 @@ An example ``project.yml`` could be:
   repo:
       - url: https://github.com/inmanta/
         type: git
-      - url: https://pypi.org/simple
-        type: package
   install_mode: release
   requires:
+  pip:
+      use_config_file: False
+      index_urls:
+          - https://pypi.org/simple
 
 .. warning::
     Using more than one Python package index in the project config is discouraged.
