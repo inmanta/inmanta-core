@@ -1573,7 +1573,7 @@ class ProjectPipConfig(env.PipConfig):
         for extra_field in extra_fields:
             # This is cfr adr 0000
             warnings.warn(
-                ProjectConfigurationWarning(f"Found unexpected configuration value 'pip.{extra_field} in 'project.yaml'")
+                ProjectConfigurationWarning(f"Found unexpected configuration value 'pip.{extra_field} in 'project.yml'")
             )
         return values
 
