@@ -239,7 +239,7 @@ test = (A(x=0) == A(x=0.0))
 
 def test_lookup_on_float_with_int(snippetcompiler):
     snippetcompiler.setup_for_snippet(
-        f"""
+        """
 entity A:
     float x
 end
