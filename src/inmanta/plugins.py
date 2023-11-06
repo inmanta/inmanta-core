@@ -23,7 +23,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
