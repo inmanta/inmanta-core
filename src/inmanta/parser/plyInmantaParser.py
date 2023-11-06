@@ -1005,7 +1005,7 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
         potential whitespace characters.
     """
 
-    def normalize(variable: str, locatable: LocatableString, offset: Optional[int] = 0) -> LocatableString:
+    def normalize(variable: str, locatable: LocatableString, offset: int = 0) -> LocatableString:
         """
         Strip a variable of potential whitespaces and compute the locatable string.
         :param variable: String representation for a plain variable or composite part of a variable
