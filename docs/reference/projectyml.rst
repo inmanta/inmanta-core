@@ -191,11 +191,10 @@ In this scenario, pip options defined in env variables would be used over the sy
 Migrate to project-wide pip config
 ----------------------------------
 
-``inmanta-core 11.0.0`` introduced new options to configure pip settings for
-the whole project in a centralized way.
+``inmanta-core 11.0.0`` introduced new options to configure pip settings for the whole project in a centralized way.
 
-When upgrading to ``inmanta-service-orchestrator 7.0.0`` or ``inmanta 2024.0``, this section can be used as a migration
-guide.
+When upgrading to ``inmanta-service-orchestrator 7.0.0`` or ``inmanta 2024.0``, this section can be used as
+a migration guide.
 
 
 All the v2 module sources currently set in a ``repo`` section of the ``project_yml`` with type ``package`` should
@@ -219,6 +218,10 @@ is available for agents.
     - Dependencies for v1 modules will now be installed according to the pip config in the project configuration file,
         while they previously always used the system's pip config.
     - The agent will follow the pip configuration defined in the :ref:`project_yml`.
+
+  - Changes relative to ``inmanta-2023.4`` (OSS)
+    - ``pip.use_config_file`` is refactored into ``pip.use-system-config``
+    - An error is now raised if ``pip.use-system-config`` is false and no "primary" index is set through ``pip.index-url``
 
 Module metadata files
 #####################
