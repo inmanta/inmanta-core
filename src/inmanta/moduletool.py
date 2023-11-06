@@ -489,11 +489,15 @@ compatible with the dependencies specified by the updated modules.
                     allow_pre_releases=my_project.install_mode != InstallMode.release,
                     use_pip_config=my_project.metadata.pip.use_config_file,
                 )
+                # Invalidate ast cache so that dependencies of installed modules can be updated as well
+                my_project.invalidate_state()
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
                 try:
                     ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
+                    # Invalidate the state of the updated module
+                    my_project.invalidate_state(v1_module)
                 except Exception:
                     LOGGER.exception("Failed to update module %s", v1_module)
 

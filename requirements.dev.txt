@@ -1,4 +1,4 @@
-inmanta-dev-dependencies[pytest,async,core]==2.89.0
+inmanta-dev-dependencies[pytest,async,core]==2.90.0
 bumpversion==0.6.0
 openapi_spec_validator==0.7.1
 pip2pi==0.8.2
@@ -7,6 +7,7 @@ types-python-dateutil==2.8.19.14
 types-setuptools==68.2.0.0
 types-toml==0.10.8.7
 flake8-junit-report==2.1.0
+time-machine==2.13.0
 
 # documentation
 furo==2023.9.10
