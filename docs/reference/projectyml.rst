@@ -50,7 +50,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_recursive: true
     freeze_operator: ~=
     pip:
-        index-url: https://pypi.org/simple/
+        index-url: https://devpi.example.com/stable/
         extra-index-url: []
         pre: false
         use-system-config: false
@@ -74,8 +74,8 @@ This option determines the isolation level of the project's pip config. When fal
 in the index(es) defined in the project.yml, when true, the orchestrator will extend the system's pip configuration rather than replace it.
 
 Setting this to ``false`` is generally recommended, especially during development, both for portability (by making sure that only the pip
-config defined in the project.yml will be used regardless of the sytem's pip config) and for security (the isolation
-reduces the risk of dependency confusion attacks if the ``index-url`` option is set mindfully).
+config defined in the project.yml will be used regardless of the system's pip config) and for security (the isolation
+reduces the risk of dependency confusion attacks).
 
 Setting this to ``true`` will have the following consequences:
 
@@ -110,8 +110,9 @@ example of a dev config:
 
 2) In production
 
-Using a single pip index is still the recommended approach, and the use of pre-release versions should be disabled. Here is an
-example of a config suitable in production:
+Using a single pip index is still the recommended approach, and the use of pre-release versions should be disabled.
+
+
 
 .. code-block:: yaml
 
@@ -169,6 +170,14 @@ installation of pre-release versions was allowed. This behaviour should now be s
 
 A full compile should be run after upgrading, in order to export the project pip config to the server, so that it
 is available for agents.
+
+# TODO add to the list of breaking changes + deprecations
+  deprecation-note:
+    - Allowing the installation of pre-release versions for v2 modules through the :class:`~inmanta.module.InstallMode`
+      is no longer supported. Use the project.yml ``pip.pre`` section instead.
+
+  breaking change:
+    - The agent will follow the pip configuration defined in the :ref:`project_yml`.
 
 Module metadata files
 #####################

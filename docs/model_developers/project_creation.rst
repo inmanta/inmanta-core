@@ -47,7 +47,7 @@ An example ``project.yml`` could be:
   install_mode: release
   requires:
   pip:
-      index-url: https://pypi.org/simple/
+      index-url: https://devpi.example.com/stable/
       extra-index-url: []
       pre: false
       use-system-config: false

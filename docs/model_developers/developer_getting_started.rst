@@ -164,8 +164,8 @@ Becomes:
 
 **Please note, code completion and navigation work on modules that are imported in the** ``main.cf`` **file**.
 
-Source for V2 modules and V1 modules' dependencies
-==================================================
+Pip index for V2 modules and V1 modules' dependencies
+=====================================================
 
 Add the pip index where your modules and dependencies are hosted to ``project.yml`` in the ``pip.index-url`` :ref:`section<specify_location_pip>`.
 For example, for modules hosted on PyPi:
