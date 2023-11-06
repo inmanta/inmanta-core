@@ -91,7 +91,7 @@ class CodeService(protocol.ServerSlice):
             data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes)
             for resource, hashes in new.items()
         ]
-
+        test = await data.ConfigurationModel.get_list()
         await data.Code.insert_many(newcodes)
 
         return 200
