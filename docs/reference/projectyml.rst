@@ -50,7 +50,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_recursive: true
     freeze_operator: ~=
     pip:
-        index-url: https://devpi.example.com/stable/
+        index-url: https://my_repo.secure.company.com/repository/inmanta-production
         extra-index-url: []
         pre: false
         use-system-config: false
@@ -115,7 +115,7 @@ example of a dev config:
 .. code-block:: yaml
 
     pip:
-        index-url: https://devpi.example.com/dev/
+        index-url: https://my_repo.secure.company.com/repository/dev
         extra-index-url: []
         pre: true
         use-system-config: false

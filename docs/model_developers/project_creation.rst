@@ -47,7 +47,7 @@ An example ``project.yml`` could be:
   install_mode: release
   requires:
   pip:
-      index-url: https://devpi.example.com/stable/
+      index-url: https://my_repo.secure.company.com/repository/inmanta-production
       extra-index-url: []
       pre: false
       use-system-config: false
