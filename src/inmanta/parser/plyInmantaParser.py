@@ -21,8 +21,7 @@ import re
 import string
 from collections import abc
 from dataclasses import dataclass
-from itertools import accumulate
-from typing import Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -1002,52 +1001,55 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
             - The string is the plain variable name without brackets (ex: 'a.b') and including any potential whitespaces.
             - The LocatableString is the same as for regular string interpolation
     :returns: A tuple where all LocatableString have been converted to Reference. These references are cleaned up of any
-        eventual whitespace character. The matching str holding the variable name is left untouched i.e. will still contain
-        eventual whitespace characters.
+        potential whitespace character. The matching str holding the variable name is left untouched i.e. will still contain
+        potential whitespace characters.
     """
+
+    def normalize(variable: str, locatable: LocatableString, offset: Optional[int] = 0) -> LocatableString:
+        """
+        Strip a variable of potential whitespaces and compute the locatable string.
+        :param variable: String representation for a plain variable or composite part of a variable
+            including potential whitespace.
+        :param locatable: LocatableString associated to this variable.
+        :param offset: Used when normalizing a subpart of a composite variable (e.g. 'a.b.c') to track where the current
+            subpart starts.
+        """
+        start_char = locatable.location.start_char + offset
+        end_char = start_char + len(variable)
+
+        variable_left_trim = variable.lstrip()
+        left_spaces: int = len(variable) - len(variable_left_trim)
+        variable_full_trim = variable_left_trim.rstrip()
+        right_spaces: int = len(variable_left_trim) - len(variable_full_trim)
+
+        range: Range = Range(
+            locatable.location.file,
+            locatable.location.lnr,
+            start_char + left_spaces,
+            locatable.location.lnr,
+            end_char - right_spaces,
+        )
+        return LocatableString(variable_full_trim, range, locatable.lexpos, locatable.namespace)
+
     assert namespace
     _vars: List[Tuple[Reference, str]] = []
     for match, var in variables:
         var_name: str = str(var)
         var_parts: List[str] = var_name.split(".")
-        start_char = var.location.start_char
-        end_char = start_char + len(var_parts[0])
 
-        field_name_left_trim = var_parts[0].lstrip()
-        left_spaces: int = len(var_parts[0]) - len(field_name_left_trim)
-        field_name_full_trim = field_name_left_trim.rstrip()
-        right_spaces: int = len(field_name_left_trim) - len(field_name_full_trim)
+        ref_locatable_string: LocatableString = normalize(var_parts[0], var)
 
-        range: Range = Range(
-            var.location.file, var.location.lnr, start_char + left_spaces, var.location.lnr, end_char - right_spaces
-        )
-        ref_locatable_string = LocatableString(field_name_full_trim, range, var.lexpos, var.namespace)
         ref = Reference(ref_locatable_string)
         ref.location = ref_locatable_string.location
         ref.namespace = namespace
         if len(var_parts) > 1:
-            attribute_offsets: Iterator[int] = accumulate(
-                var_parts[1:], lambda acc, part: acc + len(part) + 1, initial=end_char + 1
-            )
-            for attr, char_offset in zip(var_parts[1:], attribute_offsets):
-                field_name_left_trim = attr.lstrip()
-                left_spaces = len(attr) - len(field_name_left_trim)
-                field_name_full_trim = field_name_left_trim.rstrip()
-                right_spaces = len(field_name_left_trim) - len(field_name_full_trim)
-
-                range_attr: Range = Range(
-                    var.location.file,
-                    var.location.lnr,
-                    char_offset + left_spaces,
-                    var.location.lnr,
-                    char_offset + len(attr) - right_spaces,
-                )
-                attr_locatable_string: LocatableString = LocatableString(
-                    field_name_full_trim, range_attr, var.lexpos, var.namespace
-                )
+            offset = len(var_parts[0]) + 1
+            for attr in var_parts[1:]:
+                attr_locatable_string: LocatableString = normalize(attr, var, offset=offset)
                 ref = AttributeReference(ref, attr_locatable_string)
-                ref.location = range_attr
+                ref.location = attr_locatable_string.location
                 ref.namespace = namespace
+                offset += len(attr) + 1
             # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
             _vars.append((ref, match))
         else:

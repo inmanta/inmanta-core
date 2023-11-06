@@ -560,7 +560,7 @@ class FormattedString(ReferenceStatement):
     This class is an abstraction around a string containing references to variables.
     """
 
-    __slots__ = ("_format_string", "_variables")
+    __slots__ = "_format_string"
 
     def __init__(self, format_string: str, variables: abc.Sequence["Reference"]) -> None:
         super().__init__(variables)
@@ -578,7 +578,7 @@ class StringFormat(FormattedString):
     Create a new string by doing a string interpolation
     """
 
-    __slots__ = ()
+    __slots__ = "_variables"
 
     def __init__(self, format_string: str, variables: abc.Sequence[Tuple["Reference", str]]) -> None:
         super().__init__(format_string, [k for (k, _) in variables])
@@ -617,18 +617,18 @@ class StringFormatV2(FormattedString):
 
     """
 
-    __slots__ = ()
+    __slots__ = "_variables"
 
     def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
         """
         :param format_string: The string on which to perform substitution
-        :param variables: Sequence of tuples each holding a clean reference (i.e. stripped of eventual whitespaces ) to a
-         variable to substitute in the format_string and the raw full name of this variable (i.e. including eventual
+        :param variables: Sequence of tuples each holding a normalized reference (i.e. stripped of eventual whitespaces ) to a
+         variable to substitute in the format_string and the raw full name of this variable (i.e. including potential
          whitespaces).
         """
         only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
-        self._variables = {ref: full_name for (ref, full_name) in variables}
+        self._variables: abc.Mapping[Reference, str] = {ref: full_name for (ref, full_name) in variables}
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
