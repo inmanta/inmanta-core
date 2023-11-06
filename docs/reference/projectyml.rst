@@ -220,8 +220,11 @@ is available for agents.
     - The agent will follow the pip configuration defined in the :ref:`project_yml`.
 
   - Changes relative to ``inmanta-2023.4`` (OSS)
-    - ``pip.use_config_file`` is refactored into ``pip.use-system-config``
-    - An error is now raised if ``pip.use-system-config`` is false and no "primary" index is set through ``pip.index-url``
+    - ``pip.use_config_file`` is refactored into ``pip.use-system-config``.
+    - An error is now raised if ``pip.use-system-config`` is false and no "primary" index is set through ``pip.index-url``.
+    - Bugfix: An error is now raised if ``pip.use-system-config`` is false and no "primary" index is set through ``pip.index-url``.
+    - Pip environment variables are no longer ignored when ``pip.use-system-config`` is true and the corresponding option
+      from the ``project_yml`` is unset.
 
 Module metadata files
 #####################
