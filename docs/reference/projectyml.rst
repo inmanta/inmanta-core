@@ -82,8 +82,11 @@ Setting this to ``true`` will have the following consequences:
 - If no index is set in the project.yml file i.e. both ``index-url`` and ``extra-index-url`` are unset, then Pip's
   default search behaviour will be used: environment variables, pip config files and then PyPi (in that order).
 
-- If ``index-url`` and/or ``extra-index-url`` are set, they will be used and any index defined in the system's environment
-  variables or pip config files will also be used (in that order) and passed to pip as extra indexes.
+- If ``index-url`` is set, this value be used over any index defined in the system's environment
+  variables or pip config files .
+
+- If ``extra-index-url`` is set, these indexes will be used in addition to any extra index defined in the system's
+  environment variables or pip config files, and passed to pip as extra indexes.
 
 - If ``PIP_PRE`` is set, pre-release
   versions are allowed when installing v2 modules or v1 modules' dependencies.

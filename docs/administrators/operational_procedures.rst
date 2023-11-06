@@ -15,6 +15,10 @@ Project Release for Production
 
 This process describes the steps to prepare an inmanta project for production release.
 
+All packages should be hosted in an internal, curated python repository (like nexus or devpi) and the default pip
+config, which pulls packages from https://pypi.org/ should never be used. See the :ref:`specify_location_pip` section
+for more information on how to set the project's pip configuration.
+
 Context
 ++++++++
 * The project development and testing is complete
@@ -34,8 +38,8 @@ Procedure
     inmanta -vv -X project freeze --recursive --operator "=="
 
 
-    This will cause the `project.yml` file to be updated with constraints that only allow this project to work with this exact set of module versions.
-    This ensures that no unwanted updates can 'leak' into the production environment.
+    This will cause the `project.yml` file to be updated with constraints that only allow this project to work with
+    this exact set of module versions. This ensures that no unwanted updates can 'leak' into the production environment.
 
 4. Verify that all modules are frozen to the correct version.
 
