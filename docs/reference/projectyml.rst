@@ -85,7 +85,7 @@ Setting this to ``true`` will have the following consequences:
 - If ``index-url`` and/or ``extra-index-url`` are set, they will be used and any index defined in the system's environment
   variables or pip config files will also be used (in that order) and passed to pip as extra indexes.
 
-- The ``PIP_PRE`` environment variable (if set) is no longer ignored and will be used to determine whether pre-release
+- If ``PIP_PRE`` is set, pre-release
   versions are allowed when installing v2 modules or v1 modules' dependencies.
 
 Example scenario
