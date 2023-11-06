@@ -69,12 +69,12 @@ The :class:`~inmanta.module.ProjectPipConfig` section of the project.yml file of
 pip.use-system-config
 """""""""""""""""""""
 
-This option determines the isolation level of the project's pip config. When false, any pip config set on the system
+This option determines the isolation level of the project's pip config. When false (the default), any pip config set on the system
 (e.g. through environment variables or pip config files) are ignored and pip will only look for packages
-in the index(es) defined in the project.yml, when true, pip will in addition look in the eventual index(es) defined on the system.
+in the index(es) defined in the project.yml, when true, the orchestrator will extend the system's pip configuration rather than replace it.
 
-Setting this to ``false`` is recommended during development both for portability (by making sure that only the pip
-config defined in the project.yml will be used regardless of the sytem's pip config) and for security (The isolation
+Setting this to ``false`` is generally recommended, especially during development, both for portability (by making sure that only the pip
+config defined in the project.yml will be used regardless of the sytem's pip config) and for security (the isolation
 reduces the risk of dependency confusion attacks if the ``index-url`` option is set mindfully).
 
 Setting this to ``true`` will have the following consequences:
@@ -123,7 +123,7 @@ example of a config suitable in production:
     when ``use-system-config`` is set to true (other pip-related environment variables are not overridden).
 
     For example, in the production scenario above, if the following
-    pip environment variables were set by mistake on the server running the compiler: ``PIP_INDEX_URL=https://devpi.example.com/dev/``
+    pip environment variables happened to be set on the server running the compiler: ``PIP_INDEX_URL=https://devpi.example.com/dev/``
     and ``PIP_PRE=true``, the config used in the end would still be the one defined in the project.yml, namely
     ``index-url=https://devpi.example.com/stable/`` and ``pre=false``.
 
