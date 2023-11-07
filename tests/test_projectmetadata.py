@@ -160,8 +160,7 @@ def test_pip_config(tmp_path, caplog, use_system_config, value):
 
 def test_pip_config_warnings(tmp_path):
     """
-    Verify that "use_config_file" can be specified in a project.yml file but that it isn't mandatory
-    If it is not specified, verify that the default value "False" is used in the project.
+    Verify that a bad config produces warnings
     """
     pip_config_file = """
     pip:

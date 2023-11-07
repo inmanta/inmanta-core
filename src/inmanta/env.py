@@ -646,6 +646,9 @@ class PythonEnvironment:
         :param constraint_files: pass along the following constraint files
         :param upgrade: make pip do an upgrade
         :param upgrade_strategy: what upgrade strategy to use
+
+        limitation:
+         - When upgrade is false, we check if the requirements are installed, but we don't take the constraints into account.
         """
         if len(requirements) == 0 and len(paths) == 0:
             raise Exception("install_for_config requires at least one requirement or path to install")

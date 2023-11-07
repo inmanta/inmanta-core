@@ -1053,49 +1053,6 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
     assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-dummy-module"])
 
 
-@pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
-@pytest.mark.skip(reason="The install mode is no longer relevant here!")  # TODO REMOVE
-def test_project_install_with_install_mode(
-    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
-) -> None:
-    """
-    Test whether the `inmanta module install` command takes into account the `install_mode` configured on the inmanta project.
-    """
-    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-
-    module_template_path: str = os.path.join(modules_v2_dir, "elaboratev2module")
-    module_name: str = "mod"
-    package_name: str = module.ModuleV2Source.get_package_name_for(module_name)
-    for module_version in ["1.0.0", "1.0.1.dev0"]:
-        module_from_template(
-            module_template_path,
-            os.path.join(str(tmpdir), f"mod-{module_version}"),
-            new_name=module_name,
-            new_version=version.Version(module_version),
-            publish_index=index,
-        )
-
-    # set up project
-    snippetcompiler_clean.setup_for_snippet(
-        f"import {module_name}",
-        autostd=False,
-        index_url=index.url,
-        python_requires=[Requirement.parse(package_name)],
-        install_mode=install_mode,
-    )
-
-    os.chdir(module.Project.get().path)
-    ProjectTool().execute("install", [])
-
-    if install_mode is None or install_mode == InstallMode.release:
-        expected_version = version.Version("1.0.0")
-    else:
-        expected_version = version.Version("1.0.1.dev0")
-    installed_packages: Dict[str, version.Version] = env.process_env.get_installed_packages()
-    assert package_name in installed_packages
-    assert installed_packages[package_name] == expected_version
-
-
 @pytest.mark.slowtest
 def test_moduletool_list(
     capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str

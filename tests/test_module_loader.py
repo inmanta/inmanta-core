@@ -248,7 +248,6 @@ def test_load_module_v2_already_installed(
 
 
 @pytest.mark.parametrize("install", [True, False])
-# TODO: exception type has changed here
 def test_load_module_v2_module_using_install(
     snippetcompiler_clean,
     local_module_package_index: str,
