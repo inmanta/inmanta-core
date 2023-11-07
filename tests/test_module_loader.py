@@ -49,7 +49,14 @@ from utils import PipIndex, create_python_package, log_contains, module_from_tem
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
-def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
+def test_v2_module_loading(
+    editable_install: bool,
+    tmpdir: py.path.local,
+    snippetcompiler,
+    capsys,
+    modules_v2_dir: str,
+    local_module_package_index,  # upstream for setuptools for isolated build
+) -> None:
     # Disable modules_dir
     snippetcompiler.modules_dir = None
 
@@ -67,6 +74,7 @@ def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippe
         """,
         autostd=False,
         install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=editable_install)],
+        index_url=local_module_package_index,
     )
 
     snippetcompiler.do_export()
@@ -229,6 +237,7 @@ def test_load_module_v2_already_installed(
     modules_v2_dir: str,
     allow_v1: bool,
     editable_install: bool,
+    local_module_package_index,  # upstream for setuptools for isolated build
 ) -> None:
     """
     Test whether the Project.load_module() method works correctly when loading a V2 module that was already installed
@@ -240,6 +249,7 @@ def test_load_module_v2_already_installed(
         snippet=f"import {module_name}",
         install_v2_modules=[LocalPackagePath(module_dir, editable_install)],
         install_project=False,
+        index_url=local_module_package_index,
     )
 
     assert module_name not in project.modules
