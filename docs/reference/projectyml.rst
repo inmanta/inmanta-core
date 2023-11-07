@@ -156,30 +156,8 @@ and set ``index-url`` to the secure internal repo e.g.:
 
     Other pip-related environment variables are not overridden.
 
-    To use the system's pip configuration without altering it, leave the corresponding option unset (see example below).
+    To use the system's pip configuration without altering it, leave the corresponding option unset.
 
-    For example, in the production scenario above, if the following
-    pip environment variables happened to be set on the server running the compiler:
-    ``PIP_INDEX_URL=https://my_repo.secure.company.com/repository/inmanta-dev`` and ``PIP_PRE=true``, the config used
-    in the end would still be the one defined in the project.yml, namely
-    ``index-url=https://my_repo.secure.company.com/repository/inmanta-production`` and ``pre=false``.
-
-An alternative approach would be to configure all pip-related options through the system config. For example:
-
-.. code-block:: yaml
-
-    pip:
-        use-system-config: true
-
-And set the following env variables:
-
-.. code-block:: bash
-
-    export PIP_INDEX_URL=https://my_repo.secure.company.com/repository/inmanta-production
-    export PIP_EXTRA_INDEX_URL=https://my_repo.secure.company.com/repository/project-alpha-production
-    export PIP_PRE=false
-
-In this scenario, pip options defined in env variables would be used over the system's pip config (if any).
 
 .. note::
 
@@ -204,22 +182,29 @@ If you want to allow pre-releases for v2 modules and other Python packages, set 
 file. This used to be controlled by the :class:`~inmanta.module.InstallMode` set at the project level or at a module
 level.
 
-Run a full compile after upgrading in order to export the project pip config to the server, so that it
-is available for agents.
+Make sure the agents have access to the index(es) configured at the project level.
 
-# TODO add to the list of breaking changes + deprecations
-  deprecation-note:
+Run a full compile after upgrading in order to export the project pip config to the server, so that it
+is available for agents. This will ensure that the agents follow the pip config defined in the project. For reference,
+prior to ``inmanta-core 11.0.0``, the agents were using their respective system's pip config.
+
+Deprecation notes:
+""""""""""""""""""
 
     - Allowing the installation of pre-release versions for v2 modules through the :class:`~inmanta.module.InstallMode`
       is no longer supported. Use the project.yml ``pip.pre`` section instead.
 
-  breaking change:
+Breaking changes:
+"""""""""""""""""
+
     - Indexes defined through the ``repo`` option with type ``package`` will be ignored.
     - Dependencies for v1 modules will now be installed according to the pip config in the project configuration file,
-        while they previously always used the system's pip config.
+      while they previously always used the system's pip config.
     - The agent will follow the pip configuration defined in the :ref:`project_yml`.
 
-  - Changes relative to ``inmanta-2023.4`` (OSS)
+Changes relative to ``inmanta-2023.4`` (OSS):
+"""""""""""""""""""""""""""""""""""""""""""""
+
     - ``pip.use_config_file`` is refactored into ``pip.use-system-config``.
     - An error is now raised if ``pip.use-system-config`` is false and no "primary" index is set through ``pip.index-url``.
     - Pip environment variables are no longer ignored when ``pip.use-system-config`` is true and the corresponding option
