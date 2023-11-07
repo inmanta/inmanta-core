@@ -682,7 +682,7 @@ class ModuleSource(Generic[TModule]):
 class ModuleV2Source(ModuleSource["ModuleV2"]):
     def __init__(self, urls: List[str] = []) -> None:
         """
-        :param urls: retained for backward compatiblity
+        :param urls: retained for backward compatibility
         """
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
 
