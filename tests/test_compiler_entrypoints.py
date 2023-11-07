@@ -290,7 +290,7 @@ implement Test_no_doc using b
     )
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 10
+    assert len(anchormap) == 13
 
     checkmap = {(r.lnr, r.start_char, r.end_char): t.docstring for r, t in anchormap}
 
@@ -326,7 +326,14 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     implement A using a
 
     A(mytest = Test())
-    """
+    """,
+        autostd=False,
     )
 
-    (types, scopes) = compiler.get_types_and_scopes()
+    anchormap = compiler.anchormap()
+    location, resolves_to = more_itertools.one(
+        (location, resolves_to)
+        for location, resolves_to in anchormap
+        if location.file == os.path.join(snippetcompiler.project_dir, "main.cf")
+    )
+    print(location, resolves_to)
