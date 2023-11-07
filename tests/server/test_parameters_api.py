@@ -26,6 +26,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
 from inmanta.server.config import get_bind_port
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -129,9 +130,7 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
         if not parameter["updated"]:
             parameter["updated"] = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
         else:
-            parameter["updated"] = datetime.datetime.strptime(parameter["updated"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-                tzinfo=datetime.timezone.utc
-            )
+            parameter["updated"] = parse_timestamp(parameter["updated"])
     all_parameters_in_expected_order = sorted(all_parameters, key=itemgetter(order_by_column, "id"), reverse=order == "DESC")
     all_parameter_ids_in_expected_order = parameter_ids(all_parameters_in_expected_order)
 
