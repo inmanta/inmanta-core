@@ -116,7 +116,14 @@ def test_to_v2():
 
 
 @pytest.mark.slowtest
-def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, caplog, tmpdir) -> None:
+def test_is_versioned(
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    caplog,
+    tmpdir,
+    local_module_package_index,  # upstream for setuptools for isolated build
+) -> None:
     """
     Test whether the warning regarding non-versioned modules is given correctly.
     """
@@ -127,7 +134,9 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
         module_name: str, needs_versioning_warning: bool, install_v2_modules: List[LocalPackagePath] = []
     ) -> None:
         caplog.clear()
-        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules)
+        snippetcompiler_clean.setup_for_snippet(
+            f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules, index_url=local_module_package_index
+        )
         snippetcompiler_clean.do_export()
         warning_message = f"Module {module_name} is not version controlled, we recommend you do this as soon as possible."
         assert (warning_message in caplog.text) is needs_versioning_warning

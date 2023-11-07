@@ -357,7 +357,9 @@ def test_active_env_get_module_file_editable_namespace_package(
     assert env.ActiveEnv.get_module_file(module_name) is None
     project_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     env.process_env.install_for_config(
-        requirements=[], paths=[env.LocalPackagePath(path=project_dir, editable=True)], config=PipConfig()
+        requirements=[],
+        paths=[env.LocalPackagePath(path=project_dir, editable=True)],
+        config=PipConfig(use_system_config=True),  # we need an upstream for some the dependencies of core,
     )
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
@@ -379,7 +381,9 @@ def test_active_env_get_module_file_editable_namespace_package(
     )
 
 
-def create_install_package(name: str, version: version.Version, requirements: List[Requirement]) -> None:
+def create_install_package(
+    name: str, version: version.Version, requirements: List[Requirement], local_module_package_index: str
+) -> None:
     """
     Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
     cleans it up after install.
@@ -387,6 +391,7 @@ def create_install_package(name: str, version: version.Version, requirements: Li
     :param name: Package name.
     :param version: Version for this package.
     :param requirements: Requirements on other packages. Required packages must already be installed when calling this function.
+    :param local_module_package_index: upstream index to get setuptools and wheel
     """
     req_string: str = (
         "" if len(requirements) == 0 else ("[options]\ninstall_requires=" + "\n    ".join(str(req) for req in requirements))
@@ -413,7 +418,10 @@ build-backend = "setuptools.build_meta"
         env.process_env.install_for_config(
             requirements=[],
             paths=[env.LocalPackagePath(path=str(tmpdir), editable=False)],
-            config=PipConfig(use_system_config=False),
+            config=PipConfig(
+                use_system_config=False,
+                index_url=local_module_package_index,
+            ),
         )
 
 
@@ -422,6 +430,7 @@ def test_active_env_check_basic(
     caplog,
     tmpdir: str,
     tmpvenv_active_inherit: str,
+    local_module_package_index,  # upstream for setuptools for isolated build
 ) -> None:
     """
     Verify that the env.ActiveEnv.check() method detects all possible forms of incompatibilities within the environment.
@@ -458,11 +467,13 @@ def test_active_env_check_basic(
                 assert expect[1] in e.value.get_message()
 
     assert_all_checks()
-    create_install_package("test-package-one", version.Version("1.0.0"), [])
+    create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
     assert_all_checks()
-    create_install_package("test-package-two", version.Version("1.0.0"), [Requirement.parse("test-package-one~=1.0")])
+    create_install_package(
+        "test-package-two", version.Version("1.0.0"), [Requirement.parse("test-package-one~=1.0")], local_module_package_index
+    )
     assert_all_checks()
-    create_install_package("test-package-one", version.Version("2.0.0"), [])
+    create_install_package("test-package-one", version.Version("2.0.0"), [], local_module_package_index)
     assert_all_checks(
         expect_test=(
             False,
@@ -473,7 +484,7 @@ def test_active_env_check_basic(
 
 
 @pytest.mark.slowtest
-def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> None:
+def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local_module_package_index) -> None:
     """
     Verify that the env.ActiveEnv.check() method's constraints parameter is taken into account as expected.
     """
@@ -488,20 +499,22 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str) -> No
         env.ActiveEnv.check(in_scope, constraints)
 
     caplog.clear()
-    create_install_package("test-package-one", version.Version("1.0.0"), [])
+    create_install_package("test-package-one", version.Version("1.0.0"), [], local_module_package_index)
     env.ActiveEnv.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     # Add an unrelated package to the venv, that should not matter
     # setup for #4761
     caplog.clear()
-    create_install_package("ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")])
+    create_install_package(
+        "ext-package-one", version.Version("1.0.0"), [Requirement.parse("test-package-one==1.0")], local_module_package_index
+    )
     env.ActiveEnv.check(in_scope, constraints)
     assert "Incompatibility between constraint" not in caplog.text
 
     caplog.clear()
     v: version.Version = version.Version("2.0.0")
-    create_install_package("test-package-one", v, [])
+    create_install_package("test-package-one", v, [], local_module_package_index)
     # test for #4761
     # without additional constrain, this is not a hard failure
     # except for the unrelated package, which should produce a warning
