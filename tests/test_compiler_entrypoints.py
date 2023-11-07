@@ -318,7 +318,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     entity A:
     end
 
-    A.mytest [1] -- Test [1]
+    A.mytest [1] -- tests::Test [1]
 
     implementation a for A:
     end
@@ -330,10 +330,8 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
         autostd=False,
     )
 
-    anchormap = compiler.anchormap()
-    location, resolves_to = more_itertools.one(
-        (location, resolves_to)
-        for location, resolves_to in anchormap
-        if location.file == os.path.join(snippetcompiler.project_dir, "main.cf")
-    )
-    print(location, resolves_to)
+    compiler = Compiler()
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    anchormap = sched.anchormap(compiler, statements, blocks)
+    print(anchormap)

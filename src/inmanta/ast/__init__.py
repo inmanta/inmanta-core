@@ -252,6 +252,7 @@ class TypeReferenceAnchor(Anchor):
 
     def resolve(self) -> Optional[AnchorTarget]:
         t = self.namespace.get_type(self.type)
+        # here?
         location = t.get_location()
         docstring = t.comment if isinstance(t, WithComment) else None
         if not location:
@@ -386,13 +387,13 @@ class Namespace(Namespaced):
         else:
             cns = self  # type: Optional[Namespace]
             while cns is not None:
+                print("---------")
+                print(name)
+                print(cns.defines_types)
                 if name in cns.defines_types:
                     return cns.defines_types[name]
-                for vn in cns.visible_namespaces.values():
-                    ns = vn.target
-                    if name in ns.defines_types:
-                        return ns.defines_types[name]
                 cns = cns.get_parent()
+            print("olé")
             raise TypeNotFoundException(typ, self)
 
     def get_name(self) -> str:
