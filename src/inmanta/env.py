@@ -406,7 +406,7 @@ class Pip(PipCommandBuilder):
         paths: Optional[List[LocalPackagePath]] = None,
     ) -> None:
         """
-        Perform a pip installaccording to the given config
+        Perform a pip install according to the given config
 
         :param python_path: the python path to use
         :param config: the pip config to use
@@ -456,7 +456,7 @@ class Pip(PipCommandBuilder):
             # and we are not using system config,
             # then we need to disable the index.
             # This can only happen if paths is also set.
-            index_args.append("--no-index-url")
+            index_args.append("--no-index")
 
         for extra_index_url in config.extra_index_url:
             index_args.append("--extra-index-url")
@@ -563,8 +563,7 @@ class PythonEnvironment:
     A generic Python environment.
 
     The implementation of this class is based on the invariant that the version of the inmanta-core and the
-    Inmanta product packages doesn't change. This call will make sure that the version of these packages is
-    never changed.
+    Inmanta product packages don't change.
     """
 
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
