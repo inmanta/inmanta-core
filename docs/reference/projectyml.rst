@@ -186,7 +186,7 @@ Make sure the agents have access to the index(es) configured at the project leve
 
 Run a full compile after upgrading in order to export the project pip config to the server, so that it
 is available for agents. This will ensure that the agents follow the pip config defined in the project. For reference,
-prior to ``inmanta-core 11.0.0``, the agents were using their respective system's pip config.
+prior to ``inmanta-core 11.0.0``, the agents were always using their respective system's pip config.
 
 Deprecation notes:
 """"""""""""""""""
