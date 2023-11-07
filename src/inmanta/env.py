@@ -484,13 +484,12 @@ class Pip(PipCommandBuilder):
             # If we don't use system config, unset env vars
             # setting this env_var to os.devnull disables the loading of all pip configuration files
 
+            # Drop all PIP env vars
+            for env_var in list(sub_env.keys()):
+                if env_var.startswith("PIP_"):
+                    del sub_env[env_var]
+
             sub_env["PIP_CONFIG_FILE"] = os.devnull
-            if "PIP_EXTRA_INDEX_URL" in sub_env:
-                del sub_env["PIP_EXTRA_INDEX_URL"]
-            if "PIP_INDEX_URL" in sub_env:
-                del sub_env["PIP_INDEX_URL"]
-            if "PIP_PRE" in sub_env:
-                del sub_env["PIP_PRE"]
 
         if config.pre is not None:
             # Make sure that IF pip pre is set, we enforce it
@@ -772,11 +771,11 @@ class CommandRunner:
         self.logger = logger
 
     def run_command_and_log_output(
-        self, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None
+        self, cmd: List[str], env: Optional[Dict[str, str]] = None, stderr: Optional[int] = None, cwd: Optional[str] = None
     ) -> str:
         output: bytes = b""  # Make sure the var is always defined in the except bodies
         try:
-            output = subprocess.check_output(cmd, stderr=stderr, env=env)
+            output = subprocess.check_output(cmd, stderr=stderr, env=env, cwd=cwd)
         except CalledProcessError as e:
             if e.stderr:
                 msg = e.stderr.decode()

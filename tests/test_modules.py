@@ -228,6 +228,7 @@ def test_module_v2_source_get_installed_module_editable(
     snippetcompiler_clean,
     modules_v2_dir: str,
     editable: bool,
+    local_module_package_index,  # upstream for setuptools for isolated build
 ) -> None:
     """
     Make sure ModuleV2Source.get_installed_module identifies editable installations correctly.
@@ -238,6 +239,7 @@ def test_module_v2_source_get_installed_module_editable(
         f"import {module_name}",
         autostd=False,
         install_v2_modules=[env.LocalPackagePath(path=module_dir, editable=editable)],
+        index_url=local_module_package_index if editable else None,
     )
 
     source: module.ModuleV2Source = module.ModuleV2Source()

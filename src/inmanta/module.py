@@ -1684,7 +1684,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                     warnings.warn(
                         ProjectConfigurationWarning(
                             "Setting a pip index through the `repo.url` option with type `package` in the project.yml file "
-                            "is deprecated. This value will be ignored. "
+                            "is no longer supported and will be ignored. "
                             "Please set the pip index url through the `pip.index_url` option instead."
                         )
                     )
