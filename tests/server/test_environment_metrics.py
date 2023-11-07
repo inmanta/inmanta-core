@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import functools
+import operator
 import uuid
 from collections import abc, defaultdict
 from collections.abc import AsyncIterator, Sequence
@@ -801,7 +803,7 @@ async def test_compile_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
-    expected_total_compile_time = sum(compile_times)
+    expected_total_compile_time = functools.reduce(operator.add, compile_times)
 
     assert len(result_timer) == 1
     assert any(
@@ -828,7 +830,7 @@ async def test_compile_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
-    expected_total_compile_time = sum(compile_times)
+    expected_total_compile_time = functools.reduce(operator.add, compile_times)
 
     # 1 new entry
     assert len(result_timer) == 2
@@ -943,7 +945,7 @@ async def test_compile_wait_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_wait_time = sum(wait_times)
+    expected_total_wait_time = functools.reduce(operator.add, wait_times)
 
     assert len(result_timer) == 1
     assert any(
@@ -969,7 +971,7 @@ async def test_compile_wait_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_wait_time = sum(wait_times)
+    expected_total_wait_time = functools.reduce(operator.add, wait_times)
 
     # 1 new entry
     assert len(result_timer) == 2
@@ -990,7 +992,7 @@ async def test_compile_wait_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_wait_time = sum(wait_times)
+    expected_total_wait_time = functools.reduce(operator.add, wait_times)
 
     # 1 new entry
     assert len(result_timer) == 3
