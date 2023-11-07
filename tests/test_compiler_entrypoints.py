@@ -309,3 +309,24 @@ implement Test_no_doc using b
     verify_anchor(23, 11, 15, "this is a test entity")
     verify_anchor(24, 29, 30, None)
     verify_anchor(24, 11, 22, None)
+
+
+def test_constructor_with_inferred_namespace(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+    import tests
+    entity A:
+    end
+
+    A.mytest [1] -- Test [1]
+
+    implementation a for A:
+    end
+
+    implement A using a
+
+    A(mytest = Test())
+    """
+    )
+
+    (types, scopes) = compiler.get_types_and_scopes()

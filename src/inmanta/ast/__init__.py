@@ -388,6 +388,10 @@ class Namespace(Namespaced):
             while cns is not None:
                 if name in cns.defines_types:
                     return cns.defines_types[name]
+                for vn in cns.visible_namespaces.values():
+                    ns = vn.target
+                    if name in ns.defines_types:
+                        return ns.defines_types[name]
                 cns = cns.get_parent()
             raise TypeNotFoundException(typ, self)
 

@@ -1,0 +1,7 @@
+entity Test:
+end
+
+implementation test for Test:
+end
+
+implement Test using test
