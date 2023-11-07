@@ -4,4 +4,4 @@ change-type: major
 destination-branches: [master]
 sections:
   feature: "A project-wide pip configuration can be set through the project.yml pip section."
-  upgrade-note: "Reworked the orchestrator's pip configuration: please refer to the [migration guide](reference/projectyml.html#migrate-to-project-wide-pip-config) to move to a project-wide pip configuration."
+  upgrade-note: "Reworked the orchestrator's pip configuration: please refer to the [migration guide](migrate_to_project_wide_pip_config) to move to a project-wide pip configuration."
