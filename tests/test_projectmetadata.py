@@ -105,8 +105,7 @@ def test_deprecation_warning_repo_of_type_package(tmp_path):
         ProjectConfigurationWarning,
         match=re.escape(
             "Setting a pip index through the `repo.url` option with "
-            "type `package` in the project.yml file is deprecated. "
-            "This value will be ignored. "
+            "type `package` in the project.yml file is no longer supported and will be ignored. "
             "Please set the pip index url through the `pip.index_url` option instead."
         ),
     ):
