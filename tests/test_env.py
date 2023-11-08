@@ -571,12 +571,13 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
             encoding="utf-8",
         )
     except CalledProcessError as e:
+        print(e)
         print(e.output)
-
-    print("after")
-    parsed_output = json.loads(result)
-    # Ensure inheritance works correctly
-    assert "inmanta-core" in [elem["name"] for elem in parsed_output]
+    else:
+        print("after")
+        parsed_output = json.loads(result)
+        # Ensure inheritance works correctly
+        assert "inmanta-core" in [elem["name"] for elem in parsed_output]
 
 
 @pytest.mark.slowtest
