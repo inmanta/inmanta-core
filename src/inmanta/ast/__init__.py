@@ -400,7 +400,6 @@ class Namespace(Namespaced):
                 if name in cns.defines_types:
                     return cns.defines_types[name]
                 cns = cns.get_parent()
-            print("olé")
             raise TypeNotFoundException(typ, self)
 
     def get_name(self) -> str:

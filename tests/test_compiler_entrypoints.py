@@ -17,11 +17,12 @@
 """
 import os
 from collections import defaultdict
+from typing import Sequence
 
 import more_itertools
 
 from inmanta import compiler
-from inmanta.ast import Range
+from inmanta.ast import Location, Range
 from inmanta.compiler import Compiler
 from inmanta.execute import scheduler
 
@@ -312,6 +313,9 @@ implement Test_no_doc using b
 
 
 def test_constructor_with_inferred_namespace(snippetcompiler):
+    module: str = "tests"
+    target_path = os.path.join(os.path.dirname(__file__), "data", "modules", module, "model", "_init.cf")
+
     snippetcompiler.setup_for_snippet(
         """
     import tests
@@ -333,5 +337,32 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     compiler = Compiler()
     (statements, blocks) = compiler.compile()
     sched = scheduler.Scheduler()
+
+    def check_anchor(
+        range_list: Sequence[tuple[Range, Range]],
+        range_source: tuple[str, int, int, int],
+        range_target: tuple[str, int, int, int],
+    ) -> bool:
+        file1, lnr1, start_char1, end_char1 = range_source
+        file2, lnr2, start_char2, end_char2 = range_target
+        for range1, range2 in range_list:
+            # Check if the properties match for both ranges
+            if (
+                range1.file == file1
+                and range1.lnr == lnr1
+                and range1.start_char == start_char1
+                and range1.end_char == end_char1
+                and range2.file == file2
+                and range2.lnr == lnr2
+                and range2.start_char == start_char2
+                and range2.end_char == end_char2
+            ):
+                return True
+
+        return False
+
     anchormap = sched.anchormap(compiler, statements, blocks)
-    print(anchormap)
+    range_source = (os.path.join(snippetcompiler.project_dir, "main.cf"), 13, 16, 20)
+    range_target = (target_path, 1, 8, 12)
+
+    assert check_anchor(anchormap, range_source, range_target)
