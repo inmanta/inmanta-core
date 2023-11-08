@@ -251,6 +251,7 @@ class TypeReferenceAnchor(Anchor):
         self.type = type
 
     def resolve(self) -> Optional[AnchorTarget]:
+        tp = None
         try:
             tp = self.namespace.get_type(self.type)
         except TypeNotFoundException as e:
@@ -259,8 +260,8 @@ class TypeReferenceAnchor(Anchor):
                 for vn in self.namespace.visible_namespaces.values():
                     ns = vn.target
                     if name in ns.defines_types:
-                        return ns.defines_types[name]
-            else:
+                        tp = ns.defines_types[name]
+            if tp is None:
                 raise e
 
         location = tp.get_location()
