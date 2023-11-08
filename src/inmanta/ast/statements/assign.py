@@ -560,7 +560,7 @@ class FormattedString(ReferenceStatement):
     This class is an abstraction around a string containing references to variables.
     """
 
-    __slots__ = "_format_string"
+    __slots__ = ("_format_string",)
 
     def __init__(self, format_string: str, variables: abc.Sequence["Reference"]) -> None:
         super().__init__(variables)
@@ -578,7 +578,7 @@ class StringFormat(FormattedString):
     Create a new string by doing a string interpolation
     """
 
-    __slots__ = "_variables"
+    __slots__ = ("_variables",)
 
     def __init__(self, format_string: str, variables: abc.Sequence[Tuple["Reference", str]]) -> None:
         super().__init__(format_string, [k for (k, _) in variables])
@@ -617,7 +617,7 @@ class StringFormatV2(FormattedString):
 
     """
 
-    __slots__ = "_variables"
+    __slots__ = ("_variables",)
 
     def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
         """
