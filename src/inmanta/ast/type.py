@@ -229,10 +229,7 @@ class Primitive(Type):
 @stable_api
 class Number(Primitive):
     """
-    This class represents an integer or float in the configuration model. On
-    these numbers the following operations are supported:
-
-    +, -, /, *
+    This class represents an integer or float in the configuration model.
     """
 
     def __init__(self) -> None:
@@ -268,9 +265,7 @@ class Number(Primitive):
 class Float(Number):
     """
     This class is an alias for the Number class and represents a float in
-    the configuration model. On these numbers, the following operations are supported:
-
-    +, -, /, *
+    the configuration model.
     """
 
     def type_string(self) -> str:
@@ -702,8 +697,8 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
 
 TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     "string": String(),
-    "number": Number(),
     "float": Float(),
+    "number": Number(),
     "int": Integer(),
     "bool": Bool(),
     "list": LiteralList(),

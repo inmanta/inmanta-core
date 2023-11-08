@@ -127,6 +127,10 @@ Primitive types
 
 The basic primitive types are ``string``, ``float``, ``int`` or ``bool``. These basic types also support type casts:
 
+.. note::
+    For legacy reason the ``number`` type exists. It is just an alias for ``float``
+
+
 .. code-block:: inmanta
 
     assert = true
