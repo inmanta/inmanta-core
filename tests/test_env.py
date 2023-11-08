@@ -563,11 +563,17 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
 
     pip_binary = os.path.join(os.path.dirname(venv.python_path), "pip")
     # Ensure that the pip command doesn't raise an exception
-    result = subprocess.check_output(
-        [pip_binary, "list", "--format", "json", "--disable-pip-version-check", "--no-python-version-warning"],
-        timeout=10,
-        encoding="utf-8",
-    )
+    print("b4")
+    try:
+        result = subprocess.check_output(
+            [pip_binary, "list", "--format", "json", "--disable-pip-version-check", "--no-python-version-warning"],
+            timeout=10,
+            encoding="utf-8",
+        )
+    except CalledProcessError as e:
+        print(e.output)
+
+    print("after")
     parsed_output = json.loads(result)
     # Ensure inheritance works correctly
     assert "inmanta-core" in [elem["name"] for elem in parsed_output]
