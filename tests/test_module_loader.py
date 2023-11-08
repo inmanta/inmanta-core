@@ -237,6 +237,7 @@ def test_load_module_v2_already_installed(
     modules_v2_dir: str,
     allow_v1: bool,
     editable_install: bool,
+    local_module_package_index,
 ) -> None:
     """
     Test whether the Project.load_module() method works correctly when loading a V2 module that was already installed
@@ -248,6 +249,7 @@ def test_load_module_v2_already_installed(
         snippet=f"import {module_name}",
         install_v2_modules=[LocalPackagePath(module_dir, editable_install)],
         install_project=False,
+        index_url=local_module_package_index,
     )
 
     assert module_name not in project.modules

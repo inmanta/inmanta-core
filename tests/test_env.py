@@ -347,6 +347,7 @@ def test_active_env_get_module_file_editable_namespace_package(
     tmpdir: str,
     tmpvenv_active: Tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
+    local_module_package_index,
 ) -> None:
     """
     Verify that get_module_file works after installing an editable namespace package in an active environment.
@@ -359,7 +360,7 @@ def test_active_env_get_module_file_editable_namespace_package(
     env.process_env.install_for_config(
         requirements=[],
         paths=[env.LocalPackagePath(path=project_dir, editable=True)],
-        config=PipConfig(use_system_config=False),
+        config=PipConfig(use_system_config=False, index_url=local_module_package_index),
     )
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
