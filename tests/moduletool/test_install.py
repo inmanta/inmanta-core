@@ -926,12 +926,13 @@ def test_install_with_use_config(
         publish_index=index,
     )
 
-    pip_config_file = os.path.join(tmpdir, "pip.conf")
-    with open(pip_config_file, "w+", encoding="utf-8") as f:
+    pip_config_file = tmpdir / "pip.conf"
+    with pip_config_file.open("w+", encoding="utf-8") as f:
         f.write("[global]\n")
         f.write("timeout = 60\n")
         f.write("index-url = file://" + index.url + "\n")
-    monkeypatch.setenv("PIP_CONFIG_FILE", pip_config_file)
+    monkeypatch.setenv("PIP_CONFIG_FILE", str(pip_config_file))
+    LOGGER.info("Setting PIP_CONFIG_FILE to %s", str(pip_config_file))
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
