@@ -1000,6 +1000,9 @@ def test_install_with_use_config_extra_index(
         f.write("index-url = file://" + index.url + "\n")
     monkeypatch.setenv("PIP_CONFIG_FILE", pip_config_file)
 
+    # If we don't unset PIP_INDEX_URL, it will override the config file
+    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
+
     # set up project
     snippetcompiler_clean.setup_for_snippet(
         """
