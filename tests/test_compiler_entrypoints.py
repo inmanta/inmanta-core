@@ -22,7 +22,7 @@ from typing import Sequence
 import more_itertools
 
 from inmanta import compiler
-from inmanta.ast import Location, Range
+from inmanta.ast import Range
 from inmanta.compiler import Compiler
 from inmanta.execute import scheduler
 
