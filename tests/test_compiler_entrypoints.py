@@ -324,11 +324,6 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
 
     A.mytest [1] -- tests::Test [1]
 
-    implementation a for A:
-    end
-
-    implement A using a
-
     A(mytest = Test())
     """,
         autostd=False,
@@ -362,7 +357,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
         return False
 
     anchormap = sched.anchormap(compiler, statements, blocks)
-    range_source = (os.path.join(snippetcompiler.project_dir, "main.cf"), 13, 16, 20)
+    range_source = (os.path.join(snippetcompiler.project_dir, "main.cf"), 8, 16, 20)
     range_target = (target_path, 1, 8, 12)
 
     assert check_anchor(anchormap, range_source, range_target)
