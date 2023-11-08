@@ -573,6 +573,7 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
     except CalledProcessError as e:
         print(e)
         print(e.output)
+        raise e
     else:
         print("after")
         parsed_output = json.loads(result)
