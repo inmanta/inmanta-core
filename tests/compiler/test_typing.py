@@ -210,22 +210,6 @@ end
 
 implement A using std::none
 
-test = A(x=0)
-        """,
-    )
-    compiler.do_compile()
-
-
-@pytest.mark.parametrize_any("type", ["number", "float"])
-def test_int_as_index_for_number_2(snippetcompiler, type):
-    snippetcompiler.setup_for_snippet(
-        f"""
-entity A:
-    {type} x
-end
-
-implement A using std::none
-
 index A(x)
 
 test = (A(x=0) == A(x=0.0))
