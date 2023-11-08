@@ -482,13 +482,14 @@ class Pip(PipCommandBuilder):
 
         if not config.use_system_config:
             # If we don't use system config, unset env vars
-            # setting this env_var to os.devnull disables the loading of all pip configuration files
+            if "PIP_EXTRA_INDEX_URL" in sub_env:
+                del sub_env["PIP_EXTRA_INDEX_URL"]
+            if "PIP_INDEX_URL" in sub_env:
+                del sub_env["PIP_INDEX_URL"]
+            if "PIP_PRE" in sub_env:
+                del sub_env["PIP_PRE"]
 
-            # Drop all PIP env vars
-            for env_var in list(sub_env.keys()):
-                if env_var.startswith("PIP_"):
-                    del sub_env[env_var]
-
+            # setting this env_var to os.devnull disables the loading of all pip configuration file
             sub_env["PIP_CONFIG_FILE"] = os.devnull
 
         if config.pre is not None:
@@ -646,7 +647,7 @@ class PythonEnvironment:
         :param upgrade_strategy: what upgrade strategy to use
 
         limitation:
-         - When upgrade is false, we check if the requirements are installed, but we don't take the constraints into account.
+         - When upgrade is false, if requirements are already installed constraints from constraint files may not be verified.
         """
         if len(requirements) == 0 and len(paths) == 0:
             raise Exception("install_for_config requires at least one requirement or path to install")

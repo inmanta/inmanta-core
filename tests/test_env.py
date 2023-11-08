@@ -359,7 +359,7 @@ def test_active_env_get_module_file_editable_namespace_package(
     env.process_env.install_for_config(
         requirements=[],
         paths=[env.LocalPackagePath(path=project_dir, editable=True)],
-        config=PipConfig(use_system_config=True),  # we need an upstream for some the dependencies of core,
+        config=PipConfig(use_system_config=False),
     )
     assert package_name in env.process_env.get_installed_packages()
     module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)

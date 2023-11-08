@@ -680,7 +680,7 @@ class ModuleSource(Generic[TModule]):
 
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
-    def __init__(self, urls: List[str] = []) -> None:
+    def __init__(self, urls: Sequence[str] = []) -> None:
         """
         :param urls: retained for backward compatibility
         """
@@ -1552,8 +1552,8 @@ class ProjectPipConfig(env.PipConfig):
         If null, behaves like false unless pip.use-system-config=true, in which case system config is respected.
     :param use_system_config: defaults to false.
         When true, sets the pip's index url, extra index urls and pre according to the respective settings outlined above
-            but otherwise respect any pip environment variables and/or config in the pip config file,
-            including any extra-index-urls.
+        but otherwise respect any pip environment variables and/or config in the pip config file,
+        including any extra-index-urls.
 
         If no indexes are configured in pip.index-url/pip.extra-index-url, this option falls back to pip's default behavior,
         meaning it uses the pip index url from the environment, the config file, or PyPi, in that order.
