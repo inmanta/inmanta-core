@@ -67,7 +67,7 @@ tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX"
 
 def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"f(\"([^\\\"\n]|\\.)*\")|f(\'([^\\\'\n]|\\.)*\')"
-    t.value = t.value[2:-1]
+    t.value = safe_decode(token=t, warning_message="Invalid escape sequence in f-string.", start=2, end=-1)
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
