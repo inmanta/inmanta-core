@@ -93,9 +93,7 @@ Setting this to ``true`` will have the following consequences:
 - If ``PIP_PRE`` is set, pre-release
   versions are allowed when installing v2 modules or v1 modules' dependencies.
 
-- Each component of the orchestrator, including the agents, will respect their system config, therefore each of these
-  components need to be configured correctly. Auto-started agents live on the same host as the server, so they can
-  easily share config at the system level.
+- Auto-started agents live on the same host as the server, and so they will share the pip config at the system level.
 
 
 .. warning::
@@ -132,7 +130,7 @@ option e.g.:
 .. code-block:: yaml
 
     pip:
-        extra-index-url: [https://my_repo.secure.company.com/repository/project-alpha-production]
+        extra-index-url: [https://my_repo.secure.company.com/repository/project-production]
         pre: false
         use-system-config: true
 
@@ -144,7 +142,7 @@ and set ``index-url`` to the secure internal repo e.g.:
 
     pip:
         index-url: https://my_repo.secure.company.com/repository/inmanta-production
-        extra-index-url: [https://my_repo.secure.company.com/repository/project-alpha-production]
+        extra-index-url: [https://my_repo.secure.company.com/repository/project-production]
         pre: false
         use-system-config: false
 
@@ -170,6 +168,17 @@ Migrate to project-wide pip config
 ----------------------------------
 
 ``inmanta-core 11.0.0`` introduced new options to configure pip settings for the whole project in a centralized way.
+For detailed information, see :ref:`here<specify_location_pip>`. The following code sample can be used as a baseline
+in the ``project.yml`` file:
+
+
+.. code-block:: yaml
+
+    pip:
+        index-url: https://my_repo.secure.company.com/repository/inmanta-production
+        extra-index-url: [https://my_repo.secure.company.com/repository/project-production]
+        pre: false
+        use-system-config: false
 
 When upgrading to ``inmanta-service-orchestrator 7.0.0`` or ``inmanta 2024.0``, this section can be used as
 a migration guide.
