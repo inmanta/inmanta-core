@@ -918,14 +918,11 @@ class Constructor(ExpressionStatement):
             ), "Should not happen because all entity types start with a capital letter"
             local_type = tp
         except TypeNotFoundException as e:
-            print("test123")
             resolver_failure = e
 
         # Do we have hint context?
         # We only work with unqualified names for hinting
         if lhs_attribute is not None and lhs_attribute.type_hint is not None:
-            print("#########")
-            print(lhs_attribute)
             # We can do type hinting here
             type_hint = lhs_attribute.type_hint
             if not isinstance(type_hint, inmanta.ast.entity.Entity):
