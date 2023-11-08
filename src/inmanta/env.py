@@ -317,8 +317,8 @@ class PipConfig(BaseModel):
         When None and pip.use-system-config=false, we don't allow pre-releases.
     :param use_system_config: defaults to false.
         When true, sets the pip index url, extra index urls and pre according to the respective settings outlined above
-            but otherwise respect any pip environment variables and/or config in the pip config file,
-            including any extra-index-urls.
+        but otherwise respect any pip environment variables and/or config in the pip config file,
+        including any extra-index-urls.
 
         If no indexes are configured in pip.index-url/pip.extra-index-url
         with this option enabled means to fall back to pip's default behavior:
