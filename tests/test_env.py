@@ -566,7 +566,7 @@ def test_pip_binary_when_venv_path_contains_double_quote(tmpdir) -> None:
     print("b4")
     try:
         result = subprocess.check_output(
-            [pip_binary, "list", "--format", "json", "--disable-pip-version-check", "--no-python-version-warning"],
+            [pip_binary, "list", "--format", "json"],
             timeout=10,
             encoding="utf-8",
         )
