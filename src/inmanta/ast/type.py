@@ -238,7 +238,7 @@ class Number(Primitive):
 
     def cast(self, value: Optional[object]) -> object:
         """
-        Cast a value to an int if the value is already an int, otherwise cast it to float
+        Attempts to cast a given value to an int or a float.
         """
         exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
 
