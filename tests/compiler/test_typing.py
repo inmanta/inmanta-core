@@ -129,6 +129,8 @@ a = number(21)
 a = 21.0
 b = number(25.0)
 b = 25.0
+c = number(42.1)
+c = 42.1
 x = number("31")
 x = 31.0
 y = number("22.0")
@@ -143,12 +145,14 @@ u = 0.0
     root: Namespace = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
     b = root.lookup("b").get_value()
+    c = root.lookup("b").get_value()
     x = root.lookup("x").get_value()
     y = root.lookup("y").get_value()
     z = root.lookup("z").get_value()
     u = root.lookup("u").get_value()
     assert Number().validate(a)
     assert Number().validate(b)
+    assert Number().validate(c)
     assert Number().validate(x)
     assert Number().validate(y)
     assert Number().validate(z)
