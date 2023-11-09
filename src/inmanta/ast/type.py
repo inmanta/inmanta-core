@@ -229,7 +229,7 @@ class Primitive(Type):
 @stable_api
 class Number(Primitive):
     """
-    This class represents an integer or float in the configuration model.
+    This class represents a float in the configuration model.
     """
 
     def __init__(self) -> None:
