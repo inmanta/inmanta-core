@@ -240,6 +240,7 @@ class Number(Primitive):
         """
         Attempts to cast a given value to an int or a float.
         """
+        # Keep precision: cast to an int only if it already is an int
         if isinstance(value, int):
             return int(value)
         return super().cast(value)
