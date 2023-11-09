@@ -131,22 +131,27 @@ u = 0
 def test_cast_to_int(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
+a= int("0.0")
+a = 0
 x = int("42")
 x = 42
 y = int(true)
 y = 1
 z = int(false)
 z = 0
+
 import tests
 w = int(tests::unknown())
         """,
     )
     (_, scopes) = compiler.do_compile()
     root: Namespace = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
     x = root.lookup("x").get_value()
     y = root.lookup("y").get_value()
     z = root.lookup("z").get_value()
     w = root.lookup("w").get_value()
+    assert Integer().validate(a)
     assert Integer().validate(x)
     assert Integer().validate(y)
     assert Integer().validate(z)
@@ -271,15 +276,6 @@ def test_cast_exception_value_error(snippetcompiler):
 number("Hello World!")
         """,
         "Failed to cast 'Hello World!' to number (reported in number('Hello World!') ({dir}/main.cf:2))",
-    )
-
-
-def test_cast_exception_int_value_error(snippetcompiler):
-    snippetcompiler.setup_for_error(
-        """
-int("0.0")
-        """,
-        "Failed to cast '0.0' to int (reported in int('0.0') ({dir}/main.cf:2))",
     )
 
 
