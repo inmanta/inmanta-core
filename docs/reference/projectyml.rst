@@ -73,7 +73,8 @@ pip.use-system-config
 This option determines the isolation level of the project's pip config. When false (the default), any pip config set on
 the system through pip config files is ignored, the ``PIP_INDEX_URL``, ``PIP_EXTRA_INDEX_URL`` and ``PIP_PRE``
 environment variables are ignored, and pip will only look for packages in the index(es) defined in the project.yml.
-When true, the orchestrator will extend the system's pip configuration rather than replace it.
+When true, the orchestrator will use the system's pip configuration for the pip-related settings not explicitly
+overriden in the ``project.yml`` (See below for more details).
 
 Setting this to ``false`` is generally recommended, especially during development, both for portability (achieving
 consistent behavior regardless of the system it runs on, which is important for reproductive testing on developer
@@ -82,7 +83,7 @@ security (the isolation reduces the risk of dependency confusion attacks).
 
 Setting this to ``true`` will have the following consequences:
 
-- If no index is set in the project.yml file i.e. both ``index-url`` and ``extra-index-url`` are unset, then Pip's
+- If no index is set in the ``project.yml`` file i.e. both ``index-url`` and ``extra-index-url`` are unset, then Pip's
   default search behaviour will be used: environment variables, pip config files and then PyPi (in that order).
 
 - If ``index-url`` is set, this value will be used over any index defined in the system's environment
@@ -165,8 +166,8 @@ If you prefer to manage the pip configuration at the system level, use ``use-sys
 Migrate to project-wide pip config
 ----------------------------------
 
-When upgrading to ``inmanta-service-orchestrator 7.0.0`` or ``inmanta 2024.0``, this section can be used as
-a migration guide. ``inmanta-core 11.0.0`` introduced new options to configure pip settings for the whole project in a
+This section is a migration guide for upgrading to ``inmanta-service-orchestrator 7.0.0`` or ``inmanta 2024.0``.
+``inmanta-core 11.0.0`` introduced new options to configure pip settings for the whole project in a
 centralized way. For detailed information, see :ref:`here<specify_location_pip>`. The following code sample can be used
 as a baseline in the ``project.yml`` file:
 
