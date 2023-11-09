@@ -50,7 +50,7 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     freeze_recursive: true
     freeze_operator: ~=
     pip:
-        index-url: https://my_repo.secure.company.com/repository/inmanta-production
+        index-url: https://pypi.org/simple/
         extra-index-url: []
         pre: false
         use-system-config: false
@@ -70,9 +70,10 @@ Some of these options are detailed below:
 pip.use-system-config
 """""""""""""""""""""
 
-This option determines the isolation level of the project's pip config. When false (the default), any pip config set on the system
-(e.g. through environment variables or pip config files) are ignored and pip will only look for packages
-in the index(es) defined in the project.yml, when true, the orchestrator will extend the system's pip configuration rather than replace it.
+This option determines the isolation level of the project's pip config. When false (the default), any pip config set on
+the system through pip config files is ignored, the ``PIP_INDEX_URL``, ``PIP_EXTRA_INDEX_URL`` and ``PIP_PRE``
+environment variables are ignored, and pip will only look for packages in the index(es) defined in the project.yml.
+When true, the orchestrator will extend the system's pip configuration rather than replace it.
 
 Setting this to ``false`` is generally recommended, especially during development, both for portability (achieving
 consistent behavior regardless of the system it runs on, which is important for reproductive testing on developer
@@ -90,8 +91,8 @@ Setting this to ``true`` will have the following consequences:
 - If ``extra-index-url`` is set, these indexes will be used in addition to any extra index defined in the system's
   environment variables or pip config files, and passed to pip as extra indexes.
 
-- If ``PIP_PRE`` is set, pre-release
-  versions are allowed when installing v2 modules or v1 modules' dependencies.
+- If ``pre`` is set, it will supersede pip's ``pre`` option set by the ``PIP_PRE`` environment variable or in pip
+config file. When true, pre-release versions are allowed when installing v2 modules or v1 modules' dependencies.
 
 - Auto-started agents live on the same host as the server, and so they will share the pip config at the system level.
 
@@ -113,7 +114,7 @@ example of a dev config:
 .. code-block:: yaml
 
     pip:
-        index-url: https://my_repo.secure.company.com/repository/dev
+        index-url: https://my_repo.secure.example.com/repository/dev
         extra-index-url: []
         pre: true
         use-system-config: false
@@ -123,38 +124,35 @@ example of a dev config:
 Using a single pip index is still the recommended approach, and the use of pre-release versions should be disabled.
 
 
-If the pip configuration is fully managed at the system level and secure, use ``use-system-config: true``
-and add any potential project-specific repo that is not managed at the system level through the ``extra-index-url``
-option e.g.:
-
-.. code-block:: yaml
-
-    pip:
-        extra-index-url: [https://my_repo.secure.company.com/repository/project-production]
-        pre: false
-        use-system-config: true
-
-
-On the other hand, if the pip configuration is not fully managed at the system level, make sure to disable ``use-system-config``
+If the pip configuration is not fully managed at the system level, make sure to disable ``use-system-config``
 and set ``index-url`` to the secure internal repo e.g.:
 
 .. code-block:: yaml
 
     pip:
-        index-url: https://my_repo.secure.company.com/repository/inmanta-production
-        extra-index-url: [https://my_repo.secure.company.com/repository/project-production]
+        index-url: https://my_repo.secure.example.com/repository/inmanta-production
         pre: false
         use-system-config: false
 
+.. _system_level_pip_config_scenario:
+
+If you prefer to manage the pip configuration at the system level, use ``use-system-config: true`` e.g.:
+
+.. code-block:: yaml
+
+    pip:
+        pre: false
+        use-system-config: true
+
+
 .. note::
-    The ``pre`` and ``index-url`` options defined in the ``project.yml`` pip section will always take precedence over
-    the corresponding pip options, even when ``use-system-config`` is set to true.
+    Any pip config set explicitly in the project config will always take precedence over the system config. For more
+    details see `pip.use-system-config`_.
 
-    The ``extra-index-url`` option will extend the extra indexes already set at the system level (if any).
+    Other pip-related settings that are not supported by the project config are not overridden.
 
-    Other pip-related environment variables are not overridden.
-
-    To use the system's pip configuration without altering it, leave the corresponding option unset.
+    To use a setting from the system's pip configuration without overriding it, leave the corresponding option unset in
+    the ``project.yml`` file.
 
 
 .. note::
@@ -167,22 +165,21 @@ and set ``index-url`` to the secure internal repo e.g.:
 Migrate to project-wide pip config
 ----------------------------------
 
-``inmanta-core 11.0.0`` introduced new options to configure pip settings for the whole project in a centralized way.
-For detailed information, see :ref:`here<specify_location_pip>`. The following code sample can be used as a baseline
-in the ``project.yml`` file:
+When upgrading to ``inmanta-service-orchestrator 7.0.0`` or ``inmanta 2024.0``, this section can be used as
+a migration guide. ``inmanta-core 11.0.0`` introduced new options to configure pip settings for the whole project in a
+centralized way. For detailed information, see :ref:`here<specify_location_pip>`. The following code sample can be used
+as a baseline in the ``project.yml`` file:
 
 
 .. code-block:: yaml
 
     pip:
-        index-url: https://my_repo.secure.company.com/repository/inmanta-production
-        extra-index-url: [https://my_repo.secure.company.com/repository/project-production]
+        index-url: https://my_repo.secure.example.com/repository/inmanta-production
         pre: false
         use-system-config: false
 
-When upgrading to ``inmanta-service-orchestrator 7.0.0`` or ``inmanta 2024.0``, this section can be used as
-a migration guide.
-
+Alternatively, if you prefer to manage the pip config at the system level, refer to this
+:ref:`section <system_level_pip_config_scenario>`.
 
 All the v2 module sources currently set in a ``repo`` section of the ``project_yml`` with type ``package`` should
 also be duplicated in the ``pip.index-url`` (and ``pip.extra-index-url`` if more than one index is being used).
@@ -197,11 +194,6 @@ Run a full compile after upgrading in order to export the project pip config to 
 is available for agents. This will ensure that the agents follow the pip config defined in the project. For reference,
 prior to ``inmanta-core 11.0.0``, the agents were always using their respective system's pip config.
 
-Deprecation notes:
-""""""""""""""""""
-
-    - Allowing the installation of pre-release versions for v2 modules through the :class:`~inmanta.module.InstallMode`
-      is no longer supported. Use the project.yml ``pip.pre`` section instead.
 
 Breaking changes:
 """""""""""""""""
@@ -210,6 +202,9 @@ Breaking changes:
     - Dependencies for v1 modules will now be installed according to the pip config in the project configuration file,
       while they previously always used the system's pip config.
     - The agent will follow the pip configuration defined in the :ref:`project_yml`.
+    - ``PIP_PRE`` is now ignored unless ``use-system-config`` is set.
+    - Allowing the installation of pre-release versions for v2 modules through the :class:`~inmanta.module.InstallMode`
+      is no longer supported. Use the project.yml ``pip.pre`` section instead.
 
 Changes relative to ``inmanta-2023.4`` (OSS):
 """""""""""""""""""""""""""""""""""""""""""""
