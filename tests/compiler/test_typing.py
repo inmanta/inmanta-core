@@ -155,6 +155,58 @@ u = 0.0
     assert Number().validate(u)
 
 
+def test_compare_float_int_attribute(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        float i = 0
+    end
+
+    entity Test2:
+        int i = 0
+    end
+
+    implement Test using std::none
+    implement Test2 using std::none
+
+    val1 = Test(i = 42.0)
+    val2 = Test2(i = 42)
+    val2.i = val1.i
+    val1.i = val2.i
+    """,
+    )
+    (_, scopes) = compiler.do_compile()
+
+
+def test_assign_float_to_int(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+    entity Test:
+        int i = 0
+    end
+    implement Test using std::none
+    Test(i = 42.1)
+        """,
+        "Could not set attribute `i` on instance `__config__::Test (instantiated at {dir}/main.cf:6)` "
+        "(reported in Construct(Test) ({dir}/main.cf:6))\n"
+        "caused by:\n"
+        "  Invalid value '42.1', expected int (reported in Construct(Test) ({dir}/main.cf:6))",
+    )
+
+
+def test_assign_int_to_float(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        float i = 0
+    end
+    implement Test using std::none
+    Test(i = 42)
+    """,
+    )
+    (_, scopes) = compiler.do_compile()
+
+
 def test_float_alias_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
@@ -167,8 +219,8 @@ def test_float_alias_number(snippetcompiler):
     Test(i = 42)
     Test(i = -42)
     Test()
-    Test(i = 42.0)
     Test(i = false)
+    val1 = Test(i = 42.0)
 
     a = float(21)
     a = 21.0
@@ -213,12 +265,10 @@ implement A using std::none
 index A(x)
 
 test = (A(x=0) == A(x=0.0))
+test = true
         """,
     )
-    (_, scopes) = compiler.do_compile()
-    root: Namespace = scopes.get_child("__config__")
-    test = root.lookup("test").get_value()
-    assert test
+    compiler.do_compile()
 
 
 def test_lookup_on_float_with_int(snippetcompiler):
@@ -234,13 +284,10 @@ index A(x)
 
 a = A(x=1.0)
 y = A[x=1]
+a = y
         """,
     )
-    (_, scopes) = compiler.do_compile()
-    root: Namespace = scopes.get_child("__config__")
-    a = root.lookup("a").get_value()
-    y = root.lookup("y").get_value()
-    assert a is y
+    compiler.do_compile()
 
 
 def test_cast_to_int(snippetcompiler):
