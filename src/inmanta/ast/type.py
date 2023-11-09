@@ -234,27 +234,15 @@ class Number(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [int, float]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
 
     def cast(self, value: Optional[object]) -> object:
         """
         Attempts to cast a given value to an int or a float.
         """
-        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
-
-        if isinstance(value, Unknown):
-            # propagate unknowns
-            return value
-
-        elif isinstance(value, int):
-            # Value is already an int, return it as-is
-            return value
-        else:
-            try:
-                # Attempt to cast the value to a float
-                return float(value)
-            except (ValueError, TypeError):
-                raise exception
+        if isinstance(value, int):
+            return int(value)
+        return super().cast(value)
 
     def validate(self, value: Optional[object]) -> bool:
         """
