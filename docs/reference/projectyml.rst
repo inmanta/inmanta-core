@@ -124,7 +124,7 @@ example of a dev config:
 Using a single pip index is still the recommended approach, and the use of pre-release versions should be disabled.
 
 
-If the pip configuration is not fully managed at the system level, make sure to disable ``use-system-config``
+For a portable project (recommended), disable ``use-system-config``
 and set ``index-url`` to the secure internal repo e.g.:
 
 .. code-block:: yaml
@@ -149,7 +149,7 @@ If you prefer to manage the pip configuration at the system level, use ``use-sys
     Any pip config set explicitly in the project config will always take precedence over the system config. For more
     details see `pip.use-system-config`_.
 
-    Other pip-related settings that are not supported by the project config are not overridden.
+    Pip-related settings that are not supported by the project config are not overridden.
 
     To use a setting from the system's pip configuration without overriding it, leave the corresponding option unset in
     the ``project.yml`` file.
