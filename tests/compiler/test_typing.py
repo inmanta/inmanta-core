@@ -137,7 +137,6 @@ y = int(true)
 y = 1
 z = int(false)
 z = 0
-
 import tests
 w = int(tests::unknown())
         """,
