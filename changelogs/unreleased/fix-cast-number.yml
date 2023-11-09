@@ -1,6 +1,5 @@
 ---
 description: Fix a bug where numbers where cast to int instead of float
 change-type: patch
-destination-branches: [master, iso6]
-sections:
-  bugfix: "{{description}}"
+destination-branches: [iso6]
+
