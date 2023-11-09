@@ -1,0 +1,5 @@
+description: Fix jwt config error message to use the correct attribute and provide more context
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  bugfix: "{{description}}"

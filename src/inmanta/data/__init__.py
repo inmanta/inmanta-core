@@ -2424,14 +2424,12 @@ AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
 ENVIRONMENT_AGENT_TRIGGER_METHOD = "environment_agent_trigger_method"
-AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
 AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
-AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 AUTO_FULL_COMPILE = "auto_full_compile"
@@ -2602,13 +2600,6 @@ class Environment(BaseDocument):
             f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
-        AUTOSTART_SPLAY: Setting(
-            name=AUTOSTART_SPLAY,
-            typ="int",
-            default=10,
-            doc="[DEPRECATED] Splay time for autostarted agents.",
-            validator=convert_int,
-        ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
             typ="str",
@@ -2663,14 +2654,6 @@ class Environment(BaseDocument):
             validator=convert_agent_map,
             doc="A dict with key the name of agents that should be automatically started. The value "
             "is either an empty string or an agent map string. See also: :inmanta.config:option:`config.agent-map`",
-            agent_restart=True,
-        ),
-        AUTOSTART_AGENT_INTERVAL: Setting(
-            name=AUTOSTART_AGENT_INTERVAL,
-            default=600,
-            typ="int",
-            validator=convert_int,
-            doc="[DEPRECATED] Agent interval for autostarted agents in seconds",
             agent_restart=True,
         ),
         SERVER_COMPILE: Setting(
@@ -2739,11 +2722,6 @@ class Environment(BaseDocument):
         ),
     }
 
-    _renamed_settings_map = {
-        AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
-        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
-    }  # name new_option -> name deprecated_option
-
     @classmethod
     def get_setting_definition(cls, setting_name: str) -> Setting:
         """
@@ -2761,15 +2739,6 @@ class Environment(BaseDocument):
         """
         if key not in self._settings:
             raise KeyError()
-
-        if key in self._renamed_settings_map:
-            name_deprecated_setting = self._renamed_settings_map[key]
-            if name_deprecated_setting in self.settings and key not in self.settings:
-                warnings.warn(
-                    "Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
-                    category=DeprecationWarning,
-                )
-                return self.settings[name_deprecated_setting]
 
         if key in self.settings:
             return self.settings[key]
@@ -2840,10 +2809,18 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(
-        self, only_content: bool = False, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> None:
+    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         """
+        Completely remove this environment from the db
+        """
+        async with self.get_connection(connection=connection) as con:
+            await self.clear(connection=con)
+            await self.delete(connection=con)
+
+    async def clear(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+        """
+        Delete everything related to this environment from the db, except the entry in the Environment table.
+
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         This is especially true for the tables resourceaction_resource, resource and resourceaction, because they
         have a high read/write load. As such, we perform the deletes on each table in a separate transaction.
@@ -2866,8 +2843,6 @@ class Environment(BaseDocument):
             await ResourceAction.delete_all(environment=self.id, connection=con)
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
-            if not only_content:
-                await self.delete(connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
@@ -6148,7 +6123,7 @@ class DiscoveredResource(BaseDocument):
     environment: uuid.UUID
     discovered_at: datetime.datetime
     discovered_resource_id: m.ResourceIdStr
-    values: dict[str, str]
+    values: dict[str, object]
 
     __primary_key__ = ("environment", "discovered_resource_id")
 

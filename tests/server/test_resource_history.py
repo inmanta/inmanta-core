@@ -30,6 +30,7 @@ from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -331,7 +332,7 @@ async def test_resource_history(client, server, env_with_resources):
     for entry in result.result["data"]:
         actual.append(
             {
-                "date": datetime.datetime.strptime(entry["date"], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc),
+                "date": parse_timestamp(entry["date"]),
                 "attributes": entry["attributes"],
             }
         )
@@ -365,7 +366,7 @@ async def test_resource_history(client, server, env_with_resources):
     for entry in result.result["data"]:
         actual.append(
             {
-                "date": datetime.datetime.strptime(entry["date"], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc),
+                "date": parse_timestamp(entry["date"]),
                 "attributes": entry["attributes"],
             }
         )

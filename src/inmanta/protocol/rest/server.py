@@ -34,7 +34,7 @@ from inmanta import const
 from inmanta.protocol import common, exceptions
 from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
-from inmanta.server.config import server_access_control_allow_origin, server_enable_auth
+from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
 from inmanta.types import ReturnTypes
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
     def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[str, bytes]:
         if content_type == common.JSON_CONTENT:
-            return common.json_encode(body)
+            return common.json_encode(body, tz_aware=server_tz_aware_timestamps.get())
         if content_type == common.HTML_CONTENT:
             assert isinstance(body, str)
             return body.encode(common.HTML_ENCODING)

@@ -180,6 +180,45 @@ def test_module_update_with_v2_module(
     assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
 
 
+@pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])
+@pytest.mark.slowtest
+def test_module_update_with_v1_module(
+    tmpdir: py.path.local,
+    modules_dir: str,
+    snippetcompiler_clean,
+    modules_repo: str,
+    install_mode: InstallMode,
+) -> None:
+    """
+    Assert that the ast cache is invalidated after a module is installed. This so that dependencies of
+    installed modules are updated as well.
+
+    Dependency graph:
+
+        -> Inmanta project
+            -> mod13 (v1) -> mod11 (v1)
+    """
+    module_path = os.path.join(tmpdir, "modulepath")
+    os.mkdir(module_path)
+    mod11_dir = clone_repo(modules_repo, "mod11", module_path, tag="3.2.1")
+    mod13_dir = clone_repo(modules_repo, "mod13", module_path, tag="1.2.3")
+
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="""
+        import mod13
+        """,
+        autostd=False,
+        add_to_module_path=[module_path],
+        install_mode=install_mode,
+        install_project=False,
+    )
+    assert ModuleV1(project=None, path=mod13_dir).version == Version("1.2.3")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
+    ProjectTool().update()
+    assert ModuleV1(project=None, path=mod13_dir).version == Version("1.2.4")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.0")
+
+
 @pytest.mark.slowtest
 def test_module_update_dependencies(
     tmpdir: py.path.local,

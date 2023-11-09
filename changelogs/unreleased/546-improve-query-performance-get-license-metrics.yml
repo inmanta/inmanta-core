@@ -1,0 +1,5 @@
+description: Add index to speed up query in inmanta-license get_license_metrics
+issue-nr: 546
+issue-repo: inmanta-license
+change-type: patch
+destination-branches: [master, iso6]

@@ -348,7 +348,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
-    await env.delete_cascade(only_content=True)
+    await env.clear()
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
@@ -420,33 +420,6 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
     # Make sure that get for autostart_agent_map on env_obj2 object doesn't override setting with default value.
     assert await env_obj2.get(data.AUTOSTART_AGENT_MAP) == autostart_agent_map
     assert assert_setting_in_db(autostart_agent_map)
-
-
-async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
-    project = data.Project(name="proj")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    for deprecated_option, new_option, old_value, new_value in [
-        (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 22, "23"),
-        (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 22, 23),
-    ]:
-        await env.set(deprecated_option, old_value)
-        caplog.clear()
-        assert (await env.get(new_option)) == old_value
-        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) in caplog.text
-
-        await env.set(new_option, new_value)
-        caplog.clear()
-        assert (await env.get(new_option)) == new_value
-        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
-
-        await env.unset(deprecated_option)
-        caplog.clear()
-        assert (await env.get(new_option)) == new_value
-        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
 
 async def test_agent_process(init_dataclasses_and_load_schema):
