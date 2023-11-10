@@ -2157,7 +2157,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         start = time()
         # load ast
         (statements, block) = self.get_ast()
+
         blocks = [block]
+        test = blocks[0].get_anchors()
         statements = [x for x in statements]
 
         for _, nstmt, nb in self.load_module_recursive():

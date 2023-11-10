@@ -820,7 +820,8 @@ class Constructor(ExpressionStatement):
         self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
-        self.anchors.append(TypeReferenceAnchor(namespace, class_type))
+        # here
+        # self.anchors.append(TypeReferenceAnchor(namespace, class_type))
         for a in attributes:
             self.add_attribute(a[0], a[1])
         self.type: Optional["Entity"] = None
@@ -863,7 +864,7 @@ class Constructor(ExpressionStatement):
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.type = self._resolve_type(lhs_attribute)
-
+        self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.class_type))
         inindex: abc.MutableSet[str] = set()
 
         all_attributes = dict(self.type.get_default_values())

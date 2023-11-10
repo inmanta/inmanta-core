@@ -193,7 +193,7 @@ class Compiler(object):
 
         project.load()
         statements, blocks = project.get_complete_ast()
-
+        test = blocks[0].get_anchors()
         project.log_installed_modules()
 
         # This lookup variable provides efficiency in the loop below by skipping iterations for plugins

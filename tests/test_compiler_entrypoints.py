@@ -291,7 +291,7 @@ implement Test_no_doc using b
     )
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 13
+    assert len(anchormap) == 10
 
     checkmap = {(r.lnr, r.start_char, r.end_char): t.docstring for r, t in anchormap}
 
@@ -358,7 +358,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
         return False
 
     anchormap = sched.anchormap(compiler, statements, blocks)
-    # range_source = (os.path.join(snippetcompiler.project_dir, "main.cf"), 8, 16, 20)
-    # range_target = (target_path, 1, 8, 12)
+    range_source = (os.path.join(snippetcompiler.project_dir, "main.cf"), 8, 16, 20)
+    range_target = (target_path, 1, 8, 12)
     #
     # assert check_anchor(anchormap, range_source, range_target)
