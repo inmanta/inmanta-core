@@ -433,23 +433,37 @@ class PythonEnvironment:
     never changed.
     """
 
+    _invalid_chars_in_path_re = re.compile(r"[ \"&]")
+
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         if (env_path is None) == (python_path is None):
             raise ValueError("Exactly one of `env_path` and `python_path` needs to be specified")
         self.env_path: str
         self.python_path: str
         if env_path is not None:
+            self.validate_path(path=env_path, path_name="env_path")
             self.env_path = env_path
             self.python_path = self.get_python_path_for_env_path(self.env_path)
-            if not self.env_path:
-                raise ValueError("The env_path cannot be an empty string.")
         else:
             assert python_path is not None
+            self.validate_path(path=python_path, path_name="python_path")
             self.python_path = python_path
             self.env_path = self.get_env_path_for_python_path(self.python_path)
-            if not self.python_path:
-                raise ValueError("The python_path cannot be an empty string.")
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
+
+    def validate_path(self, path: str, path_name: str) -> None:
+        """
+        Check for the presence of invalid characters in the given path.
+
+        :param path: Path to validate.
+        :param path_name: Used to display the type of the path being validated.
+        """
+        if not path:
+            raise ValueError(f"The {path_name} cannot be an empty string.")
+
+        match = PythonEnvironment._invalid_chars_in_path_re.search(path)
+        if match:
+            raise ValueError(f"Invalid character `{match.group()}` in {path_name} {path}.")
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
