@@ -73,7 +73,7 @@ pip.use-system-config
 This option determines the isolation level of the project's pip config. When false (the default), any pip config set on
 the system through pip config files is ignored, the ``PIP_INDEX_URL``, ``PIP_EXTRA_INDEX_URL`` and ``PIP_PRE``
 environment variables are ignored, and pip will only look for packages in the index(es) defined in the project.yml.
-When true, the orchestrator will use the system's pip configuration for the pip-related settings not explicitly
+When true, the orchestrator will use the system's pip configuration for the pip-related settings except when explicitly
 overriden in the ``project.yml`` (See below for more details).
 
 Setting this to ``false`` is generally recommended, especially during development, both for portability (achieving
