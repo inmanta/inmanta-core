@@ -15,11 +15,12 @@ Project Release for Production
 
 This process describes the steps to prepare an inmanta project for production release.
 
-All packages should be hosted in an internal, curated python repository (like nexus or devpi). For security
-reasons, the default pip config, which pulls packages from ``https://pypi.org/`` should not be used, except in projects
-relying only on public modules and Python dependencies.
-(See `PEP 708 <https://peps.python.org/pep-0708/#motivation>`_ for more information).
-See the :ref:`specify_location_pip` section for more information on how to set the project's pip configuration.
+For small projects relying exclusively on public modules and Python dependencies, the default pip config, which pulls
+packages from ``https://pypi.org/`` can be used. If the project requires a private packages, then, for security
+reasons, the default pip config, which pulls packages from ``https://pypi.org/`` should not be used and all packages
+should be hosted in an internal, curated python repository (like nexus or devpi). See
+`PEP 708 <https://peps.python.org/pep-0708/#motivation>`_ for more information. See the :ref:`specify_location_pip`
+section for more information on how to set the project's pip configuration.
 
 Context
 ++++++++
