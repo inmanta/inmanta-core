@@ -21,7 +21,9 @@ import re
 
 import pytest
 
+import inmanta.ast.statements.define
 import inmanta.compiler as compiler
+import inmanta.plugins
 from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
 from utils import log_contains
 
@@ -335,3 +337,21 @@ std::equals(catch_all_arguments::sum_all(1, 2, 3, b=4, c=5, d=6), 21)
 """
     )
     compiler.do_compile()
+
+
+def test_signature(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+        """
+import catch_all_arguments
+import keyword_only_arguments
+        """
+    )
+    statements, _ = compiler.do_compile()
+    plugins: dict[str, inmanta.plugins.Plugin] = {
+        name: stmt for name, stmt in statements.items() if hasattr(stmt, "get_signature")
+    }
+
+    assert plugins["catch_all_arguments::sum_all"].get_signature() == "sum_all(a: int, *aa: int, b: int, **bb: int) -> int"
+    assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
+        "sum_all(a: int, b: int = 1, *, c: int, d: int = 2) -> int"
+    )

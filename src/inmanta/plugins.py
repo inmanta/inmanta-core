@@ -348,6 +348,12 @@ class PluginArgument(PluginIO):
         """
         return self._default_value is not self.NO_DEFAULT_VALUE_SET
 
+    def __str__(self) -> str:
+        if self.has_default_value():
+            return "%s: %s = %s" % (self.arg_name, self.arg_type, str(self.default_value))
+        else:
+            return "%s: %s" % (self.arg_name, self.arg_type)
+
 
 class PluginReturn(PluginIO):
     """
@@ -476,7 +482,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 default_value=(
                     arg_spec.defaults[position - defaults_start_at]
                     if position >= defaults_start_at
-                    else PluginArgument.NO_DEFAULT_VALUE_SET,
+                    else PluginArgument.NO_DEFAULT_VALUE_SET
                 ),
             )
 
@@ -506,20 +512,11 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         arg_list = []
 
-        def add_arg(arg: PluginArgument) -> None:
-            """
-            Add an argument representation to the list.
-            """
-            if arg.has_default_value():
-                arg_list.append("%s: %s = %s" % (arg.arg_name, arg.arg_type, str(arg.default_value)))
-            else:
-                arg_list.append("%s: %s" % (arg.arg_name, arg.arg_type))
-
         for arg in self.args.values():
-            add_arg(arg)
+            arg_list.append(str(arg))
 
         if self.var_args is not None:
-            add_arg(self.var_args)
+            arg_list.append("*" + str(self.var_args))
         elif self.kwargs:
             # For keyword only arguments, we need a marker if we don't have a catch-all
             # positional argument
@@ -530,10 +527,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 # This argument should already be represented as a positional argument
                 continue
 
-            add_arg(arg)
+            arg_list.append(str(arg))
 
         if self.var_kwargs is not None:
-            add_arg(self.var_kwargs)
+            arg_list.append("**" + str(self.var_kwargs))
 
         args = ", ".join(arg_list)
 
@@ -663,6 +660,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def type_string(self) -> str:
         return self.get_full_name()
+
+    def __str__(self) -> str:
+        return self.get_signature()
 
 
 @stable_api
