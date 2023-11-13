@@ -706,7 +706,7 @@ For indices on relations (instead of attributes) an alternative syntax can be us
     # a == b
 
 .. note::
-    The use of ``number`` as part of index properties is
+    The use of ``float`` (or ``number``) as part of index properties is
     generally discouraged. This is due to the reliance of index matching on precise equality,
     while floating-point numbers are represented with an inherent imprecision.
     If floating-point attributes are used in an index, it is crucial to handle arithmetic
