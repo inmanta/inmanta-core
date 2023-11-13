@@ -176,10 +176,13 @@ def test_float_int_attribute(snippetcompiler):
     f = Float(i=42)
     i = Int(i=f.i)  # f.n == 42.0 => not an int
     """,
-        "an exception",
+        "Could not set attribute `i` on instance `__config__::Int (instantiated at "
+        "{dir}/main.cf:14)` (reported in Construct(Int) "
+        "({dir}/main.cf:14))\n"
+        "caused by:\n"
+        "  Invalid value '42.0', expected int (reported in Construct(Int) "
+        "({dir}/main.cf:14))",
     )
-    (_, scopes) = compiler.do_compile()
-    # TODO ADD instance check
 
 
 def test_assign_float_to_int(snippetcompiler):
