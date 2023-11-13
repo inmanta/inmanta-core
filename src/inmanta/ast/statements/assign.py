@@ -438,13 +438,13 @@ class IndexLookup(ReferenceStatement, Resumer):
     ) -> None:
         ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), wrapped_query)))
         self.index_type = index_type
-        self.anchors.append(TypeReferenceAnchor(index_type.namespace, index_type))
         self.query = [(str(n), e) for n, e in query]
         self.wrapped_query: typing.List["WrappedKwargs"] = wrapped_query
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
+        self.anchors.append(TypeReferenceAnchor(self.index_type.namespace, self.index_type))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, VariableABC]:
         requires: Dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)

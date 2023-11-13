@@ -215,8 +215,6 @@ class For(RequiresEmitStatement):
         self.loop_var = str(loop_var)
         self.loop_var_loc = loop_var.get_location()
         self.module = module
-        self.anchors.extend(module.get_anchors())
-        self.anchors.extend(variable.get_anchors())
 
     def __repr__(self) -> str:
         return "For(%s)" % self.loop_var
@@ -225,6 +223,8 @@ class For(RequiresEmitStatement):
         self.base.normalize()
         # self.loop_var.normalize(resolver)
         self.module.normalize()
+        self.anchors.extend(self.base.get_anchors())
+        self.anchors.extend(self.module.get_anchors())
         self.module.add_var(self.loop_var, self)
         self._own_eager_promises = self.module.get_eager_promises()
 
@@ -287,6 +287,12 @@ class ListComprehension(RawResumer, ExpressionStatement):
         self.loop_var: LocatableString = loop_var
         self.iterable: ExpressionStatement = iterable
         self.guard: Optional[ExpressionStatement] = guard
+
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        self.value_expression.normalize(lhs_attribute=lhs_attribute)
+        self.iterable.normalize()
+        if self.guard is not None:
+            self.guard.normalize()
         self.anchors.extend(
             itertools.chain(
                 self.value_expression.get_anchors(),
@@ -294,12 +300,6 @@ class ListComprehension(RawResumer, ExpressionStatement):
                 (self.guard.get_anchors() if self.guard is not None else ()),
             )
         )
-
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        self.value_expression.normalize(lhs_attribute=lhs_attribute)
-        self.iterable.normalize()
-        if self.guard is not None:
-            self.guard.normalize()
 
     def requires(self) -> list[str]:
         # exclude loop var, unless it shadows an occurrence in iterable
@@ -585,9 +585,6 @@ class If(RequiresEmitStatement):
         self.condition: ExpressionStatement = condition
         self.if_branch: BasicBlock = if_branch
         self.else_branch: BasicBlock = else_branch
-        self.anchors.extend(condition.get_anchors())
-        self.anchors.extend(if_branch.get_anchors())
-        self.anchors.extend(else_branch.get_anchors())
 
     def __repr__(self) -> str:
         return "If"
@@ -596,6 +593,9 @@ class If(RequiresEmitStatement):
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
+        self.anchors.extend(self.condition.get_anchors())
+        self.anchors.extend(self.if_branch.get_anchors())
+        self.anchors.extend(self.else_branch.get_anchors())
         self._own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
@@ -645,15 +645,15 @@ class ConditionalExpression(ExpressionStatement):
         self.condition: ExpressionStatement = condition
         self.if_expression: ExpressionStatement = if_expression
         self.else_expression: ExpressionStatement = else_expression
-        self.anchors.extend(condition.get_anchors())
-        self.anchors.extend(if_expression.get_anchors())
-        self.anchors.extend(else_expression.get_anchors())
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.condition.normalize()
         # pass on lhs_attribute to branches
         self.if_expression.normalize(lhs_attribute=lhs_attribute)
         self.else_expression.normalize(lhs_attribute=lhs_attribute)
+        self.anchors.extend(self.condition.get_anchors())
+        self.anchors.extend(self.if_expression.get_anchors())
+        self.anchors.extend(self.else_expression.get_anchors())
         self._own_eager_promises = [
             *self.if_expression.get_all_eager_promises(),
             *self.else_expression.get_all_eager_promises(),

@@ -495,11 +495,11 @@ class ReferenceStatement(ExpressionStatement):
     def __init__(self, children: Sequence[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
-        self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        for c in self.children:
-            c.normalize()
+        for child in self.children:
+            child.normalize()
+            self.anchors.extend(child.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), *(subexpr.get_all_eager_promises() for subexpr in self.children))
