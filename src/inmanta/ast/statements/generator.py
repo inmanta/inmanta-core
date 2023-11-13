@@ -844,9 +844,8 @@ class Constructor(ExpressionStatement):
             ),
         )
 
-    def _normalize_rhs(self, index_attributes: abc.Set[str]) -> list[Anchor]:
+    def _normalize_rhs(self, index_attributes: abc.Set[str]) -> None:
         assert self.type is not None  # Make mypy happy
-        anchors = []
         for k, v in self.__attributes.items():
             attr = self.type.get_attribute(k)
             if attr is None:
@@ -859,10 +858,9 @@ class Constructor(ExpressionStatement):
             v.normalize(
                 lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
             )
-            anchors.extend(v.anchors)
+            self.anchors.extend(v.anchors)
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
-        return anchors
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.type = self._resolve_type(lhs_attribute)
@@ -891,7 +889,7 @@ class Constructor(ExpressionStatement):
             if not self.wrapped_kwargs and (self._lhs_attribute is None or len(self._required_dynamic_args) > 1):
                 raise IndexAttributeMissingInConstructorException(self, self.type, self._required_dynamic_args)
 
-        self.anchors.extend(self._normalize_rhs(inindex))
+        self._normalize_rhs(inindex)
 
         for k, v in all_attributes.items():
             attribute = self.type.get_attribute(k)

@@ -524,12 +524,12 @@ class AssignStatement(DynamicStatement):
         DynamicStatement.__init__(self)
         self.lhs: Optional["Reference"] = lhs
         self.rhs: ExpressionStatement = rhs
-        if lhs is not None:
-            self.anchors.extend(lhs.get_anchors())
-        self.anchors.extend(rhs.get_anchors())
 
     def normalize(self) -> None:
         self.rhs.normalize()
+        if self.lhs is not None:
+            self.anchors.extend(self.lhs.get_anchors())
+        self.anchors.extend(self.rhs.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(
