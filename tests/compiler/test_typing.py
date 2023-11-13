@@ -239,6 +239,7 @@ def test_assign_int_to_float(snippetcompiler):
     root: Namespace = scopes.get_child("__config__")
     x = root.lookup("x").get_value()
     i = x.get_attribute("i").get_value()
+    assert not isinstance(i, int)
     assert isinstance(i, float)
 
 
