@@ -30,7 +30,6 @@ import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AmbiguousTypeException,
-    Anchor,
     AttributeReferenceAnchor,
     DuplicateException,
     InvalidCompilerState,
