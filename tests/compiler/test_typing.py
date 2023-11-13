@@ -159,27 +159,27 @@ u = 0.0
     assert Number().validate(u)
 
 
-def test_compare_float_int_attribute(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
+def test_float_int_attribute(snippetcompiler):
+    snippetcompiler.setup_for_error(
         """
-    entity Test:
-        float i = 0
+    entity Int:
+        int i
     end
 
-    entity Test2:
-        int i = 0
+    entity Float:
+        float i
     end
 
-    implement Test using std::none
-    implement Test2 using std::none
+    implement Int using std::none
+    implement Float using std::none
 
-    val1 = Test(i = 42.0)
-    val2 = Test2(i = 42)
-    val2.i = val1.i
-    val1.i = val2.i
+    f = Float(i=42)
+    i = Int(i=f.i)  # f.n == 42.0 => not an int
     """,
+        "an exception",
     )
     (_, scopes) = compiler.do_compile()
+    # TODO ADD instance check
 
 
 def test_assign_float_to_int(snippetcompiler):
@@ -205,10 +205,14 @@ def test_assign_int_to_float(snippetcompiler):
         float i = 0
     end
     implement Test using std::none
-    Test(i = 42)
+    x = Test(i = 42)
     """,
     )
     (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    x = root.lookup("x").get_value()
+    i = x.get_attribute("i").get_value()
+    assert isinstance(i, float)
 
 
 def test_float_alias_number(snippetcompiler):

@@ -382,14 +382,15 @@ class Entity(NamedType, WithComment):
         been set
         """
         attributes = {}
-        for k, v in instance.slots.items():
-            if v.is_ready():
-                value = v.get_value()
-                # Check if the value is an integer,
-                # and convert to float if necessary
-                if isinstance(value, int):
-                    value = float(value)
-                attributes[k] = repr(value)
+        attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
+        # for k, v in instance.slots.items():
+        #     if v.is_ready():
+        #         value = v.get_value()
+        #         # Check if the value is an integer,
+        #         # and convert to float if necessary
+        #         if isinstance(value, int):
+        #             value = float(value)
+        #         attributes[k] = repr(value)
         # check if an index entry can be added
         for index_attributes in self.get_indices():
             index_ok = True
