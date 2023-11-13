@@ -265,6 +265,9 @@ class Scheduler(object):
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[Tuple[Location, AnchorTarget]]:
+        """
+        This function should only be called after normalization is done
+        """
         prev = time.time()
 
         # first evaluate all definitions, this should be done in one iteration
@@ -273,23 +276,12 @@ class Scheduler(object):
         # relations are also in blocks
         not_relation_statements: Iterator[Statement] = (s for s in statements if not isinstance(s, DefineRelation))
 
-        # anchors: Iterator[Anchor] = (
-        #     anchor
-        #     for container in itertools.chain(not_relation_statements, blocks)  # container: Union[Statement, BasicBlock]
-        #     for anchor in container.get_anchors()
-        #     if anchor is not None
-        # )
-
-        # for debuggging
-        anchors = []
-        for container in itertools.chain(not_relation_statements, blocks):
-            print("1")
-            test_anchors = container.get_anchors()
-            for anchor in test_anchors:
-                print("2")
-                if anchor is not None:
-                    print("3")
-                    anchors.append(anchor)
+        anchors: Iterator[Anchor] = (
+            anchor
+            for container in itertools.chain(not_relation_statements, blocks)  # container: Union[Statement, BasicBlock]
+            for anchor in container.get_anchors()
+            if anchor is not None
+        )
 
         range_to_anchor_target = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
         range_to_anchor_target = [(f, t) for f, t in range_to_anchor_target if t is not None]
