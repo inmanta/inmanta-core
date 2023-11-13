@@ -266,7 +266,7 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
             else:
                 return
         if not isinstance(value, Unknown) and self.type is not None:
-            if type(self.type) == Float:
+            if type(self.type) is Float:
                 value = float(value)
             self.type.validate(value)
 
