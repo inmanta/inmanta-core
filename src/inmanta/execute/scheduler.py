@@ -261,7 +261,6 @@ class Scheduler(object):
             block.normalize()
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
-        print(self.types)
 
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
