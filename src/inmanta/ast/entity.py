@@ -381,17 +381,7 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-        attributes = {}
         attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
-        # for k, v in instance.slots.items():
-        #     if v.is_ready():
-        #         value = v.get_value()
-        #         # Check if the value is an integer,
-        #         # and convert to float if necessary
-        #         if isinstance(value, int):
-        #             value = float(value)
-        #         attributes[k] = repr(value)
-        # check if an index entry can be added
         for index_attributes in self.get_indices():
             index_ok = True
             key = []
@@ -399,7 +389,6 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    # key.append("%s=%s" % (attribute, attributes[attribute]))
                     value = attributes[attribute]
                     if isinstance(value, int):
                         value = float(value)
@@ -445,7 +434,6 @@ class Entity(NamedType, WithComment):
         key = ", ".join(
             ["%s=%s" % (k, repr(float(v) if isinstance(v, int) else v)) for (k, v) in sorted(params, key=lambda x: x[0])]
         )
-        # key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
 
         if target is None:
             if key in self._index:

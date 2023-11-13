@@ -159,6 +159,30 @@ u = 0.0
     assert Number().validate(u)
 
 
+def test_compare_float_int_attribute(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Float:
+        float i = 0
+    end
+    entity Int:
+        int i = 0
+    end
+    implement Float using std::none
+    implement Int using std::none
+    val1 = Float(i = 42.0)
+    val2 = Int(i = 42)
+    std::print(val1.i)
+    std::print(val2.i)
+    val1.i=val2.i
+    val2.i=val1.i
+    """,
+    )
+    (_, scopes) = compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert "42.0\n42\n" in out
+
+
 def test_float_int_attribute(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
