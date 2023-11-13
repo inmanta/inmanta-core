@@ -23,7 +23,7 @@ import pytest
 from pkg_resources import Requirement
 
 from inmanta.config import Config
-from inmanta.env import LocalPackagePath, process_env
+from inmanta.env import LocalPackagePath, PipConfig, process_env
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleV1, ModuleV2Source
 from inmanta.moduletool import ProjectTool
 from inmanta.parser import ParserException
@@ -81,7 +81,6 @@ def test_module_update_with_install_mode_master(
 
 
 @pytest.mark.parametrize("corrupt_module", [False, True])
-@pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])
 @pytest.mark.slowtest
 def test_module_update_with_v2_module(
     tmpdir: py.path.local,
@@ -89,7 +88,6 @@ def test_module_update_with_v2_module(
     snippetcompiler_clean,
     modules_repo: str,
     corrupt_module: bool,
-    install_mode: InstallMode,
 ) -> None:
     """
     Assert that the `inmanta module update` command works correctly when executed on a project with a V2 module.
@@ -165,12 +163,11 @@ def test_module_update_with_v2_module(
             LocalPackagePath(path=patched_module_dir),
         ],
         add_to_module_path=[module_path],
-        python_package_sources=[pip_index.url],
+        index_url=pip_index.url,
         project_requires=[
             InmantaModuleRequirement.parse("module1<1.2.5"),
             InmantaModuleRequirement.parse("mod11<4.2.0"),
         ],
-        install_mode=install_mode,
         install_project=False,
     )
 
@@ -179,7 +176,7 @@ def test_module_update_with_v2_module(
     assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
     ProjectTool().update()
     assert_version_installed(module_name="module1", version="1.2.4")
-    assert_version_installed(module_name="module2", version="2.2.0" if install_mode == InstallMode.release else "2.2.1.dev0")
+    assert_version_installed(module_name="module2", version="2.2.0")
     assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
 
 
@@ -235,13 +232,6 @@ def test_module_update_dependencies(
         - update should update Python dependencies within module's constraints
         - update should update transitive Python dependencies
     """
-    snippetcompiler_clean.setup_for_snippet(
-        snippet="import my_mod",
-        autostd=False,
-        install_project=False,
-        add_to_module_path=[str(tmpdir.join("modules"))],
-    )
-
     # create index with multiple versions for packages a, b and c
     index: PipIndex = PipIndex(str(tmpdir.join("index")))
     create_python_package("a", Version("1.0.0"), str(tmpdir.join("a-1.0.0")), publish_index=index)
@@ -252,8 +242,22 @@ def test_module_update_dependencies(
     for v in ("1.0.0", "2.0.0"):
         create_python_package("c", Version(v), str(tmpdir.join(f"c-{v}")), publish_index=index)
 
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="import my_mod",
+        autostd=False,
+        install_project=False,
+        add_to_module_path=[str(tmpdir.join("modules"))],
+        index_url=index.url,
+    )
+
     # install b-1.0.0 and c-1.0.0
-    process_env.install_from_index([Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")], index_urls=[index.url])
+    process_env.install_for_config(
+        [Requirement.parse(req) for req in ("b==1.0.0", "c==1.0.0")],
+        config=PipConfig(
+            index_url=index.url,
+            use_system_config=False,
+        ),
+    )
 
     # create my_mod
     v1_module_from_template(

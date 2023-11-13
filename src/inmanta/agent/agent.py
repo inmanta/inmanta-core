@@ -31,6 +31,8 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
 
+import pkg_resources
+
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
@@ -40,6 +42,7 @@ from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
+from inmanta.env import PipConfig
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
@@ -1378,7 +1381,12 @@ class Agent(SessionEndpoint):
 
         async with self._loader_lock:
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(self.thread_pool, self._env.install_from_list, requirements)
+            await loop.run_in_executor(
+                self.thread_pool,
+                self._env.install_for_config,
+                list(pkg_resources.parse_requirements(requirements)),
+                PipConfig(use_system_config=True),
+            )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
