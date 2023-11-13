@@ -151,6 +151,7 @@ w = int(tests::unknown())
     assert Integer().validate(y)
     assert Integer().validate(z)
     assert isinstance(w, Unknown)
+    assert not any(isinstance(v, (bool, float)) for v in (x, y, z))
 
 
 def test_cast_to_string(snippetcompiler):
