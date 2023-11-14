@@ -428,18 +428,18 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         self.return_type.resolve_type(self, self.resolver)
 
-    def _load_signature(
-        self,
-        function: Callable[..., object],
-    ) -> tuple[dict[int, PluginArgument], dict[str, PluginArgument]]:
+    def _load_signature(self, function: Callable[..., object]) -> None:
         """
-        Load the signature from the given python function, returns a tuple containing:
-        - As first value, a dict with the mapping from each position to the corresponding
-            argument to validate positioned input parameters.
-        - As second value, a dict with the mapping from each kwarg name to the corresponding
-            argument to validate key-word input parameters.
-        - As third value, a PluginReturn object, containing the annotation for the return type.
+        Load the signature from the given python function, and update the relevant attributes
+        of this object.
         """
+        # Reset relevant object attributes
+        self.args = list()
+        self.var_args = None
+        self.kwargs = dict()
+        self.var_kwargs = None
+        self.return_type = PluginReturn(arg_spec.annotations.get("return", None))
+
         # Inspect the function to get its arguments and annotations
         arg_spec = inspect.getfullargspec(function)
 
@@ -510,9 +510,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     else PluginArgument.NO_DEFAULT_VALUE_SET
                 ),
             )
-
-        # Get the expected return value type
-        self.return_type = PluginReturn(arg_spec.annotations.get("return", None))
 
     def get_signature(self) -> str:
         """
