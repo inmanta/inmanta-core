@@ -574,7 +574,7 @@ class PythonEnvironment:
         self.env_path: str
         self.python_path: str
         if env_path is not None:
-            self.validate_path(path=env_path, path_name="env_path")
+            self.validate_path(path=str(env_path), path_name="env_path")  # explicit cast to str because of LocalPath
             self.env_path = env_path
             self.python_path = self.get_python_path_for_env_path(self.env_path)
         else:
