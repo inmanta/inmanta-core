@@ -32,10 +32,11 @@ from pkg_resources import iter_entry_points
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import TIME_ISOFMT, AgentAction, AgentTriggerMethod, ResourceAction
+from inmanta.const import AgentAction, AgentTriggerMethod, ResourceAction
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.resources import Id
 from inmanta.types import JsonType
+from inmanta.util import parse_timestamp
 
 
 class Client(object):
@@ -667,7 +668,7 @@ def param(ctx: click.Context) -> None:
 def param_list(client: Client, environment: str) -> None:
     result = client.get_dict("list_params", arguments=dict(tid=client.to_environment_id(environment)))
     expire = int(result["expire"])
-    now = datetime.datetime.strptime(result["now"], TIME_ISOFMT)
+    now = parse_timestamp(result["now"])
     when = now - datetime.timedelta(0, expire)
 
     data = []
@@ -679,7 +680,7 @@ def param_list(client: Client, environment: str) -> None:
                 p["name"],
                 p["source"],
                 p["updated"],
-                str(float(datetime.datetime.strptime(p["updated"], TIME_ISOFMT) < when)),
+                str(float(parse_timestamp(p["updated"]) < when)),
             ]
         )
 

@@ -29,7 +29,7 @@ def test_multiline_string_interpolation(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 var = 42
-str = \"\"\"var == {{var}}\"\"\"
+str = \"\"\"var == {{   var }}\"\"\"
         """,
     )
     (_, scopes) = compiler.do_compile()
@@ -182,10 +182,12 @@ std::print(z)
 @pytest.mark.parametrize(
     "f_string,expected_output",
     [
+        (r"f'{   arg }'", "123\n"),
         (r"f'{arg}'", "123\n"),
         (r"f'{arg}{arg}{arg}'", "123123123\n"),
         (r"f'{arg:@>5}'", "@@123\n"),
         (r"f'{arg:^5}'", " 123 \n"),
+        (r"f' {  \t\narg  \n  } '", " 123 \n"),
     ],
 )
 def test_fstring_formatting(snippetcompiler, capsys, f_string, expected_output):
@@ -235,7 +237,7 @@ a = A(b=b)
 b = B(c=c)
 c = C()
 
-std::print(f"{a.b.c.n_c}")
+std::print(f"{  a .b . c . n_c }")
         """
     )
 
@@ -245,22 +247,58 @@ std::print(f"{a.b.c.n_c}")
     assert out == expected_output
 
 
+def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
+    assert variable.location.start_char == start, f"{variable=} expected {start=} got {variable.location.start_char=}"
+    assert variable.location.end_char == end, f"{variable=} expected {end=} got {variable.location.end_char=}"
+
+
 def test_fstring_numbering_logic():
+    """
+    Check that variable ranges in f-strings are correctly computed
+    """
     statements = parse_code(
         """
-std::print(f"---{s}{mm} - {sub.attr}")
+#        10        20        30        40        50        60        70        80
+#        |         |         |         |         |         |         |         |
+std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr   }")
+#                |   |           |           |                          |
+#               [-][--]       [----]     [------]                    [----]    <--- expected ranges
         """
     )
-
-    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start
-        assert variable.location.end_char == end
 
     # Ranges are 1-indexed [start:end[
     ranges = [
         (len('std::print(f"---{s'), len('std::print(f"---{s}')),
         (len('std::print(f"---{s}{m'), len('std::print(f"---{s}{mm}')),
         (len('std::print(f"---{s}{mm} - {sub.a'), len('std::print(f"---{s}{mm} - {sub.attr}')),
+        (len('std::print(f"---{s}{mm} - {sub.attr} - {  p'), len('std::print(f"---{s}{mm} - {sub.attr} - {  padded ')),
+        (
+            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.a'),
+            len('std::print(f"---{s}{mm} - {sub.attr} - {  padded  } - {  \tpadded.sub.attr '),
+        ),
+    ]
+    variables = statements[0].children[0]._variables
+
+    for var, range in zip(variables, ranges):
+        check_range(var, *range)
+
+
+def test_fstring_numbering_logic_multiple_refs():
+    """
+    Check that variable ranges in f-strings are correctly computed
+    """
+    statements = parse_code(
+        """
+std::print(f"---{s}----{s}")
+#                |      |
+#               [-]    [-] <--- expected ranges
+        """
+    )
+
+    # Ranges are 1-indexed [start:end[
+    ranges = [
+        (len('std::print(f"---{s'), len('std::print(f"---{s}')),
+        (len('std::print(f"---{s}----{s'), len('std::print(f"---{s}----{s}')),
     ]
     variables = statements[0].children[0]._variables
 
@@ -304,10 +342,6 @@ def test_fstring_numbering_logic_complex():
 std::print(f"-{arg:{width}.{precision}}{other}-text-{a:{w}.{p}}-----{w}")
         """
     )
-
-    def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
-        assert variable.location.start_char == start, print(variable)
-        assert variable.location.end_char == end, print(variable)
 
     # Ranges are 1-indexed [start:end[
     ranges = [

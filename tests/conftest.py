@@ -114,7 +114,7 @@ from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.data.schema import SCHEMA_VERSION_TABLE
 from inmanta.db import util as db_util
-from inmanta.env import LocalPackagePath, VirtualEnv, mock_process_env
+from inmanta.env import CommandRunner, LocalPackagePath, VirtualEnv, mock_process_env
 from inmanta.export import ResourceDict, cfg_env, unknown_parameters
 from inmanta.module import InmantaModuleRequirement, InstallMode, Project, RelationPrecedenceRule
 from inmanta.moduletool import DefaultIsolatedEnvCached, ModuleTool, V2ModuleBuilder
@@ -1143,7 +1143,9 @@ class SnippetCompilationTest(KeepOnFail):
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
         strict_deps_check: Optional[bool] = None,
-        use_pip_config_file: Optional[bool] = False,
+        use_pip_config_file: bool = False,
+        index_url: Optional[str] = None,
+        extra_index_url: list[str] = [],
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1174,6 +1176,8 @@ class SnippetCompilationTest(KeepOnFail):
             install_mode,
             relation_precedence_rules,
             use_pip_config_file,
+            index_url,
+            extra_index_url,
         )
         return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
 
@@ -1205,6 +1209,7 @@ class SnippetCompilationTest(KeepOnFail):
         env.mock_process_env(env_path=self.env)
 
     def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
+        """Assumes we have a project set"""
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
         for mod in install_v2_modules:
@@ -1213,7 +1218,11 @@ class SnippetCompilationTest(KeepOnFail):
                     install_path = mod.path
                 else:
                     install_path = module_tool.build(mod.path, build_dir)
-                self.project.virtualenv.install_from_source(paths=[LocalPackagePath(path=install_path, editable=mod.editable)])
+                self.project.virtualenv.install_for_config(
+                    requirements=[],
+                    paths=[LocalPackagePath(path=install_path, editable=mod.editable)],
+                    config=self.project.metadata.pip,
+                )
 
     def reset(self):
         Project.set(Project(self.project_dir, autostd=Project.get().autostd, venv_path=self.env))
@@ -1230,9 +1239,12 @@ class SnippetCompilationTest(KeepOnFail):
         install_mode: Optional[InstallMode] = None,
         relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
         use_pip_config_file: bool = False,
+        index_url: Optional[str] = None,
+        extra_index_url: list[str] = [],
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
+
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
         relation_precedence_rules = relation_precedence_rules if relation_precedence_rules else []
@@ -1256,13 +1268,23 @@ class SnippetCompilationTest(KeepOnFail):
                 cfg.write("\n".join(f"                - {req}" for req in project_requires))
             if install_mode:
                 cfg.write(f"\n            install_mode: {install_mode.value}")
+
             cfg.write(
                 f"""
             pip:
-                use_config_file: {use_pip_config_file}
-                index_urls: [{", ".join(url for url in python_package_sources)}]
-            """
+                use_system_config: {use_pip_config_file}
+"""
             )
+            if index_url:
+                cfg.write(
+                    f"""                index_url: {index_url}
+"""
+                )
+            if extra_index_url:
+                cfg.write(
+                    f"""                extra_index_url: [{", ".join(url for url in extra_index_url)}]
+"""
+                )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
         self.main = os.path.join(self.project_dir, "main.cf")
@@ -1666,7 +1688,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
             # Cache doesn't exist
             return True
-        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 1:  # #modules + index.html
+        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 3:  # #modules + index.html + setuptools + wheel
             # Modules were added/removed from the build_dir
             return True
         # Cache is dirty
@@ -1674,6 +1696,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
             os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
             for root, _, files in os.walk(modules_v2_dir)
             for f in files
+            if "egg-info" not in root  # we write egg info in some test, messing up the tests
         )
 
     if _should_rebuild_cache():
@@ -1686,6 +1709,11 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         for module_dir in os.listdir(modules_v2_dir):
             path: str = os.path.join(modules_v2_dir, module_dir)
             ModuleTool().build(path=path, output_dir=build_dir)
+        # Download bare necessities
+        CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
+            ["pip", "download", "setuptools", "wheel"], cwd=build_dir
+        )
+
         # Build python package repository
         dir2pi(argv=["dir2pi", build_dir])
         # Update timestamp file

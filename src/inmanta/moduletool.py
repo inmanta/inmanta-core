@@ -53,6 +53,7 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
+from inmanta.env import PipConfig
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -482,18 +483,20 @@ compatible with the dependencies specified by the updated modules.
                 # These could be constraints (-c) as well, but that requires additional sanitation
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
-                env.process_env.install_from_index(
+                env.process_env.install_for_config(
                     v2_python_specs + [Requirement.parse(r) for r in current_requires],
-                    my_project.module_source.urls,
+                    my_project.metadata.pip,
                     upgrade=True,
-                    allow_pre_releases=my_project.install_mode != InstallMode.release,
-                    use_pip_config=my_project.metadata.pip.use_config_file,
                 )
+                # Invalidate ast cache so that dependencies of installed modules can be updated as well
+                my_project.invalidate_state()
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
                 try:
                     ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
+                    # Invalidate the state of the updated module
+                    my_project.invalidate_state(v1_module)
                 except Exception:
                     LOGGER.exception("Failed to update module %s", v1_module)
 
@@ -1026,9 +1029,14 @@ version: 0.0.1dev0"""
         context of a project.
         """
 
+        # TODO: refine behavior
+        pip_config = PipConfig(use_system_config=True)
+
         def install(install_path: str) -> None:
             try:
-                env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
+                env.process_env.install_for_config(
+                    requirements=[], paths=[env.LocalPackagePath(path=install_path, editable=editable)], config=pip_config
+                )
             except env.ConflictingRequirements as e:
                 raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
 

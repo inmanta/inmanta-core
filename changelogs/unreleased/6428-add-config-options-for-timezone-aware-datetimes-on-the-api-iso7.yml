@@ -1,0 +1,8 @@
+description: Add server config option server.tz_aware_timestamps to make the server return time-zone
+  aware timestamps.
+issue-nr: 6428
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "{{description}}"
+

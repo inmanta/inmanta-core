@@ -44,7 +44,7 @@ import asyncpg
 from tornado import gen
 
 from crontab import CronTab
-from inmanta import COMPILER_VERSION
+from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 from pydantic_core import Url
@@ -395,19 +395,37 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_utc_isoformat(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, tz_aware: bool = True) -> str:
     """
-    Returns a timestamp ISO string in implicit UTC.
+    Returns a timestamp ISO string.
+
 
     :param timestamp: The timestamp to get the ISO string for.
-    :param naive_utc: Whether to interpret naive timestamps as UTC. By default naive timestamps are assumed to be in local time.
+    :param tz_aware: Whether to return timezone aware timestamps or naive, implicit UTC timestamp.
     """
-    naive_utc_timestamp: datetime.datetime = (
-        timestamp
-        if timestamp.tzinfo is None and naive_utc
-        else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-    )
-    return naive_utc_timestamp.isoformat(timespec="microseconds")
+
+    def convert_timestamp() -> datetime.datetime:
+        if tz_aware:
+            if timestamp.tzinfo:
+                return timestamp
+            return timestamp.replace(tzinfo=datetime.timezone.utc)
+
+        if timestamp.tzinfo:
+            return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return timestamp
+
+    return convert_timestamp().isoformat(timespec="microseconds")
+
+
+def parse_timestamp(timestamp: str) -> datetime.datetime:
+    """
+    Parse a timestamp into a timezone aware object. Naive timestamps are assumed to be UTC.
+    """
+    try:
+        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
+    except ValueError:
+        # interpret naive datetimes as UTC
+        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
 
 class JSONSerializable(ABC):
@@ -439,14 +457,15 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
 
 @stable_api
-def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+def api_boundary_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
     encoder is meant to be used for API boundaries.
+    :param tz_aware: Whether to serialize timestamps as timezone aware objects or as naive implicit UTC.
     """
     if isinstance(o, datetime.datetime):
-        # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
-        return datetime_utc_isoformat(o, naive_utc=True)
+        # Accross API boundaries, all naive datetime instances are assumed UTC.
+        return datetime_iso_format(o, tz_aware=tz_aware)
 
     return _custom_json_encoder(o)
 
