@@ -23,7 +23,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -257,6 +257,10 @@ class PluginIO:
 
     @property
     def resolved_type(self) -> Optional[inmanta_type.Type]:
+        """
+        Get the resolved type of this plugin io.  The resolved type can only be accessed
+        once this object has been normalized (which happens during the plugin normalization).
+        """
         if not hasattr(self, "_resolved_type"):
             raise CompilerException(
                 f"{type(self).__name__} {self.IO_NAME} ({repr(self.type_expression)}) has not been normalized, "
@@ -285,7 +289,7 @@ class PluginIO:
             )
 
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
-        locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, None)
+        locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
         self._resolved_type = resolve_type(locatable_type, resolver)
         return self._resolved_type
 
@@ -306,10 +310,7 @@ class PluginIO:
             return True
 
         # Validate the value, use custom validate method of the type if it exists
-        if hasattr(self.resolved_type, "validate"):
-            valid = getattr(self.resolved_type, "validate")(value)
-        else:
-            valid = isinstance(value, self.resolved_type)
+        valid = self.resolved_type.validate(value)
 
         if not valid:
             # Validation fail, we should raise an exception
@@ -438,10 +439,12 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.var_args = None
         self.kwargs = dict()
         self.var_kwargs = None
-        self.return_type = PluginReturn(arg_spec.annotations.get("return", None))
 
         # Inspect the function to get its arguments and annotations
         arg_spec = inspect.getfullargspec(function)
+
+        # Get the expected return value type
+        self.return_type = PluginReturn(arg_spec.annotations.get("return", None))
 
         def get_annotation(arg: str) -> object:
             """
