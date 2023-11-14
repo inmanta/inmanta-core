@@ -33,7 +33,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast.type import NamedType, Type
+from inmanta.ast.type import Float, NamedType, Number, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType
 
@@ -386,10 +386,6 @@ class Entity(NamedType, WithComment):
         for k, v in instance.slots.items():
             if v.is_ready():
                 value = v.get_value()
-                # TODO 1
-                # If the value is an integer, convert it to a float
-                # if isinstance(value, int):
-                #     value = float(value)
                 value_repr = repr(value)
                 attributes[k] = value_repr
 
@@ -439,12 +435,16 @@ class Entity(NamedType, WithComment):
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
-        # Convert integers to floats in the key, similar to add_to_index
-        # TODO 3
-        key = ", ".join(
-            ["%s=%s" % (k, repr(float(v) if isinstance(v, int) else v)) for (k, v) in sorted(params, key=lambda x: x[0])]
-        )
-        # key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
+        formatted_pairs = []
+
+        for k, v in sorted(params, key=lambda x: x[0]):
+            value = v
+            attribute_type = self.get_attribute(k).type
+            if isinstance(attribute_type, (Float, Number)):
+                value = attribute_type.cast(value)
+            pair_str = "%s=%s" % (k, repr(value))
+            formatted_pairs.append(pair_str)
+        key = ", ".join(formatted_pairs)
 
         if target is None:
             if key in self._index:
