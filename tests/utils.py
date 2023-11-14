@@ -38,6 +38,7 @@ import build.env
 from _pytest.mark import MarkDecorator
 from inmanta import const, data, env, module, util
 from inmanta.data import ResourceIdStr
+from inmanta.env import PipConfig
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -469,7 +470,11 @@ author = Inmanta <code@inmanta.com>
                 fd.write(f"\n{option_name} ={requirements_as_string}")
 
     if install:
-        env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=path, editable=editable)],
+            config=PipConfig(use_system_config=True),
+        )
     if publish_index is not None:
         with build.env.DefaultIsolatedEnv() as build_env:
             builder = build.ProjectBuilder(source_dir=path, python_executable=build_env.python_executable)

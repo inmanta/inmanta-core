@@ -18,6 +18,7 @@
 import logging
 import os
 import py_compile
+import re
 import shutil
 import sys
 from collections import abc
@@ -30,7 +31,7 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
-from inmanta.env import ConflictingRequirements, LocalPackagePath, process_env
+from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFound, PipConfig, process_env
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
@@ -48,7 +49,14 @@ from utils import PipIndex, create_python_package, log_contains, module_from_tem
 
 
 @pytest.mark.parametrize_any("editable_install", [True, False])
-def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippetcompiler, capsys, modules_v2_dir: str) -> None:
+def test_v2_module_loading(
+    editable_install: bool,
+    tmpdir: py.path.local,
+    snippetcompiler,
+    capsys,
+    modules_v2_dir: str,
+    local_module_package_index,  # upstream for setuptools for isolated build
+) -> None:
     # Disable modules_dir
     snippetcompiler.modules_dir = None
 
@@ -66,6 +74,7 @@ def test_v2_module_loading(editable_install: bool, tmpdir: py.path.local, snippe
         """,
         autostd=False,
         install_v2_modules=[LocalPackagePath(path=module_copy_dir, editable=editable_install)],
+        index_url=local_module_package_index,
     )
 
     snippetcompiler.do_export()
@@ -165,25 +174,23 @@ def test_install_module_no_v2_source(snippetcompiler) -> None:
     Verify that attempting to install a v2 module without a v2 module source configured results in the appropriate exception.
     """
     module_name = "non_existing_module"
-    with pytest.raises(Exception) as e:
+    with pytest.raises(PackageNotFound) as e:
         snippetcompiler.setup_for_snippet(
             snippet=f"import {module_name}",
             install_project=True,
-            python_package_sources=[],
             python_requires=[
                 InmantaModuleRequirement.parse(module_name).get_python_package_requirement(),
             ],
         )
 
     message: str = (
-        "Attempting to install a v2 module non_existing_module but no v2 module source is configured. Add the relevant pip "
-        "indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
-        "the `pip` section of the project's `project.yml`:"
-        "\n\t  index_urls:"
-        "\n\t\t  - https://pypi.org/simple"
-        "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
+        "Attempting to install a v2 module non_existing_module but pip is not configured. Add the relevant pip indexes "
+        "to the project config file. e.g. to set PyPi as pip index, add the following to `project.yml`:\n"
+        "pip:\n"
+        "  index_url: https://pypi.org/simple\n"
+        "Another option is to set `pip.use_system_config = true` to use the system's pip config."
     )
-    assert message in e.value.format_trace()
+    e.match(re.escape(message))
 
 
 @pytest.mark.parametrize("allow_v1", [True, False])
@@ -230,6 +237,7 @@ def test_load_module_v2_already_installed(
     modules_v2_dir: str,
     allow_v1: bool,
     editable_install: bool,
+    local_module_package_index,
 ) -> None:
     """
     Test whether the Project.load_module() method works correctly when loading a V2 module that was already installed
@@ -241,6 +249,7 @@ def test_load_module_v2_already_installed(
         snippet=f"import {module_name}",
         install_v2_modules=[LocalPackagePath(module_dir, editable_install)],
         install_project=False,
+        index_url=local_module_package_index,
     )
 
     assert module_name not in project.modules
@@ -260,7 +269,7 @@ def test_load_module_v2_module_using_install(
     """
     module_name = "minimalv2module"
     project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet=f"import {module_name}", python_package_sources=[local_module_package_index], install_project=False
+        snippet=f"import {module_name}", index_url=local_module_package_index, install_project=False
     )
     assert module_name not in project.modules
     assert module_name not in os.listdir(project.downloadpath)
@@ -281,7 +290,7 @@ def test_load_module_module_not_found(snippetcompiler_clean, allow_v1: bool) -> 
     module_name = "non_existing_module"
     snippetcompiler_clean.modules_dir = None
     project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet=f"import {module_name}", install_project=False, python_package_sources=["non_existing_local_index"]
+        snippet=f"import {module_name}", install_project=False, index_url="non_existing_local_index"
     )
     with pytest.raises(ModuleNotFoundException, match=f"Could not find module {module_name}"):
         project.load_module(module_name=module_name, install_v1=allow_v1, install_v2=True, allow_v1=allow_v1)
@@ -334,7 +343,7 @@ def test_load_module_recursive_v2_module_depends_on_v1(
     """
     project = snippetcompiler.setup_for_snippet(
         snippet="import v2_depends_on_v1",
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[Requirement.parse("inmanta-module-v2-depends-on-v1")],
         install_project=False,
     )
@@ -361,7 +370,7 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
     project = snippetcompiler.setup_for_snippet(
         snippet="import complex_module_dependencies_mod1",
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[Requirement.parse("inmanta-module-complex-module-dependencies-mod1")],
         install_project=False,
     )
@@ -391,7 +400,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
             f"import {module_name}",
             autostd=False,
             install_project=False,
-            python_package_sources=[local_module_package_index],
+            index_url=local_module_package_index,
             # make sure that even listing the requirement in project.yml does not suffice
             project_requires=[InmantaModuleRequirement.parse(module_name)],
             python_requires=requires,
@@ -454,7 +463,8 @@ def test_load_import_based_v2_module(
         autostd=False,
         install_project=False,
         add_to_module_path=[libs_dir],
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         # make sure that even listing the requirement in project.yml does not suffice
         project_requires=[InmantaModuleRequirement.parse(dependency_module_name)],
         python_requires=[] if v1 else [Requirement.parse(ModuleV2Source.get_package_name_for(main_module_name))],
@@ -480,7 +490,7 @@ def test_module_unload(
 import minimalv2module
 import elaboratev2module
         """.strip(),
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[
             InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
             InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement(),
@@ -519,7 +529,7 @@ def test_project_has_v2_requirements_on_non_imported_module(
     dependency = "elaboratev2module"
     project: Project = snippetcompiler.setup_for_snippet(
         snippet="",  # Don't import elaboratev2module
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[
             InmantaModuleRequirement.parse(dependency).get_python_package_requirement(),
         ],
@@ -539,7 +549,7 @@ def test_module_has_v2_requirements_on_non_imported_module(snippetcompiler, loca
     """
     project: Project = snippetcompiler.setup_for_snippet(
         snippet="import dependency_but_no_import",
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[
             InmantaModuleRequirement.parse("dependency_but_no_import").get_python_package_requirement(),
         ],
@@ -557,9 +567,11 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
     """
     # set up venv
     snippetcompiler_clean.setup_for_snippet("", autostd=False)
-    process_env.install_from_index(
+    process_env.install_for_config(
         [InmantaModuleRequirement.parse("elaboratev2module").get_python_package_requirement()],
-        index_urls=[local_module_package_index],
+        config=PipConfig(
+            index_url=local_module_package_index,
+        ),
     )
 
     # set up project: import submodule only, don't add the module to requirements
@@ -646,7 +658,8 @@ def test_project_requirements_dont_overwrite_core_requirements_index(
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "",
         install_project=False,
-        python_package_sources=[index.url, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=["https://pypi.org/simple"],
         python_requires=[InmantaModuleRequirement.parse(module_name).get_python_package_requirement()],
         autostd=False,
     )
@@ -718,7 +731,7 @@ def test_module_conflicting_dependencies_with_v2_modules(
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "",
         install_project=False,
-        python_package_sources=[index.url],
+        index_url=index.url,
         python_requires=[req1, req2],
         autostd=False,
         strict_deps_check=strict_deps_check,
@@ -787,7 +800,7 @@ def test_module_conflicting_dependencies_with_v1_module(
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import modulev1",
         install_project=False,
-        python_package_sources=[index.url],
+        index_url=index.url,
         python_requires=[req],
         autostd=False,
         add_to_module_path=[str(tmpdir)],
@@ -836,7 +849,8 @@ def test_module_install_extra_on_project_level_v2_dep(
     snippetcompiler_clean.setup_for_snippet(
         "import mymod",
         install_project=True,
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         python_requires=[package_with_extra],
         autostd=False,
     )
@@ -891,7 +905,8 @@ def test_module_install_extra_on_dep_of_v2_module(
     snippetcompiler_clean.setup_for_snippet(
         "import myv2mod",
         install_project=True,
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         python_requires=[Requirement.parse("inmanta-module-myv2mod")],
         autostd=False,
     )
@@ -945,7 +960,8 @@ def test_module_install_extra_on_dep_of_v1_module(
         "import myv1mod",
         install_project=True,
         add_to_module_path=[str(tmpdir)],
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         autostd=False,
     )
 
@@ -995,7 +1011,8 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
     snippetcompiler_clean.setup_for_snippet(
         "import mymod",
         install_project=True,
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         python_requires=[package_without_extra],
         autostd=False,
     )
@@ -1005,7 +1022,8 @@ def test_module_install_extra_on_project_level_v2_dep_update_scenario(
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import mymod",
         install_project=not do_project_update,
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         python_requires=[package_with_extra],
         autostd=False,
     )
@@ -1072,7 +1090,8 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
     snippetcompiler_clean.setup_for_snippet(
         "import myv2mod",
         install_project=True,
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
         autostd=False,
     )
@@ -1093,7 +1112,8 @@ def test_module_install_extra_on_dep_of_v2_module_update_scenario(
     project: Project = snippetcompiler_clean.setup_for_snippet(
         "import myv2mod",
         install_project=not do_project_update,
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
         autostd=False,
     )
@@ -1160,7 +1180,8 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
         "import myv1mod",
         install_project=True,
         add_to_module_path=[str(tmpdir)],
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         autostd=False,
     )
     assert_installed(extra_installed=False)
@@ -1177,7 +1198,8 @@ def test_module_install_extra_on_dep_of_v1_module_update_scenario(
         "import myv1mod",
         install_project=not do_project_update,
         add_to_module_path=[str(tmpdir)],
-        python_package_sources=[index.url, local_module_package_index, "https://pypi.org/simple"],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index, "https://pypi.org/simple"],
         autostd=False,
     )
     if do_project_update:
@@ -1206,7 +1228,7 @@ async def test_v1_module_depends_on_third_party_dep_with_extra(
         "import myv1mod",
         install_project=True,
         add_to_module_path=[str(tmpdir)],
-        python_package_sources=[index_with_pkgs_containing_optional_deps],
+        index_url=index_with_pkgs_containing_optional_deps,
         autostd=False,
     )
     assert project.virtualenv.are_installed(["pkg", "dep-a"])
@@ -1226,7 +1248,7 @@ async def test_v1_module_depends_on_third_party_dep_with_extra(
         "import myv1mod",
         install_project=True,
         add_to_module_path=[str(tmpdir)],
-        python_package_sources=[index_with_pkgs_containing_optional_deps],
+        index_url=index_with_pkgs_containing_optional_deps,
         autostd=False,
     )
     assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])
@@ -1254,7 +1276,8 @@ async def test_v2_module_depends_on_third_party_dep_with_extra(
         "import myv2mod",
         install_project=True,
         python_requires=[Requirement.parse("inmanta-module-myv2mod==1.0.0")],
-        python_package_sources=[index.url, index_with_pkgs_containing_optional_deps],
+        index_url=index.url,
+        extra_index_url=[index_with_pkgs_containing_optional_deps],
         autostd=False,
     )
     assert project.virtualenv.are_installed(["pkg", "dep-a"])
@@ -1275,7 +1298,8 @@ async def test_v2_module_depends_on_third_party_dep_with_extra(
         "import myv2mod",
         install_project=True,
         python_requires=[Requirement.parse("inmanta-module-myv2mod==2.0.0")],
-        python_package_sources=[index.url, index_with_pkgs_containing_optional_deps],
+        index_url=index.url,
+        extra_index_url=[index_with_pkgs_containing_optional_deps],
         autostd=False,
     )
     assert project.virtualenv.are_installed(["pkg", "dep-a", "dep-b", "dep-c"])
@@ -1357,7 +1381,9 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     module_dir: str = os.path.join(modules_v2_dir, "minimalv2module")
     # start with non-editable install to populate site-packages with appropriate metadata (editable install would create pth
     # files if a different mechanism is picked so we want to avoid that).
-    process_env.install_from_source([LocalPackagePath(path=module_dir, editable=False)])
+    process_env.install_for_config(
+        requirements=[], paths=[LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
+    )
     # replace module dir in site-packages with symlink
     rel_path_src: str = os.path.join(const.PLUGINS_PACKAGE, "minimalv2module")
     module_dir_site_packages: str = os.path.join(process_env.site_packages_dir, rel_path_src)
@@ -1365,7 +1391,7 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     os.symlink(os.path.join(module_dir, rel_path_src), module_dir_site_packages)
 
     # verify that module can be found
-    module: Optional[ModuleV2] = ModuleV2Source([]).get_installed_module(DummyProject(autostd=False), "minimalv2module")
+    module: Optional[ModuleV2] = ModuleV2Source().get_installed_module(DummyProject(autostd=False), "minimalv2module")
     assert module is not None
     assert module.path == module_dir
 
@@ -1394,7 +1420,7 @@ cross_module_dependency::print_message('message from project model')
 cross_module_dependency::call_to_triple_from_another_mod('triple this string')
 
         """.strip(),
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[
             InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement(),
             InmantaModuleRequirement.parse("cross_module_dependency").get_python_package_requirement(),
@@ -1464,7 +1490,7 @@ import complex_module_dependencies_mod2
 
 complex_module_dependencies_mod2::cmd_mod2()
         """.strip(),
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[
             InmantaModuleRequirement.parse("complex_module_dependencies_mod2").get_python_package_requirement(),
         ],
