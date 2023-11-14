@@ -18,6 +18,7 @@
 import logging
 import os
 import re
+import typing
 
 import pytest
 
@@ -26,6 +27,9 @@ import inmanta.compiler as compiler
 import inmanta.plugins
 from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
 from utils import log_contains
+
+if typing.TYPE_CHECKING:
+    from conftest import SnippetCompilationTest
 
 
 def test_plugin_excn(snippetcompiler):
@@ -324,7 +328,10 @@ keyword_only_arguments::sum_all(1, 2)
     assert "sum_all() missing 1 required keyword-only argument: 'c'" in exc_info.value.msg
 
 
-def test_catch_all_arguments(snippetcompiler) -> None:
+def test_catch_all_arguments(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that catch all positional and keyword arguments work as expected.
+    """
     snippetcompiler.setup_for_snippet(
         """
 import catch_all_arguments
@@ -334,19 +341,26 @@ std::equals(catch_all_arguments::sum_all(1, b=2), 3)
 
 # Test with extra values provided
 std::equals(catch_all_arguments::sum_all(1, 2, 3, b=4, c=5, d=6), 21)
-"""
+        """
     )
     compiler.do_compile()
 
 
-def test_signature(snippetcompiler) -> None:
+def test_signature(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that the get_signature method of the plugins work as expected.
+    """
     snippetcompiler.setup_for_snippet(
         """
+# Import some modules which define plugins
 import catch_all_arguments
 import keyword_only_arguments
         """
     )
     statements, _ = compiler.do_compile()
+
+    # Get all plugins objects, we get them from the statements, and recognize them
+    # by their `get_signature` method.
     plugins: dict[str, inmanta.plugins.Plugin] = {
         name: stmt for name, stmt in statements.items() if hasattr(stmt, "get_signature")
     }

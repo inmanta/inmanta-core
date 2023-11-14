@@ -27,7 +27,16 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Ty
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
-from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, TypeNotFoundException, WithComment
+from inmanta.ast import (
+    CompilerException,
+    LocatableString,
+    Location,
+    Namespace,
+    Range,
+    RuntimeException,
+    TypeNotFoundException,
+    WithComment,
+)
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
@@ -326,13 +335,14 @@ class PluginArgument(PluginIO):
         self,
         arg_name: str,
         arg_type: object,
-        is_kw_only_argument: bool,
+        arg_position: Optional[int] = None,
         default_value: object = NO_DEFAULT_VALUE_SET,
     ) -> None:
         super().__init__(arg_type)
         self.arg_name = arg_name
         self.arg_type = self.type_expression
-        self.is_kw_only_argument = is_kw_only_argument
+        self.arg_position = arg_position
+        self.is_kw_only_argument = arg_position is None
         self._default_value = default_value
         self.IO_NAME = self.arg_name
 
@@ -380,7 +390,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self._context: int = -1
 
         # Load the signature and build all the PluginArgument objects corresponding to it
-        self.args: dict[int, PluginArgument] = dict()
+        self.args: list[PluginArgument] = list()
         self.var_args: Optional[PluginArgument] = None
         self.kwargs: dict[str, PluginArgument] = dict()
         self.var_kwargs: Optional[PluginArgument] = None
@@ -407,7 +417,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.resolver = self.namespace
 
         # Resolve all the types that we expect to receive as input of our plugin
-        for arg in self.args.values():
+        for arg in self.args:
             arg.resolve_type(self, self.resolver)
         if self.var_args is not None:
             self.var_args.resolve_type(self, self.resolver)
@@ -450,7 +460,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.var_args = PluginArgument(
                 arg_name=arg_spec.varargs,
                 arg_type=get_annotation(arg_spec.varargs),
-                is_kw_only_argument=False,
             )
 
         if arg_spec.varkw is not None:
@@ -458,7 +467,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.var_kwargs = PluginArgument(
                 arg_name=arg_spec.varkw,
                 arg_type=get_annotation(arg_spec.varkw),
-                is_kw_only_argument=True,
             )
 
         # Save all positional arguments
@@ -475,15 +483,17 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 # from the model.
                 position -= 1
 
-            self.args[position] = PluginArgument(
-                arg_name=arg,
-                arg_type=annotation,
-                is_kw_only_argument=False,
-                default_value=(
-                    arg_spec.defaults[position - defaults_start_at]
-                    if position >= defaults_start_at
-                    else PluginArgument.NO_DEFAULT_VALUE_SET
-                ),
+            self.args.append(
+                PluginArgument(
+                    arg_name=arg,
+                    arg_type=annotation,
+                    arg_position=position,
+                    default_value=(
+                        arg_spec.defaults[position - defaults_start_at]
+                        if position >= defaults_start_at
+                        else PluginArgument.NO_DEFAULT_VALUE_SET
+                    ),
+                )
             )
 
             # All positional arguments can also be assigned as kwargs
@@ -494,7 +504,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             self.kwargs[arg] = PluginArgument(
                 arg_name=arg,
                 arg_type=get_annotation(arg),
-                is_kw_only_argument=True,
                 default_value=(
                     arg_spec.kwonlydefaults[arg]
                     if arg_spec.kwonlydefaults is not None and arg in arg_spec.kwonlydefaults
@@ -512,7 +521,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         arg_list = []
 
-        for arg in self.args.values():
+        for arg in self.args:
             arg_list.append(str(arg))
 
         if self.var_args is not None:
@@ -540,60 +549,67 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def get_arg(self, position: int) -> PluginArgument:
         """
-        Get the argument at a given position, raise a KeyError if it doesn't exists.
-        If a catch-all positional argument is defined, it will never raise a KeyError.
+        Get the argument at a given position, raise a RuntimeException if it doesn't exists..
+        If a catch-all positional argument is defined, it will never raise a RuntimeException.
 
         :param position: The position of the argument (excluding any Context argument)
         """
-        if self.var_args is not None:
-            return self.args.get(position, self.var_args)
-        else:
+        if position < len(self.args):
             return self.args[position]
+        elif self.var_args is not None:
+            return self.var_args
+        else:
+            raise RuntimeException(None, f"{self.get_full_name()}() got an unexpected positional argument: {position}")
 
-    def get_kwargs(self, name: str) -> PluginArgument:
+    def get_kwarg(self, name: str) -> PluginArgument:
         """
-        Get the argument with a given name, raise a KeyError if it doesn't exists.
-        If a catch-all keyword argument is defined, it will never raise a KeyError.
+        Get the argument with a given name, raise a RuntimeException if it doesn't exists.
+        If a catch-all keyword argument is defined, it will never raise a RuntimeException.
 
         :param name: The name of the argument
         """
-        if self.var_kwargs is not None:
-            return self.kwargs.get(name, self.var_kwargs)
-        else:
+        if name in self.kwargs:
             return self.kwargs[name]
+        elif self.var_kwargs is not None:
+            return self.var_kwargs
+        else:
+            # Trying to provide a keyword argument which doesn't exist
+            raise RuntimeException(None, f"{self.get_full_name()}() got an unexpected keyword argument: '{name}'")
 
     def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature.
-        We only need to check the types of each argument as the rest (count, duplicates, etc)
-        is already checked by python.
 
         :param args: All the positional arguments to pass on to the plugin function
         :param kwargs: All the keyword arguments to pass on to the plugin function
         """
+        if self.var_args is None and len(args) > len(self.args):
+            # We got too many positional arguments
+            raise RuntimeException(
+                None, f"{self.get_full_name()}() takes {len(self.args)} positional arguments but {len(args)} were given"
+            )
+
         # Validate all positional arguments
-        for position, arg in enumerate(args):
-            try:
-                if not self.get_arg(position).validate(arg):
-                    return False
-            except KeyError:
-                # We have more positional arguments than we can
-                # handle, we stop the verification here and let python
-                # raise a proper exception when the function is called
-                # There is no point validating the other arguments as there
-                # won't be any available anyway.
-                break
+        for position, value in enumerate(args):
+            # Get the corresponding argument, fails if we don't have one
+            arg = self.get_arg(position)
+
+            # Validate the input value
+            if not arg.validate(value):
+                return False
 
         # Validate all kw arguments
-        for name, arg in kwargs.items():
-            try:
-                if not self.get_kwargs(name).validate(arg):
-                    return False
-            except KeyError:
-                # We have an unexpected key-word argument, we stop the
-                # verification here and let python raise a proper exception
-                # when the function is called
-                pass
+        for name, value in kwargs.items():
+            # Get the corresponding kwarg, fails if we don't have one
+            kwarg = self.get_kwarg(name)
+
+            # Make sure that our argument is not provided twice
+            if kwarg.arg_position is not None and kwarg.arg_position < len(args):
+                raise RuntimeException(None, f"{self.get_full_name()}() fot multiple values for argument '{name}'")
+
+            # Validate the input value
+            if not kwarg.validate(value):
+                return False
 
         return True
 
@@ -660,9 +676,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
     def type_string(self) -> str:
         return self.get_full_name()
-
-    def __str__(self) -> str:
-        return self.get_signature()
 
 
 @stable_api
