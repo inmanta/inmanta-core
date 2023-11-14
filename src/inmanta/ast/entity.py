@@ -402,9 +402,6 @@ class Entity(NamedType, WithComment):
                     index_ok = False
                 else:
                     value = attributes[attribute]
-                    # TODO 2
-                    # if isinstance(value, int):
-                    #     value = float(value)
                     key.append("%s=%s" % (attribute, value))
 
             if index_ok:
@@ -444,10 +441,10 @@ class Entity(NamedType, WithComment):
             )
         # Convert integers to floats in the key, similar to add_to_index
         # TODO 3
-        # key = ", ".join(
-        #     ["%s=%s" % (k, repr(float(v) if isinstance(v, int) else v)) for (k, v) in sorted(params, key=lambda x: x[0])]
-        # )
-        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
+        key = ", ".join(
+            ["%s=%s" % (k, repr(float(v) if isinstance(v, int) else v)) for (k, v) in sorted(params, key=lambda x: x[0])]
+        )
+        # key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
 
         if target is None:
             if key in self._index:
