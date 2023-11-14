@@ -381,13 +381,7 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-
-        attributes = {}
-        for k, v in instance.slots.items():
-            if v.is_ready():
-                value = v.get_value()
-                value_repr = repr(value)
-                attributes[k] = value_repr
+        attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
 
         # check if an index entry can be added
         for index_attributes in self.get_indices():
@@ -397,8 +391,7 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    value = attributes[attribute]
-                    key.append("%s=%s" % (attribute, value))
+                    key.append("%s=%s" % (attribute, attributes[attribute]))
 
             if index_ok:
                 keys = ", ".join(key)
@@ -435,16 +428,17 @@ class Entity(NamedType, WithComment):
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
-        formatted_pairs = []
 
-        for k, v in sorted(params, key=lambda x: x[0]):
-            value = v
-            attribute_type = self.get_attribute(k).type
-            if isinstance(attribute_type, (Float, Number)):
-                value = attribute_type.cast(value)
-            pair_str = "%s=%s" % (k, repr(value))
-            formatted_pairs.append(pair_str)
-        key = ", ".join(formatted_pairs)
+        key = ", ".join(
+            [
+                "%s=%s"
+                % (
+                    k,
+                    repr(self.get_attribute(k).type.cast(v) if isinstance(self.get_attribute(k).type, (Float, Number)) else v),
+                )
+                for k, v in sorted(params, key=lambda x: x[0])
+            ]
+        )
 
         if target is None:
             if key in self._index:
