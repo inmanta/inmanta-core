@@ -159,33 +159,21 @@ u = 0.0
     assert Number().validate(u)
 
 
-def test_compare_float_int_attribute(snippetcompiler, capsys):
+def test_same_value_float_int(snippetcompiler, capsys):
     snippetcompiler.setup_for_snippet(
         """
-    entity Float:
-        float i = 0
-    end
-    entity Int:
-        int i = 0
-    end
-    implement Float using std::none
-    implement Int using std::none
-    val1 = Float(i = 42.0)
-    val2 = Int(i = 42)
-    std::print(val1.i)
-    std::print(val2.i)
-    val1.i=val2.i
-    val2.i=val1.i
+    i = 42.0
+    j = 42
+    i = j
+    j = i
     """,
     )
     (_, scopes) = compiler.do_compile()
-    out, err = capsys.readouterr()
-    assert "42.0\n42\n" in out
 
 
-def test_float_int_attribute(snippetcompiler):
-    snippetcompiler.setup_for_error(
-        """
+@pytest.mark.parametrize("val", ["42.0", "42.1"])
+def test_float_int_attribute(snippetcompiler, val):
+    snippet = f"""
     entity Int:
         int i
     end
@@ -197,16 +185,43 @@ def test_float_int_attribute(snippetcompiler):
     implement Int using std::none
     implement Float using std::none
 
-    f = Float(i=42)
-    i = Int(i=f.i)  # f.n == 42.0 => not an int
-    """,
+    f = Float(i={val})
+    i = Int(i=f.i) # => not an int
+    """
+    snippetcompiler.setup_for_error(
+        snippet,
         "Could not set attribute `i` on instance `__config__::Int (instantiated at "
         "{dir}/main.cf:14)` (reported in Construct(Int) "
         "({dir}/main.cf:14))\n"
         "caused by:\n"
-        "  Invalid value '42.0', expected int (reported in Construct(Int) "
+        f"  Invalid value '{val}', expected int (reported in Construct(Int) "
         "({dir}/main.cf:14))",
     )
+
+
+def test_float_int_attribute_2(snippetcompiler):
+    snippet = f"""
+    entity Int:
+        int i
+    end
+
+    entity Float:
+        float i
+    end
+
+    implement Int using std::none
+    implement Float using std::none
+
+    f = Int(i=42)
+    i = Float(i=f.i)
+    """
+    snippetcompiler.setup_for_snippet(snippet)
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    x = root.lookup("i").get_value()
+    i = x.get_attribute("i").get_value()
+    assert not isinstance(i, int)
+    assert isinstance(i, float)
 
 
 def test_assign_float_to_int(snippetcompiler):
@@ -320,6 +335,25 @@ index A(x)
 
 a = A(x=1.0)
 y = A[x=1]
+a = y
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_lookup_on_int_with_float(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    float x
+end
+
+implement A using std::none
+
+index A(x)
+
+a = A(x=1)
+y = A[x=1.0]
 a = y
         """,
     )

@@ -266,10 +266,9 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
             else:
                 return
         if not isinstance(value, Unknown) and self.type is not None:
-            if isinstance(self.type, (Float, Number)) and not isinstance(self.type, Integer):
-                value = float(value)
             self.type.validate(value)
-
+        if isinstance(self.type, (Float, Number)):
+            value = self.type.cast(value)
         self.value = value
         self.location = location
         self.hasValue = True
@@ -1280,8 +1279,6 @@ class Instance(ExecutionContext):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
         try:
-            if isinstance(self.slots[name].type, float):
-                value = float(value)
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:
             raise AttributeException(self, self, name, cause=e)
