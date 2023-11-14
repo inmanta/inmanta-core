@@ -445,21 +445,6 @@ class Entity(NamedType, WithComment):
             ["%s=%s" % (k, repr(float(v) if isinstance(v, int) else v)) for (k, v) in sorted(params, key=lambda x: x[0])]
         )
 
-        # key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
-
-        # # Initialize an empty list to hold the key-value pairs
-        # key_value_pairs = []
-        #
-        # # Iterate over the sorted parameters
-        # for k, v in sorted(params, key=lambda x: x[0]):
-        #     # Format each key-value pair as a string
-        #     pair = "%s=%s" % (k, repr(v))
-        #     # Add the formatted pair to the list
-        #     key_value_pairs.append(pair)
-        #
-        # # Join the key-value pairs with a comma and a space
-        # key = ", ".join(key_value_pairs)
-
         if target is None:
             if key in self._index:
                 return self._index[key]

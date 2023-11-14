@@ -458,22 +458,16 @@ class IndexLookup(ReferenceStatement, Resumer):
     def resume(
         self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
     ) -> None:
-        processed_query = []
-        for k, v in self.query:
-            result = v.execute(requires, resolver, queue)
-            processed_query.append((k, result))
-
-        # Second part of the chain: processing self.wrapped_query
-        processed_wrapped_query = []
-        for kwargs in self.wrapped_query:
-            for k, v in kwargs.execute(requires, resolver, queue):
-                processed_wrapped_query.append((k, v))
-
-        # Combining both parts using chain
-        combined_query = list(chain(processed_query, processed_wrapped_query))
-
-        # Finally, calling the lookup_index method
-        self.type.lookup_index(combined_query, self, target)
+        self.type.lookup_index(
+            list(
+                chain(
+                    ((k, v.execute(requires, resolver, queue)) for (k, v) in self.query),
+                    ((k, v) for kwargs in self.wrapped_query for (k, v) in kwargs.execute(requires, resolver, queue)),
+                )
+            ),
+            self,
+            target,
+        )
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
