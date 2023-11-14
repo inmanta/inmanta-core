@@ -159,7 +159,7 @@ u = 0.0
     assert Number().validate(u)
 
 
-def test_same_value_float_int(snippetcompiler, capsys):
+def test_same_value_float_int(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
     i = 42.0
@@ -169,6 +169,22 @@ def test_same_value_float_int(snippetcompiler, capsys):
     """,
     )
     (_, scopes) = compiler.do_compile()
+
+
+def test_different_value_float_int(snippetcompiler, capsys):
+    snippetcompiler.setup_for_error(
+        """
+    i = 42.1
+    j = 42
+    i = j
+    """,
+        "value set twice:\n"
+        "\told value: 42.1\n"
+        "\t\tset at {dir}/main.cf:2\n"
+        "\tnew value: 42\n"
+        "\t\tset at {dir}/main.cf:4:9\n"
+        " (reported in i = j ({dir}/main.cf:4))",
+    )
 
 
 @pytest.mark.parametrize("val", ["42.0", "42.1"])

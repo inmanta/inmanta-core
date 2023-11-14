@@ -246,6 +246,7 @@ class Number(Primitive):
 
         if not isinstance(value, numbers.Number):
             raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
+
         return True  # allow this function to be called from a lambda function
 
     def is_primitive(self) -> bool:
