@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import asyncio
+import collections.abc
 import copy
 import inspect
 import os
@@ -23,7 +24,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Tuple, Type, TypeVar, Union
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -190,6 +191,37 @@ class PluginMeta(type):
             }
         else:
             cls.__functions = {}
+
+
+def report_missing_arguments(
+    func: str, missing_args: collections.abc.Collection[str], args_sort: Literal["positional", "keyword-only"]
+) -> None:
+    """
+    Helper function to raise an exception specifying that the given arguments are missing.  We try here
+    to stick as much as possible to the error that python would have raised, only changing its type.
+
+    The type of the exception raised is RuntimeException.
+
+    If the list of missing_args is empty, we don't report any exception.
+
+    :param func: The name of the called function requiring the given arguments
+    :param missing_args: The missing arguments we should report
+    :param args_sort: The sort of argument we are checking (positional or kw)
+    """
+    if len(missing_args) == 1:
+        # The exception raised here tries to match as closely as possible what python
+        # would have raised as exception
+        raise RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
+    if len(missing_args) > 1:
+        arg_names = " and ".join(
+            (
+                ", ".join(repr(arg) for arg in missing_args[:-1]),
+                repr(missing_args[-1]),
+            )
+        )
+        # The exception raised here tries to match as closely as possible what python
+        # would have raised as exception
+        raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
 
 def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Optional[inmanta_type.Type]:
@@ -574,40 +606,74 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             return self.var_kwargs
         else:
             # Trying to provide a keyword argument which doesn't exist
+            # The exception raised here tries to match as closely as possible what python
+            # would have raised as exception
             raise RuntimeException(None, f"{self.get_full_name()}() got an unexpected keyword argument: '{name}'")
 
     def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature.
 
+        1. Check if we have too many arguments
+        2. Check if we have too few arguments
+        3. Check if we have any duplicate arguments (provided as positional and keyword)
+        4. Validate the type of each of the provided arguments
+
         :param args: All the positional arguments to pass on to the plugin function
         :param kwargs: All the keyword arguments to pass on to the plugin function
         """
         if self.var_args is None and len(args) > len(self.args):
-            # We got too many positional arguments
+            # (1) We got too many positional arguments
+            # The exception raised here tries to match as closely as possible what python
+            # would have raised as exception
             raise RuntimeException(
                 None, f"{self.get_full_name()}() takes {len(self.args)} positional arguments but {len(args)} were given"
             )
 
+        # (2) Check that all positional arguments without a default are provided
+        missing_positional_arguments = [
+            arg.arg_name
+            for position, arg in enumerate(self.args)
+            if (
+                position >= len(args)  # No input from user in positional args
+                and arg.arg_name not in kwargs  # No input from user in keyword args
+                and not arg.has_default_value()  # No default value in plugin definition
+            )
+        ]
+        report_missing_arguments(self.get_full_name(), missing_positional_arguments, "positional")
+
+        # (2) Check that all keyword arguments without a default are provided
+        missing_keyword_arguments = [
+            name
+            for name, arg in self.kwargs.items()
+            if (
+                name not in kwargs  # No input from user in keyword args
+                and not arg.has_default_value()  # No default value in plugin definition
+            )
+        ]
+        report_missing_arguments(self.get_full_name(), missing_keyword_arguments, "keyword-only")
+
         # Validate all positional arguments
         for position, value in enumerate(args):
-            # Get the corresponding argument, fails if we don't have one
+            # (1) Get the corresponding argument, fails if we don't have one
             arg = self.get_arg(position)
 
-            # Validate the input value
+            # (4) Validate the input value
             if not arg.validate(value):
                 return False
 
         # Validate all kw arguments
         for name, value in kwargs.items():
-            # Get the corresponding kwarg, fails if we don't have one
+            # (1) Get the corresponding kwarg, fails if we don't have one
             kwarg = self.get_kwarg(name)
 
-            # Make sure that our argument is not provided twice
+            # (3) Make sure that our argument is not provided twice
             if kwarg.arg_position is not None and kwarg.arg_position < len(args):
+                # The exception raised here tries to match as closely as possible what python
+                # would have raised as exception
                 raise RuntimeException(None, f"{self.get_full_name()}() fot multiple values for argument '{name}'")
 
-            # Validate the input value
+            # (4) Validate the input value
             if not kwarg.validate(value):
                 return False
 
