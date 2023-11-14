@@ -216,7 +216,7 @@ def test_float_int_attribute(snippetcompiler, val):
 
 
 def test_float_int_attribute_2(snippetcompiler):
-    snippet = f"""
+    snippet = """
     entity Int:
         int i
     end
