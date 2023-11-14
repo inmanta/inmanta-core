@@ -381,7 +381,17 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-        attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
+
+        attributes = {}
+        for k, v in instance.slots.items():
+            if v.is_ready():
+                value = v.get_value()
+                # If the value is an integer, convert it to a float
+                if isinstance(value, int):
+                    value = float(value)
+                value_repr = repr(value)
+                attributes[k] = value_repr
+
         # check if an index entry can be added
         for index_attributes in self.get_indices():
             index_ok = True
@@ -390,7 +400,10 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    key.append("%s=%s" % (attribute, attributes[attribute]))
+                    value = attributes[attribute]
+                    if isinstance(value, int):
+                        value = float(value)
+                    key.append("%s=%s" % (attribute, value))
 
             if index_ok:
                 keys = ", ".join(key)
@@ -427,8 +440,25 @@ class Entity(NamedType, WithComment):
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
+        # Convert integers to floats in the key, similar to add_to_index
+        key = ", ".join(
+            ["%s=%s" % (k, repr(float(v) if isinstance(v, int) else v)) for (k, v) in sorted(params, key=lambda x: x[0])]
+        )
 
-        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
+        # key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
+
+        # # Initialize an empty list to hold the key-value pairs
+        # key_value_pairs = []
+        #
+        # # Iterate over the sorted parameters
+        # for k, v in sorted(params, key=lambda x: x[0]):
+        #     # Format each key-value pair as a string
+        #     pair = "%s=%s" % (k, repr(v))
+        #     # Add the formatted pair to the list
+        #     key_value_pairs.append(pair)
+        #
+        # # Join the key-value pairs with a comma and a space
+        # key = ", ".join(key_value_pairs)
 
         if target is None:
             if key in self._index:
