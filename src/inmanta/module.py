@@ -65,6 +65,7 @@ from typing import (
 
 import more_itertools
 import pkg_resources
+import pydantic
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
@@ -267,6 +268,10 @@ class InvalidMetadata(CompilerException):
 
 
 class ModuleDeprecationWarning(InmantaWarning):
+    pass
+
+
+class ProjectConfigurationWarning(InmantaWarning):
     pass
 
 
@@ -675,7 +680,10 @@ class ModuleSource(Generic[TModule]):
 
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
-    def __init__(self, urls: List[str]) -> None:
+    def __init__(self, urls: Sequence[str] = []) -> None:
+        """
+        :param urls: retained for backward compatibility
+        """
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
 
     @classmethod
@@ -713,17 +721,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
-        if not self.urls and not project.metadata.pip.use_config_file:
-            raise Exception(
-                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add the relevant pip "
-                f"indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
-                "the `pip` section of the project's `project.yml`:"
-                "\n\t  index_urls:"
-                "\n\t\t  - https://pypi.org/simple"
-                "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
-            )
+
+        project.metadata.pip.assert_has_source(f"a v2 module {module_name}")
+
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
-        allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
@@ -745,11 +746,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         try:
             self.log_pre_install_information(module_name, module_spec)
             modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
-            env.process_env.install_from_index(
+            env.process_env.install_for_config(
                 requirements,
-                self.urls,
-                allow_pre_releases=allow_pre_releases,
-                use_pip_config=project.metadata.pip.use_config_file,
+                project.metadata.pip,
             )
             self.log_post_install_information(module_name)
             self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
@@ -1228,7 +1227,9 @@ class Metadata(BaseModel):
     def parse(cls: Type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
         raw: Mapping[str, object] = cls._raw_parser.parse(source)
         try:
-            return cls(**raw)
+            return cls(
+                **raw,
+            )
         except ValidationError as e:
             if isinstance(source, TextIOBase):
                 raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid:", validation_error=e) from e
@@ -1534,21 +1535,51 @@ class RelationPrecedenceRule:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
 
+def hyphenize(field: str) -> str:
+    """Alias generator to convert python names (with `_`) to config file name (with `-`)"""
+    return field.replace("_", "-")
+
+
 @stable_api
-class ProjectPipConfig(BaseModel):
+class ProjectPipConfig(env.PipConfig):
     """
-    :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
-        Python packages.
-    :param index_urls: List of pip indexes to use project-wide. These repositories should be
-        `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-        compliant. If more than one index url is configured, they will all be passed to pip. This is generally only
+    :param index_url: one pip index url for this project.
+    :param extra_index_url:  additional pip index urls for this project. This is generally only
         recommended if all configured indexes are under full control of the end user to protect against dependency
         confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
         `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
+    :param pre:  allow pre-releases when installing Python packages, i.e. pip --pre.
+        If null, behaves like false unless pip.use-system-config=true, in which case system config is respected.
+    :param use_system_config: defaults to false.
+        When true, sets the pip's index url, extra index urls and pre according to the respective settings outlined above
+        but otherwise respect any pip environment variables and/or config in the pip config file,
+        including any extra-index-urls.
+
+        If no indexes are configured in pip.index-url/pip.extra-index-url, this option falls back to pip's default behavior,
+        meaning it uses the pip index url from the environment, the config file, or PyPi, in that order.
+
+        For development, it is recommended to set this option to false, both for portability
+        (and related compatibility with tools like pytest-inmanta-lsm) and for security
+        (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
     """
 
-    use_config_file: bool = False
-    index_urls: List[str] = []
+    class Config:
+        # use alias generator have `-` in names
+        alias_generator = hyphenize
+        # allow use of aliases
+        allow_population_by_field_name = True
+        extra = "ignore"
+
+    @pydantic.root_validator(pre=True)
+    def __alert_extra_field__(cls, values: dict[str, object]) -> dict[str, object]:
+        extra_fields = values.keys() - cls.__fields__.keys() - {v.alias for v in cls.__fields__.values()}
+
+        for extra_field in extra_fields:
+            # This is cfr adr 0000
+            warnings.warn(
+                ProjectConfigurationWarning(f"Found unexpected configuration value 'pip.{extra_field}' in 'project.yml'")
+            )
+        return values
 
 
 @stable_api
@@ -1650,9 +1681,12 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 result.append({"url": elem, "type": ModuleRepoType.git})
             elif isinstance(elem, dict):
                 if elem["type"] == ModuleRepoType.package.value:
-                    LOGGER.warning(
-                        "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file "
-                        "is deprecated. Please set the pip index url through the `pip -> index_urls` option instead."
+                    warnings.warn(
+                        ProjectConfigurationWarning(
+                            "Setting a pip index through the `repo.url` option with type `package` in the project.yml file "
+                            "is no longer supported and will be ignored. "
+                            "Please set the pip index url through the `pip.index_url` option instead."
+                        )
                     )
                 result.append(elem)
             else:
@@ -1666,12 +1700,15 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
     def get_index_urls(self) -> List[str]:
-        # Once setting repos with type package is no longer supported, this method can return self.pip.index_urls alone.
-        index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
-
+        """For backward compatibility with ISO6"""
         # This ensures no duplicates are returned and insertion order is preserved.
         # i.e. the left-most index will be passed to pip as --index-url and the others as --extra-index-url
-        return list({value: None for value in itertools.chain(self.pip.index_urls, index_urls_deprecated_option)})
+        return list(
+            {
+                value: None
+                for value in itertools.chain([self.pip.index_url] if self.pip.index_url else [], self.pip.extra_index_url)
+            }
+        )
 
 
 @stable_api
@@ -1945,7 +1982,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        self.module_source: ModuleV2Source = ModuleV2Source(self.metadata.get_index_urls())
+        self.module_source: ModuleV2Source = ModuleV2Source()
         self.module_source_v1: ModuleV1Source = ModuleV1Source(
             local_repo=CompositeModuleRepo([make_repo(x) for x in self.modulepath]),
             remote_repo=CompositeModuleRepo(
@@ -2082,7 +2119,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
-        indexes_urls: List[str] = self.metadata.get_index_urls()
         # Verify non-python part
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
@@ -2092,12 +2128,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            self.virtualenv.install_from_index(
+            self.virtualenv.install_for_config(
                 pyreq,
+                config=self.metadata.pip,
                 upgrade=update_dependencies,
-                index_urls=indexes_urls if indexes_urls else None,
                 upgrade_strategy=env.PipUpgradeStrategy.EAGER,
-                use_pip_config=self.metadata.pip.use_config_file,
             )
 
         self.verify()
@@ -2411,6 +2446,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         except InvalidModuleException:
             raise
         except env.ConflictingRequirements:
+            raise
+        except env.PackageNotFound:
             raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
@@ -3266,7 +3303,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
     GENERATION = ModuleGeneration.V2
-    PKG_NAME_PREFIX = "inmanta-module-"
+    PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
     def __init__(
         self,

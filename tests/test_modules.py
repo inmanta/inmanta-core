@@ -32,7 +32,7 @@ from _io import StringIO
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
-from inmanta.env import LocalPackagePath
+from inmanta.env import LocalPackagePath, PipConfig
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool
@@ -116,7 +116,14 @@ def test_to_v2():
 
 
 @pytest.mark.slowtest
-def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: str, caplog, tmpdir) -> None:
+def test_is_versioned(
+    snippetcompiler_clean,
+    modules_dir: str,
+    modules_v2_dir: str,
+    caplog,
+    tmpdir,
+    local_module_package_index,  # upstream for setuptools for isolated build
+) -> None:
     """
     Test whether the warning regarding non-versioned modules is given correctly.
     """
@@ -127,7 +134,9 @@ def test_is_versioned(snippetcompiler_clean, modules_dir: str, modules_v2_dir: s
         module_name: str, needs_versioning_warning: bool, install_v2_modules: List[LocalPackagePath] = []
     ) -> None:
         caplog.clear()
-        snippetcompiler_clean.setup_for_snippet(f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules)
+        snippetcompiler_clean.setup_for_snippet(
+            f"import {module_name}", autostd=False, install_v2_modules=install_v2_modules, index_url=local_module_package_index
+        )
         snippetcompiler_clean.do_export()
         warning_message = f"Module {module_name} is not version controlled, we recommend you do this as soon as possible."
         assert (warning_message in caplog.text) is needs_versioning_warning
@@ -228,6 +237,7 @@ def test_module_v2_source_get_installed_module_editable(
     snippetcompiler_clean,
     modules_v2_dir: str,
     editable: bool,
+    local_module_package_index,  # upstream for setuptools for isolated build
 ) -> None:
     """
     Make sure ModuleV2Source.get_installed_module identifies editable installations correctly.
@@ -238,9 +248,10 @@ def test_module_v2_source_get_installed_module_editable(
         f"import {module_name}",
         autostd=False,
         install_v2_modules=[env.LocalPackagePath(path=module_dir, editable=editable)],
+        index_url=local_module_package_index if editable else None,
     )
 
-    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    source: module.ModuleV2Source = module.ModuleV2Source()
     mod: Optional[module.ModuleV2] = source.get_installed_module(module.DummyProject(autostd=False), module_name)
     assert mod is not None
     # os.path.realpath because snippetcompiler uses symlinks
@@ -266,7 +277,7 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
     assert path is not None
     assert isinstance(loader, PluginModuleLoader)
 
-    source: module.ModuleV2Source = module.ModuleV2Source(urls=[])
+    source: module.ModuleV2Source = module.ModuleV2Source()
     assert source.path_for("std") is None
 
 
@@ -309,7 +320,7 @@ If you want to use the module as a v2 module:
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "",
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         install_project=False,
     )
     os.chdir(project.path)
@@ -362,7 +373,9 @@ def test_module_v2_incorrect_install_warning(
         assert cause.msg == expected
 
     # install module from source without using `inmanta module install`
-    env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
+    env.process_env.install_for_config(
+        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
+    )
     module_path = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     verify_exception(
         f"Invalid module at {module_path}: found module package but it has no setup.cfg. "
@@ -373,7 +386,9 @@ def test_module_v2_incorrect_install_warning(
 
     # include setup.cfg in package to circumvent error
     shutil.copy(os.path.join(module_dir, "setup.cfg"), os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module"))
-    env.process_env.install_from_source([env.LocalPackagePath(path=module_dir, editable=False)])
+    env.process_env.install_for_config(
+        requirements=[], paths=[env.LocalPackagePath(path=module_dir, editable=False)], config=PipConfig(use_system_config=True)
+    )
     verify_exception(
         "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"
         " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively install and"
