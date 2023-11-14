@@ -638,7 +638,7 @@ def test_module_v2_incompatible_commands(caplog, local_module_package_index: str
 import minimalv1module
 import minimalv2module
         """.strip(),
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement()],
         autostd=False,
     )
