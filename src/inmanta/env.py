@@ -1127,7 +1127,7 @@ class VirtualEnv(ActiveEnv):
             raise ValueError(
                 f"Cannot create virtual environment because the provided path `{path}` contains an"
                 f"invalid character (`{match.group()}`). Please provide a path that doesn't contain LIST_OF_INVALID"
-            )  # TODO add list of invalid chars
+            )
 
     def exists(self) -> bool:
         """
