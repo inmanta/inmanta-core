@@ -1094,7 +1094,7 @@ class VirtualEnv(ActiveEnv):
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
 
-    _invalid_chars_in_path_re = re.compile(r"[ \"&]")
+    _invalid_chars_in_path_re = re.compile(r"[\"$]")
 
     def __init__(self, env_path: str) -> None:
         super(VirtualEnv, self).__init__(env_path=env_path)
@@ -1107,7 +1107,13 @@ class VirtualEnv(ActiveEnv):
 
     def validate_path(self, path: str) -> None:
         """
-        Check for the presence of invalid characters in the given path.
+        Check for the presence of the following invalid characters in the given path.
+            - '$' because of a limitation in python venv causing prompt display issues:
+                - '$$' will be replaced by the pid of the process
+                - '${<var>}' will be expanded (possibly to empty string if var is undefined)
+
+            - '"' because of a limitation in python venv causing venv activation to fail silently for python<3.12 and
+              a crash for python>=3.12
 
         :param path: Path to validate.
         """
