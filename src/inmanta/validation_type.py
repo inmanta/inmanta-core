@@ -82,7 +82,7 @@ def parametrize_type(
     if inspect.isroutine(base_type):
         # TODO: test with non-routine callable (e.g. uuid.UUID)
         parametrized_type = base_type(**validation_parameters)
-    elif validation_parameters is not None:
+    elif validation_parameters:
         raise ValueError(
             f"validate_type got validation parameters {validation_parameters}"
             f" but validation type {type_name} is not parametrized"
