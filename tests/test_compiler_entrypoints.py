@@ -341,47 +341,9 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     (statements, blocks) = compiler.compile()
     sched = scheduler.Scheduler()
 
-    def check_anchor(
-        range_list: Sequence[tuple[Range, Range]],
-        range_source: tuple[str, int, int, int],
-        range_target: tuple[str, int, int, int],
-    ) -> bool:
-        """
-        Check if a specific source-target range pair is present in a given list of ranges.
-
-        This function iterates through a list of range pairs, each consisting of a source range and a target range.
-        It compares each pair of ranges in the list against the provided source and target ranges. The comparison
-        is based on file paths, line numbers, and character positions within the line for both the source and target ranges.
-
-        Returns True if a pair in the range list matches the provided source and target ranges, False otherwise.
-
-        :param range_list: A sequence of tuples, where each tuple contains two `Range` objects.
-                    The first object in each tuple represents the source range, and the second represents the target range.
-        :param range_source: A tuple representing the source range, consisting of the file path, line number,
-                      start character position, and end character position.
-        :param range_target: A tuple representing the target range, similar in structure to range_source.
-        """
-        file1, lnr1, start_char1, end_char1 = range_source
-        file2, lnr2, start_char2, end_char2 = range_target
-        for range1, range2 in range_list:
-            # Check if the properties match for both ranges
-            if (
-                range1.file == file1
-                and range1.lnr == lnr1
-                and range1.start_char == start_char1
-                and range1.end_char == end_char1
-                and range2.file == file2
-                and range2.lnr == lnr2
-                and range2.start_char == start_char2
-                and range2.end_char == end_char2
-            ):
-                return True
-
-        return False
-
     anchormap = sched.anchormap(compiler, statements, blocks)
     assert len(anchormap) == 5
-    range_source = (os.path.join(snippetcompiler.project_dir, "main.cf"), 9, 16, 20)
-    range_target = (target_path, 1, 8, 12)
+    range_source = Range(os.path.join(snippetcompiler.project_dir, "main.cf"), 9, 16, 9, 20)
+    range_target = Range(target_path, 1, 8, 1, 12)
 
-    assert check_anchor(anchormap, range_source, range_target)
+    assert (range_source, range_target) in anchormap
