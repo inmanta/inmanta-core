@@ -313,6 +313,13 @@ implement Test_no_doc using b
 
 
 def test_constructor_with_inferred_namespace(snippetcompiler):
+    """
+    Test that the anchor for a constructor for an entity with an inferred namespace is correctly added to the anchormap
+    The test checks if the anchormap correctly reflects the relationship between the
+    source range (where the entity is instantiated: line 9 in main.cf) and the target range (where the
+    entity is defined: line 1 in the _init.cf file of the tests mmodule)
+    """
+
     module: str = "tests"
     target_path = os.path.join(os.path.dirname(__file__), "data", "modules", module, "model", "_init.cf")
 
@@ -339,6 +346,21 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
         range_source: tuple[str, int, int, int],
         range_target: tuple[str, int, int, int],
     ) -> bool:
+        """
+        Check if a specific source-target range pair is present in a given list of ranges.
+
+        This function iterates through a list of range pairs, each consisting of a source range and a target range.
+        It compares each pair of ranges in the list against the provided source and target ranges. The comparison
+        is based on file paths, line numbers, and character positions within the line for both the source and target ranges.
+
+        Returns True if a pair in the range list matches the provided source and target ranges, False otherwise.
+
+        :param range_list: A sequence of tuples, where each tuple contains two `Range` objects.
+                    The first object in each tuple represents the source range, and the second represents the target range.
+        :param range_source: A tuple representing the source range, consisting of the file path, line number,
+                      start character position, and end character position.
+        :param range_target: A tuple representing the target range, similar in structure to range_source.
+        """
         file1, lnr1, start_char1, end_char1 = range_source
         file2, lnr2, start_char2, end_char2 = range_target
         for range1, range2 in range_list:
@@ -358,6 +380,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
         return False
 
     anchormap = sched.anchormap(compiler, statements, blocks)
+    assert len(anchormap) == 5
     range_source = (os.path.join(snippetcompiler.project_dir, "main.cf"), 9, 16, 20)
     range_target = (target_path, 1, 8, 12)
 
