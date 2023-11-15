@@ -1,0 +1,4 @@
+description: Allow matching floats with corresponding ints in dict path
+issue-nr: 6734
+change-type: patch
+destination-branches: [master, iso6]
