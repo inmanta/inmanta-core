@@ -115,6 +115,7 @@ class NormalValue(DictPathValue):
     def __init__(self, value: str) -> None:
         super(DictPathValue, self).__init__()
         self._value: str = value
+        self._numeric_value: Optional[float] = self._try_parse_numeric(value)
 
     def escape(self) -> str:
         return WildDictPath.PATTERN_SPECIAL_CHARACTER.sub(r"\\\1", self._value)
@@ -123,15 +124,20 @@ class NormalValue(DictPathValue):
         if value is None:
             return False
 
-        # Attempt numeric comparison if both values can be converted to floats
-        try:
-            if float(self._value) == float(value):
-                return True
-        except ValueError:
-            pass
+        # Perform a numeric comparison only if the value is an int/float and
+        # The key in the dictpath can be interpreted as an int/float
+        if self._numeric_value is not None and isinstance(value, (int, float)):
+            return float(self._value) == value
 
-        # Fallback to string comparison
-        return self._value == str(value)
+        # Fallback to string comparison for other types
+        return str(self._value) == str(value)
+
+    @staticmethod
+    def _try_parse_numeric(value: object) -> Optional[float]:
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
 
     @property
     def value(self) -> str:
