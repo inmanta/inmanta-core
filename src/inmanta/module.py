@@ -1576,7 +1576,7 @@ class ProjectPipConfig(env.PipConfig):
         # use alias generator have `-` in names
         alias_generator = hyphenize
         # allow use of aliases
-        allow_population_by_field_name = True
+        populate_by_name = True
         extra = "ignore"
 
     @pydantic.root_validator(pre=True)
