@@ -566,37 +566,23 @@ class PythonEnvironment:
     Inmanta product packages don't change.
     """
 
-    _invalid_chars_in_path_re = re.compile(r"[ \"&]")
-
     def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
         if (env_path is None) == (python_path is None):
             raise ValueError("Exactly one of `env_path` and `python_path` needs to be specified")
         self.env_path: str
         self.python_path: str
         if env_path is not None:
-            self.validate_path(path=str(env_path), path_name="env_path")  # explicit cast to str because of LocalPath
             self.env_path = env_path
             self.python_path = self.get_python_path_for_env_path(self.env_path)
+            if not self.env_path:
+                raise ValueError("The env_path cannot be an empty string.")
         else:
             assert python_path is not None
-            self.validate_path(path=python_path, path_name="python_path")
             self.python_path = python_path
             self.env_path = self.get_env_path_for_python_path(self.python_path)
+            if not self.python_path:
+                raise ValueError("The python_path cannot be an empty string.")
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
-
-    def validate_path(self, path: str, path_type: Literal['env_path', 'python_path']) -> None:
-        """
-        Check for the presence of invalid characters in the given path.
-
-        :param path: Path to validate.
-        :param path_name: Used to display the type of the path being validated.
-        """
-        if not path:
-            raise ValueError(f"The {path_name} cannot be an empty string.")
-
-        match = PythonEnvironment._invalid_chars_in_path_re.search(path)
-        if match:
-            raise ValueError(f"Invalid character `{match.group()}` in {path_name} {path}.")
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
@@ -1108,13 +1094,32 @@ class VirtualEnv(ActiveEnv):
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
 
+    _invalid_chars_in_path_re = re.compile(r"[ \"&]")
+
     def __init__(self, env_path: str) -> None:
         super(VirtualEnv, self).__init__(env_path=env_path)
+        self.validate_path(env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self._using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
+
+    def validate_path(self, path: str) -> None:
+        """
+        Check for the presence of invalid characters in the given path.
+
+        :param path: Path to validate.
+        """
+        if not path:
+            raise ValueError("Cannot create virtual environment because the provided path is an empty string.")
+
+        match = VirtualEnv._invalid_chars_in_path_re.search(path)
+        if match:
+            raise ValueError(
+                f"Cannot create virtual environment because the provided path `{path}` contains an"
+                f"invalid character (`{match.group()}`). Please provide a path that doesn't contain LIST_OF_INVALID"
+            )  # TODO add list of invalid chars
 
     def exists(self) -> bool:
         """

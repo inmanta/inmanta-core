@@ -564,12 +564,10 @@ def test_invalid_chars_in_venv_path(tmpdir, invalid_char) -> None:
 
     with pytest.raises(ValueError) as excinfo:
         env.VirtualEnv(venv_dir)
-    assert f"Invalid character `{invalid_char}` in env_path {venv_dir}" in str(excinfo.value)
-
-    python_path = os.path.join(venv_dir, "bin", "python")
-    with pytest.raises(ValueError) as excinfo:
-        env.PythonEnvironment(python_path=python_path)
-    assert f"Invalid character `{invalid_char}` in python_path {python_path}" in str(excinfo.value)
+    assert (
+        f"Cannot create virtual environment because the provided path `{venv_dir}` contains an"
+        f"invalid character (`{invalid_char}`). Please provide a path that doesn't contain LIST_OF_INVALID"
+    ) in str(excinfo.value)
 
 
 @pytest.mark.slowtest
