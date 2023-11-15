@@ -317,7 +317,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     Test that the anchor for a constructor for an entity with an inferred namespace is correctly added to the anchormap
     The test checks if the anchormap correctly reflects the relationship between the
     source range (where the entity is instantiated: line 9 in main.cf) and the target range (where the
-    entity is defined: line 1 in the _init.cf file of the tests mmodule)
+    entity is defined: line 1 in the _init.cf file of the tests module)
     """
 
     module: str = "tests"
