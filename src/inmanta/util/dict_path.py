@@ -122,6 +122,15 @@ class NormalValue(DictPathValue):
     def matches(self, value: Optional[object]) -> bool:
         if value is None:
             return False
+
+        # Attempt numeric comparison if both values can be converted to floats
+        try:
+            if float(self._value) == float(value):
+                return True
+        except ValueError:
+            pass
+
+        # Fallback to string comparison
         return self._value == str(value)
 
     @property
