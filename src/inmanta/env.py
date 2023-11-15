@@ -584,7 +584,7 @@ class PythonEnvironment:
             self.env_path = self.get_env_path_for_python_path(self.python_path)
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
 
-    def validate_path(self, path: str, path_name: str) -> None:
+    def validate_path(self, path: str, path_type: Literal['env_path', 'python_path']) -> None:
         """
         Check for the presence of invalid characters in the given path.
 
