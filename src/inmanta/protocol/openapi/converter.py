@@ -21,9 +21,6 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from pydantic import ConfigDict
-
-# TODO: should be v2
-from pydantic.v1.typing import NoneType
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
@@ -524,7 +521,7 @@ class OperationHandler:
             if not url_method_properties.envelope:
                 raise RuntimeError("Methods returning a ReturnValue object should always have an envelope")
 
-            if type_args[0] != NoneType:
+            if type_args[0] is not type(None):
                 return_properties[url_method_properties.envelope_key] = self.type_converter.get_openapi_type(type_args[0])
 
         else:
