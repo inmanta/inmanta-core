@@ -1094,7 +1094,7 @@ class VirtualEnv(ActiveEnv):
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
 
-    _invalid_chars_in_path_re = re.compile(r"[\"$`]")
+    _invalid_chars_in_path_re = re.compile(r'["$`]')
 
     def __init__(self, env_path: str) -> None:
         super(VirtualEnv, self).__init__(env_path=env_path)

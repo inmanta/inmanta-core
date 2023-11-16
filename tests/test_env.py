@@ -555,7 +555,7 @@ def test_override_inmanta_package(tmpvenv_active_inherit: env.VirtualEnv) -> Non
 
 @pytest.mark.slowtest
 @pytest.mark.parametrize("invalid_char", ['"', "$", "`"])
-def test_invalid_chars_in_venv_path(tmpdir, invalid_char) -> None:
+def test_invalid_chars_in_venv_path(tmpdir, invalid_char: str) -> None:
     """
     Test that an error is raised when attempting to create a venv with invalid chars in its path.
     """

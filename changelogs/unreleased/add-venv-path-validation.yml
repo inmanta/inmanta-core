@@ -2,5 +2,5 @@ description: Raise an explicit error when attempting to create a virtual env wit
 change-type: patch
 destination-branches: [master, iso6]
 sections:
-  deprecation-note: "{{description}}"
+  minor-improvement: "{{description}}"
 
