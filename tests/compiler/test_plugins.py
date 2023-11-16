@@ -86,7 +86,7 @@ def test_kwargs_in_plugin_call_missing_arg(snippetcompiler):
         """
 std::equals(42, desc="they differ")
         """,
-        "equals() missing 1 required positional argument: 'arg2' "
+        "std::equals() missing 1 required positional argument: 'arg2' "
         "(reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
     )
 
@@ -96,7 +96,7 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
         """
 std::equals(42, 42, arg1=42)
         """,
-        "equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+        "std::equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
     )
 
 
@@ -226,10 +226,10 @@ x = null
 def test_1778_context_as_kwarg_reject(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-std::generate_password("pw_id", context=42)
+std::generate_password("pw_id", 42, context=42)
         """,
-        "generate_password() got multiple values for argument 'context' "
-        "(reported in std::generate_password('pw_id',context=42) ({dir}/main.cf:2))",
+        "std::generate_password() got an unexpected keyword argument: 'context' "
+        "(reported in std::generate_password('pw_id',42,context=42) ({dir}/main.cf:2))",
     )
 
 

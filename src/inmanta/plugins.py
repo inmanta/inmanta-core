@@ -647,7 +647,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             name
             for name, arg in self.kwargs.items()
             if (
-                name not in kwargs  # No input from user in keyword args
+                arg.is_kw_only_argument  # The argument was not provided as positional arg
+                and name not in kwargs  # No input from user in keyword args
                 and not arg.has_default_value()  # No default value in plugin definition
             )
         ]
@@ -671,7 +672,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             if kwarg.arg_position is not None and kwarg.arg_position < len(args):
                 # The exception raised here tries to match as closely as possible what python
                 # would have raised as exception
-                raise RuntimeException(None, f"{self.get_full_name()}() fot multiple values for argument '{name}'")
+                raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
             if not kwarg.validate(value):
