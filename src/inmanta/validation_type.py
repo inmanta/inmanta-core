@@ -31,8 +31,8 @@ def parametrize_type(
     base_type: Type[object] | abc.Callable[..., Type[object]],
     type_name: str,
     validation_parameters: Optional[abc.Mapping[str, object]] = None,
-) -> Type[object]:
-    # TODO: docstring
+) -> object:
+    # TODO: docstring + mention return type
     """
     Check whether `value` satisfies the constraints of type `fq_type_name`. When the given type (fq_type_name)
     requires validation_parameters, they can be provided using the optional `validation_parameters` argument.
@@ -69,8 +69,8 @@ def parametrize_type(
         passed.
     :raises TypeError: When the given validation parameters are not valid with respect to the requested type.
     """
-    custom_annotations: object = []
-    validation_parameters: dict[str, object] = validation_parameters.copy() if validation_parameters is not None else {}
+    custom_annotations: list[object] = []
+    validation_parameters = dict(validation_parameters) if validation_parameters is not None else {}
 
     # workaround for Pydantic v1 python regex support and removal of stricturl
     if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
@@ -148,5 +148,5 @@ def validate_type(
     module = importlib.import_module(module_name)
     requested_type: object = getattr(module, type_name)
 
-    validation_type: Type[object] = pydantic.TypeAdapter(parametrize_type(requested_type, fq_type_name, validation_parameters))
+    validation_type: pydantic.TypeAdapter = pydantic.TypeAdapter(parametrize_type(requested_type, fq_type_name, validation_parameters))
     validation_type.validate_python(value)
