@@ -56,7 +56,7 @@ class BaseModel(pydantic.BaseModel):
     Base class for all data objects in Inmanta
     """
 
-    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
+    _normalize_timestamps: ClassVar[classmethod] = pydantic.field_validator("*")(
         validator_timezone_aware_timestamps
     )
     # Populate models with the value property of enums, rather than the raw enum.
