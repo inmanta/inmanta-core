@@ -133,7 +133,7 @@ class NormalValue(DictPathValue):
         return str(self._value) == str(value)
 
     @staticmethod
-    def _try_parse_numeric(value: object) -> Optional[float]:
+    def _try_parse_numeric(value: str) -> Optional[float]:
         try:
             return float(value)
         except (ValueError, TypeError):
