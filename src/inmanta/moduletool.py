@@ -1775,7 +1775,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
                 ]
                 env.process_env.install_for_config(build_requirements_list, pip_config)
                 return builder.build(distribution=distribution, output_directory=output_directory)
-        except Exception:
+        except Exception as e:
             raise ModuleBuildFailedError(msg="Module build failed")
 
 
