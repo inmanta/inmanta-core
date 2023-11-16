@@ -20,12 +20,10 @@ import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-import pydantic
 from pydantic import ConfigDict
-from pydantic._internal._typing_extra import TypingGenericAlias
-from pydantic.networks import AnyUrl
-from pydantic.v1.schema import model_schema  # [TODO] migrate to v2
-from pydantic.v1.typing import NoneType  # [TODO] migrate to v2
+
+# TODO: should be v2
+from pydantic.v1.typing import NoneType
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util

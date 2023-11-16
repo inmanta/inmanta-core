@@ -210,9 +210,7 @@ LOG_LEVEL_AS_INTEGER: abc.Mapping[LogLevel, int] = {
     LogLevel.TRACE: 3,
 }
 
-INTEGER_AS_LOG_LEVEL: abc.Mapping[int, LogLevel] = {
-    value: log_level for log_level, value in LOG_LEVEL_AS_INTEGER.items()
-}
+INTEGER_AS_LOG_LEVEL: abc.Mapping[int, LogLevel] = {value: log_level for log_level, value in LOG_LEVEL_AS_INTEGER.items()}
 
 INMANTA_URN = "urn:inmanta:"
 

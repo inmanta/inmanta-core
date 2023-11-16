@@ -34,7 +34,7 @@ from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
 
-from inmanta import config, const, protocol, types
+from inmanta import config, const, protocol
 from inmanta.const import ClientType
 from inmanta.data.model import BaseModel
 from inmanta.protocol import VersionMatch, exceptions, json_encode

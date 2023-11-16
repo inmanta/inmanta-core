@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 import datetime
+import itertools
 import json
 import uuid
 from collections import abc
 from operator import itemgetter
 
-import itertools
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 

@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping,
 
 import pydantic
 import typing_inspect
-from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler, errors, types
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 
 from pydantic_core import CoreSchema, PydanticCustomError, core_schema

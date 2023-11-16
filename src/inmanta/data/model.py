@@ -56,9 +56,7 @@ class BaseModel(pydantic.BaseModel):
     Base class for all data objects in Inmanta
     """
 
-    _normalize_timestamps: ClassVar[classmethod] = pydantic.field_validator("*")(
-        validator_timezone_aware_timestamps
-    )
+    _normalize_timestamps: ClassVar[classmethod] = pydantic.field_validator("*")(validator_timezone_aware_timestamps)
     # Populate models with the value property of enums, rather than the raw enum.
     # This is useful to serialise model.dict() later
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=True)
@@ -272,9 +270,7 @@ class EnvironmentSettingsReponse(BaseModel):
 class ModelMetadata(BaseModel):
     """Model metadata"""
 
-    inmanta_compile_state: const.Compilestate = Field(
-        default=const.Compilestate.success, alias="inmanta:compile:state"
-    )
+    inmanta_compile_state: const.Compilestate = Field(default=const.Compilestate.success, alias="inmanta:compile:state")
     message: str
     type: str
     extra_data: Optional[JsonType] = None
@@ -382,7 +378,7 @@ class LogLine(BaseModel):
             name_value_pairs: abc.Iterator[tuple[str, int]] = ((level.value, level.to_int) for level in const.LogLevel)
             valid_input_descriptions: list[str] = [f"'{name}' | {num_value}" for name, num_value in name_value_pairs]
             raise ValueError(
-                f"Input should be %s" % " or ".join((", ".join(valid_input_descriptions[:-1]), valid_input_descriptions[-1]))
+                "Input should be %s" % " or ".join((", ".join(valid_input_descriptions[:-1]), valid_input_descriptions[-1]))
             )
 
 

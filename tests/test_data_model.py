@@ -17,7 +17,6 @@
 """
 import datetime
 import json
-import sys
 import typing
 from enum import Enum
 
@@ -96,7 +95,9 @@ def test_log_line_deserialization():
     """
     with pytest.raises(ValueError, match="validation error") as excinfo:
         LogLine(level="LOUD", msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
-    expected_output: str = "Input should be 'CRITICAL' | 50, 'ERROR' | 40, 'WARNING' | 30, 'INFO' | 20, 'DEBUG' | 10 or 'TRACE' | 3"
+    expected_output: str = (
+        "Input should be 'CRITICAL' | 50, 'ERROR' | 40, 'WARNING' | 30, 'INFO' | 20, 'DEBUG' | 10 or 'TRACE' | 3"
+    )
     assert expected_output in str(excinfo.value)
 
     with pytest.raises(ValueError, match="validation error") as excinfo:

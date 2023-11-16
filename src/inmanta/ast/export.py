@@ -19,7 +19,6 @@
 from enum import Enum
 from typing import Optional
 
-import pydantic
 from pydantic import BaseModel, ConfigDict
 
 from inmanta.stable_api import stable_api

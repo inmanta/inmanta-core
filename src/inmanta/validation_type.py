@@ -28,7 +28,9 @@ from inmanta.types import PrimitiveTypes, PythonRegex
 
 @stable_api
 def parametrize_type(
-    base_type: Type[object] | abc.Callable[..., Type[object]], type_name: str, validation_parameters: Optional[abc.Mapping[str, object]] = None
+    base_type: Type[object] | abc.Callable[..., Type[object]],
+    type_name: str,
+    validation_parameters: Optional[abc.Mapping[str, object]] = None,
 ) -> Type[object]:
     # TODO: docstring
     """
@@ -71,11 +73,7 @@ def parametrize_type(
     validation_parameters: dict[str, object] = validation_parameters.copy() if validation_parameters is not None else {}
 
     # workaround for Pydantic v1 python regex support and removal of stricturl
-    if (
-        base_type is pydantic.constr
-        and validation_parameters is not None
-        and "regex" in validation_parameters
-    ):
+    if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
         # TODO: add tests for regex + other constr parameters -> tests/test_validation_type.py
         regex: object = validation_parameters["regex"]
         if regex is not None:

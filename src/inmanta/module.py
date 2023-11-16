@@ -1574,10 +1574,10 @@ class ProjectPipConfig(env.PipConfig):
 
     model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
         # use alias generator have `-` in names
-        alias_generator = hyphenize,
+        alias_generator=hyphenize,
         # allow use of aliases
-        populate_by_name = True,
-        extra = "ignore",
+        populate_by_name=True,
+        extra="ignore",
     )
 
     @pydantic.model_validator(mode="before")
