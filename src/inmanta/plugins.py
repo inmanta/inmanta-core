@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import asyncio
-import collections.abc
 import copy
 import inspect
 import os
@@ -24,7 +23,7 @@ import subprocess
 import warnings
 from collections import abc
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Tuple, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -191,37 +190,6 @@ class PluginMeta(type):
             }
         else:
             cls.__functions = {}
-
-
-def report_missing_arguments(
-    func: str, missing_args: collections.abc.Sequence[str], args_sort: Literal["positional", "keyword-only"]
-) -> None:
-    """
-    Helper function to raise an exception specifying that the given arguments are missing.  We try here
-    to stick as much as possible to the error that python would have raised, only changing its type.
-
-    The type of the exception raised is RuntimeException.
-
-    If the list of missing_args is empty, we don't report any exception.
-
-    :param func: The name of the called function requiring the given arguments
-    :param missing_args: The missing arguments we should report
-    :param args_sort: The sort of argument we are checking (positional or kw)
-    """
-    if len(missing_args) == 1:
-        # The exception raised here tries to match as closely as possible what python
-        # would have raised as exception
-        raise RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
-    if len(missing_args) > 1:
-        arg_names = " and ".join(
-            (
-                ", ".join(repr(arg) for arg in missing_args[:-1]),
-                repr(missing_args[-1]),
-            )
-        )
-        # The exception raised here tries to match as closely as possible what python
-        # would have raised as exception
-        raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
 
 def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Optional[inmanta_type.Type]:
@@ -393,9 +361,9 @@ class PluginArgument(PluginIO):
 
     def __str__(self) -> str:
         if self.has_default_value():
-            return "%s: %s = %s" % (self.arg_name, self.arg_type, str(self.default_value))
+            return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
         else:
-            return "%s: %s" % (self.arg_name, self.arg_type)
+            return "%s: %s" % (self.arg_name, repr(self.arg_type))
 
 
 class PluginReturn(PluginIO):
@@ -553,31 +521,39 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         arg_list = []
 
-        for arg in self.args:
-            arg_list.append(str(arg))
+        args = [str(arg) for arg in self.args]
+        arg_list.extend(args)
+
+        kwargs = [str(arg) for _, arg in self.kwargs.items() if arg.is_kw_only_argument]
 
         if self.var_args is not None:
             arg_list.append("*" + str(self.var_args))
-        elif self.kwargs:
+        elif kwargs:
             # For keyword only arguments, we need a marker if we don't have a catch-all
             # positional argument
             arg_list.append("*")
 
-        for arg in self.kwargs.values():
-            if not arg.is_kw_only_argument:
-                # This argument should already be represented as a positional argument
-                continue
-
-            arg_list.append(str(arg))
+        arg_list.extend(kwargs)
 
         if self.var_kwargs is not None:
             arg_list.append("**" + str(self.var_kwargs))
 
-        args = ", ".join(arg_list)
+        args_string = ", ".join(arg_list)
 
         if self.return_type.type_expression is None:
-            return "%s(%s)" % (self.__class__.__function_name__, args)
-        return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self.return_type.type_expression)
+            return "%s(%s)" % (self.__class__.__function_name__, args_string)
+        return "%s(%s) -> %s" % (self.__class__.__function_name__, args_string, repr(self.return_type.type_expression))
+
+    def mock_function(self) -> Callable:
+        """
+        Build a function that has the same type definition as our plugin, but doesn't execute
+        any code.
+        """
+        # Don't use the full signature as we don't care about annotations here
+        signature = self.get_signature()
+
+        exec(f"def {signature}: pass")
+        return locals()[self.__function_name__]
 
     def get_arg(self, position: int) -> PluginArgument:
         """
@@ -622,60 +598,23 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         :param args: All the positional arguments to pass on to the plugin function
         :param kwargs: All the keyword arguments to pass on to the plugin function
         """
-        if self.var_args is None and len(args) > len(self.args):
-            # (1) We got too many positional arguments
-            # The exception raised here tries to match as closely as possible what python
-            # would have raised as exception
-            raise RuntimeException(
-                None, f"{self.get_full_name()}() takes {len(self.args)} positional arguments but {len(args)} were given"
-            )
-
-        # (2) Check that all positional arguments without a default are provided
-        missing_positional_arguments = [
-            arg.arg_name
-            for position, arg in enumerate(self.args)
-            if (
-                position >= len(args)  # No input from user in positional args
-                and arg.arg_name not in kwargs  # No input from user in keyword args
-                and not arg.has_default_value()  # No default value in plugin definition
-            )
-        ]
-        report_missing_arguments(self.get_full_name(), missing_positional_arguments, "positional")
-
-        # (2) Check that all keyword arguments without a default are provided
-        missing_keyword_arguments = [
-            name
-            for name, arg in self.kwargs.items()
-            if (
-                arg.is_kw_only_argument  # The argument was not provided as positional arg
-                and name not in kwargs  # No input from user in keyword args
-                and not arg.has_default_value()  # No default value in plugin definition
-            )
-        ]
-        report_missing_arguments(self.get_full_name(), missing_keyword_arguments, "keyword-only")
+        try:
+            # Delegate the signature usage checking to python, call
+            # a dummy function with the same signature
+            self.mock_function()(*args, **kwargs)
+        except TypeError as e:
+            raise RuntimeException(None, str(e))
 
         # Validate all positional arguments
         for position, value in enumerate(args):
-            # (1) Get the corresponding argument, fails if we don't have one
-            arg = self.get_arg(position)
-
             # (4) Validate the input value
-            if not arg.validate(value):
+            if not self.get_arg(position).validate(value):
                 return False
 
         # Validate all kw arguments
         for name, value in kwargs.items():
-            # (1) Get the corresponding kwarg, fails if we don't have one
-            kwarg = self.get_kwarg(name)
-
-            # (3) Make sure that our argument is not provided twice
-            if kwarg.arg_position is not None and kwarg.arg_position < len(args):
-                # The exception raised here tries to match as closely as possible what python
-                # would have raised as exception
-                raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
-
             # (4) Validate the input value
-            if not kwarg.validate(value):
+            if not self.get_kwarg(name).validate(value):
                 return False
 
         return True

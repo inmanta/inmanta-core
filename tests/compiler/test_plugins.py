@@ -86,7 +86,7 @@ def test_kwargs_in_plugin_call_missing_arg(snippetcompiler):
         """
 std::equals(42, desc="they differ")
         """,
-        "std::equals() missing 1 required positional argument: 'arg2' "
+        "equals() missing 1 required positional argument: 'arg2' "
         "(reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
     )
 
@@ -96,7 +96,7 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
         """
 std::equals(42, 42, arg1=42)
         """,
-        "std::equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+        "equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
     )
 
 
@@ -228,7 +228,7 @@ def test_1778_context_as_kwarg_reject(snippetcompiler):
         """
 std::generate_password("pw_id", 42, context=42)
         """,
-        "std::generate_password() got an unexpected keyword argument: 'context' "
+        "generate_password() got an unexpected keyword argument 'context' "
         "(reported in std::generate_password('pw_id',42,context=42) ({dir}/main.cf:2))",
     )
 
@@ -365,7 +365,10 @@ import keyword_only_arguments
         name: stmt for name, stmt in statements.items() if hasattr(stmt, "get_signature")
     }
 
-    assert plugins["catch_all_arguments::sum_all"].get_signature() == "sum_all(a: int, *aa: int, b: int, **bb: int) -> int"
+    assert (
+        plugins["catch_all_arguments::sum_all"].get_signature()
+        == "sum_all(a: 'int', *aa: 'int', b: 'int', **bb: 'int') -> 'int'"
+    )
     assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
-        "sum_all(a: int, b: int = 1, *, c: int, d: int = 2) -> int"
+        "sum_all(a: 'int', b: 'int' = 1, *, c: 'int', d: 'int' = 2) -> 'int'"
     )
