@@ -35,7 +35,6 @@ from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFou
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
-    InvalidModuleException,
     ModuleLoadingException,
     ModuleNotFoundException,
     ModuleV1,

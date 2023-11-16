@@ -29,10 +29,10 @@ import py
 import pytest
 
 from _io import StringIO
-from inmanta import const, env, module
+from inmanta import env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
-from inmanta.env import LocalPackagePath, PipConfig
+from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool
