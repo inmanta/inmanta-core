@@ -72,7 +72,6 @@ class PythonRegex:
         return json_schema
 
 
-# TODO: drop usage of this object in other components: inmanta-lsm
 # kept for backwards compatibility
 StrictNonIntBool = pydantic.StrictBool
 

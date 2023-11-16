@@ -29,50 +29,28 @@ from inmanta.types import PrimitiveTypes, PythonRegex
 @stable_api
 def parametrize_type(
     base_type: Type[object] | abc.Callable[..., Type[object]],
-    type_name: str,
     validation_parameters: Optional[abc.Mapping[str, object]] = None,
+    *,
+    type_name: Optional[str] = None,
 ) -> object:
-    # TODO: docstring + mention return type
     """
-    Check whether `value` satisfies the constraints of type `fq_type_name`. When the given type (fq_type_name)
-    requires validation_parameters, they can be provided using the optional `validation_parameters` argument.
+    Add validation parameters to the given type, if it supports any. Returns the parametrized type as a pydantic compatible
+    type, possibly through the use of typing.Annotated.
 
-    The following types require validation_parameters:
+    :param base_type: The type to parametrize. Either a type or a callable that produces a type when parametrized.
+    :param validation_parameters: Additional parameters to construct the validation type. Should only be passed if base_type
+        is a type generator function.
+    :param type_name: Optionally, the human-readable name of the type, for error messages.
 
-        * pydantic.condecimal:
-            gt: Decimal = None
-            ge: Decimal = None
-            lt: Decimal = None
-            le: Decimal = None
-            max_digits: int = None
-            decimal_places: int = None
-            multiple_of: Decimal = None
-        * pydantic.confloat and pydantic.conint:
-            gt: float = None
-            ge: float = None
-            lt: float = None
-            le: float = None
-            multiple_of: float = None,
-        * pydantic.constr:
-            min_length: int = None
-            max_length: int = None
-            curtail_length: int = None (Only verify the regex on the first curtail_length characters)
-            regex: str = None          (The regex is verified via Pattern.match())
-            pattern: str = None        (The built-in pattern support of pydantic)
-        * pydantic.stricturl:
-            min_length: int = 1
-            max_length: int = 2 ** 16
-            tld_required: bool = True
-            allowed_schemes: Optional[Set[str]] = None
-
-    :raises ValueError: When the given fq_type_name is an unsupported type name or when otherwise invalid parameters are
-        passed.
+    :raises ValueError: When invalid parameters are passed.
     :raises TypeError: When the given validation parameters are not valid with respect to the requested type.
     """
+    type_name = type_name if type_name is not None else repr(base_type)
+
     custom_annotations: list[object] = []
     validation_parameters = dict(validation_parameters) if validation_parameters is not None else {}
 
-    # workaround for Pydantic v1 python regex support and removal of stricturl
+    # backwards compatibility layer for Pydantic v1 python regex support
     if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
         # TODO: add tests for regex + other constr parameters -> tests/test_validation_type.py
         regex: object = validation_parameters["regex"]
@@ -86,8 +64,7 @@ def parametrize_type(
         parametrized_type = base_type(**validation_parameters)
     elif validation_parameters:
         raise ValueError(
-            f"validate_type got validation parameters {validation_parameters}"
-            f" but validation type {type_name} is not parametrized"
+            f"got validation parameters {validation_parameters} but {type_name} does not accept parameters"
         )
     else:
         parametrized_type = base_type
@@ -125,11 +102,6 @@ def validate_type(
             curtail_length: int = None (Only verify the regex on the first curtail_length characters)
             regex: str = None          (The regex is verified via Pattern.match())
             pattern: str = None        (The built-in pattern support of pydantic)
-        * pydantic.stricturl:
-            min_length: int = 1
-            max_length: int = 2 ** 16
-            tld_required: bool = True
-            allowed_schemes: Optional[Set[str]] = None
 
     :raises ValueError: When the given fq_type_name is an unsupported type name or when otherwise invalid parameters are
         passed.
