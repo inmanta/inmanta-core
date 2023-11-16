@@ -71,9 +71,13 @@ def parametrize_type(
     validation_parameters: dict[str, object] = validation_parameters.copy() if validation_parameters is not None else {}
 
     # workaround for Pydantic v1 python regex support and removal of stricturl
-    if base_type is pydantic.constr and validation_parameters is not None:
+    if (
+        base_type is pydantic.constr
+        and validation_parameters is not None
+        and "regex" in validation_parameters
+    ):
         # TODO: add tests for regex + other constr parameters -> tests/test_validation_type.py
-        regex: object = validation_parameters.get("regex", None)
+        regex: object = validation_parameters["regex"]
         if regex is not None:
             custom_annotations.append(PythonRegex(str(validation_parameters["regex"])))
         del validation_parameters["regex"]
