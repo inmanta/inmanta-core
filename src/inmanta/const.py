@@ -197,7 +197,7 @@ class LogLevel(str, Enum):
 
     @classmethod
     def _missing_(cls, value: object) -> Optional["LogLevel"]:
-        return INTEGER_AS_LOG_LEVEL.get(value, default=None) if isinstance(value, int) else None
+        return INTEGER_AS_LOG_LEVEL.get(value, None) if isinstance(value, int) else None
 
 
 # Mapping each log level to its integer value
