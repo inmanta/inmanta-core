@@ -71,12 +71,12 @@ def run_module_build(module_path: str, set_path_argument: bool, output_dir: Opti
 @pytest.mark.parametrize_any(
     "module_name, is_v2_module, set_path_argument, byte_code",
     [
-        # ("minimalv2module", True, True, False),
-        # ("minimalv2module", True, False, False),
+        ("minimalv2module", True, True, False),
+        ("minimalv2module", True, False, False),
         ("elaboratev2module", True, True, False),
-        # ("elaboratev2module", True, False, False),
-        # ("elaboratev1module", False, False, False),
-        # ("elaboratev1module", False, False, True),
+        ("elaboratev2module", True, False, False),
+        ("elaboratev1module", False, False, False),
+        ("elaboratev1module", False, False, True),
     ],
 )
 def test_build_v2_module(
