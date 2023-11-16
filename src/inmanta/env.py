@@ -1107,15 +1107,12 @@ class VirtualEnv(ActiveEnv):
 
     def validate_path(self, path: str) -> None:
         """
-        Check for the presence of the following invalid characters in the given path.
-            - '$' because of a limitation in python venv causing prompt display issues:
-                - '$$' will be replaced by the pid of the process
-                - '${<var>}' will be expanded (possibly to empty string if var is undefined)
+        The given path is used in the `./bin/activate` file of the created venv without escaping any special characters.
+        As such, we refuse all special characters here that might cause the given path to be interpreted incorrectly:
 
-            - '`' to prevent command substitution e.g. `whoami` would be interpreted in the prompt.
-
-            - '"' because of a limitation in python venv causing venv activation to fail silently for python<3.12 and
-              a crash for python>=3.12
+            * $: Character used for variable expansion in bash strings.
+            * `: Character used to perform command substitution in bash strings.
+            * ": Character that will be interpreted incorrectly as the end of the string.
 
         :param path: Path to validate.
         """
@@ -1126,7 +1123,7 @@ class VirtualEnv(ActiveEnv):
         if match:
             raise ValueError(
                 f"Cannot create virtual environment because the provided path `{path}` contains an"
-                f"invalid character (`{match.group()}`). Please provide a path that doesn't contain LIST_OF_INVALID"
+                f"invalid character (`{match.group()}`)."
             )
 
     def exists(self) -> bool:
