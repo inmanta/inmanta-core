@@ -53,6 +53,7 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
+from inmanta.env import PipConfig
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -1763,11 +1764,16 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         Build v2 module using PEP517 package builder.
         """
         try:
-            with self._get_isolated_env_builder() as env:
+            with self._get_isolated_env_builder() as isolated_env:
                 distribution = "wheel"
-                builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
-                env.install(builder.build_system_requires)
-                env.install(builder.get_requires_for_build(distribution=distribution))
+                builder = build.ProjectBuilder(source_dir=build_path, python_executable=isolated_env.python_executable)
+                pip_config = PipConfig(use_system_config=True)
+                system_requirements_list = [Requirement.parse(r) for r in builder.build_system_requires]
+                env.process_env.install_for_config(system_requirements_list, pip_config)
+                build_requirements_list = [
+                    Requirement.parse(r) for r in builder.get_requires_for_build(distribution=distribution)
+                ]
+                env.process_env.install_for_config(build_requirements_list, pip_config)
                 return builder.build(distribution=distribution, output_directory=output_directory)
         except Exception:
             raise ModuleBuildFailedError(msg="Module build failed")
