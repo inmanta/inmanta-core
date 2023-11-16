@@ -1572,16 +1572,17 @@ class ProjectPipConfig(env.PipConfig):
         (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
     """
 
-    class Config:
+    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
         # use alias generator have `-` in names
-        alias_generator = hyphenize
+        alias_generator = hyphenize,
         # allow use of aliases
-        populate_by_name = True
-        extra = "ignore"
+        populate_by_name = True,
+        extra = "ignore",
+    )
 
-    @pydantic.root_validator(pre=True)
+    @pydantic.model_validator(mode="before")
     def __alert_extra_field__(cls, values: dict[str, object]) -> dict[str, object]:
-        extra_fields = values.keys() - cls.__fields__.keys() - {v.alias for v in cls.__fields__.values()}
+        extra_fields = values.keys() - cls.model_fields.keys() - {v.alias for v in cls.model_fields.values()}
 
         for extra_field in extra_fields:
             # This is cfr adr 0000

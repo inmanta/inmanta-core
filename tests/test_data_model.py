@@ -94,17 +94,16 @@ def test_log_line_deserialization():
     """
     Ensure that a proper error is raised when an invalid log level is used.
     """
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="validation error") as excinfo:
         LogLine(level="LOUD", msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
-    assert "is not a valid" in str(excinfo.value)
+    expected_output: str = "Input should be 'CRITICAL' | 50, 'ERROR' | 40, 'WARNING' | 30, 'INFO' | 20, 'DEBUG' | 10 or 'TRACE' | 3"
+    assert expected_output in str(excinfo.value)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="validation error") as excinfo:
         LogLine(level=43, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
-    assert "is not a valid" in str(excinfo.value)
+    assert expected_output in str(excinfo.value)
 
     LogLine(level=50, msg="test", args=[], kwargs={}, timestamp=datetime.datetime.now())
-
-    # TODO: This does not list what is possible? Removing the validator will
 
 
 def test_timezone_aware_fields_in_pydantic_object():
