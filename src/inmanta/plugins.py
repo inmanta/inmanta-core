@@ -711,7 +711,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         The function call itself
         """
         if self.deprecated:
-            msg: str = f"Plugin '{self.get_full_name()}' in module '{self.__module__}' is deprecated."
+            msg: str = f"Plugin '{self.get_full_name()}' is deprecated."
             if self.replaced_by:
                 msg += f" It should be replaced by '{self.replaced_by}'."
             warnings.warn(PluginDeprecationWarning(msg))
