@@ -1099,7 +1099,7 @@ import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
         project_requires=[
-            module.InmantaModuleRequirement.parse("std~=4.1.7,<4.1.8"),
+            module.InmantaModuleRequirement.parse("std~=4.3.3,<4.3.4"),
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
@@ -1121,7 +1121,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.1.7          | 4.1.7          | yes     |
+| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -1147,7 +1147,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.1.7          | 4.1.7          | yes     |
+| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -1204,7 +1204,7 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
         python_requires=v2_requirements,
         install_project=False,
         project_requires=[
-            module.InmantaModuleRequirement.parse("std==4.1.7"),
+            module.InmantaModuleRequirement.parse("std==4.2.1"),
         ],
     )
 
@@ -1219,7 +1219,7 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
         ("Successfully installed module minimalv2module (v2) version 1.2.3", logging.DEBUG),
         ("Installing module std (v1)", logging.DEBUG),
         (
-            """Successfully installed module std (v1) version 4.1.7 in %s from %s"""
+            """Successfully installed module std (v1) version 4.2.1 in %s from %s"""
             % (os.path.join(project.downloadpath, "std"), "https://github.com/inmanta/std"),
             logging.DEBUG,
         ),
@@ -1643,7 +1643,7 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
         project_requires=[
             module.InmantaModuleRequirement.parse("std>0.0"),
             module.InmantaModuleRequirement.parse("std>=0.0"),
-            module.InmantaModuleRequirement.parse("std==4.1.7"),
+            module.InmantaModuleRequirement.parse("std==4.2.1"),
             module.InmantaModuleRequirement.parse("std<=100.0.0"),
             module.InmantaModuleRequirement.parse("std<100.0.0"),
         ],
@@ -1653,5 +1653,5 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.1.7 std<=100.0.0 std<100.0.0)",
+        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.2.1 std<=100.0.0 std<100.0.0)",
     )
