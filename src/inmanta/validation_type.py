@@ -63,9 +63,7 @@ def parametrize_type(
         # TODO: test with non-routine callable (e.g. uuid.UUID)
         parametrized_type = base_type(**validation_parameters)
     elif validation_parameters:
-        raise ValueError(
-            f"got validation parameters {validation_parameters} but {type_name} does not accept parameters"
-        )
+        raise ValueError(f"got validation parameters {validation_parameters} but {type_name} does not accept parameters")
     else:
         parametrized_type = base_type
 
