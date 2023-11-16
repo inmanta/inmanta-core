@@ -1209,8 +1209,7 @@ class Field(Generic[T]):
             jsv = json.loads(value)
             return self.field_type(**jsv)
         if self.field_type == pydantic.AnyHttpUrl:
-            # TODO: deprecated: check other usages too
-            return pydantic.tools.parse_obj_as(pydantic.AnyHttpUrl, value)
+            return pydantic.TypeAdapter(pydantic.AnyHttpUrl).validate_python(value)
 
         raise TypeError(
             "Field %s should have the correct type (%s instead of %s)" % (name, self.field_type.__name__, type(value).__name__)

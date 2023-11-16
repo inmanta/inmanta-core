@@ -574,7 +574,7 @@ class Exporter(object):
 
         if version == 0:
             assert result.result is not None
-            return pydantic.parse_obj_as(int, result.result["data"])
+            return pydantic.TypeAdapter(int).validate_python(result.result["data"])
         else:
             return version
 
