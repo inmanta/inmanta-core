@@ -151,6 +151,7 @@ w = int(tests::unknown())
     assert Integer().validate(y)
     assert Integer().validate(z)
     assert isinstance(w, Unknown)
+    assert not any(isinstance(v, (bool, float)) for v in (x, y, z))
 
 
 def test_cast_to_string(snippetcompiler):
@@ -380,3 +381,14 @@ implement Child using std::none
 Child()
         """,
     )
+
+
+def test_print_number(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+std::print(number(1.234))
+        """,
+    )
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert "1.234" in out
