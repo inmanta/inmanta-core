@@ -485,9 +485,7 @@ def get_one() -> "int":
                             f"It should be replaced by '{replaced_by}'" in str(warning.message)
                         )
                     else:
-                        assert "Plugin 'test_module::get_one' is deprecated." in str(
-                            warning.message
-                        )
+                        assert "Plugin 'test_module::get_one' is deprecated." in str(warning.message)
             assert has_warning
         else:
             assert not any(issubclass(warning.category, PluginDeprecationWarning) for warning in w)
@@ -646,7 +644,5 @@ def get_one() -> "int":
         for warning in w:
             if issubclass(warning.category, PluginDeprecationWarning):
                 has_warning = True
-                assert "Plugin 'test_module::custom_name' is deprecated." in str(
-                    warning.message
-                )
+                assert "Plugin 'test_module::custom_name' is deprecated." in str(warning.message)
         assert has_warning
