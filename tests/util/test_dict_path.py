@@ -378,6 +378,18 @@ WILD_PATH_TEST_CONTAINER = {
             "value": "number 0",
         },
     ],
+    3.0: "float key 3.0",
+    4: "int key 4",
+    "mixed_list": [
+        {"key": 5.0, "value": "float key 5.0"},
+        {"key": 6, "value": "int key 6"},
+    ],
+    "7.0": "str key 7.0",
+    "8": "str key 8",
+    "mixed_list_str": [
+        {"key": "9.0", "value": "str key 9.0"},
+        {"key": "10", "value": "str key 10"},
+    ],
 }
 
 
@@ -399,6 +411,22 @@ WILD_PATH_TEST_CONTAINER = {
         (None, "special_list[key=None].value", ["just-a-string"], False),
         (None, r"special_list[key=\\0].value", [r"literal \0"], False),
         (None, "special_list[key=0].value", ["number 0"], False),
+        (None, "3", ["float key 3.0"], False),
+        (None, "4", ["int key 4"], False),
+        (None, r"3\.0", ["float key 3.0"], False),
+        (None, r"4\.0", ["int key 4"], False),
+        (None, "mixed_list[key=5]", [{"key": 5.0, "value": "float key 5.0"}], False),
+        (None, "mixed_list[key=6]", [{"key": 6, "value": "int key 6"}], False),
+        (None, r"mixed_list[key=5\.0]", [{"key": 5.0, "value": "float key 5.0"}], False),
+        (None, r"mixed_list[key=6\.0]", [{"key": 6, "value": "int key 6"}], False),
+        (None, r"7\.0", ["str key 7.0"], False),
+        (None, "7", [], False),
+        (None, r"8\.0", [], False),
+        (None, "8", ["str key 8"], False),
+        (None, r"mixed_list_str[key=9\.0]", [{"key": "9.0", "value": "str key 9.0"}], False),
+        (None, r"mixed_list_str[key=9]", [], False),
+        (None, r"mixed_list_str[key=10\.0]", [], False),
+        (None, r"mixed_list_str[key=10]", [{"key": "10", "value": "str key 10"}], False),
     ],
 )
 def test_dict_path_get_elements(
