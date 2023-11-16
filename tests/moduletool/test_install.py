@@ -33,6 +33,7 @@ from pkg_resources import Requirement
 
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
+from inmanta.command import CLIException
 from inmanta.config import Config
 from inmanta.env import CommandRunner, ConflictingRequirements
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
@@ -42,19 +43,6 @@ from packaging import version
 from utils import LogSequence, PipIndex, log_contains, module_from_template
 
 LOGGER = logging.getLogger(__name__)
-
-
-def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
-    """
-    Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
-
-    :param module_path: Path to the inmanta module
-    :param editable: Install the module in editable mode (pip install -e).
-    :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
-    """
-    if not set_path_argument:
-        os.chdir(module_path)
-    ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -205,64 +193,17 @@ def test_dev_checkout(git_modules_dir, modules_repo):
     assert not os.path.exists(os.path.join(dirname, "mastersignal"))
 
 
-@pytest.mark.parametrize_any("editable", [True, False])
-@pytest.mark.parametrize_any("set_path_argument", [True, False])
-def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install() -> None:
     """
-    Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
-    for its options.
+    Verify that the "inmanta module install commands raises an exception"
     """
-    # activate snippetcompiler's venv
-    snippetcompiler_clean.setup_for_snippet("")
 
-    module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
-    python_module_name: str = "inmanta-module-minimalv2module"
-
-    def is_installed(name: str, only_editable: bool = False) -> bool:
-        return name in env.process_env.get_installed_packages(only_editable=only_editable)
-
-    assert not is_installed(python_module_name)
-    run_module_install(module_path, editable, set_path_argument)
-    assert is_installed(python_module_name, True) == editable
-    if not editable:
-        assert is_installed(python_module_name, False)
-
-
-@pytest.mark.slowtest
-def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
-    """
-    Verify that the module tool's install command raises an appropriate exception when a module has conflicting dependencies.
-    """
-    # activate snippetcompiler's venv
-    snippetcompiler_clean.setup_for_snippet("")
-
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "modone"),
-        new_name="modone",
-        new_requirements=[Requirement.parse("lorem~=0.0.1")],
-        install=True,
-    )
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        os.path.join(str(tmpdir), "modtwo"),
-        new_name="modtwo",
-        new_requirements=[Requirement.parse("lorem~=0.1.0")],
-        install=True,
-    )
-
-    module_path: str = os.path.join(str(tmpdir), "conflictingdeps")
-    module_from_template(
-        os.path.join(modules_v2_dir, "minimalv2module"),
-        module_path,
-        new_name="conflictingdeps",
-        new_requirements=[InmantaModuleRequirement.parse(name) for name in ("modone", "modtwo")],
-    )
-
-    with pytest.raises(module.InvalidModuleException) as exc_info:
-        run_module_install(module_path, False, True)
-    assert isinstance(exc_info.value.__cause__, ConflictingRequirements)
-    assert "caused by:" in exc_info.value.format_trace()
+    with pytest.raises(
+        CLIException,
+        match="The 'inmanta module install' command is no longer supported. For development mode "
+        "installation, use 'pip install -e .'. For a regular installation, first run 'inmanta module build' and then 'pip install'.",
+    ):
+        ModuleTool().execute("install", [])
 
 
 @pytest.mark.parametrize_any("dev", [True, False])
