@@ -1,0 +1,7 @@
+change-type: minor
+description: Allow usage of catch-all positional and keyword-only arguments in plugin definitions.
+issue-nr: 6691
+issue-repo: inmanta-core
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
