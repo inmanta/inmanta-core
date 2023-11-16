@@ -194,7 +194,7 @@ class PluginMeta(type):
 
 
 def report_missing_arguments(
-    func: str, missing_args: collections.abc.Collection[str], args_sort: Literal["positional", "keyword-only"]
+    func: str, missing_args: collections.abc.Sequence[str], args_sort: Literal["positional", "keyword-only"]
 ) -> None:
     """
     Helper function to raise an exception specifying that the given arguments are missing.  We try here
