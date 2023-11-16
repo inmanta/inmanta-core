@@ -553,31 +553,28 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         """
         arg_list = []
 
-        for arg in self.args:
-            arg_list.append(str(arg))
+        args = [str(arg) for arg in self.args]
+        arg_list.extend(args)
+
+        kwargs = [str(arg) for _, arg in self.kwargs.items() if arg.is_kw_only_argument]
 
         if self.var_args is not None:
             arg_list.append("*" + str(self.var_args))
-        elif self.kwargs:
+        elif kwargs:
             # For keyword only arguments, we need a marker if we don't have a catch-all
             # positional argument
             arg_list.append("*")
 
-        for arg in self.kwargs.values():
-            if not arg.is_kw_only_argument:
-                # This argument should already be represented as a positional argument
-                continue
-
-            arg_list.append(str(arg))
+        arg_list.extend(kwargs)
 
         if self.var_kwargs is not None:
             arg_list.append("**" + str(self.var_kwargs))
 
-        args = ", ".join(arg_list)
+        args_string = ", ".join(arg_list)
 
         if self.return_type.type_expression is None:
-            return "%s(%s)" % (self.__class__.__function_name__, args)
-        return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self.return_type.type_expression)
+            return "%s(%s)" % (self.__class__.__function_name__, args_string)
+        return "%s(%s) -> %s" % (self.__class__.__function_name__, args_string, repr(self.return_type.type_expression))
 
     def get_arg(self, position: int) -> PluginArgument:
         """
