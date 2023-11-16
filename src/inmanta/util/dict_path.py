@@ -127,10 +127,10 @@ class NormalValue(DictPathValue):
         # Perform a numeric comparison only if the value is an int/float and
         # The key in the dictpath can be interpreted as an int/float
         if self._numeric_value is not None and isinstance(value, (int, float)):
-            return float(self._value) == value
+            return self._numeric_value == value
 
         # Fallback to string comparison for other types
-        return str(self._value) == str(value)
+        return self._value == str(value)
 
     @staticmethod
     def _try_parse_numeric(value: str) -> Optional[float]:
