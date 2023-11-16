@@ -17,7 +17,6 @@
 """
 import os
 from collections import defaultdict
-from typing import Sequence
 
 import more_itertools
 
