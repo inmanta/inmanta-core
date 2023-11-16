@@ -566,7 +566,7 @@ def test_invalid_chars_in_venv_path(tmpdir, invalid_char: str) -> None:
         env.VirtualEnv(venv_dir)
     assert (
         f"Cannot create virtual environment because the provided path `{venv_dir}` contains an"
-        f"invalid character (`{invalid_char}`)."
+        f" invalid character (`{invalid_char}`)."
     ) in str(excinfo.value)
 
 

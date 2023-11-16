@@ -1123,7 +1123,7 @@ class VirtualEnv(ActiveEnv):
         if match:
             raise ValueError(
                 f"Cannot create virtual environment because the provided path `{path}` contains an"
-                f"invalid character (`{match.group()}`)."
+                f" invalid character (`{match.group()}`)."
             )
 
     def exists(self) -> bool:
