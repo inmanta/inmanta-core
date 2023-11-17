@@ -35,6 +35,7 @@ from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFou
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
+    InvalidModuleException,
     ModuleLoadingException,
     ModuleNotFoundException,
     ModuleV1,
@@ -580,6 +581,48 @@ def test_module_v2_load_installed_without_required(snippetcompiler_clean, local_
         "elaboratev2module::nested",
         "elaboratev2module::nested::sub",
     }
+
+
+@pytest.mark.slowtest
+def test_project_requirements_dont_overwrite_core_requirements_source(
+    snippetcompiler_clean,
+    local_module_package_index: str,
+    modules_v2_dir: str,
+    tmpdir: py.path.local,
+) -> None:
+    """
+    A project has a requirement that is also a requirement of core
+    but with another version. The requirements of core should not be
+    overwritten. The module gets installed from source
+    """
+    if "inmanta-core" in process_env.get_installed_packages(only_editable=True):
+        pytest.skip(
+            "This test would fail if it runs against an inmanta-core installed in editable mode, because the build tag "
+            "on the development branch is set to .dev0. The inmanta package protection feature would make pip "
+            "install a non-editable version of the same package. But no version with build tag .dev0 exists on the python "
+            "package repository."
+        )
+
+    # Create the module
+    module_name: str = "minimalv2module"
+    module_path: str = str(tmpdir.join(module_name))
+    module_from_template(
+        os.path.join(modules_v2_dir, module_name), module_path, new_requirements=[Requirement.parse("Jinja2==2.11.3")]
+    )
+
+    # Activate the snippetcompiler venv
+    project: Project = snippetcompiler_clean.setup_for_snippet("")
+    active_env = project.virtualenv
+    jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
+
+    # Install the module
+    with pytest.raises(InvalidModuleException) as e:
+        ModuleTool().install(editable=False, path=module_path)
+
+    assert ("Module installation failed due to conflicting dependencies") in str(e.value.msg)
+
+    jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
+    assert jinja2_version_before == jinja2_version_after
 
 
 @pytest.mark.slowtest
