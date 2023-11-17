@@ -85,6 +85,7 @@ class Schema(BaseModel):
                     child: "Schema" = without_null[0]
                     for field in child.model_fields_set:
                         setattr(self, field, getattr(child, field))
+                    self.anyOf = None
                 else:
                     # convert null option to nullable property
                     self.anyOf = without_null
