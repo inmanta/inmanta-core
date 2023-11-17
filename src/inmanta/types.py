@@ -22,7 +22,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import pydantic
 import typing_inspect
@@ -35,41 +35,6 @@ if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
     from inmanta.data.model import BaseModel  # noqa: F401
     from inmanta.protocol.common import ReturnValue  # noqa: F401
-
-
-@dataclass
-class PythonRegex:
-    """
-    A pydantic regex type for constrained strings that use the old "regex" parameter instead of the new "pattern".
-    Added for compatibility with
-    """
-
-    regex: str
-
-    def __get_pydantic_core_schema__(self, source_type: object, handler: GetCoreSchemaHandler) -> CoreSchema:
-        try:
-            regex = re.compile(self.regex)
-        except re.error as e:
-            raise ValueError(f"Unable to compile regex {self.regex}: {e}")
-
-        def match(v: str) -> str:
-            if not regex.match(v):
-                raise PydanticCustomError(
-                    "string_pattern_mismatch",
-                    "String should match regex '{regex}'",
-                    {"regex": self.regex},
-                )
-            return v
-
-        return core_schema.no_info_after_validator_function(
-            match,
-            handler(source_type),
-        )
-
-    def __get_pydantic_json_schema__(self, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
-        json_schema = handler(core_schema)
-        json_schema["pattern"] = self.regex
-        return json_schema
 
 
 # kept for backwards compatibility

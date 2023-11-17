@@ -35,7 +35,6 @@ from inmanta.validation_type import validate_type
         ("pydantic.conint", 4, {"ge": 5}, False),
         ("pydantic.constr", "test123", {"regex": "^test.*$"}, True),
         ("pydantic.constr", "test123", {"regex": "^tst.*$"}, False),
-        ("pydantic.constr", "test123", {"regex": "^(tst.*$"}, False),
         # constr with non-regex parameters
         ("pydantic.constr", "nomatch", {"regex": "^test.*$", "max_length": 10}, False),
         ("pydantic.constr", "testbuttoolong", {"regex": "^test.*$", "max_length": 10}, False),

@@ -23,7 +23,7 @@ from typing import Annotated, Optional, Type
 import pydantic
 
 from inmanta.stable_api import stable_api
-from inmanta.types import PrimitiveTypes, PythonRegex
+from inmanta.types import PrimitiveTypes
 
 
 @stable_api
@@ -54,7 +54,16 @@ def parametrize_type(
     if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
         regex: object = validation_parameters["regex"]
         if regex is not None:
-            custom_annotations.append(PythonRegex(str(validation_parameters["regex"])))
+            custom_annotations.append(
+                # python-re engine can only be selected on model/TypeAdapter level
+                # => add custom validator that delegates to TypeAdapter
+                pydantic.AfterValidator(
+                    pydantic.TypeAdapter(
+                        pydantic.constr(pattern=str(validation_parameters["regex"])),
+                        config=pydantic.ConfigDict(regex_engine="python-re"),
+                    ).validate_python
+                )
+            )
         del validation_parameters["regex"]
 
     parametrized_type: object
