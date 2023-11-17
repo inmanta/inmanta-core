@@ -1233,6 +1233,7 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         snippet: str,
         add_to_module_path: Optional[List[str]] = None,
+        python_package_sources: Optional[List[str]] = None,
         project_requires: Optional[List[InmantaModuleRequirement]] = None,
         python_requires: Optional[List[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
@@ -1242,6 +1243,7 @@ class SnippetCompilationTest(KeepOnFail):
         extra_index_url: list[str] = [],
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
+        python_package_sources = python_package_sources if python_package_sources is not None else []
 
         project_requires = project_requires if project_requires is not None else []
         python_requires = python_requires if python_requires is not None else []
@@ -1669,26 +1671,6 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     venv.use_virtual_env()
     yield venv
     loader.unload_modules_for_path(venv.site_packages_dir)
-
-
-@pytest.fixture
-def set_pip_index_extra_url(tmpdir):
-    # Store the original value if it exists
-    original_pip_index_url = os.environ.get("PIP_EXTRA_INDEX_URL")
-    index = os.path.join(str(tmpdir), ".custom-index")
-    index_url = f"file://{index}"
-
-    # Set the new value
-    os.environ["PIP_EXTRA_INDEX_URL"] = index_url
-
-    # Yield control back to the test function
-    yield index_url
-
-    # Restore the original value
-    if original_pip_index_url is not None:
-        os.environ["PIP_EXTRA_INDEX_URL"] = original_pip_index_url
-    else:
-        del os.environ["PIP_EXTRA_INDEX_URL"]
 
 
 @pytest.fixture(scope="session")
