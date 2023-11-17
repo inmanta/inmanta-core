@@ -809,3 +809,6 @@ class PipConfig(BaseModel):
                 "\n  index_url: https://pypi.org/simple"
                 "\nAnother option is to set `pip.use_system_config = true` to use the system's pip config."
             )
+
+
+LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)

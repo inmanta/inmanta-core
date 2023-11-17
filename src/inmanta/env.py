@@ -42,6 +42,7 @@ import inmanta.data.model
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.data import PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
@@ -664,7 +665,7 @@ class PythonEnvironment:
         self.install_for_config(
             requirements=[],
             paths=paths,
-            config=PipConfig(use_system_config=True),
+            config=LEGACY_PIP_DEFAULT,
             constraint_files=constraint_files,
         )
 

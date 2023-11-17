@@ -39,6 +39,7 @@ from inmanta.data import (
 )
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
+    LEGACY_PIP_DEFAULT,
     DesiredStateVersion,
     PipConfig,
     PromoteTriggerMethod,
@@ -514,7 +515,10 @@ class OrchestrationService(protocol.ServerSlice):
         version_object = await data.ConfigurationModel.get_version(env.id, version)
         if version_object is None:
             raise NotFound(f"No configuration model with version {version} exists.")
-        return version_object.pip_config
+        out = version_object.pip_config
+        if out is None:
+            return LEGACY_PIP_DEFAULT
+        return out
 
     def _create_dao_resources_from_api_resources(
         self,
@@ -898,8 +902,7 @@ class OrchestrationService(protocol.ServerSlice):
 
         if pip_config is None:
             # backward compatibility
-            pip_config = PipConfig(use_system_config=True)
-            # TODO WARNING!
+            pip_config = LEGACY_PIP_DEFAULT
 
         async with data.Resource.get_connection() as con:
             async with con.transaction():
