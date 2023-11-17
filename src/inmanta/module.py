@@ -45,7 +45,7 @@ from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
 from typing import (
-    Any,
+    Annotated,
     ClassVar,
     Dict,
     Generic,
@@ -71,7 +71,6 @@ import pydantic
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
-from pydantic.v1.error_wrappers import display_errors
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -87,7 +86,6 @@ from inmanta.util import get_compiler_version
 from inmanta.warnings import InmantaWarning
 from packaging import version
 from ruamel.yaml.comments import CommentedMap
-from typing_extensions import Annotated
 
 try:
     from typing import TYPE_CHECKING
@@ -266,8 +264,7 @@ class InvalidMetadata(CompilerException):
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
         errors = validation_error.errors()
         if errors:
-            # TODO: display_errors is v1
-            msg += "\n" + textwrap.indent(display_errors(errors), " " * 2)
+            msg += "\n" + textwrap.indent(str(validation_error), " " * 2)
         return msg
 
 
@@ -1686,7 +1683,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
 
     @field_validator("repo", mode="before")
     @classmethod
-    def validate_repo_field(cls, v: object) -> List[Dict[Any, Any]]:
+    def validate_repo_field(cls, v: object) -> List[Dict[object, object]]:
         v_as_list = cls.to_list(v)
         result = []
         for elem in v_as_list:
