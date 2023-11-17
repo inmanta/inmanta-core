@@ -344,7 +344,7 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes)
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
 class MethodArgumentsBaseModel(pydantic.BaseModel):
@@ -642,7 +642,8 @@ class MethodProperties(object):
             args = typing_inspect.get_args(arg_type, evaluate=True)
             if len(args) == 0:
                 raise InvalidMethodDefinition(
-                    f"Type {arg_type} of argument {arg} must be have a subtype plain List, Dict or Literal is not allowed."
+                    f"Type {arg_type} of argument {arg} must have a type parameter:"
+                    " non-parametrized List, Dict or Literal is not allowed."
                 )
             elif is_literal_type:  # A generic Literal
                 if not all(isinstance(a, Enum) for a in args):
@@ -687,7 +688,7 @@ class MethodProperties(object):
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(
-                f"Type {arg_type.__name__} of argument {arg} must be a either {valid_types} or a List of these types or a "
+                f"Type {arg_type.__name__} of argument {arg} must be one of {valid_types} or a List of these types or a "
                 "Dict with str keys and values of these types."
             )
 
