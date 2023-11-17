@@ -167,7 +167,7 @@ class OpenApiTypeConverter:
         return schema
 
     def _handle_pydantic_model(self, type_annotation: BaseModel, by_alias: bool = True) -> Schema:
-        schema = type_annotation.model_json_schema(by_alias=True, ref_template=f"{self.openapi_ref_prefix}{{model}}")
+        schema = type_annotation.model_json_schema(by_alias=by_alias, ref_template=f"{self.openapi_ref_prefix}{{model}}")
         # pydantic.BaseModel.model_json_schema() stores the model (and sub-model) definitions at #/$defs/{model}
         # (pydantic.main.DEFAULT_REF_TEMPLATE) but OpenAPI requires them to be placed at "#/components/schemas/"
         # The ref_template tells pydantic to update the references (the referring side) but not the schema location (the
