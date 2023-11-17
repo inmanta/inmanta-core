@@ -433,7 +433,6 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
     )
 
 
-@pytest.mark.slowtest
 def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean, caplog, modules_v2_dir, tmpdir):
     """
     Make sure the logs contain the correct version snapshot after each module installation.
