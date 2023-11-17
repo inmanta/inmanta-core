@@ -1766,6 +1766,9 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         try:
             with self._get_isolated_env_builder() as isolated_env:
                 distribution = "wheel"
+                # builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
+                # env.install(builder.build_system_requires)
+                # isolated_env.install(builder.get_requires_for_build(distribution=distribution))
                 python_env = PythonEnvironment(env_path=isolated_env.path)
                 builder = build.ProjectBuilder(source_dir=build_path, python_executable=isolated_env.python_executable)
                 pip_config = PipConfig(use_system_config=True)
