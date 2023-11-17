@@ -573,7 +573,7 @@ def module_from_template(
     with open(config_file, "w") as fh:
         config.write(fh)
     if install:
-        pass  # todo
+        raise Exception("TODO")  # todo
     if publish_index is not None:
         ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
         publish_index.publish()
