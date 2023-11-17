@@ -283,7 +283,7 @@ def test_plugin_module_finder(
         str(venv_module_dir),
         new_content_init_py="where = 'venv'",
     )
-    moduletool.ModuleTool().build(path=str(module_dir))
+    moduletool.ModuleTool().install(path=str(venv_module_dir))
 
     module_to_reload: Optional[ModuleType] = None
     if reload:
