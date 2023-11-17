@@ -361,7 +361,6 @@ class LogLine(BaseModel):
     msg: str
     args: List[Optional[ArgumentTypes]] = []
     kwargs: JsonType = {}
-    # TODO: make all timestamps tz aware?
     timestamp: datetime.datetime
 
     @field_validator("level", mode="before")
