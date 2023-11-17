@@ -39,6 +39,7 @@ import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
 from pydantic import BaseModel
 
+import inmanta.data.model
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
@@ -302,7 +303,7 @@ class PipUpgradeStrategy(enum.Enum):
     ONLY_IF_NEEDED = "only-if-needed"
 
 
-class PipConfig(BaseModel):
+class PipConfig(inmanta.data.model.PipConfig):
     """
     Base class to represent pip config internally
 
@@ -329,16 +330,7 @@ class PipConfig(BaseModel):
         (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
     """
 
-    index_url: Optional[str] = None
-    # Singular to be consistent with pip itself
-    extra_index_url: Sequence[str] = []
-    pre: Optional[bool] = None
-    use_system_config: bool = False
-
-    def has_source(self) -> bool:
-        """Can this config get packages from anywhere?"""
-        return bool(self.index_url) or self.use_system_config
-
+    # We add this method here to prevent import loops
     def assert_has_source(self, reason: str) -> None:
         """Ensure this index has a valid package source, otherwise raise exception"""
         if not self.has_source():

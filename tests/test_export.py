@@ -44,7 +44,7 @@ async def assert_resource_set_assignment(environment, assignment: Dict[str, Opti
     """
     resources = await Resource.get_resources_in_latest_version(environment=environment)
     assert len(resources) == len(assignment)
-    actual_assignment = {r.attributes["name"]: r.resource_set for r in resources}
+    actual_assignment = {r.attributes["key"]: r.resource_set for r in resources}
     assert actual_assignment == assignment
 
 
@@ -204,13 +204,20 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
     snippetcompiler.setup_for_snippet(
         """
             h = std::Host(name="test", os=std::linux)
-        """
+        """,
+        extra_index_url=["example.com/index"],
     )
     await snippetcompiler.do_export_and_deploy()
 
     response = await client.list_versions(tid=environment)
     assert response.code == 200
     assert len(response.result["versions"]) == 1
+    assert response.result["versions"][0]["pip_config"] == {
+        "extra-index-url": ["example.com/index"],
+        "index-url": None,
+        "pre": None,
+        "use-system-config": False,
+    }
 
 
 async def test_server_export(snippetcompiler, server: Server, client, environment):
@@ -451,7 +458,7 @@ exp::Test3(
     )
 
 
-async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+async def test_resource_set(snippetcompiler, modules_dir: str, environment, client) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -461,33 +468,9 @@ async def test_resource_set(snippetcompiler, modules_dir: str, tmpdir, environme
         partial_compile: bool,
         resource_sets_to_remove: Optional[List[str]] = None,
     ) -> None:
-        init_py = """
-from inmanta.resources import (
-    Resource,
-    resource,
-)
-@resource("modulev1::Res", agent="name", id_attribute="name")
-class Res(Resource):
-    fields = ("name",)
-"""
-
-        module_name: str = "minimalv1module"
-        module_path: str = str(tmpdir.join("modulev1"))
-        if os.path.exists(module_path):
-            shutil.rmtree(module_path)
-        v1_module_from_template(
-            os.path.join(modules_dir, module_name),
-            module_path,
-            new_content_init_cf=model,
-            new_content_init_py=init_py,
-            new_name="modulev1",
-        )
-
         snippetcompiler.setup_for_snippet(
-            """
-    import modulev1
-            """,
-            add_to_module_path=[str(tmpdir)],
+            model,
+            extra_index_url=["example.com/index"],
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
@@ -497,17 +480,15 @@ class Res(Resource):
     # Full compile
     await export_model(
         model="""
-entity Res extends std::Resource:
-    string name
-end
-implement Res using std::none
-a = Res(name="the_resource_a")
-b = Res(name="the_resource_b")
-c = Res(name="the_resource_c")
-d = Res(name="the_resource_d")
-e = Res(name="the_resource_e")
-y = Res(name="the_resource_y")
-z = Res(name="the_resource_z")
+import test_resources
+
+a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+b = test_resources::Resource(value="A", agent="A", key="the_resource_b")
+c = test_resources::Resource(value="A", agent="A", key="the_resource_c")
+d = test_resources::Resource(value="A", agent="A", key="the_resource_d")
+e = test_resources::Resource(value="A", agent="A", key="the_resource_e")
+y = test_resources::Resource(value="A", agent="A", key="the_resource_y")
+z = test_resources::Resource(value="A", agent="A", key="the_resource_z")
 std::ResourceSet(name="resource_set_1", resources=[a,c])
 std::ResourceSet(name="resource_set_2", resources=[b])
 std::ResourceSet(name="resource_set_3", resources=[d, e])
@@ -530,15 +511,13 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     # Partial compile
     await export_model(
         model="""
-    entity Res extends std::Resource:
-        string name
-    end
-    implement Res using std::none
-    a = Res(name="the_resource_a")
-    c2 = Res(name="the_resource_c2")
-    f = Res(name="the_resource_f")
+    import test_resources
+
+    a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+    c2 = test_resources::Resource(value="A", agent="A", key="the_resource_c2")
+    f = test_resources::Resource(value="A", agent="A", key="the_resource_f")
     # y is a shared resource, identical to the one in previous compile
-    y = Res(name="the_resource_y")
+    y = test_resources::Resource(value="A", agent="A", key="the_resource_y")
     # z is a shared resource not present in this model
     std::ResourceSet(name="resource_set_1", resources=[a,c2])
     std::ResourceSet(name="resource_set_4", resources=[f])
@@ -558,6 +537,17 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
             "the_resource_z": None,
         },
     )
+
+    response = await client.list_versions(tid=environment)
+    assert response.code == 200
+    assert len(response.result["versions"]) == 2
+    for version in response.result["versions"]:
+        assert version["pip_config"] == {
+            "extra-index-url": ["example.com/index"],
+            "index-url": None,
+            "pre": None,
+            "use-system-config": False,
+        }, f"failed for version: {version['version']}"
 
 
 async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:

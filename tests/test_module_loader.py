@@ -31,7 +31,8 @@ from pkg_resources import Requirement
 from inmanta import compiler, const, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
-from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFound, PipConfig, process_env
+from inmanta.data.model import PipConfig
+from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFound, process_env
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,

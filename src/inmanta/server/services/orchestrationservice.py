@@ -29,10 +29,18 @@ from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, InvalidSort, RowLockMode
+from inmanta.data import (
+    APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    InvalidSort,
+    RowLockMode,
+    json_encode,
+)
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
+    PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
     ResourceIdStr,
@@ -625,6 +633,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         partial_base_version: Optional[int] = None,
         removed_resource_sets: Optional[List[str]] = None,
+        pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
@@ -727,6 +736,7 @@ class OrchestrationService(protocol.ServerSlice):
                         skipped_for_undeployable=sorted(
                             self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
                         ),
+                        pip_config=pip_config,
                         is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
                     )
                     await cm.insert(connection=connection)
@@ -851,6 +861,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: JsonType,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        pip_config: Optional[PipConfig] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -874,12 +885,24 @@ class OrchestrationService(protocol.ServerSlice):
             resource_sets=resource_sets,
         )
 
+        if pip_config is None:
+            # backward compatibility
+            pip_config = PipConfig(use_system_config=True)
+            # TODO WARNING!
+
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
                 await env.put_version_lock(shared=True, connection=con)
                 await self._put_version(
-                    env, version, rid_to_resource, unknowns_objs, version_info, resource_sets, connection=con
+                    env,
+                    version,
+                    rid_to_resource,
+                    unknowns_objs,
+                    version_info,
+                    resource_sets,
+                    pip_config=pip_config,
+                    connection=con,
                 )
             try:
                 await self._trigger_auto_deploy(env, version, connection=con)
@@ -901,6 +924,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[List[str]] = None,
+        pip_config: Optional[PipConfig] = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure

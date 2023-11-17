@@ -71,6 +71,7 @@ from pkg_resources import Distribution, DistributionNotFound, Requirement, parse
 from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
 from pydantic.error_wrappers import display_errors
 
+import inmanta.data.model
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
@@ -1535,13 +1536,8 @@ class RelationPrecedenceRule:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
 
-def hyphenize(field: str) -> str:
-    """Alias generator to convert python names (with `_`) to config file name (with `-`)"""
-    return field.replace("_", "-")
-
-
 @stable_api
-class ProjectPipConfig(env.PipConfig):
+class ProjectPipConfig(inmanta.data.model.PipConfig):
     """
     :param index_url: one pip index url for this project.
     :param extra_index_url:  additional pip index urls for this project. This is generally only
@@ -1564,13 +1560,6 @@ class ProjectPipConfig(env.PipConfig):
 
         See the :ref:`section<specify_location_pip>` about setting up pip index for more information.
     """
-
-    class Config:
-        # use alias generator have `-` in names
-        alias_generator = hyphenize
-        # allow use of aliases
-        allow_population_by_field_name = True
-        extra = "ignore"
 
     @pydantic.root_validator(pre=True)
     def __alert_extra_field__(cls, values: dict[str, object]) -> dict[str, object]:
