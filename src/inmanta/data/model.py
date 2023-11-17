@@ -794,3 +794,18 @@ class PipConfig(BaseModel):
     def has_source(self) -> bool:
         """Can this config get packages from anywhere?"""
         return bool(self.index_url) or self.use_system_config
+
+    def assert_has_source(self, reason: str) -> None:
+        """Ensure this index has a valid package source, otherwise raise exception"""
+        # Import loop
+        import inmanta.env
+
+        if not self.has_source():
+            raise inmanta.env.PackageNotFound(
+                f"Attempting to install {reason} but pip is not configured. Add the relevant pip "
+                f"indexes to the project config file. e.g. to set PyPi as pip index, add the following "
+                "to `project.yml`:"
+                "\npip:"
+                "\n  index_url: https://pypi.org/simple"
+                "\nAnother option is to set `pip.use_system_config = true` to use the system's pip config."
+            )

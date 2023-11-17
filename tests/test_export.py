@@ -458,7 +458,7 @@ exp::Test3(
     )
 
 
-async def test_resource_set(snippetcompiler, modules_dir: str, environment, client) -> None:
+async def test_resource_set(snippetcompiler, modules_dir: str, environment, client, agent) -> None:
     """
     Test that resource sets are exported correctly, when a full compile or an incremental compile is done.
     """
@@ -541,13 +541,24 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     response = await client.list_versions(tid=environment)
     assert response.code == 200
     assert len(response.result["versions"]) == 2
+    last_version_nr = 0
+    expected_pip_config = {
+        "extra-index-url": ["example.com/index"],
+        "index-url": None,
+        "pre": None,
+        "use-system-config": False,
+    }
     for version in response.result["versions"]:
-        assert version["pip_config"] == {
-            "extra-index-url": ["example.com/index"],
-            "index-url": None,
-            "pre": None,
-            "use-system-config": False,
-        }, f"failed for version: {version['version']}"
+        assert version["pip_config"] == expected_pip_config, f"failed for version: {version['version']}"
+        last_version_nr = version["version"]
+
+    # abusing this setup to test get_pip_config
+    response = await agent._client.get_pip_config(tid=environment, version=last_version_nr)
+    assert response.code == 200
+    assert response.result["data"] == expected_pip_config
+
+    response = await agent._client.get_pip_config(tid=environment, version=500)
+    assert response.code == 404
 
 
 async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:

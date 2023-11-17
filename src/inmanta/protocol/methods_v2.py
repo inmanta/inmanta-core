@@ -23,13 +23,12 @@ from typing import Dict, List, Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
+from inmanta.data.model import DiscoveredResource, ResourceIdStr
+from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.decorators import typedmethod
+from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes
-
-from ..data.model import DiscoveredResource, ResourceIdStr
-from . import methods
-from .decorators import typedmethod
-from .openapi.model import OpenAPI
 
 
 @typedmethod(
@@ -1281,6 +1280,23 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
     :param tid: The id of the environment
     :param version: The id of the model version
     :param resource_type: The type name of the resource
+    :raises NotFound: Raised when the version or type is not found
+    """
+
+
+@typedmethod(
+    path="/pip/config/<version>",
+    operation="GET",
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent],
+    api_version=2,
+)
+def get_pip_config(tid: uuid.UUID, version: int) -> model.PipConfig:
+    """
+    Get the code for the given version and the given resource
+    :param tid: The id of the environment
+    :param version: The id of the model version
     :raises NotFound: Raised when the version or type is not found
     """
 

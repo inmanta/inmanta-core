@@ -28,7 +28,9 @@ import pytest
 
 import inmanta
 from inmanta.agent import Agent
+from inmanta.data import PipConfig
 from inmanta.protocol import Client
+from inmanta.util import get_compiler_version
 from utils import LogSequence
 
 
@@ -57,7 +59,9 @@ async def make_source_structure(
         return hv
 
 
-async def test_agent_code_loading(caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch) -> None:
+async def test_agent_code_loading(
+    caplog, server, agent_factory, client, environment: uuid.UUID, monkeypatch, clienthelper
+) -> None:
     """
     Test goals:
     1. ensure the agent doesn't re-load the same code if not required
@@ -105,31 +109,48 @@ inmanta.test_agent_code_loading = 15
         sources3, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codec, byte_code=True, client=client
     )
 
-    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test": sources})
+    async def get_version() -> int:
+        version = await clienthelper.get_version()
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[],
+            pip_config=PipConfig(),
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+        return version
+
+    version_1 = await get_version()
+    version_2 = await get_version()
+    version_3 = await get_version()
+    version_4 = await get_version()
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
     assert res.code == 200
 
     # 2 identical versions
-    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test2": sources})
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
     assert res.code == 200
-    res = await client.upload_code_batched(tid=environment, id=6, resources={"test::Test2": sources})
+    res = await client.upload_code_batched(tid=environment, id=version_2, resources={"test::Test2": sources})
     assert res.code == 200
 
     # two distinct versions
-    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test3": sources})
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test3": sources})
     assert res.code == 200
-    res = await client.upload_code_batched(tid=environment, id=6, resources={"test::Test3": sources2})
+    res = await client.upload_code_batched(tid=environment, id=version_2, resources={"test::Test3": sources2})
     assert res.code == 200
 
     # bytecompile version
-    res = await client.upload_code_batched(tid=environment, id=7, resources={"test::Test4": sources3})
+    res = await client.upload_code_batched(tid=environment, id=version_3, resources={"test::Test4": sources3})
     assert res.code == 200
 
     # source version again
-    res = await client.upload_code_batched(tid=environment, id=8, resources={"test::Test4": sources2})
+    res = await client.upload_code_batched(tid=environment, id=version_4, resources={"test::Test4": sources2})
     assert res.code == 200
 
     # Try to pull binary file via v1 API, get a 400
-    result = await client.get_code(tid=environment, id=7, resource="test::Test4")
+    result = await client.get_code(tid=environment, id=version_3, resource="test::Test4")
     assert result.code == 400
 
     agent: Agent = await agent_factory(
@@ -140,25 +161,25 @@ inmanta.test_agent_code_loading = 15
     # install sources for all three
     await agent.ensure_code(
         environment=environment,
-        version=5,
+        version=version_1,
         resource_types=["test::Test", "test::Test2", "test::Test3"],
     )
     # install sources as well
-    await agent.ensure_code(environment=environment, version=5, resource_types=["test::Test", "test::Test2"])
+    await agent.ensure_code(environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"])
     # install sources as well
-    await agent.ensure_code(environment=environment, version=6, resource_types=["test::Test2"])
+    await agent.ensure_code(environment=environment, version=version_2, resource_types=["test::Test2"])
 
     # Test 1 is deployed once, as seen by the agent
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test version=5").contains(
-        "inmanta.agent.agent", DEBUG, "Installed handler test::Test version=5"
-    ).contains("inmanta.agent.agent", DEBUG, "Code already present for test::Test version=5").assert_not(
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test version={version_1}").contains(
+        "inmanta.agent.agent", DEBUG, f"Installed handler test::Test version={version_1}"
+    ).contains("inmanta.agent.agent", DEBUG, f"Code already present for test::Test version={version_1}").assert_not(
         "inmanta", DEBUG, "test::Test "
     )
 
     # Test 2 is once twice, as seen by the agent
     # But loaded only once
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test2 version=5").contains(
-        "inmanta.agent.agent", DEBUG, "Installing handler test::Test2 version=6"
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test2 version={version_1}").contains(
+        "inmanta.agent.agent", DEBUG, f"Installing handler test::Test2 version={version_2}"
     ).contains("inmanta.loader", DEBUG, f"Not deploying code (hv={hv1}, module=inmanta_plugins.test) because of cache hit")
 
     # Loader only loads source1 once
@@ -170,10 +191,10 @@ inmanta.test_agent_code_loading = 15
     assert getattr(inmanta, "test_agent_code_loading") == 5
 
     # Install sources2
-    await agent.ensure_code(environment=environment, version=6, resource_types=["test::Test3"])
+    await agent.ensure_code(environment=environment, version=version_2, resource_types=["test::Test3"])
     # Test 3 is deployed twice, as seen by the agent and the loader
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=5")
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test3 version=6")
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_1}")
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_2}")
     # Loader only loads source2 once
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv2}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv2}, module=inmanta_plugins.tests)"
@@ -183,8 +204,8 @@ inmanta.test_agent_code_loading = 15
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
     # Loader loads byte code file
-    await agent.ensure_code(environment=environment, version=7, resource_types=["test::Test4"])
-    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, "Installing handler test::Test4 version=7")
+    await agent.ensure_code(environment=environment, version=version_3, resource_types=["test::Test4"])
+    LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test4 version={version_3}")
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
     )
@@ -192,13 +213,19 @@ inmanta.test_agent_code_loading = 15
     assert getattr(inmanta, "test_agent_code_loading") == 15
 
     # Now load the python only version again
-    await agent.ensure_code(environment=environment, version=8, resource_types=["test::Test4"])
+    await agent.ensure_code(environment=environment, version=version_4, resource_types=["test::Test4"])
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
 
 @pytest.mark.slowtest
 async def test_agent_installs_dependency_containing_extras(
-    server, client, environment, agent_factory, monkeypatch, index_with_pkgs_containing_optional_deps: str
+    server,
+    client,
+    environment,
+    agent_factory,
+    monkeypatch,
+    index_with_pkgs_containing_optional_deps: str,
+    clienthelper,
 ) -> None:
     """
     Test whether the agent code loading works correctly when a python dependency is provided that contains extras.
@@ -218,7 +245,18 @@ def test():
         client=client,
     )
 
-    res = await client.upload_code_batched(tid=environment, id=5, resources={"test::Test": sources})
+    version = await clienthelper.get_version()
+
+    res = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=[],
+        pip_config=PipConfig(index_url=index_with_pkgs_containing_optional_deps),
+        compiler_version=get_compiler_version(),
+    )
+    assert res.code == 200
+
+    res = await client.upload_code_batched(tid=environment, id=version, resources={"test::Test": sources})
     assert res.code == 200
 
     agent: Agent = await agent_factory(
@@ -226,10 +264,9 @@ def test():
     )
 
     # Set the PIP_INDEX_URL, because the agent doesn't have support for custom indexes yet
-    monkeypatch.setenv("PIP_INDEX_URL", index_with_pkgs_containing_optional_deps)
     await agent.ensure_code(
         environment=environment,
-        version=5,
+        version=version,
         resource_types=["test::Test"],
     )
 

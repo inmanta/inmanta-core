@@ -581,6 +581,10 @@ class Exporter(object):
             and isinstance(result.result, dict)
             and "Invalid request: request contains fields {'pip_config'}" in result.result.get("message", "")
         ):
+            LOGGER.warning(
+                "Pip config will not be correctly picked up by the agent: "
+                "the orchestrator we are exporting to does not support this!"
+            )
             result = do_put()
 
         if result.code != 200:

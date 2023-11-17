@@ -505,6 +505,17 @@ class OrchestrationService(protocol.ServerSlice):
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
 
+    @handle(methods_v2.get_pip_config, env="tid")
+    async def get_pip_config(
+        self,
+        env: data.Environment,
+        version: int,
+    ) -> PipConfig:
+        version_object = await data.ConfigurationModel.get_version(env.id, version)
+        if version_object is None:
+            raise NotFound(f"No configuration model with version {version} exists.")
+        return version_object.pip_config
+
     def _create_dao_resources_from_api_resources(
         self,
         env_id: uuid.UUID,

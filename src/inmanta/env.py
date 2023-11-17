@@ -37,11 +37,11 @@ from typing import Dict, Iterator, List, Mapping, NamedTuple, Optional, Pattern,
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
-from pydantic import BaseModel
 
 import inmanta.data.model
 from inmanta import const
 from inmanta.ast import CompilerException
+from inmanta.data import PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version
@@ -301,47 +301,6 @@ class PipUpgradeStrategy(enum.Enum):
 
     EAGER = "eager"
     ONLY_IF_NEEDED = "only-if-needed"
-
-
-class PipConfig(inmanta.data.model.PipConfig):
-    """
-    Base class to represent pip config internally
-
-    :param index_url: one pip index url for this project.
-    :param extra_index_url:  additional pip index urls for this project. This is generally only
-        recommended if all configured indexes are under full control of the end user to protect against dependency
-        confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
-        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
-    :param pre:  allow pre-releases when installing Python packages, i.e. pip --pre.
-        Defaults to None.
-        When None and pip.use-system-config=true we follow the system config.
-        When None and pip.use-system-config=false, we don't allow pre-releases.
-    :param use_system_config: defaults to false.
-        When true, sets the pip index url, extra index urls and pre according to the respective settings outlined above
-        but otherwise respect any pip environment variables and/or config in the pip config file,
-        including any extra-index-urls.
-
-        If no indexes are configured in pip.index-url/pip.extra-index-url
-        with this option enabled means to fall back to pip's default behavior:
-        use the pip index url from the environment, the config file, or PyPi, in that order.
-
-        For development, it is recommended to set this option to false, both for portability
-        (and related compatibility with tools like pytest-inmanta-lsm) and for security
-        (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
-    """
-
-    # We add this method here to prevent import loops
-    def assert_has_source(self, reason: str) -> None:
-        """Ensure this index has a valid package source, otherwise raise exception"""
-        if not self.has_source():
-            raise PackageNotFound(
-                f"Attempting to install {reason} but pip is not configured. Add the relevant pip "
-                f"indexes to the project config file. e.g. to set PyPi as pip index, add the following "
-                "to `project.yml`:"
-                "\npip:"
-                "\n  index_url: https://pypi.org/simple"
-                "\nAnother option is to set `pip.use_system_config = true` to use the system's pip config."
-            )
 
 
 class PipCommandBuilder:
