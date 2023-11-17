@@ -561,50 +561,24 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     assert response.code == 404
 
 
-async def test_resource_in_multiple_resource_sets(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+async def test_resource_in_multiple_resource_sets(snippetcompiler, environment) -> None:
     """
     test that an error is raised if a resource is in multiple
     resource_sets
     """
-    init_cf = """
-entity Res extends std::Resource:
-    string name
-end
+    model = """
+import test_resources
 
-implement Res using std::none
-
-a = Res(name="the_resource_a")
+a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
 std::ResourceSet(name="resource_set_1", resources=[a])
 std::ResourceSet(name="resource_set_2", resources=[a])
 """
-    init_py = """
-from inmanta.resources import (
-    Resource,
-    resource,
-)
-@resource("modulev1::Res", agent="name", id_attribute="name")
-class Res(Resource):
-    fields = ("name",)
-"""
-    module_name: str = "minimalv1module"
-    module_path: str = str(tmpdir.join("modulev1"))
-    v1_module_from_template(
-        os.path.join(modules_dir, module_name),
-        module_path,
-        new_content_init_cf=init_cf,
-        new_content_init_py=init_py,
-        new_name="modulev1",
-    )
-    snippetcompiler.setup_for_snippet(
-        """
-import modulev1
-        """,
-        add_to_module_path=[str(tmpdir)],
-    )
+
+    snippetcompiler.setup_for_snippet(model)
     with pytest.raises(CompilerException) as e:
         await snippetcompiler.do_export_and_deploy()
     assert str(e.value).startswith(
-        "resource 'modulev1::Res[the_resource_a,name=the_resource_a]' can not be part of multiple " "ResourceSets:"
+        "resource 'test_resources::Resource[A,key=the_resource_a]' can not be part of multiple " "ResourceSets:"
     )
 
 
@@ -632,7 +606,7 @@ implement std::Resource using std::none
     log_sequence.contains("inmanta.export", logging.WARNING, msg)
 
 
-async def test_empty_resource_set_removal(snippetcompiler, modules_dir: str, tmpdir, environment) -> None:
+async def test_empty_resource_set_removal(snippetcompiler, environment) -> None:
     """
     When a partial compile is ran, the exporter should trigger a deletion of each ResourceSet, defined in the partial model,
     that doesn't have any resources associated
@@ -643,33 +617,8 @@ async def test_empty_resource_set_removal(snippetcompiler, modules_dir: str, tmp
         partial_compile: bool,
         resource_sets_to_remove: Optional[List[str]] = None,
     ) -> None:
-        init_py = """
-from inmanta.resources import (
-    Resource,
-    resource,
-)
-@resource("modulev1::Res", agent="name", id_attribute="name")
-class Res(Resource):
-    fields = ("name",)
-"""
-
-        module_name: str = "minimalv1module"
-        module_path: str = str(tmpdir.join("modulev1"))
-        if os.path.exists(module_path):
-            shutil.rmtree(module_path)
-        v1_module_from_template(
-            os.path.join(modules_dir, module_name),
-            module_path,
-            new_content_init_cf=model,
-            new_content_init_py=init_py,
-            new_name="modulev1",
-        )
-
         snippetcompiler.setup_for_snippet(
-            """
-    import modulev1
-            """,
-            add_to_module_path=[str(tmpdir)],
+            model,
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
@@ -679,18 +628,14 @@ class Res(Resource):
     # Full compile
     await export_model(
         model="""
-entity Res extends std::Resource:
-    string name
-end
+import test_resources
 
-implement Res using std::none
-
-a = Res(name="the_resource_a")
-b = Res(name="the_resource_b")
-c = Res(name="the_resource_c")
-d = Res(name="the_resource_d")
-e = Res(name="the_resource_e")
-z = Res(name="the_resource_z")
+a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+b = test_resources::Resource(value="A", agent="A", key="the_resource_b")
+c = test_resources::Resource(value="A", agent="A", key="the_resource_c")
+d = test_resources::Resource(value="A", agent="A", key="the_resource_d")
+e = test_resources::Resource(value="A", agent="A", key="the_resource_e")
+z = test_resources::Resource(value="A", agent="A", key="the_resource_z")
 std::ResourceSet(name="resource_set_1", resources=[a,c])
 std::ResourceSet(name="resource_set_2", resources=[b])
 std::ResourceSet(name="resource_set_3", resources=[d, e])
@@ -712,15 +657,12 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     # Partial compile
     await export_model(
         model="""
-    entity Res extends std::Resource:
-        string name
-    end
+    import test_resources
 
-    implement Res using std::none
 
-    a = Res(name="the_resource_a")
-    c2 = Res(name="the_resource_c2")
-    f = Res(name="the_resource_f")
+    a = test_resources::Resource(value="A", agent="A", key="the_resource_a")
+    c2 = test_resources::Resource(value="A", agent="A", key="the_resource_c2")
+    f = test_resources::Resource(value="A", agent="A", key="the_resource_f")
     std::ResourceSet(name="resource_set_1", resources=[a,c2])
     std::ResourceSet(name="resource_set_4", resources=[f])
     std::ResourceSet(name="resource_set_3", resources=[])
