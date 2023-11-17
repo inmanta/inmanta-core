@@ -629,8 +629,7 @@ packages = find_namespace:
         f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n"
         "  1 validation error for ModuleV2Metadata\n"
         "  version\n"
-        f"    Value error, {error_msg} [type=value_error, input_value='{version}', input_type=str]\n"
-        in str(e.value)
+        f"    Value error, {error_msg} [type=value_error, input_value='{version}', input_type=str]\n" in str(e.value)
     )
 
 

@@ -18,18 +18,12 @@
 # This file defines named type definition for the Inmanta code base
 
 import builtins
-import re
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import pydantic
 import typing_inspect
-from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
-from pydantic.json_schema import JsonSchemaValue
-
-from pydantic_core import CoreSchema, PydanticCustomError, core_schema
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
