@@ -441,6 +441,8 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
     caplog.set_level(logging.DEBUG)
 
     index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    print(os.environ["PIP_INDEX_URL"])
+    print(os.environ["PIP_EXTRA_INDEX_URL"])
 
     # Prepare the modules:
     # module a with version 1.0.0 and 5.0.0
