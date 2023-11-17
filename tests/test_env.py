@@ -183,7 +183,7 @@ def test_req_parser(tmpdir):
     at_url = "iplib@" + url
     egg_url = url + "#egg=iplib"
 
-    e = env.VirtualEnv(tmpdir)
+    e = env.VirtualEnv(os.path.abspath(tmpdir))
     name, u = e._parse_line(url)
     assert name is None
     assert u == url
@@ -198,7 +198,7 @@ def test_req_parser(tmpdir):
 
 
 def test_gen_req_file(tmpdir):
-    e = env.VirtualEnv(tmpdir)
+    e = env.VirtualEnv(os.path.abspath(tmpdir))
     req = [
         "lorem == 0.1.1",
         "lorem > 0.1",
@@ -220,7 +220,7 @@ def test_gen_req_file(tmpdir):
 
 
 def test_gen_req_file_multiple_python_versions(tmpdir):
-    e = env.VirtualEnv(tmpdir)
+    e = env.VirtualEnv(os.path.abspath(tmpdir))
     req = [
         "lorem",
         "lorem == 0.1;python_version=='3.7'",
@@ -235,7 +235,7 @@ def test_gen_req_file_multiple_python_versions(tmpdir):
 
 
 def test_gen_req_file_multiple_extras(tmpdir):
-    e = env.VirtualEnv(tmpdir)
+    e = env.VirtualEnv(os.path.abspath(tmpdir))
     req = ["dep[opt]", "dep[otheropt]"]
 
     req_lines = [x for x in e._gen_content_requirements_file(req).split("\n") if len(x) > 0]
