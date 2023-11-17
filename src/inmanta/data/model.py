@@ -23,7 +23,7 @@ from typing import Any, ClassVar, Dict, List, NewType, Optional, Sequence, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import BaseModel, Extra, root_validator, validator
+from pydantic import Extra, root_validator, validator
 from pydantic.fields import ModelField
 from pydantic.types import StrictFloat, StrictInt, StrictStr
 

@@ -26,3 +26,4 @@ async def update(connection: Connection) -> None:
     ALTER TABLE public.configurationmodel
       ADD COLUMN pip_config jsonb;"""
     )
+    # No upgrade of data needed: read path supports None values.

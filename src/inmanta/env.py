@@ -38,7 +38,6 @@ from typing import Dict, Iterator, List, Mapping, NamedTuple, Optional, Pattern,
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
-import inmanta.data.model
 from inmanta import const
 from inmanta.ast import CompilerException
 from inmanta.data import PipConfig
