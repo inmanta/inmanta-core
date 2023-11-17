@@ -295,7 +295,8 @@ class PluginIO:
             )
 
         if self.type_expression in PLUGIN_TYPES:
-            return PLUGIN_TYPES[self.type_expression]
+            self._resolved_type = PLUGIN_TYPES[self.type_expression]
+            return self._resolved_type
 
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
         locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
