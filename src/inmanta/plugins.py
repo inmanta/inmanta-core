@@ -193,7 +193,7 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
-def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Optional[inmanta_type.Type]:
+def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> inmanta_type.Type:
     """
     Convert a locatable type string, into a real inmanta type, that can be used for validation.
     Alternatively, if the locatable string defines a type that doesn't have any constraint, return None.
@@ -202,12 +202,6 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Option
     :param resolver: The namespace that can be used to resolve the type annotation of this
         argument.
     """
-    if locatable_type.value == "any":
-        return None
-
-    if locatable_type.value == "expression":
-        return None
-
     # quickfix issue #1774
     allowed_element_type: inmanta_type.Type = inmanta_type.Type()
     if locatable_type.value == "list":
@@ -234,6 +228,25 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Option
     return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
 
+class Nothing(inmanta_type.Type):
+    """
+    This custom type is used for the validation of plugins which only
+    accept null as an argument or return value.  It is meant to be used
+    as the element_type of an instance of the `NullableType` class.
+    """
+
+    def validate(self, value: object | None) -> bool:
+        return False
+
+
+# Define some types which are only used in the context of plugins.
+PLUGIN_TYPES = {
+    "any": inmanta_type.Type(),  # Any value will pass validation
+    "expression": inmanta_type.Type(),  # Any value will pass validation
+    "null": inmanta_type.NullableType(Nothing()),  # Only NoneValue will pass validation
+}
+
+
 class PluginIO:
     """
     Base class for all values that go in and out of a plugin: arguments and return value.
@@ -250,26 +263,22 @@ class PluginIO:
 
     def __init__(self, type_expression: object) -> None:
         self.type_expression = type_expression
-
-        # We define the attribute but don't set it yet, this will be done when
-        # the type is resolved.  This allows to differentiate between a type that
-        # has not been resolved and a type that is a match for "any" (None).
-        self._resolved_type: Optional[inmanta_type.Type]
+        self._resolved_type: Optional[inmanta_type.Type] = None
 
     @property
-    def resolved_type(self) -> Optional[inmanta_type.Type]:
+    def resolved_type(self) -> inmanta_type.Type:
         """
         Get the resolved type of this plugin io.  The resolved type can only be accessed
         once this object has been normalized (which happens during the plugin normalization).
         """
-        if not hasattr(self, "_resolved_type"):
+        if self._resolved_type is None:
             raise CompilerException(
                 f"{type(self).__name__} {self.IO_NAME} ({repr(self.type_expression)}) has not been normalized, "
                 "its resolved type can't be accessed."
             )
         return self._resolved_type
 
-    def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> Optional[inmanta_type.Type]:
+    def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
         """
         Convert the string representation of this argument's type to a type.
         If no type annotation is present or if the type annotation allows any type to be passed
@@ -279,15 +288,14 @@ class PluginIO:
         :param resolver: The namespace that can be used to resolve the type annotation of this
             argument.
         """
-        if self.type_expression is None:
-            self._resolved_type = None
-            return self._resolved_type
-
         if not isinstance(self.type_expression, str):
             raise CompilerException(
                 "Bad annotation in plugin %s for %s, expected str but got %s (%s)"
                 % (plugin.get_full_name(), self.IO_NAME, type(self.type_expression).__name__, self.type_expression)
             )
+
+        if self.type_expression in PLUGIN_TYPES:
+            return PLUGIN_TYPES[self.type_expression]
 
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
         locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
@@ -305,10 +313,6 @@ class PluginIO:
         if isinstance(value, Unknown):
             # Value is not known, it can not be validated
             return False
-
-        if self.resolved_type is None:
-            # Any value is valid
-            return True
 
         # Validate the value, use custom validate method of the type if it exists
         valid = self.resolved_type.validate(value)
@@ -396,7 +400,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.var_args: Optional[PluginArgument] = None
         self.kwargs: dict[str, PluginArgument] = dict()
         self.var_kwargs: Optional[PluginArgument] = None
-        self.return_type: PluginReturn = PluginReturn(None)
+        self.return_type: PluginReturn = PluginReturn("null")
         if hasattr(self.__class__, "__function__"):
             self._load_signature(self.__class__.__function__)
 
@@ -444,9 +448,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Inspect the function to get its arguments and annotations
         arg_spec = inspect.getfullargspec(function)
 
-        # Get the expected return value type
-        self.return_type = PluginReturn(arg_spec.annotations.get("return", None))
-
         def get_annotation(arg: str) -> object:
             """
             Get the annotation for a specific argument, and if none exists, raise an exception
@@ -458,6 +459,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 )
 
             return arg_spec.annotations[arg]
+
+        # Make sure we have a return annotation even for implicit "null"
+        arg_spec.annotations["return"] = arg_spec.annotations.get("return") or "null"
+        self.return_type = PluginReturn(get_annotation("return"))
 
         if arg_spec.varargs is not None:
             # We have a catch-all positional arguments
