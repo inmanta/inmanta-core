@@ -393,9 +393,9 @@ class PluginArgument(PluginIO):
 
     def __str__(self) -> str:
         if self.has_default_value():
-            return "%s: %s = %s" % (self.arg_name, self.arg_type, str(self.default_value))
+            return "%s: %s = %s" % (self.arg_name, repr(self.arg_type), str(self.default_value))
         else:
-            return "%s: %s" % (self.arg_name, self.arg_type)
+            return "%s: %s" % (self.arg_name, repr(self.arg_type))
 
 
 class PluginReturn(PluginIO):
@@ -551,11 +551,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         Generate the signature of this plugin.  The signature is a string representing the the function
         as it can be called as a plugin in the model.
         """
-        arg_list = []
+        # Start the list with all positional arguments
+        arg_list = [str(arg) for arg in self.args]
 
-        args = [str(arg) for arg in self.args]
-        arg_list.extend(args)
-
+        # Filter all positional arguments out of the kwargs list
         kwargs = [str(arg) for _, arg in self.kwargs.items() if arg.is_kw_only_argument]
 
         if self.var_args is not None:
@@ -565,11 +564,13 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # positional argument
             arg_list.append("*")
 
+        # Add all keyword-only arguments to the list
         arg_list.extend(kwargs)
 
         if self.var_kwargs is not None:
             arg_list.append("**" + str(self.var_kwargs))
 
+        # Join all arguments, separated by a comma
         args_string = ", ".join(arg_list)
 
         if self.return_type.type_expression is None:
