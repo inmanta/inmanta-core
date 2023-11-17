@@ -123,7 +123,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     parent_installed = list(env.process_env.get_installed_packages().keys())
 
     # create a venv and list all packages available in the venv
-    venv = env.VirtualEnv(tmpdir)
+    venv = env.VirtualEnv(str(tmpdir))
     venv.use_virtual_env()
 
     installed_packages = list(env.PythonEnvironment(python_path=venv._parent_python).get_installed_packages().keys())
