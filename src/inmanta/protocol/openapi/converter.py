@@ -18,7 +18,7 @@
 import inspect
 import json
 import re
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union
 
 from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
@@ -149,53 +149,6 @@ class OpenApiConverter:
         return template
 
 
-def is_nullable(schema: list[dict[str, Any]]) -> bool:
-    """Returns true if in an anyOf list at least once the type null is present"""
-    for sub in schema:
-        if "type" in sub and sub["type"] == "null":
-            return True
-    return False
-
-
-def nullable_item(schema: Union[dict[str, Any], str]) -> dict[str, Any]:
-    """Make sure nullable is used correctly. See generate_nullable for details"""
-    if isinstance(schema, str):
-        return schema
-
-    if "anyOf" in schema and is_nullable(schema["anyOf"]):
-        schema["nullable"] = True
-        schema["anyOf"] = [x for x in schema["anyOf"] if x.get("type") != "null"]
-        if len(schema["anyOf"]) == 1:
-            anyOfList = schema["anyOf"]
-            del schema["anyOf"]
-            schema.update(anyOfList[0])
-
-    # TODO: clean up! Probably better to do this with a validator on Schema
-    if schema.get("items", None) is not None:
-        schema["items"] = nullable_item(schema["items"])
-    if schema.get("additionalProperties", None) is not None:
-        if not isinstance(schema["additionalProperties"], bool):
-            schema["additionalProperties"] = nullable_item(schema["additionalProperties"])
-    for sequence_subfield in ("anyOf", "allOf", "oneOf"):
-        if schema.get(sequence_subfield, None) is not None:
-            schema[sequence_subfield] = [nullable_item(sub) for sub in schema[sequence_subfield]]
-    if schema.get("properties", None) is not None:
-        for prop, sub in schema["properties"].items():
-            schema["properties"][prop] = nullable_item(sub)
-
-    return schema
-
-
-def generate_nullable(schema: dict[str, Any]) -> dict[str, Any]:
-    """Generate nullable based on the union types. In case there is a union (anyOf) with null, nullable will be set and the
-    anyOf list will be modified.
-    """
-    for prop, sub in schema.get("properties", {}).items():
-        schema["properties"][prop] = nullable_item(sub)
-
-    return schema
-
-
 class OpenApiTypeConverter:
     """
     Lookup for OpenAPI types corresponding to python types
@@ -224,8 +177,8 @@ class OpenApiTypeConverter:
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
                     definition = self._add_type_field_to_enum_value(definition)
-                    self.components.schemas[key] = Schema(**generate_nullable(definition))
-        return Schema(**generate_nullable(schema))
+                    self.components.schemas[key] = Schema(**definition)
+        return Schema(**schema)
 
     def _add_type_field_to_enum_value(self, definition: Dict[str, object]) -> Dict[str, object]:
         """

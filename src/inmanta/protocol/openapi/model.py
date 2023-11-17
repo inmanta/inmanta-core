@@ -21,9 +21,11 @@ https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.2.md
 Inspired by FastAPI:
 https://github.com/tiangolo/fastapi
 """
+from collections import abc
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Self, Union
 
+import pydantic
 from pydantic import AnyUrl, ConfigDict, Field
 
 from inmanta.data.model import BaseModel
@@ -65,10 +67,29 @@ class Schema(BaseModel):
     readOnly: Optional[bool] = None
     example: Optional[Any] = None
     deprecated: Optional[bool] = None
-    anyOf: Optional[Sequence["Schema"]] = None
-    allOf: Optional[Sequence["Schema"]] = None
-    oneOf: Optional[Sequence["Schema"]] = None
+    anyOf: Optional[abc.Sequence["Schema"]] = None
+    allOf: Optional[abc.Sequence["Schema"]] = None
+    oneOf: Optional[abc.Sequence["Schema"]] = None
     enum: Optional[List[str]] = None
+
+    @pydantic.model_validator(mode="after")
+    def convert_null_any_of(self: Self) -> Self:
+        """
+        Convert null in anyOf to the `nullable` property.
+        """
+        if self.anyOf is not None:
+            without_null: abc.Sequence["Schema"] = [e for e in self.anyOf if e.type != "null"]
+            if len(without_null) != len(self.anyOf):
+                if len(without_null) == 1:
+                    # promote single child, which has already been validated at this point
+                    child: "Schema" = without_null[0]
+                    for field in child.model_fields_set:
+                        setattr(self, field, getattr(child, field))
+                else:
+                    # convert null option to nullable property
+                    self.anyOf = without_null
+                self.nullable = True
+        return self
 
     def resolve(self, ref_prefix: str, known_schemas: Dict[str, "Schema"]) -> "Schema":
         """
