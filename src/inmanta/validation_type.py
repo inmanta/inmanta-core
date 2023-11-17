@@ -52,7 +52,6 @@ def parametrize_type(
 
     # backwards compatibility layer for Pydantic v1 python regex support
     if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
-        # TODO: add tests for regex + other constr parameters -> tests/test_validation_type.py
         regex: object = validation_parameters["regex"]
         if regex is not None:
             custom_annotations.append(PythonRegex(str(validation_parameters["regex"])))
@@ -60,7 +59,6 @@ def parametrize_type(
 
     parametrized_type: object
     if inspect.isroutine(base_type):
-        # TODO: test with non-routine callable (e.g. uuid.UUID)
         parametrized_type = base_type(**validation_parameters)
     elif validation_parameters:
         raise ValueError(f"got validation parameters {validation_parameters} but {type_name} does not accept parameters")

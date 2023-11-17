@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import uuid
 from typing import Optional
 
 import pydantic
@@ -35,6 +36,13 @@ from inmanta.validation_type import validate_type
         ("pydantic.constr", "test123", {"regex": "^test.*$"}, True),
         ("pydantic.constr", "test123", {"regex": "^tst.*$"}, False),
         ("pydantic.constr", "test123", {"regex": "^(tst.*$"}, False),
+        # constr with non-regex parameters
+        ("pydantic.constr", "nomatch", {"regex": "^test.*$", "max_length": 10}, False),
+        ("pydantic.constr", "testbuttoolong", {"regex": "^test.*$", "max_length": 10}, False),
+        ("pydantic.constr", "testgood", {"regex": "^test.*$", "max_length": 10}, True),
+        ("pydantic.constr", "noregex", {"max_length": 10}, True),
+        ("pydantic.constr", "noregexbuttoolong", {"max_length": 10}, False),
+        ("uuid.UUID", uuid.uuid4(), {}, True),
     ],
 )
 def test_type_validation(attr_type: str, value: str, validation_parameters: dict[str, object], is_valid: bool) -> None:
