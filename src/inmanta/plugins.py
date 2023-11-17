@@ -193,37 +193,6 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
-def report_missing_arguments(
-    func: str, missing_args: collections.abc.Sequence[str], args_sort: Literal["positional", "keyword-only"]
-) -> None:
-    """
-    Helper function to raise an exception specifying that the given arguments are missing.  We try here
-    to stick as much as possible to the error that python would have raised, only changing its type.
-
-    The type of the exception raised is RuntimeException.
-
-    If the list of missing_args is empty, we don't report any exception.
-
-    :param func: The name of the called function requiring the given arguments
-    :param missing_args: The missing arguments we should report
-    :param args_sort: The sort of argument we are checking (positional or kw)
-    """
-    if len(missing_args) == 1:
-        # The exception raised here tries to match as closely as possible what python
-        # would have raised as exception
-        raise RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
-    if len(missing_args) > 1:
-        arg_names = " and ".join(
-            (
-                ", ".join(repr(arg) for arg in missing_args[:-1]),
-                repr(missing_args[-1]),
-            )
-        )
-        # The exception raised here tries to match as closely as possible what python
-        # would have raised as exception
-        raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
-
-
 def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Optional[inmanta_type.Type]:
     """
     Convert a locatable type string, into a real inmanta type, that can be used for validation.
@@ -450,12 +419,12 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.resolver = self.namespace
 
         # Resolve all the types that we expect to receive as input of our plugin
-        for arg in self.args:
+        for arg in self.kwargs.values():
+            # Normalizing the kwargs will also normalize the args as they are all
+            # included in this dict
             arg.resolve_type(self, self.resolver)
         if self.var_args is not None:
             self.var_args.resolve_type(self, self.resolver)
-        for arg in self.kwargs.values():
-            arg.resolve_type(self, self.resolver)
         if self.var_kwargs is not None:
             self.var_kwargs.resolve_type(self, self.resolver)
 
@@ -608,6 +577,36 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{self.get_full_name()}() got an unexpected keyword argument: '{name}'")
 
+    def report_missing_arguments(
+        self, missing_args: collections.abc.Sequence[str], args_sort: Literal["positional", "keyword-only"]
+    ) -> None:
+        """
+        Helper method to raise an exception specifying that the given arguments are missing.  We try here
+        to stick as much as possible to the error that python would have raised, only changing its type.
+
+        The type of the exception raised is RuntimeException.
+
+        If the list of missing_args is empty, we don't report any exception.
+
+        :param missing_args: The missing arguments we should report
+        :param args_sort: The sort of argument we are checking (positional or kw)
+        """
+        func = self.get_full_name()
+        if len(missing_args) == 1:
+            # The exception raised here tries to match as closely as possible what python
+            # would have raised as exception
+            raise RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
+        if len(missing_args) > 1:
+            arg_names = " and ".join(
+                (
+                    ", ".join(repr(arg) for arg in missing_args[:-1]),
+                    repr(missing_args[-1]),
+                )
+            )
+            # The exception raised here tries to match as closely as possible what python
+            # would have raised as exception
+            raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
+
     def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature.
@@ -638,7 +637,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 and not arg.has_default_value()  # No default value in plugin definition
             )
         ]
-        report_missing_arguments(self.get_full_name(), missing_positional_arguments, "positional")
+        self.report_missing_arguments(missing_positional_arguments, "positional")
 
         # (2) Check that all keyword arguments without a default are provided
         missing_keyword_arguments = [
@@ -650,7 +649,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 and not arg.has_default_value()  # No default value in plugin definition
             )
         ]
-        report_missing_arguments(self.get_full_name(), missing_keyword_arguments, "keyword-only")
+        self.report_missing_arguments(missing_keyword_arguments, "keyword-only")
 
         # Validate all positional arguments
         for position, value in enumerate(args):
