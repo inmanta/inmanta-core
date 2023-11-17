@@ -1336,6 +1336,7 @@ class Agent(SessionEndpoint):
         if self._loader is None:
             return failed_to_load
 
+        # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
 
         for rt in set(resource_types):

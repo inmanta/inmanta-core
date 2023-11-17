@@ -1287,9 +1287,10 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
 @typedmethod(
     path="/pip/config/<version>",
     operation="GET",
+    api=True,
     agent_server=True,
     arg_options=methods.ENV_OPTS,
-    client_types=[ClientType.agent],
+    client_types=[ClientType.agent, ClientType.api],
     api_version=2,
 )
 def get_pip_config(tid: uuid.UUID, version: int) -> model.PipConfig:

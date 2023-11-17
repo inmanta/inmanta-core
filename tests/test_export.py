@@ -205,7 +205,7 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
         """
             h = std::Host(name="test", os=std::linux)
         """,
-        extra_index_url=["example.com/index"],
+        extra_index_url=["example.inmanta.com/index"],
     )
     await snippetcompiler.do_export_and_deploy()
 
@@ -213,7 +213,7 @@ async def test_empty_server_export(snippetcompiler, server, client, environment)
     assert response.code == 200
     assert len(response.result["versions"]) == 1
     assert response.result["versions"][0]["pip_config"] == {
-        "extra-index-url": ["example.com/index"],
+        "extra-index-url": ["example.inmanta.com/index"],
         "index-url": None,
         "pre": None,
         "use-system-config": False,
@@ -470,7 +470,7 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
     ) -> None:
         snippetcompiler.setup_for_snippet(
             model,
-            extra_index_url=["example.com/index"],
+            extra_index_url=["example.inmanta.com/index"],
         )
         await snippetcompiler.do_export_and_deploy(
             partial_compile=partial_compile,
@@ -543,7 +543,7 @@ std::ResourceSet(name="resource_set_3", resources=[d, e])
     assert len(response.result["versions"]) == 2
     last_version_nr = 0
     expected_pip_config = {
-        "extra-index-url": ["example.com/index"],
+        "extra-index-url": ["example.inmanta.com/index"],
         "index-url": None,
         "pre": None,
         "use-system-config": False,
