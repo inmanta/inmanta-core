@@ -228,7 +228,7 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> inmant
     return reduce(lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type))
 
 
-class Nothing(inmanta_type.Type):
+class Never(inmanta_type.Type):
     """
     This custom type is used for the validation of plugins which only
     accept null as an argument or return value.  It is meant to be used
@@ -238,12 +238,15 @@ class Nothing(inmanta_type.Type):
     def validate(self, value: object | None) -> bool:
         return False
 
+    def type_string_internal(self) -> str:
+        return "Never"
+
 
 # Define some types which are only used in the context of plugins.
 PLUGIN_TYPES = {
     "any": inmanta_type.Type(),  # Any value will pass validation
     "expression": inmanta_type.Type(),  # Any value will pass validation
-    "null": inmanta_type.NullableType(Nothing()),  # Only NoneValue will pass validation
+    "null": inmanta_type.NullableType(Never()),  # Only NoneValue will pass validation
 }
 
 
