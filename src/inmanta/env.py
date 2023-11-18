@@ -40,8 +40,7 @@ from pkg_resources import DistInfoDistribution, Distribution, Requirement
 
 from inmanta import const
 from inmanta.ast import CompilerException
-from inmanta.data import PipConfig
-from inmanta.data.model import LEGACY_PIP_DEFAULT
+from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
 from packaging import version

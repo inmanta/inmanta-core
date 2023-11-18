@@ -5167,7 +5167,7 @@ class ConfigurationModel(BaseDocument):
     date: Optional[datetime.datetime] = None
     partial_base: Optional[int] = None
 
-    pip_config: PipConfig = None
+    pip_config: Optional[PipConfig] = None
 
     released: bool = False
     deployed: bool = False
