@@ -1,9 +1,0 @@
-include setup.py
-include setup.cfg
-
-recursive-include src/inmanta_tests/data *
-recursive-include src/inmanta_tests/db *
-
-global-exclude *.pyc
-global-exclude */__pycache__/*
-global-exclude **/.env/**
