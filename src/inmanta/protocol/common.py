@@ -62,7 +62,7 @@ from tornado import web
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
-from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
+from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
@@ -347,10 +347,6 @@ VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
 VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
-class MethodArgumentsBaseModel(pydantic.BaseModel):
-    _normalize_timestamps: ClassVar[classmethod] = pydantic.field_validator("*")(validator_timezone_aware_timestamps)
-
-
 class MethodProperties(object):
     """
     This class stores the information from a method definition
@@ -499,7 +495,7 @@ class MethodProperties(object):
         return create_model(
             f"{self.function.__name__}_arguments",
             **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
-            __base__=MethodArgumentsBaseModel,
+            __base__=DateTimeNormalizerModel,
         )
 
     def arguments_in_url(self) -> bool:

@@ -40,23 +40,30 @@ def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datet
         return value
 
 
-def validator_timezone_aware_timestamps(value: object) -> object:
+@stable_api
+class DateTimeNormalizerModel(pydantic.BaseModel):
     """
-    A Pydantic validator to ensure that all datetime times are timezone aware.
+    A model that normalizes all datetime values to be timezone aware. Assumes that all naive timestamps represent UTC times.
     """
-    if isinstance(value, datetime.datetime):
-        return api_boundary_datetime_normalizer(value)
-    else:
-        return value
+
+    @field_validator("*", mode="after")
+    @classmethod
+    def validator_timezone_aware_timestamps(cls: type, value: object) -> object:
+        """
+        Ensure that all datetime times are timezone aware.
+        """
+        if isinstance(value, datetime.datetime):
+            return api_boundary_datetime_normalizer(value)
+        else:
+            return value
 
 
 @stable_api
-class BaseModel(pydantic.BaseModel):
+class BaseModel(DateTimeNormalizerModel):
     """
     Base class for all data objects in Inmanta
     """
 
-    _normalize_timestamps: ClassVar[classmethod] = pydantic.field_validator("*")(validator_timezone_aware_timestamps)
     # Populate models with the value property of enums, rather than the raw enum.
     # This is useful to serialise model.dict() later
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=True)
