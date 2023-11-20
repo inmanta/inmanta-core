@@ -1764,23 +1764,11 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         Build v2 module using PEP517 package builder.
         """
         try:
-            with self._get_isolated_env_builder() as isolated_env:
+            with self._get_isolated_env_builder() as env:
                 distribution = "wheel"
-                # builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
-                # env.install(builder.build_system_requires)
-                # isolated_env.install(builder.get_requires_for_build(distribution=distribution))
-
-                python_env = PythonEnvironment(env_path=isolated_env.path)
-                builder = build.ProjectBuilder(source_dir=build_path, python_executable=isolated_env.python_executable)
-                pip_config = PipConfig(
-                    use_system_config=True, index_url="https://artifacts.internal.inmanta.com/inmanta/dev", pre=True
-                )
-                system_requirements_list = [Requirement.parse(r) for r in builder.build_system_requires]
-                python_env.install_for_config(system_requirements_list, pip_config)
-                build_requirements_list = [
-                    Requirement.parse(r) for r in builder.get_requires_for_build(distribution=distribution)
-                ]
-                python_env.install_for_config(build_requirements_list, pip_config)
+                builder = build.ProjectBuilder(source_dir=build_path, python_executable=env.python_executable)
+                env.install(builder.build_system_requires)
+                env.install(builder.get_requires_for_build(distribution=distribution))
                 return builder.build(distribution=distribution, output_directory=output_directory)
         except Exception:
             raise ModuleBuildFailedError(msg="Module build failed")
