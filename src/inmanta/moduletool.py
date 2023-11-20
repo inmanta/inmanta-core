@@ -1591,7 +1591,7 @@ class V2ModuleBuilder:
 
     def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
         """
-        Build the module and return the path to the build artifact.
+        Build the module using the pip system config and return the path to the build artifact.
 
         :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel
         """
@@ -1760,7 +1760,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
 
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
-        Build v2 module using PEP517 package builder.
+        Build v2 module using the pip system config and using PEP517 package builder.
         """
         try:
             with self._get_isolated_env_builder() as env:
