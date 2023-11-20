@@ -1,4 +1,4 @@
-description: Remove the 'inmanta module(s) install' command.
+description: Remove the 'inmanta module install' command.
 change-type: major
 issue-nr: 6717
 destination-branches: [master]
