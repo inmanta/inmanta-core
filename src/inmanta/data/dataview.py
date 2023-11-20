@@ -1252,6 +1252,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
 class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
     """
     A query builder that applies any filters and the LIMIT statement to the prelude query rather than the outer query.
+    The outer query may use the table name "prelude" to refer to the inner query.
     """
 
     def __init__(
