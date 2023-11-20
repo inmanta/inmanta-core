@@ -1,0 +1,6 @@
+description: Remove the 'inmanta module(s) install' command.
+change-type: major
+issue-nr: 6717
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}"
