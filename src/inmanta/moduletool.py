@@ -53,7 +53,6 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
-from inmanta.env import PipConfig, PythonEnvironment
 from inmanta.module import (
     DummyProject,
     FreezeOperator,
@@ -604,7 +603,7 @@ class ModuleTool(ModuleLikeTool):
         The 'inmanta module install' command is no longer supported. Instead, use one of the following approaches:
 
         1. To install a module in development mode, use 'pip install -e .'.
-        2. For a non-editable installation, first run 'inmanta module build' followed by 'pip install'.
+        2. For a non-editable installation, first run 'inmanta module build' followed by 'pip install .'.
             """.strip(),
         )
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
@@ -1022,12 +1021,12 @@ version: 0.0.1dev0"""
         """
         This command is no longer supported.
         Use 'pip install -e .' to install a module in development mode.
-        Use 'inmanta module build' followed by 'pip install' for non-editable install.
+        Use 'inmanta module build' followed by 'pip install .' for non-editable install.
         """
         raise CLIException(
             "The 'inmanta module install' command is no longer supported. "
             "For development mode installation, use 'pip install -e .'. "
-            "For a regular installation, first run 'inmanta module build' and then 'pip install'.",
+            "For a regular installation, first run 'inmanta module build' and then 'pip install .'.",
             exitcode=1,
         )
 

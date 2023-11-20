@@ -574,6 +574,7 @@ def module_from_template(
         config.write(fh)
     if install:
         ModuleTool().build(path=dest_dir)
+        env.process_env.install_from_source([env.LocalPackagePath(path=dest_dir, editable=editable)])
     if publish_index is not None:
         ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
         publish_index.publish()

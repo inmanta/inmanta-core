@@ -35,7 +35,7 @@ from inmanta.env import CommandRunner
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import ModuleTool, ProjectTool
 from packaging import version
-from utils import LogSequence, PipIndex, log_contains, module_from_template
+from utils import PipIndex, log_contains, module_from_template
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def test_module_install() -> None:
     with pytest.raises(
         CLIException,
         match="The 'inmanta module install' command is no longer supported. For development mode "
-        "installation, use 'pip install -e .'. For a regular installation, first run 'inmanta module build' and then 'pip install'.",
+        "installation, use 'pip install -e .'. For a regular installation, first run 'inmanta module build' and then 'pip install .'.",
     ):
         ModuleTool().execute("install", [])
 
