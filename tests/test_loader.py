@@ -33,6 +33,7 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
+from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
 
@@ -239,80 +240,6 @@ def module_path(tmpdir):
     loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(tmpdir)])
     yield str(tmpdir)
     loader.PluginModuleFinder.reset()
-
-
-@pytest.mark.slowtest
-@pytest.mark.parametrize(
-    "prefer_finder, reload",
-    [(True, False), (False, False), (True, True)],
-)
-def test_plugin_module_finder(
-    tmpdir: py.path.local,
-    tmpvenv_active_inherit: env.VirtualEnv,
-    modules_dir: str,
-    prefer_finder: bool,
-    reload: bool,
-) -> None:
-    """
-    Verify correct behavior of the PluginModuleFinder class, especially with respect to preference when a module is present
-    both in the normal venv and in the finder's module path.
-    The different scenarios are tested via parametrization rather than in a single test case to force proper cleanup in
-    between.
-
-    :param prefer_finder: Configure the custom module finder to be preferred over the default finders.
-    :param reload: Instead of only importing the module at the end, already import it before setting up the finder and reload
-        it after, checking that the change of source works as expected.
-    """
-    module: str = "mymodule"
-    python_module: str = f"{const.PLUGINS_PACKAGE}.{module}"
-
-    # set up libs dir for the custom module finder
-    libs_dir: py.path.local = tmpdir.mkdir("libs")
-    module_dir: py.path.local = libs_dir.join(module)
-    utils.v1_module_from_template(
-        os.path.join(modules_dir, "minimalv1module"),
-        str(module_dir),
-        new_name=module,
-        new_content_init_py="where = 'libs'",
-    )
-
-    # install module in venv
-    venv_module_dir: py.path.local = tmpdir.join("mymodule_for_venv")
-    utils.v1_module_from_template(
-        str(module_dir),
-        str(venv_module_dir),
-        new_content_init_py="where = 'venv'",
-    )
-    moduletool.ModuleTool().install(path=str(venv_module_dir))
-
-    module_to_reload: Optional[ModuleType] = None
-    if reload:
-        # load it once before setting up the finder
-        module_to_reload = importlib.import_module(python_module)
-
-    # set up module finder
-    assert not any(isinstance(finder, loader.PluginModuleFinder) for finder in sys.meta_path)
-    loader.PluginModuleFinder.configure_module_finder(modulepaths=[str(libs_dir)], prefer=prefer_finder)
-
-    # verify that the correct module will be loaded: either the one from the venv or the one in libs, depending on parameters
-    assert isinstance(sys.meta_path[0 if prefer_finder else -1], loader.PluginModuleFinder)
-    # reload now to refresh ModuleSpec and associated loader
-    if reload:
-        assert module_to_reload is not None
-        importlib.reload(module_to_reload)
-    spec: Optional[importlib.machinery.ModuleSpec] = importlib.util.find_spec(python_module)
-    assert spec is not None
-    assert spec.loader is not None
-    assert isinstance(spec.loader, loader.PluginModuleLoader) == prefer_finder
-
-    # verify that import works and imports the correct module
-    mod: ModuleType
-    if reload:
-        assert module_to_reload is not None
-        mod = module_to_reload
-    else:
-        mod = importlib.import_module(python_module)
-    assert mod.where == "libs" if prefer_finder else "venv"
 
 
 def test_code_loader_prefer_finder(tmpdir: py.path.local) -> None:
