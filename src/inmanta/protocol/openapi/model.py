@@ -76,10 +76,16 @@ class Schema(BaseModel):
     def convert_null_any_of(self) -> Self:
         """
         Convert null in anyOf to the `nullable` property.
+
+        The OpenAPI spec models nullable fields with the `nullable` property while internally we use `Optional[t]`, which is
+        essentially `Union[None, t]`. `anyOf` is the OpenAPI equivalent of this union type. Therefore, if `null` appears in it,
+        we have to drop it from the `anyOf` and mark the schema as `nullable` instead.
         """
         if self.anyOf is not None:
             without_null: abc.Sequence["Schema"] = [e for e in self.anyOf if e.type != "null"]
             if len(without_null) != len(self.anyOf):
+                # if by dropping `null`, there is now only a single value in the `anyOf`, it is no longer an `anyOf`
+                # => promote the single element to this schema's level by copying all its attributes
                 if len(without_null) == 1:
                     # promote single child, which has already been validated at this point
                     child: "Schema" = without_null[0]
