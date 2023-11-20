@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import uuid
 from typing import Optional
 
 import pydantic
@@ -34,18 +35,13 @@ from inmanta.validation_type import validate_type
         ("pydantic.conint", 4, {"ge": 5}, False),
         ("pydantic.constr", "test123", {"regex": "^test.*$"}, True),
         ("pydantic.constr", "test123", {"regex": "^tst.*$"}, False),
-        (
-            "pydantic.stricturl",
-            "http://test:8080",
-            {"tld_required": False},
-            True,
-        ),
-        (
-            "pydantic.stricturl",
-            "http://test:8080",
-            {"tld_required": True},
-            False,
-        ),
+        # constr with non-regex parameters
+        ("pydantic.constr", "nomatch", {"regex": "^test.*$", "max_length": 10}, False),
+        ("pydantic.constr", "testbuttoolong", {"regex": "^test.*$", "max_length": 10}, False),
+        ("pydantic.constr", "testgood", {"regex": "^test.*$", "max_length": 10}, True),
+        ("pydantic.constr", "noregex", {"max_length": 10}, True),
+        ("pydantic.constr", "noregexbuttoolong", {"max_length": 10}, False),
+        ("uuid.UUID", uuid.uuid4(), {}, True),
     ],
 )
 def test_type_validation(attr_type: str, value: str, validation_parameters: dict[str, object], is_valid: bool) -> None:
@@ -55,6 +51,6 @@ def test_type_validation(attr_type: str, value: str, validation_parameters: dict
     validation_error: Optional[pydantic.ValidationError] = None
     try:
         validate_type(attr_type, value, validation_parameters)
-    except pydantic.ValidationError as e:
+    except (pydantic.ValidationError, ValueError) as e:
         validation_error = e
     assert (validation_error is None) is is_valid, validation_error

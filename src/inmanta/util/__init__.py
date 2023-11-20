@@ -47,6 +47,7 @@ from crontab import CronTab
 from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
+from pydantic_core import Url
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -476,7 +477,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, JSONSerializable):
         return o.json_serialization_step()
 
-    if isinstance(o, uuid.UUID):
+    if isinstance(o, (uuid.UUID, Url)):
         return str(o)
 
     if isinstance(o, datetime.datetime):
@@ -495,7 +496,10 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     from inmanta.data.model import BaseModel
 
     if isinstance(o, BaseModel):
-        return o.dict(by_alias=True)
+        return o.model_dump(by_alias=True)
+
+    if dataclasses.is_dataclass(o) and not isinstance(o, type):
+        return dataclasses.asdict(o)
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")

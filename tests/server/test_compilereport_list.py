@@ -16,8 +16,10 @@
     Contact: code@inmanta.com
 """
 import datetime
+import itertools
 import json
 import uuid
+from collections import abc
 from operator import itemgetter
 
 import pytest
@@ -54,7 +56,7 @@ async def env_with_compile_reports(client, environment):
             do_export=bool(i % 3),
             force_update=False,
             metadata={"meta": 42} if i % 2 else None,
-            environment_variables={"TEST_ENV_VAR": True} if i % 2 else None,
+            environment_variables={"TEST_ENV_VAR": "True"} if i % 2 else None,
             success=i != 0,
             handled=True,
             version=i,
@@ -163,6 +165,15 @@ async def test_compile_reports_paging(server, client, env_with_compile_reports, 
     assert result.code == 200
     assert len(result.result["data"]) == 6
     assert compile_ids(result.result["data"]) == all_compile_ids_in_expected_order
+
+    env_vars: abc.Mapping[str, str] = {"TEST_ENV_VAR": "True"}
+    assert all(
+        c["environment_variables"] == expected
+        for c, expected in zip(
+            result.result["data"],
+            itertools.cycle((env_vars, {}) if order == "ASC" else ({}, env_vars)),
+        )
+    )
 
     assert result.result["metadata"] == {"total": 6, "before": 0, "after": 0, "page_size": 6}
 
