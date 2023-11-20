@@ -68,7 +68,8 @@ def test_module_install() -> None:
     with pytest.raises(
         CLIException,
         match="The 'inmanta module install' command is no longer supported. For development mode "
-        "installation, use 'pip install -e .'. For a regular installation, first run 'inmanta module build' and then 'pip install .'.",
+        "installation, use 'pip install -e .'. For a regular installation, first run 'inmanta module "
+        "build' and then 'pip install .'.",
     ):
         ModuleTool().execute("install", [])
 
