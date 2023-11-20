@@ -1094,13 +1094,37 @@ class VirtualEnv(ActiveEnv):
     Creates and uses a virtual environment for this process. This virtualenv inherits from the previously active one.
     """
 
+    _invalid_chars_in_path_re = re.compile(r'["$`]')
+
     def __init__(self, env_path: str) -> None:
         super(VirtualEnv, self).__init__(env_path=env_path)
+        self.validate_path(env_path)
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self._using_venv: bool = False
         self._parent_python: Optional[str] = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
+
+    def validate_path(self, path: str) -> None:
+        """
+        The given path is used in the `./bin/activate` file of the created venv without escaping any special characters.
+        As such, we refuse all special characters here that might cause the given path to be interpreted incorrectly:
+
+            * $: Character used for variable expansion in bash strings.
+            * `: Character used to perform command substitution in bash strings.
+            * ": Character that will be interpreted incorrectly as the end of the string.
+
+        :param path: Path to validate.
+        """
+        if not path:
+            raise ValueError("Cannot create virtual environment because the provided path is an empty string.")
+
+        match = VirtualEnv._invalid_chars_in_path_re.search(path)
+        if match:
+            raise ValueError(
+                f"Cannot create virtual environment because the provided path `{path}` contains an"
+                f" invalid character (`{match.group()}`)."
+            )
 
     def exists(self) -> bool:
         """

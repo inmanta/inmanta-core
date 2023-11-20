@@ -1561,6 +1561,8 @@ class ProjectPipConfig(env.PipConfig):
         For development, it is recommended to set this option to false, both for portability
         (and related compatibility with tools like pytest-inmanta-lsm) and for security
         (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
+
+        See the :ref:`section<specify_location_pip>` about setting up pip index for more information.
     """
 
     class Config:
@@ -1594,8 +1596,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
         repositories. This path is not automatically included in the modulepath!
-    :param install_mode: (Optional) This key determines what version of a module should be selected when a module
-        is downloaded. For more information see :class:`InstallMode`.
+    :param install_mode: (Optional) [DEPRECATED] This key was used to determine what version of a module should be selected
+        when a module is downloaded. For more information see :class:`InstallMode`. This should now be set via the ``pre``
+        option of the ``pip`` section.
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
         in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
         can have the following values:
@@ -1603,16 +1606,16 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
-        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. See
-          :py:class:`inmanta.module.ProjectPipConfig` for more details.
+        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section.
+          Refer to the :ref:`migration guide<migrate_to_project_wide_pip_config>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
         project. Similar to the module, version constraints are defined using
         `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
+    :param freeze_recursive: (Optional) This key determines if the freeze command will behave recursively or not. If
         freeze_recursive is set to false or not set, the current version of all modules imported directly in the main.cf file
-        will be set in project.yml. If it is set to true, the versions of all modules used in this project will set in
+        will be set in project.yml. If it is set to true, the versions of all modules used in this project will be set in
         project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
         Valid values are [==, ~=, >=]. *Default is '~='*
