@@ -3422,7 +3422,7 @@ class Agent(BaseDocument):
         return base
 
     @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, str]) -> Dict[str, str]:
+    def _convert_field_names_to_db_column_names(cls, field_dict: dict[str, object]) -> dict[str, object]:
         if "primary" in field_dict:
             field_dict["id_primary"] = field_dict["primary"]
             del field_dict["primary"]
@@ -4042,9 +4042,10 @@ class ResourceAction(BaseDocument):
                 if "timestamp" in message:
                     ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
-                    message["timestamp"] = ta.validate_python(message["timestamp"])
-                    if message["timestamp"].tzinfo is None:
+                    timestamp = ta.validate_python(message["timestamp"])
+                    if timestamp.tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
+                    message["timestamp"] = timestamp
                 new_messages.append(message)
             self.messages = new_messages
 

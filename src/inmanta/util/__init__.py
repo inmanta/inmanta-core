@@ -498,7 +498,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     if isinstance(o, BaseModel):
         return o.model_dump(by_alias=True)
 
-    if dataclasses.is_dataclass(o):
+    if dataclasses.is_dataclass(o) and not isinstance(o, type):
         return dataclasses.asdict(o)
 
     LOGGER.error("Unable to serialize %s", o)

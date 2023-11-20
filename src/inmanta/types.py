@@ -59,5 +59,3 @@ MethodType = Callable[..., MethodReturn]
 Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
 Warnings = Optional[List[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]
-
-# TODO: mypy-diff

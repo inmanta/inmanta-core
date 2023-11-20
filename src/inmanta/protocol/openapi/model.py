@@ -73,8 +73,7 @@ class Schema(BaseModel):
     enum: Optional[List[str]] = None
 
     @pydantic.model_validator(mode="after")
-    @classmethod
-    def convert_null_any_of(cls, self: Self) -> Self:
+    def convert_null_any_of(self) -> Self:
         """
         Convert null in anyOf to the `nullable` property.
         """

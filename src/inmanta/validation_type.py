@@ -125,7 +125,7 @@ def validate_type(
     module = importlib.import_module(module_name)
     requested_type: object = getattr(module, type_name)
 
-    validation_type: pydantic.TypeAdapter = pydantic.TypeAdapter(
+    validation_type: pydantic.TypeAdapter[object] = pydantic.TypeAdapter(
         parametrize_type(requested_type, validation_parameters, type_name=fq_type_name)
     )
     validation_type.validate_python(value)

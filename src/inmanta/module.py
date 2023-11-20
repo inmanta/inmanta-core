@@ -1248,7 +1248,7 @@ class MetadataFieldRequires(BaseModel):
     requires: List[str] = []
 
     @classmethod
-    def to_list(cls, v: object) -> List[object]:
+    def to_list(cls, v: object) -> list[object]:
         if v is None:
             return []
         if not isinstance(v, list):
@@ -1355,7 +1355,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     _raw_parser: typing.ClassVar[Type[YamlParser]] = YamlParser
 
-    @field_validator("compiler_version")
+    @field_validator("compiler_version", mode="after")
     @classmethod
     def is_pep440_version_v1(cls, v: str) -> str:
         return cls.is_pep440_version(v)
@@ -1579,6 +1579,7 @@ class ProjectPipConfig(env.PipConfig):
     )
 
     @pydantic.model_validator(mode="before")
+    @classmethod
     def __alert_extra_field__(cls, values: dict[str, object]) -> dict[str, object]:
         extra_fields = values.keys() - cls.model_fields.keys() - {v.alias for v in cls.model_fields.values()}
 
@@ -1683,9 +1684,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
 
     @field_validator("repo", mode="before")
     @classmethod
-    def validate_repo_field(cls, v: object) -> List[Dict[object, object]]:
+    def validate_repo_field(cls, v: object) -> list[dict[object, object]]:
         v_as_list = cls.to_list(v)
-        result = []
+        result: list[dict[object, object]] = []
         for elem in v_as_list:
             if isinstance(elem, str):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
