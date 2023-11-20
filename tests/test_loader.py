@@ -259,6 +259,7 @@ def test_plugin_module_finder(
     both in the normal venv and in the finder's module path.
     The different scenarios are tested via parametrization rather than in a single test case to force proper cleanup in
     between.
+
     :param prefer_finder: Configure the custom module finder to be preferred over the default finders.
     :param reload: Instead of only importing the module at the end, already import it before setting up the finder and reload
         it after, checking that the change of source works as expected.
