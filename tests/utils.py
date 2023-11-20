@@ -580,10 +580,10 @@ def module_from_template(
                 config=PipConfig(use_system_config=True),
             )
         else:
-            mod = ModuleTool().build(path=dest_dir)
+            modpath = ModuleTool().build(path=dest_dir)
             env.process_env.install_for_config(
                 requirements=[],
-                paths=[env.LocalPackagePath(path=mod)],
+                paths=[env.LocalPackagePath(path=modpath)],
                 config=PipConfig(use_system_config=True),
             )
     if publish_index is not None:
