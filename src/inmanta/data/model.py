@@ -21,7 +21,7 @@ import uuid
 from collections import abc
 from enum import Enum
 from itertools import chain
-from typing import ClassVar, Dict, List, NewType, Optional, Self, Union, Sequence
+from typing import ClassVar, Dict, List, NewType, Optional, Self, Sequence, Union
 
 import pydantic
 import pydantic.schema
