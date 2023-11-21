@@ -950,7 +950,7 @@ class OrchestrationService(protocol.ServerSlice):
             removed_resource_sets = []
 
         try:
-            pydantic.parse_obj_as(List[ResourceMinimal], resources)
+            pydantic.TypeAdapter(abc.Sequence[ResourceMinimal]).validate_python(resources)
         except pydantic.ValidationError:
             raise BadRequest(
                 "Type validation failed for resources argument. "

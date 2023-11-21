@@ -1237,6 +1237,6 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
             model.DiscoveredResource(
                 discovered_resource_id=res["discovered_resource_id"],
                 values=json.loads(res["values"]),
-            ).dict()
+            ).model_dump()
             for res in records
         ]

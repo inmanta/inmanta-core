@@ -18,6 +18,7 @@
 import asyncio
 import configparser
 import datetime
+import functools
 import json
 import logging
 import os
@@ -31,7 +32,6 @@ from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
-from pydantic.tools import lru_cache
 
 import build
 import build.env
@@ -360,7 +360,7 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
     }
 
 
-@lru_cache(1)
+@functools.lru_cache(1)
 def get_product_meta_data() -> ProductMetadata:
     """Get the produce meta-data"""
     bootloader = InmantaBootloader()
