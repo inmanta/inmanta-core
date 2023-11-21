@@ -1025,8 +1025,8 @@ version: 0.0.1dev0"""
         """
         raise CLIException(
             "The 'inmanta module install' command is no longer supported. "
-            "For development mode installation, use 'pip install -e .'. "
-            "For a regular installation, first run 'inmanta module build' and then 'pip install .'.",
+            "For editable mode installation, use 'pip install -e .'. "
+            "For a regular installation, first run 'inmanta module build' and then 'pip install ./dist/<dist-package>'.",
             exitcode=1,
         )
 
