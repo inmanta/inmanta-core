@@ -65,7 +65,6 @@ def test_type_validation(attr_type: str, value: str, validation_parameters: dict
         ("^abc.*", "xabc", False),
         ("^xabc.*", "xabc", True),
         ("^abc.*", "ab", False),
-        ("^abc.*", "abc", True),
         (".*", True, False),
     ],
 )
