@@ -602,7 +602,7 @@ class ModuleTool(ModuleLikeTool):
             description="""
         The 'inmanta module install' command is no longer supported. Instead, use one of the following approaches:
 
-        1. To install a module in development mode, use 'pip install -e .'.
+        1. To install a module in editable mode, use 'pip install -e .'.
         2. For a non-editable installation, first run 'inmanta module build' followed by 'pip install .'.
             """.strip(),
         )
