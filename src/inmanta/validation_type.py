@@ -26,6 +26,34 @@ from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 
 
+def _regex_validator(regex: str) -> pydantic.AfterValidator:
+    """
+    Returns an AfterValidator for regex validation.
+    """
+    # python-re engine can only be selected on model/TypeAdapter level
+    # => add custom validator that delegates to TypeAdapter
+    return pydantic.AfterValidator(
+        pydantic.TypeAdapter(
+            Annotated[
+                str,
+                pydantic.StringConstraints(pattern=regex),
+            ],
+            config=pydantic.ConfigDict(regex_engine="python-re"),
+        ).validate_python
+    )
+
+
+@stable_api
+def regex_string(regex: str) -> object:
+    """
+    Returns a pydantic-compatible string type that validates values with the given Python regex.
+    """
+    return Annotated[
+        str,
+        _regex_validator(regex),
+    ]
+
+
 @stable_api
 def parametrize_type(
     base_type: Type[object] | abc.Callable[..., Type[object]],
@@ -54,16 +82,7 @@ def parametrize_type(
     if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
         regex: object = validation_parameters["regex"]
         if regex is not None:
-            custom_annotations.append(
-                # python-re engine can only be selected on model/TypeAdapter level
-                # => add custom validator that delegates to TypeAdapter
-                pydantic.AfterValidator(
-                    pydantic.TypeAdapter(
-                        pydantic.constr(pattern=str(validation_parameters["regex"])),
-                        config=pydantic.ConfigDict(regex_engine="python-re"),
-                    ).validate_python
-                )
-            )
+            custom_annotations.append(_regex_validator(str(validation_parameters["regex"])))
         del validation_parameters["regex"]
 
     parametrized_type: object
