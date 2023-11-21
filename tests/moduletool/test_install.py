@@ -267,10 +267,13 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
         new_requirements=[InmantaModuleRequirement.parse(name) for name in ("modone", "modtwo")],
     )
 
-    with pytest.raises(module.InvalidModuleException) as exc_info:
+    with pytest.raises(ConflictingRequirements) as exc_info:
         run_module_install(module_path, False)
-    assert isinstance(exc_info.value.__cause__, ConflictingRequirements)
-    assert "caused by:" in exc_info.value.format_trace()
+    assert (
+        "ERROR: Cannot install inmanta-module-modone==1.2.3 and "
+        "inmanta-module-modtwo==1.2.3 because these package versions "
+        "have conflicting dependencies."
+    ) in exc_info.value.format_trace()
 
 
 @pytest.mark.parametrize_any("dev", [True, False])
