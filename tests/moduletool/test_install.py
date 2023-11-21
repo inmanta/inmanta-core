@@ -432,7 +432,7 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     assert not model_file_installed()
 
 
-def test_module_install() -> None:
+def test_module_install_exception() -> None:
     """
     Verify that the "inmanta module install" commands raises an exception
     """

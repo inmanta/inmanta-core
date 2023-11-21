@@ -833,7 +833,8 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             f"Invalid module at {pkg_installation_dir}: found module package but it has no {ModuleV2.MODULE_FILE}. "
             "This occurs when you install or build modules from source incorrectly. "
             "Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` to "
-            "respectively build a module from source and install the distribution package. Make sure to uninstall the broken package first."
+            "respectively build a module from source and install the distribution package. "
+            "Make sure to uninstall the broken package first."
         )
 
     @classmethod
