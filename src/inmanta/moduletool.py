@@ -598,7 +598,7 @@ class ModuleTool(ModuleLikeTool):
         install: ArgumentParser = subparser.add_parser(
             "install",
             parents=parent_parsers,
-            help="This command is deprecated and no longer supported.",
+            help="This command is no longer supported.",
             description="""
         The 'inmanta module install' command is no longer supported. Instead, use one of the following approaches:
 
