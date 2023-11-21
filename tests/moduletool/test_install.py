@@ -217,7 +217,7 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 @pytest.mark.parametrize_any("editable", [True, False])
 def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
     """
-    Make sur it is possible to install a module in both non-editable and editable mode
+    Make sure it is possible to install a module in both non-editable and editable mode
     """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
