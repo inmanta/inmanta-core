@@ -1298,7 +1298,7 @@ def get_pip_config(tid: uuid.UUID, version: int) -> model.PipConfig:
     Get the code for the given version and the given resource
     :param tid: The id of the environment
     :param version: The id of the model version
-    :raises NotFound: Raised when the version or type is not found
+    :raises NotFound: Raised when the version or environment is not found
     """
 
 
