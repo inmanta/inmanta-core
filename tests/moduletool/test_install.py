@@ -35,7 +35,7 @@ from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException
 from inmanta.config import Config
-from inmanta.env import CommandRunner, ConflictingRequirements
+from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -291,7 +291,12 @@ def test_module_install_version(
         new_version=module_version,
     )
     os.chdir(project.path)
-    ModuleTool().install(editable=True, path=module_path)
+    mod_artifact_path = ModuleTool().build(path=module_path)
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
 
     # check version
     mod: module.Module = ModuleTool().get_module(module_name)
@@ -325,7 +330,12 @@ def test_module_install_reinstall(
         )
 
     # install module
-    ModuleTool().install(editable=False, path=module_path)
+    mod_artifact_path = ModuleTool().build(path=module_path)
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
 
     assert not any(new_files_exist())
 
@@ -335,7 +345,12 @@ def test_module_install_reinstall(
     open(os.path.join(model_dir, "newmod.cf"), "w").close()
     open(os.path.join(module_path, const.PLUGINS_PACKAGE, module_name, "newmod.py"), "w").close()
     module_from_template(module_path, new_version=version.Version("2.0.0"), in_place=True)
-    ModuleTool().install(editable=False, path=module_path)
+    mod_artifact_path = ModuleTool().build(path=module_path)
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
 
     assert all(new_files_exist())
 
@@ -364,7 +379,12 @@ def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompi
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    ModuleTool().install(editable=False, path=module_path)
+    mod_artifact_path = ModuleTool().build(path=module_path)
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
 
     assert os.path.exists(
         os.path.join(
@@ -408,7 +428,12 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    ModuleTool().install(editable=False, path=module_path)
+    mod_artifact_path = ModuleTool().build(path=module_path)
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
     assert model_file_installed()
 
     # remove model file and reinstall
@@ -418,7 +443,12 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
         new_version=version.Version("2.0.0"),
         in_place=True,
     )
-    ModuleTool().install(editable=False, path=module_path)
+    mod_artifact_path = ModuleTool().build(path=module_path)
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
     assert not model_file_installed()
 
 
@@ -429,9 +459,9 @@ def test_module_install() -> None:
 
     with pytest.raises(
         CLIException,
-        match="The 'inmanta module install' command is no longer supported. For development mode "
+        match="The 'inmanta module install' command is no longer supported. For editable mode "
         "installation, use 'pip install -e .'. For a regular installation, first run 'inmanta module "
-        "build' and then 'pip install .'.",
+        "build' and then 'pip install ./dist/<dist-package>'.",
     ):
         ModuleTool().execute("install", [])
 
