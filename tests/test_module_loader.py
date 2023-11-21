@@ -615,8 +615,8 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install the module
+    mod_artifact_path = ModuleTool().build(path=module_path)
     with pytest.raises(ConflictingRequirements) as e:
-        mod_artifact_path = ModuleTool().build(path=module_path)
         env.process_env.install_from_source([env.LocalPackagePath(path=mod_artifact_path, editable=False)])
 
     assert ("these package versions have conflicting dependencies") in str(e.value.msg)
