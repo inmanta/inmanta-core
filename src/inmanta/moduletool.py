@@ -1021,7 +1021,7 @@ version: 0.0.1dev0"""
         """
         This command is no longer supported.
         Use 'pip install -e .' to install a module in editable mode.
-        Use 'inmanta module build' followed by 'pip install .' for non-editable install.
+        Use 'inmanta module build' followed by 'pip install ./dist/<dist-package>' for non-editable install.
         """
         raise CLIException(
             "The 'inmanta module install' command is no longer supported. "
