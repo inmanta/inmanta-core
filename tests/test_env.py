@@ -116,7 +116,7 @@ def test_basic_install(tmpdir):
 
 @pytest.mark.slowtest
 def test_install_fails(tmpdir, caplog, monkeypatch):
-    venv = env.VirtualEnv(tmpdir)
+    venv = env.VirtualEnv(str(tmpdir))
     venv.use_virtual_env()
     caplog.clear()
     caplog.set_level(logging.INFO)
