@@ -867,6 +867,7 @@ def test_install_from_index_dont_leak_pip_index(
     """
     Test that PIP_EXTRA_INDEX_URL/PIP_INDEX_URL is not set in the subprocess doing an install_from_index
     and that it is not changed in the active env. also test that the pip configuration file is not used.
+
     The installation fails with an ModuleNotFoundException
     as the index .custom-index is needed to install v2mod1,
     but it is only present in the active env in PIP_EXTRA_INDEX_URL/PIP_INDEX_URL/config file which is not know by the
