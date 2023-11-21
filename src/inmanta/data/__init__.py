@@ -5209,6 +5209,7 @@ class ConfigurationModel(BaseDocument):
         skipped_for_undeployable: abc.Sequence[ResourceIdStr],
         partial_base: int,
         rids_in_partial_compile: abc.Set[ResourceIdStr],
+        pip_config: Optional[PipConfig],
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
         """
@@ -5217,10 +5218,7 @@ class ConfigurationModel(BaseDocument):
         the partial compile, i.e. not present in rids_in_partial_compile.
         """
         query = f"""
-            WITH base_version_record AS (
-                SELECT pip_config FROM {cls.table_name()} as c0 WHERE c0.environment=$1 AND c0.version=$8 LIMIT 1
-            ),
-            base_version_exists AS (
+            WITH base_version_exists AS (
                 SELECT EXISTS(
                     SELECT 1
                     FROM {cls.table_name()} AS c1
@@ -5289,7 +5287,7 @@ class ConfigurationModel(BaseDocument):
                 ),
                 $8,
                 True,
-                (SELECT pip_config FROM base_version_record LIMIT 1)
+                $10::jsonb
             )
             RETURNING
                 (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
@@ -5305,7 +5303,7 @@ class ConfigurationModel(BaseDocument):
                 deployed,
                 result,
                 is_suitable_for_partial_compiles,
-                (SELECT pip_config FROM base_version_record LIMIT 1) as pip_config
+                pip_config
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetchrow(
@@ -5319,6 +5317,7 @@ class ConfigurationModel(BaseDocument):
                 skipped_for_undeployable,
                 partial_base,
                 list(rids_in_partial_compile),
+                cls._get_value(pip_config),
             )
             # Make mypy happy
             assert result is not None

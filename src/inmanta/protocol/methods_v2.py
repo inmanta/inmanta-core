@@ -23,7 +23,7 @@ from typing import Dict, List, Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
-from inmanta.data.model import DiscoveredResource, ResourceIdStr
+from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
@@ -45,6 +45,7 @@ def put_partial(
     unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[List[str]] = None,
+    pip_config: Optional[PipConfig] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -68,6 +69,7 @@ def put_partial(
     :param **kwargs: The following arguments are supported:
               * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
+    :param pip_config: Pip config used by this version
     :return: The newly stored version number.
     """
 
@@ -1293,7 +1295,7 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
     client_types=[ClientType.agent, ClientType.api],
     api_version=2,
 )
-def get_pip_config(tid: uuid.UUID, version: int) -> model.PipConfig:
+def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
     """
     Get the code for the given version and the given resource
     :param tid: The id of the environment

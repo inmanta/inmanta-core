@@ -504,13 +504,11 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-    ) -> PipConfig:
+    ) -> Optional[PipConfig]:
         version_object = await data.ConfigurationModel.get_version(env.id, version)
         if version_object is None:
             raise NotFound(f"No configuration model with version {version} exists.")
         out = version_object.pip_config
-        if out is None:
-            return LEGACY_PIP_DEFAULT
         return out
 
     def _create_dao_resources_from_api_resources(
@@ -731,6 +729,7 @@ class OrchestrationService(protocol.ServerSlice):
                         ),
                         partial_base=partial_base_version,
                         rids_in_partial_compile=set(rid_to_resource.keys()),
+                        pip_config=pip_config,
                         connection=connection,
                     )
                 else:
@@ -1044,6 +1043,7 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     partial_base_version=base_version,
                     removed_resource_sets=removed_resource_sets,
+                    pip_config=pip_config,
                     connection=con,
                 )
 
