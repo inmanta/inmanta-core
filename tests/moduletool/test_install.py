@@ -45,17 +45,26 @@ from utils import LogSequence, PipIndex, log_contains, module_from_template
 LOGGER = logging.getLogger(__name__)
 
 
-def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
+def run_module_install(module_path: str, editable: bool = False) -> None:
     """
     Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
 
     :param module_path: Path to the inmanta module
     :param editable: Install the module in editable mode (pip install -e).
-    :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
     """
-    if not set_path_argument:
-        os.chdir(module_path)
-    ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
+    if editable:
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=module_path, editable=True)],
+            config=PipConfig(use_system_config=True),
+        )
+    else:
+        mod_artifact_path = ModuleTool().build(path=module_path)
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=mod_artifact_path)],
+            config=PipConfig(use_system_config=True),
+        )
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -207,8 +216,7 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
-@pytest.mark.parametrize_any("set_path_argument", [True, False])
-def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
     """
     Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
     for its options.
@@ -223,7 +231,7 @@ def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bo
         return name in env.process_env.get_installed_packages(only_editable=only_editable)
 
     assert not is_installed(python_module_name)
-    run_module_install(module_path, editable, set_path_argument)
+    run_module_install(module_path, editable)
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
@@ -261,7 +269,7 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
     )
 
     with pytest.raises(module.InvalidModuleException) as exc_info:
-        run_module_install(module_path, False, True)
+        run_module_install(module_path, False)
     assert isinstance(exc_info.value.__cause__, ConflictingRequirements)
     assert "caused by:" in exc_info.value.format_trace()
 
@@ -291,12 +299,7 @@ def test_module_install_version(
         new_version=module_version,
     )
     os.chdir(project.path)
-    mod_artifact_path = ModuleTool().build(path=module_path)
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_path)],
-        config=PipConfig(use_system_config=True),
-    )
+    run_module_install(module_path)
 
     # check version
     mod: module.Module = ModuleTool().get_module(module_name)
@@ -330,12 +333,7 @@ def test_module_install_reinstall(
         )
 
     # install module
-    mod_artifact_path = ModuleTool().build(path=module_path)
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_path)],
-        config=PipConfig(use_system_config=True),
-    )
+    run_module_install(module_path)
 
     assert not any(new_files_exist())
 
@@ -345,12 +343,7 @@ def test_module_install_reinstall(
     open(os.path.join(model_dir, "newmod.cf"), "w").close()
     open(os.path.join(module_path, const.PLUGINS_PACKAGE, module_name, "newmod.py"), "w").close()
     module_from_template(module_path, new_version=version.Version("2.0.0"), in_place=True)
-    mod_artifact_path = ModuleTool().build(path=module_path)
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_path)],
-        config=PipConfig(use_system_config=True),
-    )
+    run_module_install(module_path)
 
     assert all(new_files_exist())
 
@@ -379,12 +372,7 @@ def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompi
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    mod_artifact_path = ModuleTool().build(path=module_path)
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_path)],
-        config=PipConfig(use_system_config=True),
-    )
+    run_module_install(module_path)
 
     assert os.path.exists(
         os.path.join(
@@ -428,12 +416,7 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    mod_artifact_path = ModuleTool().build(path=module_path)
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_path)],
-        config=PipConfig(use_system_config=True),
-    )
+    run_module_install(module_path)
     assert model_file_installed()
 
     # remove model file and reinstall
@@ -443,12 +426,7 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
         new_version=version.Version("2.0.0"),
         in_place=True,
     )
-    mod_artifact_path = ModuleTool().build(path=module_path)
-    env.process_env.install_for_config(
-        requirements=[],
-        paths=[env.LocalPackagePath(path=mod_artifact_path)],
-        config=PipConfig(use_system_config=True),
-    )
+    run_module_install(module_path)
     assert not model_file_installed()
 
 
