@@ -1,0 +1,3 @@
+description: Fix for type error in testcase test_install_fails
+change-type: patch
+destination-branches: [iso6]
