@@ -1020,7 +1020,7 @@ version: 0.0.1dev0"""
     def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
         This command is no longer supported.
-        Use 'pip install -e .' to install a module in development mode.
+        Use 'pip install -e .' to install a module in editable mode.
         Use 'inmanta module build' followed by 'pip install .' for non-editable install.
         """
         raise CLIException(
