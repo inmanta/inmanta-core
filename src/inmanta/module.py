@@ -3322,8 +3322,8 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(
                 f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
-                " incorrectly. Always use the `inmanta module build` command followed by 'pip install' to "
-                "respectively build and install modules from source. Make sure to uninstall the broken package first."
+                " incorrectly. Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` to "
+                "respectively build a module from source and install the distribution package. Make sure to uninstall the broken package first."
             )
 
     @classmethod
