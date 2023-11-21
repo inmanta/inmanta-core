@@ -574,7 +574,9 @@ class ResourceService(protocol.ServerSlice):
     ) -> None:
         resource_id_str = resource_id.resource_version_str()
         finished = datetime.datetime.now().astimezone()
-        changes_with_rvid = {resource_id_str: {attr_name: attr_change.dict()} for attr_name, attr_change in changes.items()}
+        changes_with_rvid = {
+            resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in changes.items()
+        }
 
         if status not in VALID_STATES_ON_STATE_UPDATE:
             error_and_log(
@@ -635,7 +637,7 @@ class ResourceService(protocol.ServerSlice):
                 await resource_action.set_and_save(
                     messages=[
                         {
-                            **log.dict(),
+                            **log.model_dump(),
                             "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds"),
                         }
                         for log in messages

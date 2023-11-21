@@ -124,3 +124,7 @@ def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> 
 def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
     assert import_entry_point("inmanta.server.extensions") == 0
     assert import_entry_point("inmanta.server.bootloader") == 0
+
+
+def test_import_validation_type(import_entry_point: Callable[[str], Optional[int]]) -> None:
+    assert import_entry_point("inmanta.validation_type") == 0
