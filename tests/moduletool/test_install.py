@@ -18,12 +18,13 @@
 import argparse
 import logging
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Tuple, re
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import py
 import pytest
@@ -47,6 +48,7 @@ LOGGER = logging.getLogger(__name__)
 def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
     """
     Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
+
     :param module_path: Path to the inmanta module
     :param editable: Install the module in editable mode (pip install -e).
     :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
@@ -444,6 +446,7 @@ def test_project_install_logs(
     """
     Verify the logs of a project install
     """
+
     # set up project
     snippetcompiler_clean.setup_for_snippet(
         """
@@ -603,6 +606,7 @@ def test_project_install_modules_cache_invalid(
 ) -> None:
     """
     Verify that introducing invalidities in the modules cache results in the appropriate exception and warnings.
+
     - preinstall old (v1 or v2) version of {dependency_module}
     - install project with {main_module} that depends on {dependency_module}>={v2_version}
     """
@@ -852,6 +856,224 @@ def test_project_install_requirement_not_loaded(
     assert message in (rec.message for rec in caplog.records)
 
 
+@pytest.mark.parametrize_any("env_var", ["PIP_EXTRA_INDEX_URL", "PIP_INDEX_URL", "PIP_CONFIG_FILE"])
+def test_install_from_index_dont_leak_pip_index(
+    tmpdir: py.path.local,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    env_var,
+) -> None:
+    """
+    Test that PIP_EXTRA_INDEX_URL/PIP_INDEX_URL is not set in the subprocess doing an install_from_index
+    and that it is not changed in the active env. also test that the pip configuration file is not used.
+    The installation fails with an ModuleNotFoundException
+    as the index .custom-index is needed to install v2mod1,
+    but it is only present in the active env in PIP_EXTRA_INDEX_URL/PIP_INDEX_URL/config file which is not know by the
+    subprocess doing the pip install.
+    """
+
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        publish_index=index,
+    )
+
+    if env_var == "PIP_CONFIG_FILE":
+        pip_config_file = os.path.join(tmpdir, "pip.conf")
+        with open(pip_config_file, "w+", encoding="utf-8") as f:
+            f.write("[global]\n")
+            f.write("timeout = 60\n")
+            f.write("extra-index-url =" + index.url + "\n")
+        monkeypatch.setenv(env_var, pip_config_file)
+    else:
+        monkeypatch.setenv(env_var, index.url)
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        f"""
+        import {module.ModuleV2.get_name_from_metadata(v2mod1)}
+        """,
+        autostd=False,
+        install_project=False,
+        # Installing a V2 module requires a python package source.
+        index_url="unknown",
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
+            for metadata in [v2mod1]
+        ],
+    )
+
+    # install project
+    os.chdir(module.Project.get().path)
+    assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
+    with pytest.raises(ModuleNotFoundException):
+        ProjectTool().execute("install", [])
+    assert os.getenv(env_var) == index.url if env_var != "PIP_CONFIG_FILE" else pip_config_file
+
+
+@pytest.mark.parametrize_any("use_pip_config", [True, False])
+def test_install_with_use_config(
+    tmpdir: py.path.local,
+    tmpvenv_active_inherit: env.VirtualEnv,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    use_pip_config,
+    caplog,
+) -> None:
+    """
+    Test that when using "use_pip_config" the configfile is used and that the module is being installed and
+    that no package source needs to be set.
+    if "use_pip_config" is not used, verify that it will install the module from the specified package source
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        publish_index=index,
+    )
+
+    pip_config_file = tmpdir / "pip.conf"
+    with pip_config_file.open("w+", encoding="utf-8") as f:
+        f.write("[global]\n")
+        f.write("timeout = 60\n")
+        f.write("index-url = file://" + index.url + "\n")
+    monkeypatch.setenv("PIP_CONFIG_FILE", str(pip_config_file))
+    LOGGER.info("Setting PIP_CONFIG_FILE to %s", str(pip_config_file))
+
+    # If we don't unset PIP_INDEX_URL, it will override the config file
+    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        """
+        import v2mod1
+        """,
+        autostd=False,
+        install_project=False,
+        # Installing a V2 module requires a python package source if use_config_file is not True
+        index_url=index.url if not use_pip_config else None,
+        use_pip_config_file=use_pip_config,
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
+            for metadata in [v2mod1]
+        ],
+    )
+
+    # install project
+    project_path = module.Project.get().path
+    os.chdir(project_path)
+    with caplog.at_level(logging.DEBUG):
+        ProjectTool().execute("install", [])
+    assert f"--index-url {index.url}" not in caplog.text if use_pip_config else f"--index-url {index.url}" in caplog.text
+    assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-v2mod1"])
+
+
+def test_install_with_use_config_extra_index(
+    tmpdir: py.path.local,
+    tmpvenv_active_inherit: env.VirtualEnv,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    caplog,
+) -> None:
+    """
+    Test that package sources that are specified when the pip_config_file is used, are used as
+    --extra-index-url in the pip install command
+    """
+    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
+    index2: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index2"))
+
+    # prepare v2 modules
+    v2_template_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    v2mod1: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod1"),
+        new_name="v2mod1",
+        publish_index=index,
+    )
+
+    v2mod2: module.ModuleV2Metadata = module_from_template(
+        v2_template_path,
+        os.path.join(str(tmpdir), "v2mod2"),
+        new_name="v2mod2",
+        publish_index=index2,
+    )
+
+    pip_config_file = os.path.join(tmpdir, "pip.conf")
+    with open(pip_config_file, "w+", encoding="utf-8") as f:
+        f.write("[global]\n")
+        f.write("timeout = 60\n")
+        f.write("index-url = file://" + index.url + "\n")
+    monkeypatch.setenv("PIP_CONFIG_FILE", pip_config_file)
+
+    # If we don't unset PIP_INDEX_URL, it will override the config file
+    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
+
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        """
+        import v2mod1
+        import v2mod2
+        """,
+        autostd=False,
+        install_project=False,
+        # Installing a V2 module requires a python package source if use_config_file is not True
+        extra_index_url=[index2.url],
+        use_pip_config_file=True,
+        python_requires=[
+            Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
+            for metadata in [v2mod1, v2mod2]
+        ],
+    )
+
+    # install project
+    project_path = module.Project.get().path
+    os.chdir(project_path)
+    with caplog.at_level(logging.DEBUG):
+        ProjectTool().execute("install", [])
+    assert f"--extra-index-url {index2.url}" in caplog.text
+    assert f"--extra-index-url {index.url}" not in caplog.text
+    assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-v2mod1", "inmanta-module-v2mod2"])
+
+
+def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
+    tmpvenv_active_inherit: env.VirtualEnv,
+    modules_v2_dir: str,
+    snippetcompiler_clean,
+    monkeypatch,
+    caplog,
+) -> None:
+    """
+    Verify that the default pip config is used if the PIP_CONFIG_FILE env var is not set but use_pip_config_file is.
+    """
+    monkeypatch.delenv("PIP_CONFIG_FILE", False)
+    # set up project
+    snippetcompiler_clean.setup_for_snippet(
+        """
+        import dummy_module
+        """,
+        autostd=False,
+        install_project=False,
+        use_pip_config_file=True,
+        python_requires=[Requirement.parse("inmanta-module-dummy-module")],
+    )
+
+    # install project
+    project_path = module.Project.get().path
+    os.chdir(project_path)
+    with caplog.at_level(logging.DEBUG):
+        ProjectTool().execute("install", [])
+    assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-dummy-module"])
+
+
 @pytest.mark.slowtest
 def test_moduletool_list(
     capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
@@ -972,6 +1194,58 @@ The release type of the project is set to 'master'. Set it to a value that is ap
     """.strip() in str(
         excinfo.value
     )
+
+
+@pytest.mark.slowtest
+def test_module_install_logging(local_module_package_index: str, snippetcompiler_clean, caplog) -> None:
+    """
+    Make sure the module's informations are displayed when it is being installed for both v1 and v2 modules.
+    The check for v1 module is performed on the std module as it gets downloaded and installed, unlike other
+    v1 modules in tests/data/modules which are already on disk.
+    """
+
+    caplog.set_level(logging.DEBUG)
+
+    v2_module = "minimalv2module"
+
+    v2_requirements = [Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_module))]
+
+    # set up project and modules
+    project: module.Project = snippetcompiler_clean.setup_for_snippet(
+        "\n".join(f"import {mod}" for mod in ["std", v2_module]),
+        autostd=False,
+        index_url=local_module_package_index,
+        python_requires=v2_requirements,
+        install_project=False,
+        project_requires=[
+            module.InmantaModuleRequirement.parse("std==4.1.7"),
+        ],
+    )
+
+    os.chdir(project.path)
+
+    # autostd=True reports std as an import for any module, thus requiring it to be v2 because v2 can not depend on v1
+    module.Project.get().autostd = False
+    ProjectTool().execute("install", [])
+
+    expected_logs = [
+        ("Installing module minimalv2module (v2)", logging.DEBUG),
+        ("Successfully installed module minimalv2module (v2) version 1.2.3", logging.DEBUG),
+        ("Installing module std (v1)", logging.DEBUG),
+        (
+            """Successfully installed module std (v1) version 4.1.7 in %s from %s"""
+            % (os.path.join(project.downloadpath, "std"), "https://github.com/inmanta/std"),
+            logging.DEBUG,
+        ),
+    ]
+
+    for message, level in expected_logs:
+        log_contains(
+            caplog,
+            "inmanta.module",
+            level,
+            message,
+        )
 
 
 @pytest.mark.slowtest
