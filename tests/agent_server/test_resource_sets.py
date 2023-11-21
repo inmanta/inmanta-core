@@ -100,6 +100,14 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     expected_resource_sets = {**resource_sets, "test::Resource[agent1,key=key4]": None}
     assert resource_sets_from_db == expected_resource_sets
 
+    # also assert pip config can be None on put_version
+    pip_config_result = await client.get_pip_config(
+        tid=environment,
+        version=version,
+    )
+    assert pip_config_result.code == 200
+    assert pip_config_result.result["data"] == None
+
 
 async def test_put_partial_version_allocation(server, client, environment, clienthelper) -> None:
     """
@@ -185,6 +193,11 @@ async def test_put_partial_version_allocation(server, client, environment, clien
         model = await data.ConfigurationModel.get_version(environment, version)
         assert model is not None
         assert model.partial_base == version - 1
+
+    # also assert pip config can be None on put_partial
+    pip_config_result = await client.get_pip_config(tid=environment, version=full_version + 2)
+    assert pip_config_result.code == 200
+    assert pip_config_result.result["data"] == None
 
 
 async def test_put_partial_replace_resource_set(server, client, environment, clienthelper):

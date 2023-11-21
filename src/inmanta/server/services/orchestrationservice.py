@@ -892,10 +892,6 @@ class OrchestrationService(protocol.ServerSlice):
             resource_sets=resource_sets,
         )
 
-        if pip_config is None:
-            # backward compatibility
-            pip_config = LEGACY_PIP_DEFAULT
-
         async with data.Resource.get_connection() as con:
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
