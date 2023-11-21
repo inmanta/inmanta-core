@@ -217,8 +217,7 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 @pytest.mark.parametrize_any("editable", [True, False])
 def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
     """
-    Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
-    for its options.
+    Make sur it is possible to install a module in both non-editable and editable mode
     """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
@@ -239,7 +238,7 @@ def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bo
 @pytest.mark.slowtest
 def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
     """
-    Verify that the module tool's install command raises an appropriate exception when a module has conflicting dependencies.
+    Verify that installing a module raises an appropriate exception when a module has conflicting dependencies.
     """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
