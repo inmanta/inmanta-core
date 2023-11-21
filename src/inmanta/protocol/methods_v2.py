@@ -1297,7 +1297,8 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
 )
 def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
     """
-    Get the code for the given version and the given resource
+    Get the pip config for the given version
+
     :param tid: The id of the environment
     :param version: The id of the model version
     :raises NotFound: Raised when the version or environment is not found
