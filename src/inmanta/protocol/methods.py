@@ -387,7 +387,7 @@ def stat_files(files: list):
     """
     Check which files exist in the given list
 
-    :param files: A list of file IDs to check
+    :param files: A list of file ids to check
     :return: A list of files that do not exist.
     """
 
