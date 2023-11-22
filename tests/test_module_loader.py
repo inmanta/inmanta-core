@@ -28,7 +28,7 @@ import py
 import pytest
 from pkg_resources import Requirement
 
-from inmanta import compiler, const, loader, plugins, resources
+from inmanta import compiler, const, env, loader, plugins, resources
 from inmanta.ast import CompilerException
 from inmanta.const import CF_CACHE_DIR
 from inmanta.data.model import PipConfig
@@ -36,7 +36,6 @@ from inmanta.env import ConflictingRequirements, LocalPackagePath, PackageNotFou
 from inmanta.module import (
     DummyProject,
     InmantaModuleRequirement,
-    InvalidModuleException,
     ModuleLoadingException,
     ModuleNotFoundException,
     ModuleV1,
@@ -617,10 +616,11 @@ def test_project_requirements_dont_overwrite_core_requirements_source(
     jinja2_version_before = active_env.get_installed_packages()["Jinja2"].base_version
 
     # Install the module
-    with pytest.raises(InvalidModuleException) as e:
-        ModuleTool().install(editable=False, path=module_path)
+    mod_artifact_path = ModuleTool().build(path=module_path)
+    with pytest.raises(ConflictingRequirements) as e:
+        env.process_env.install_from_source([env.LocalPackagePath(path=mod_artifact_path, editable=False)])
 
-    assert ("Module installation failed due to conflicting dependencies") in str(e.value.msg)
+    assert ("these package versions have conflicting dependencies") in str(e.value.msg)
 
     jinja2_version_after = active_env.get_installed_packages()["Jinja2"].base_version
     assert jinja2_version_before == jinja2_version_after

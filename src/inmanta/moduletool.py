@@ -62,7 +62,6 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     Module,
-    ModuleGeneration,
     ModuleLike,
     ModuleMetadata,
     ModuleMetadataFileNotFound,
@@ -600,17 +599,13 @@ class ModuleTool(ModuleLikeTool):
         install: ArgumentParser = subparser.add_parser(
             "install",
             parents=parent_parsers,
-            help="Install a module in the active Python environment.",
+            help="This command is no longer supported.",
             description="""
-Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context
-of a project.
+        The 'inmanta module install' command is no longer supported. Instead, use one of the following approaches:
 
-This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
-with the dependencies specified by the installed module.
-
-Like `pip install`, this command does not reinstall a module for which the same version is already installed, except in editable
-mode.
-        """.strip(),
+        1. To install a module in editable mode, use 'pip install -e .'.
+        2. For a non-editable installation, first run 'inmanta module build' followed by 'pip install ./dist/<dist-package>'.
+            """.strip(),
         )
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
         install.add_argument("path", nargs="?", help="The path to the module.")
@@ -1025,33 +1020,16 @@ version: 0.0.1dev0"""
 
     def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
-        Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
-        context of a project.
+        This command is no longer supported.
+        Use 'pip install -e .' to install a module in editable mode.
+        Use 'inmanta module build' followed by 'pip install ./dist/<dist-package>' for non-editable install.
         """
-
-        # TODO: refine behavior
-        pip_config = PipConfig(use_system_config=True)
-
-        def install(install_path: str) -> None:
-            try:
-                env.process_env.install_for_config(
-                    requirements=[], paths=[env.LocalPackagePath(path=install_path, editable=editable)], config=pip_config
-                )
-            except env.ConflictingRequirements as e:
-                raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
-
-        module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
-        module: Module = self.construct_module(None, module_path)
-        if editable:
-            if module.GENERATION == ModuleGeneration.V1:
-                raise ModuleVersionException(
-                    "Can not install v1 modules in editable mode. You can upgrade your module with `inmanta module v1tov2`."
-                )
-            install(module_path)
-        else:
-            with tempfile.TemporaryDirectory() as build_dir:
-                build_artifact: str = self.build(module_path, build_dir)
-                install(build_artifact)
+        raise CLIException(
+            "The 'inmanta module install' command is no longer supported. "
+            "For editable mode installation, use 'pip install -e .'. "
+            "For a regular installation, first run 'inmanta module build' and then 'pip install ./dist/<dist-package>'.",
+            exitcode=1,
+        )
 
     def status(self, module: Optional[str] = None) -> None:
         """
@@ -1614,7 +1592,7 @@ class V2ModuleBuilder:
 
     def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
         """
-        Build the module and return the path to the build artifact.
+        Build the module using the pip system config and return the path to the build artifact.
 
         :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel
         """
@@ -1783,7 +1761,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
 
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
-        Build v2 module using PEP517 package builder.
+        Build v2 module using the pip system config and using PEP517 package builder.
         """
         try:
             with self._get_isolated_env_builder() as env:

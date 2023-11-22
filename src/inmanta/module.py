@@ -834,8 +834,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         raise InvalidModuleException(
             f"Invalid module at {pkg_installation_dir}: found module package but it has no {ModuleV2.MODULE_FILE}. "
             "This occurs when you install or build modules from source incorrectly. "
-            "Always use the `inmanta module install` and `inmanta module build` commands to "
-            "respectively install and build modules from source. Make sure to uninstall the broken package first."
+            "Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` to "
+            "respectively build a module from source and install the distribution package. "
+            "Make sure to uninstall the broken package first."
         )
 
     @classmethod
@@ -3322,8 +3323,9 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(
                 f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
-                " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
-                " install and build modules from source. Make sure to uninstall the broken package first."
+                " incorrectly. Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` "
+                "to respectively build a module from source and install the distribution package. "
+                "Make sure to uninstall the broken package first."
             )
 
     @classmethod

@@ -573,7 +573,19 @@ def module_from_template(
     with open(config_file, "w") as fh:
         config.write(fh)
     if install:
-        ModuleTool().install(editable=editable, path=dest_dir)
+        if editable:
+            env.process_env.install_for_config(
+                requirements=[],
+                paths=[env.LocalPackagePath(path=dest_dir, editable=True)],
+                config=PipConfig(use_system_config=True),
+            )
+        else:
+            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            env.process_env.install_for_config(
+                requirements=[],
+                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                config=PipConfig(use_system_config=True),
+            )
     if publish_index is not None:
         ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
         publish_index.publish()

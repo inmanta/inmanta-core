@@ -380,9 +380,10 @@ def test_module_v2_incorrect_install_warning(
     module_path = os.path.join(env.process_env.site_packages_dir, const.PLUGINS_PACKAGE, "minimalv2module")
     verify_exception(
         f"Invalid module at {module_path}: found module package but it has no setup.cfg. "
-        "This occurs when you install or build modules from"
-        " source incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
-        " install and build modules from source. Make sure to uninstall the broken package first."
+        "This occurs when you install or build modules from source incorrectly. "
+        "Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` to "
+        "respectively build a module from source and install the distribution "
+        "package. Make sure to uninstall the broken package first."
     )
 
     # include setup.cfg in package to circumvent error
@@ -392,13 +393,18 @@ def test_module_v2_incorrect_install_warning(
     )
     verify_exception(
         "The module at %s contains no _init.cf file. This occurs when you install or build modules from source"
-        " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively install and"
-        " build modules from source. Make sure to uninstall the broken package first." % module_path
+        " incorrectly. Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` to"
+        " respectively build a module from source and install the distribution package."
+        " Make sure to uninstall the broken package first." % module_path
     )
     os.remove(os.path.join(module_dir, const.PLUGINS_PACKAGE, "minimalv2module", "setup.cfg"))
 
     # verify that proposed solution works: editable install doesn't require uninstall first
-    ModuleTool().install(editable=True, path=module_dir)
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=module_dir, editable=True)],
+        config=PipConfig(use_system_config=True),
+    )
     verify_exception(None)
 
 
