@@ -80,7 +80,7 @@ EOF
 }
 
 function __store_old_pip_config {
-    # Store pip configuration
+    # Store pip configuration to be later restored in __restore_old_pip_config during deactivation
     if [ -n "${PIP_PRE:-}" ] ; then
         _OLD_INMANTA_CONFIG_PIP_PRE="${PIP_PRE:-}"
     fi
@@ -97,12 +97,11 @@ function __store_old_pip_config {
         _OLD_INMANTA_CONFIG_PIP_CONFIG_FILE="${PIP_CONFIG_FILE:-}"
     fi
 
-
     return 0
 }
 
 function __restore_old_pip_config {
-    # Restore pip configuration
+    # Restore pip configuration from values saved in __store_old_pip_config
     if [ -n "${_OLD_INMANTA_CONFIG_PIP_PRE:-}" ] ; then
         PIP_PRE="${_OLD_INMANTA_CONFIG_PIP_PRE:-}"
         export PIP_PRE
@@ -132,45 +131,39 @@ function __restore_old_pip_config {
 
 function __get_pip_config_setting {
     declare result
-#    echo "CALLING $1" >&2
-    if [ "$1" == "index_url" ] || [ "$1" == "pre" ] || [ "$1" == "use_system_config" ] ; then
-        result=$(
-            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(pip_cfg.$1);" #2> /dev/null
-        )
-        echo "$result"  # TODO make sure extra index url is formatted eg "idx0 idx1 idx2" (space-separated)
-#        echo "rst: $result"  >&2
-        return 0
-    fi
     if [ "$1" == "extra_index_url" ] ; then
         # make sure extra index url are formatted correctly (space-separated) e.g. "idx0 idx1 idx2"
         result=$(
             "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(' '.join(pip_cfg.$1));" #2> /dev/null
         )
-        echo "$result"  # TODO make sure extra index url is formatted eg "idx0 idx1 idx2" (space-separated)
-#        echo "rst: $result"  >&2
+        echo "$result"
+        return 0
+    fi
+    if [ "$1" == "index_url" ] || [ "$1" == "pre" ] || [ "$1" == "use_system_config" ] ; then
+        result=$(
+            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(pip_cfg.$1);" #2> /dev/null
+        )
+        echo "$result"
         return 0
     fi
 
-    echo "FAILURE $1" >&2
+    echo "ERROR: invalid pip config setting $1" >&2
 
     return 1
 }
 
 function __set_pip_config {
-    declare use_system_config
-    use_system_config=$(__get_pip_config_setting "use_system_config")
-#    echo "use_system_config:$use_system_config" >&2
     declare pre
-    pre=$(__get_pip_config_setting "pre")
-#    echo "pre:$pre" >&2
     declare index_url
-    index_url=$(__get_pip_config_setting 'index_url')
-#    echo "index-url:$index_url" >&2
     declare extra_index_url
+    declare use_system_config
+
+    pre=$(__get_pip_config_setting "pre")
+    index_url=$(__get_pip_config_setting 'index_url')
     extra_index_url=$(__get_pip_config_setting 'extra_index_url')
-#    echo "extra-index-url:$extra_index_url" >&2
+    use_system_config=$(__get_pip_config_setting "use_system_config")
+
     if [ "$use_system_config" == "False" ] ; then
-#        echo "NOT USING SYST CONFIG" >&2
         if [ "$index_url" == "None" ] ; then
             # Do not override any config because unsetting the config and the index urls might lead to PyPi being used, which is worse than keeping the config
             echo "WARNING: Cannot use project.yml pip configuration: pip.use-system-config is False, but no index is defined in the pip.index-url section of the project.yml" >&2
@@ -186,10 +179,9 @@ function __set_pip_config {
         if [ -n "${pre:-}" ] ; then
             PIP_PRE="${pre:-}"
         fi
-
+        # Make sure we disable the config
         PIP_CONFIG_FILE="/dev/null"
     else
-#        echo "USING SYST CONFIG" >&2
         if [ -n "${index_url:-}" ] ; then
             PIP_INDEX_URL="${index_url:-}"
         fi
@@ -199,17 +191,10 @@ function __set_pip_config {
         # Append to existing extra indexes
         if [ -n "${extra_index_url:-}" ] ; then
             PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL:+${PIP_EXTRA_INDEX_URL}} ${extra_index_url}"
-#            echo "PIP_EXTRA_INDEX_URL: $PIP_EXTRA_INDEX_URL" >&2
         fi
 
     fi
-#    result=$(
-#        "$INMANTA_WORKON_PYTHON" -c 'from inmanta.module import Project ;project = Project(".", autostd=False);pip_cfg=project.metadata.pip;print(pip_cfg.index-url);print(pip_cfg.extra-index-url);print(pip_cfg.pre);print(pip_cfg.use_system_config);' 2> /dev/null
-#    )
-#    result2=$(
-#        "$INMANTA_WORKON_PYTHON" -c 'import os;f=open("project.yml");print(f.read());f.close()' 2> /dev/null
-#    )
-#    echo "RES2:$result2" >&2
+
     return 0
 }
 
@@ -318,8 +303,6 @@ function __inmanta_workon_activate {
     __store_old_pip_config
     __set_pip_config
 
-#    echo "SO far SO good [1]" >&2
-
     source "$activate"
     export PS1="($env_name) $OLD_PS1"
 
@@ -330,10 +313,6 @@ function __inmanta_workon_activate {
     __inmanta_workon_register_deactivate
 }
 
-function __test_function_call {
-
-    echo "SO far SO good [2-1]" >&2
-}
 
 function __inmanta_workon_register_deactivate {
     # Registers a custom deactivate function. Modified from virtualenvwrapper's implementation

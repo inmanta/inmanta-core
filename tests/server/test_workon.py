@@ -194,7 +194,7 @@ async def compiled_environments(client: protocol.Client) -> abc.AsyncIterator[ab
                 result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
             )
 
-        await utils.retry_limited(all_compiles_done, 30)
+        await utils.retry_limited(all_compiles_done, 15)
 
         yield environments
 
@@ -965,12 +965,16 @@ async def test_workon_sets_pip_config(
     inner_env_id: uuid.UUID = compiled_environments[0].id
     env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
 
-    def add_check(var_name: str, value: Optional[str], extra_debug_info: Optional[str] = "") -> str:
-        if value:
+    def add_check(var_name: str, expected_value: Optional[str], extra_debug_info: Optional[str] = "") -> str:
+        """
+        This method is meant to be used in a post_activate or pre_activate script passed to the assert_workon_state method.
+        It checks that a given variable has the expected value if this value is a non-empty string.
+        """
+        if expected_value:
             return textwrap.dedent(
                 f"""
-                    if [ ! "${{{var_name}}}" = "{value}" ] ; then
-                        echo $"{extra_debug_info} {var_name}  expected "{value}"  got ${{{var_name}}}"
+                    if [ ! "${{{var_name}}}" = "{expected_value}" ] ; then
+                        echo $"{extra_debug_info} {var_name} expected "{expected_value}" got ${{{var_name}}}"
                         exit 1
                     fi
                 """
@@ -978,15 +982,19 @@ async def test_workon_sets_pip_config(
         return ""
 
     def pre_deactivation_check() -> str:
+        """
+        Return bash code as a string to perform checks on the pip env variables when the inmanta environment is active
+        i.e. AFTER activation but BEFORE deactivation
+        """
         out = ""
         index_url = pip_config.get("index-url")
         if not pip_config.get("use-system-config"):
             if not index_url:
                 # Make sure we didn't change any config:
-                out += add_check("PIP_INDEX_URL", "before_activation")
-                out += add_check("PIP_EXTRA_INDEX_URL", "before_activation")
-                out += add_check("PIP_PRE", "before_activation")
-                out += add_check("PIP_CONFIG_FILE", "before_activation", "pre_deactivation_check")
+                out += add_check("PIP_INDEX_URL", "initial_dummy_value")
+                out += add_check("PIP_EXTRA_INDEX_URL", "initial_dummy_value")
+                out += add_check("PIP_PRE", "initial_dummy_value")
+                out += add_check("PIP_CONFIG_FILE", "initial_dummy_value", "pre_deactivation_check")
             else:
                 # Check we fully replace extra index value
                 out += add_check("PIP_EXTRA_INDEX_URL", " ".join(pip_config.get("extra-index-url", [])))
@@ -994,9 +1002,9 @@ async def test_workon_sets_pip_config(
                 out += add_check("PIP_CONFIG_FILE", "/dev/null", "pre_deactivation_check")
         else:
             # Check we extend extra index value
-            out += add_check("PIP_EXTRA_INDEX_URL", f"before_activation {' '.join(pip_config.get('extra-index-url', []))}")
+            out += add_check("PIP_EXTRA_INDEX_URL", f"initial_dummy_value {' '.join(pip_config.get('extra-index-url', []))}")
             # Make sure PIP_CONFIG_FILE is left untouched:
-            out += add_check("PIP_CONFIG_FILE", "before_activation", "pre_deactivation_check")
+            out += add_check("PIP_CONFIG_FILE", "initial_dummy_value", "pre_deactivation_check")
 
         out += add_check("PIP_INDEX_URL", index_url)
         out += add_check("PIP_PRE", pip_config.get("pre"))
@@ -1004,17 +1012,24 @@ async def test_workon_sets_pip_config(
         return out
 
     def post_deactivation_check() -> str:
+        """
+        Return bash code as a string to perform checks on the pip env variables AFTER deactivation of the inmanta environment
+        """
+
         out = ""
 
         # Make sure we didn't change any config:
-        out += add_check("PIP_INDEX_URL", "before_activation", "post_deactivation_check")
-        out += add_check("PIP_EXTRA_INDEX_URL", "before_activation", "post_deactivation_check")
-        out += add_check("PIP_PRE", "before_activation", "post_deactivation_check")
-        out += add_check("PIP_CONFIG_FILE", "before_activation", "post_deactivation_check")
+        out += add_check("PIP_INDEX_URL", "initial_dummy_value", "post_deactivation_check")
+        out += add_check("PIP_EXTRA_INDEX_URL", "initial_dummy_value", "post_deactivation_check")
+        out += add_check("PIP_PRE", "initial_dummy_value", "post_deactivation_check")
+        out += add_check("PIP_CONFIG_FILE", "initial_dummy_value", "post_deactivation_check")
 
         return out
 
     def create_script(script_parts: Sequence[str]) -> str:
+        """
+        Utility function to put together bash code
+        """
         out = ""
         for part in script_parts:
             out += textwrap.dedent(part)
@@ -1023,6 +1038,8 @@ async def test_workon_sets_pip_config(
 
     def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, str]):
         """
+        Override the project's pip config.
+
         :param env_dir: Environment directory in which a project.yml is expected.
         :pip_config: The specific pip config to write in the project.yml
         """
@@ -1043,10 +1060,10 @@ async def test_workon_sets_pip_config(
             [
                 """
                 # Set some pip env var with dummy values:
-                export PIP_INDEX_URL="before_activation"
-                export PIP_EXTRA_INDEX_URL="before_activation"
-                export PIP_PRE="before_activation"
-                export PIP_CONFIG_FILE="before_activation"
+                export PIP_INDEX_URL="initial_dummy_value"
+                export PIP_EXTRA_INDEX_URL="initial_dummy_value"
+                export PIP_PRE="initial_dummy_value"
+                export PIP_CONFIG_FILE="initial_dummy_value"
                 """
             ]
         ),
