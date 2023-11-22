@@ -962,7 +962,7 @@ def set_state(agent: str, enabled: bool):
     Set the state of the agent.
 
     :param agent: The name of the agent.
-    :param enabled: A boolean value indicating whether the agent should be enabled or disabled.
+    :param enabled: A boolean value indicating whether the agent should be paused (enabled=False) or unpaused (enabled=True).
     """
 
 
