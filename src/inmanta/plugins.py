@@ -40,7 +40,7 @@ from inmanta.ast.type import NamedType
 from inmanta.config import Config
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -191,7 +191,7 @@ class PluginMeta(type):
             cls.__functions = {}
 
 
-class Never(inmanta_type.Type):
+class Null(inmanta_type.Type):
     """
     This custom type is used for the validation of plugins which only
     accept null as an argument or return value.  It is meant to be used
@@ -199,33 +199,33 @@ class Never(inmanta_type.Type):
     """
 
     def validate(self, value: object | None) -> bool:
-        return False
+        return isinstance(value, NoneValue)
 
     def type_string_internal(self) -> str:
-        return "Never"
+        return "Null"
 
 
 # Define some types which are only used in the context of plugins.
 PLUGIN_TYPES = {
     "any": inmanta_type.Type(),  # Any value will pass validation
     "expression": inmanta_type.Type(),  # Any value will pass validation
-    "null": inmanta_type.NullableType(Never()),  # Only NoneValue will pass validation
+    "null": Null(),  # Only NoneValue will pass validation
 }
 
 
-class PluginIO:
+class PluginValue:
     """
     Base class for all values that go in and out of a plugin: arguments and return value.
 
     The class has two class attributes that should be set in the different subclasses:
-    :attr IO_TYPE: The type of io value it is, argument or return value
-    :attr IO_NAME: The name of the io value, the argument name or "return value"
+    :attr VALUE_TYPE: The type of io value it is, argument or return value
+    :attr VALUE_NAME: The name of the io value, the argument name or "return value"
 
     These attributes are only used for better error reporting.
     """
 
-    IO_TYPE: str = ""
-    IO_NAME: str = ""
+    VALUE_TYPE: str = ""
+    VALUE_NAME: str = ""
 
     def __init__(self, type_expression: object) -> None:
         self.type_expression = type_expression
@@ -239,7 +239,7 @@ class PluginIO:
         """
         if self._resolved_type is None:
             raise CompilerException(
-                f"{type(self).__name__} {self.IO_NAME} ({repr(self.type_expression)}) has not been normalized, "
+                f"{type(self).__name__} {self.VALUE_NAME} ({repr(self.type_expression)}) has not been normalized, "
                 "its resolved type can't be accessed."
             )
         return self._resolved_type
@@ -257,7 +257,7 @@ class PluginIO:
         if not isinstance(self.type_expression, str):
             raise CompilerException(
                 "Bad annotation in plugin %s for %s, expected str but got %s (%s)"
-                % (plugin.get_full_name(), self.IO_NAME, type(self.type_expression).__name__, self.type_expression)
+                % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression)
             )
 
         if self.type_expression in PLUGIN_TYPES:
@@ -288,18 +288,18 @@ class PluginIO:
             # Validation fail, we should raise an exception
             raise ValueError(
                 "Invalid %s for %s: value %s has type %s (expected %s)"
-                % (self.IO_TYPE, self.IO_NAME, repr(value), type(value).__name__, type(self.resolved_type).__name__)
+                % (self.VALUE_TYPE, self.VALUE_NAME, repr(value), type(value).__name__, type(self.resolved_type).__name__)
             )
 
         return True
 
 
-class PluginArgument(PluginIO):
+class PluginArgument(PluginValue):
     """
     Represents the argument of an Inmanta plugin.
     """
 
-    IO_TYPE = "argument value"
+    VALUE_TYPE = "argument value"
 
     # Marker used to indicate that a plugin argument has no default value.
     NO_DEFAULT_VALUE_SET = object()
@@ -317,7 +317,7 @@ class PluginArgument(PluginIO):
         self.arg_position = arg_position
         self.is_kw_only_argument = arg_position is None
         self._default_value = default_value
-        self.IO_NAME = self.arg_name
+        self.VALUE_NAME = self.arg_name
 
     @property
     def default_value(self) -> Optional[object]:
@@ -338,13 +338,13 @@ class PluginArgument(PluginIO):
             return "%s: %s" % (self.arg_name, repr(self.arg_type))
 
 
-class PluginReturn(PluginIO):
+class PluginReturn(PluginValue):
     """
     Represent the return type of an Inmanta plugin.
     """
 
-    IO_TYPE = "returned value"
-    IO_NAME = "return value"
+    VALUE_TYPE = "returned value"
+    VALUE_NAME = "return value"
 
 
 class Plugin(NamedType, WithComment, metaclass=PluginMeta):
