@@ -82,7 +82,7 @@ def modify_project(id: uuid.UUID, name: str):
     """
     Modify the given project.
 
-    :param id: The unique identifier of the project to modify.
+    :param id: The id of the project to modify.
     :param name: The new name for the project.
     """
 
@@ -92,7 +92,7 @@ def delete_project(id: uuid.UUID):
     """
     Delete the given project and all related data.
 
-    :param id: The unique identifier of the project to be deleted.
+    :param id: The id of the project to be deleted.
     """
 
 
@@ -108,7 +108,7 @@ def get_project(id: uuid.UUID):
     """
     Get a project and a list of the ids of all environments.
 
-    :param id: The unique identifier of the project to retrieve.
+    :param id: The id of the project to retrieve.
     """
 
 
@@ -133,7 +133,7 @@ def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch:
     """
     Modify the given environment.
 
-    :param id: The unique identifier of the environment to modify.
+    :param id: The id of the environment to modify.
     :param name: The new name for the environment.
     :param repository: Optional. The URL (in git format) of the repository.
     :param branch: Optional. The name of the branch in the repository.
@@ -145,7 +145,7 @@ def delete_environment(id: uuid.UUID):
     """
     Delete the given environment and all related data.
 
-    :param id: The unique identifier of the environment to be deleted.
+    :param id: The id of the environment to be deleted.
 
     :raises NotFound: The given environment doesn't exist.
     :raises Forbidden: The given environment is protected.
@@ -169,7 +169,7 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     """
     Get an environment and all versions associated.
 
-    :param id: The unique identifier of the environment to return.
+    :param id: The id of the environment to return.
     :param versions: Optional. Include this many available versions for this environment.
     :param resources: Optional. Include this many available resources for this environment.
     """
@@ -191,7 +191,7 @@ def list_settings(tid: uuid.UUID):
     """
     List the settings in the current environment ordered by name alphabetically.
 
-    :param tid: The unique identifier of the environment to list settings for.
+    :param tid: The id of the environment to list settings for.
     """
 
 
@@ -207,8 +207,8 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
     """
     Set a value for a setting.
 
-    :param tid: The unique identifier of the environment.
-    :param id: The identifier of the setting to set.
+    :param tid: The id of the environment.
+    :param id: The id of the setting to set.
     :param value: The value to set for the setting.
     """
 
@@ -225,8 +225,8 @@ def get_setting(tid: uuid.UUID, id: str):
     """
     Get the value of a setting.
 
-    :param tid: The unique identifier of the environment.
-    :param id: The identifier of the setting to retrieve.
+    :param tid: The id of the environment.
+    :param id: The id of the setting to retrieve.
     """
 
 
@@ -242,8 +242,8 @@ def delete_setting(tid: uuid.UUID, id: str):
     """
     Delete a setting.
 
-    :param tid: The unique identifier of the environment.
-    :param id: The identifier of the setting to delete.
+    :param tid: The id of the environment.
+    :param id: The id of the setting to delete.
     """
 
 
@@ -277,7 +277,7 @@ def clear_environment(id: uuid.UUID):
     """
     Clear all data from this environment.
 
-    :param id: The unique identifier of the environment to be cleared.
+    :param id: The id of the environment to be cleared.
 
     :raises NotFound: The given environment doesn't exist.
     :raises Forbidden: The given environment is protected.
@@ -649,7 +649,7 @@ def notify_change_get(id: uuid.UUID, update: bool = True):
     """
     Simplified GET version of the POST method
 
-    :param id: The unique identifier of the environment.
+    :param id: The id of the environment.
     :param update: Optional. Indicates whether to update the model code and modules. Defaults to true.
     """
 
@@ -986,7 +986,7 @@ def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
     Get the state for this agent.
 
-    :param tid: The unique identifier of the environment.
+    :param tid: The id of the environment.
     :param sid: The session ID associated with this agent.
     :param agent: The name of the agent.
 
@@ -1013,7 +1013,7 @@ def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
     """
     Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
 
-    :param tid: The unique identifier of the environment for which to retrieve the compile queue.
+    :param tid: The id of the environment for which to retrieve the compile queue.
 
     :return: A list of CompileRun objects representing the current state of the compiler queue,
              with each entry detailing a specific compile run.
