@@ -1,0 +1,10 @@
+description: Removed the 'inmanta module install' command.
+change-type: major
+issue-nr: 6717
+destination-branches: [master]
+sections:
+  deprecation-note: "{{description}}. As an alternative to the now-removed 'inmanta module install' command,
+  users should follow the updated procedure for module installation:
+  The new method involves using the 'inmanta module build' command followed by 'pip install ./dist/<dist-package>' to
+  build a module from source and install the distribution package, respectively. Alternatively, use 'pip install -e .'
+  to install the module in editable mode"

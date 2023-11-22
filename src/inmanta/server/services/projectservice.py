@@ -64,7 +64,7 @@ class ProjectService(protocol.ServerSlice):
     # v1 handlers
     @handle(methods.create_project)
     async def create_project(self, name: str, project_id: Optional[uuid.UUID]) -> Apireturn:
-        return 200, {"project": (await self.project_create(name, project_id)).dict()}
+        return 200, {"project": (await self.project_create(name, project_id)).model_dump()}
 
     @handle(methods.delete_project, project_id="id", api_version=1)
     async def delete_project(self, project_id: uuid.UUID) -> Apireturn:
@@ -73,18 +73,18 @@ class ProjectService(protocol.ServerSlice):
 
     @handle(methods.modify_project, project_id="id")
     async def modify_project(self, project_id: uuid.UUID, name: str) -> Apireturn:
-        return 200, {"project": (await self.project_modify(project_id, name)).dict()}
+        return 200, {"project": (await self.project_modify(project_id, name)).model_dump()}
 
     @handle(methods.list_projects)
     async def list_projects(self) -> Apireturn:
-        project_list: List[JsonType] = [x.dict() for x in await self.project_list()]
+        project_list: List[JsonType] = [x.model_dump() for x in await self.project_list()]
         for project in project_list:
             project["environments"] = [x["id"] for x in project["environments"]]
         return 200, {"projects": project_list}
 
     @handle(methods.get_project, project_id="id")
     async def get_project(self, project_id: uuid.UUID) -> Apireturn:
-        project_model = (await self.project_get(project_id)).dict()
+        project_model = (await self.project_get(project_id)).model_dump()
         project_model["environments"] = [e.id for e in await data.Environment.get_list(project=project_id)]
         return 200, {"project": project_model}
 

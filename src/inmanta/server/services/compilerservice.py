@@ -457,7 +457,7 @@ class CompileRun(object):
                 compile_data_json: str = file.read().decode()
                 if compile_data_json:
                     try:
-                        return success, model.CompileData.parse_raw(compile_data_json)
+                        return success, model.CompileData.model_validate_json(compile_data_json)
                     except json.JSONDecodeError:
                         await warn(
                             "Failed to load compile data json for compile %s. Invalid json: '%s'"
@@ -683,7 +683,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         Returns a key used to determine whether two compiles c1 and c2 are eligible for merging. They are iff
         _compile_merge_key(c1) == _compile_merge_key(c2).
         """
-        return c.to_dto().json(
+        return c.to_dto().model_dump_json(
             include={"environment", "started", "do_export", "environment_variables", "partial", "removed_resource_sets"}
         )
 
@@ -836,7 +836,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         version = runner.version
 
         end = datetime.datetime.now().astimezone()
-        compile_data_json: Optional[dict] = None if compile_data is None else compile_data.dict()
+        compile_data_json: Optional[dict] = None if compile_data is None else compile_data.model_dump()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
             merge_candidate.update_fields(
