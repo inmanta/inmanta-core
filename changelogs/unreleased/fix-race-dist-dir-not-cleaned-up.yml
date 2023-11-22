@@ -1,0 +1,4 @@
+---
+description: Fix race condition where the `test_module_install` test case creates a dist directory in the `./data/modules_v2/minimalv2module` module, which makes the `test_build_v2_module_set_output_directory` test case fail.
+change-type: patch
+destination-branches: [master]
