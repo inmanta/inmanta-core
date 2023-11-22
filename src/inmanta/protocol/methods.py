@@ -806,7 +806,7 @@ def get_code(tid: uuid.UUID, id: int, resource: str):
 
     :param tid: The environment the code belongs to
     :param id: The id (version) of the configuration model
-    :param resource: The id of the resource to get the code from
+    :param resource: The id of the resource to get the code for
     """
 
 
