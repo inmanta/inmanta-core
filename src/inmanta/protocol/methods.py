@@ -73,7 +73,7 @@ def create_project(name: str, project_id: uuid.UUID = None):
     Create a new project
 
     :param name: The name of the project
-    :param project_id: A unique uuid, when it is not provided the server generates one
+    :param project_id: Optional. A unique uuid, when it is not provided the server generates one
     """
 
 
@@ -806,6 +806,7 @@ def get_code(tid: uuid.UUID, id: int, resource: str):
 
     :param tid: The environment the code belongs to
     :param id: The id (version) of the configuration model
+    :param resource: The id of the resource to get the code from
     """
 
 
@@ -816,7 +817,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
 
     :param tid: The environment the code belongs to
     :param id: The id (version) of the configuration model
-    :param resource: a dict mapping resources to dicts mapping file names to file hashes
+    :param resources: a dict mapping resources to dicts mapping file names to file hashes
     """
 
 
@@ -910,9 +911,9 @@ def list_agents(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     List all agent for an environment
 
     :param tid: The environment the agents are defined in
-    :param start: Agent after start (sorted by name in ASC)
-    :param end: Agent before end (sorted by name in ASC)
-    :param limit: Maximum number of results, up to a maximum of 1000
+    :param start: Optional. Agent after start (sorted by name in ASC)
+    :param end: Optional. Agent before end (sorted by name in ASC)
+    :param limit: Optional. Maximum number of results, up to a maximum of 1000
 
     :raises BadRequest: limit parameter can not exceed 1000
     :raises NotFound: The given environment id does not exist!
