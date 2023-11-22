@@ -244,12 +244,12 @@ def get_setting(tid: uuid.UUID, id: str):
     agent_server=True,
     client_types=[const.ClientType.api, const.ClientType.agent],
 )
-def delete_setting(tid: uuid.UUID, key: str):
+def delete_setting(tid: uuid.UUID, id: str):
     """
     Delete a setting identified by the 'key' from the specified environment.
 
     :param tid: The id of the environment from which the setting is to be deleted.
-    :param key: The key of the setting to delete.
+    :param id: The key of the setting to delete.
 
     """
 
