@@ -12,12 +12,12 @@ def test_not_nullable(param: "string") -> "bool":
 
 
 @plugin
-def test_nullable_list(param: "number[]?") -> "bool":
+def test_nullable_list(param: "int[]?") -> "bool":
     return True
 
 
 @plugin
-def test_not_nullable_list(param: "number[]") -> "bool":
+def test_not_nullable_list(param: "int[]") -> "bool":
     return True
 
 

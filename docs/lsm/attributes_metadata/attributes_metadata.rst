@@ -161,7 +161,7 @@ The example below illustrates how the annotation ``annotation=value`` can be att
     end
 
     entity Port extends lsm::EmbeddedEntity:
-        number id
+        int id
     end
 
     __annotations__ = lsm::RelationAnnotations(
