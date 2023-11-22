@@ -428,6 +428,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             return arg_spec.annotations[arg]
 
         # Make sure we have a return annotation even for implicit "null"
+        # If no return annotation (or a Falsy value) is provided, we write
+        # "null" in the annotations dict so that we can use the get_annotation
+        # helper defined above.
         arg_spec.annotations["return"] = arg_spec.annotations.get("return") or "null"
         self.return_type = PluginReturn(get_annotation("return"))
 
