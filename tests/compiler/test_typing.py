@@ -187,31 +187,35 @@ def test_different_value_float_int(snippetcompiler, capsys):
     )
 
 
-@pytest.mark.parametrize("val", ["42.0", "42.1"])
-def test_float_int_attribute(snippetcompiler, val):
+@pytest.mark.parametrize("float_val", ["42.0", "42.1"])
+def test_float_attribute(snippetcompiler, float_val):
+    snippet = f"""
+    entity Float:
+        float i
+    end
+    implement Float using std::none
+    f = Float(i={float_val})
+    """
+    snippetcompiler.setup_for_snippet(snippet)
+
+
+@pytest.mark.parametrize("float_val", ["42.0", "42.1"])
+def test_int_attribute_with_float(snippetcompiler, float_val):
     snippet = f"""
     entity Int:
         int i
     end
-
-    entity Float:
-        float i
-    end
-
     implement Int using std::none
-    implement Float using std::none
-
-    f = Float(i={val})
-    i = Int(i=f.i) # => not an int
+    i = Int(i={float_val}) # => not an int
     """
     snippetcompiler.setup_for_error(
         snippet,
         "Could not set attribute `i` on instance `__config__::Int (instantiated at "
-        "{dir}/main.cf:14)` (reported in Construct(Int) "
-        "({dir}/main.cf:14))\n"
+        "{dir}/main.cf:6)` (reported in Construct(Int) "
+        "({dir}/main.cf:6))\n"
         "caused by:\n"
-        f"  Invalid value '{val}', expected int (reported in Construct(Int) "
-        "({dir}/main.cf:14))",
+        f"  Invalid value '{float_val}', expected int (reported in Construct(Int) "
+        "({dir}/main.cf:6))",
     )
 
 
