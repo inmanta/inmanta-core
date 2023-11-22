@@ -30,6 +30,7 @@ import tempfile
 import textwrap
 import traceback
 import types
+import typing
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
@@ -44,7 +45,8 @@ from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
 from typing import (
-    Any,
+    Annotated,
+    ClassVar,
     Dict,
     Generic,
     Iterable,
@@ -68,8 +70,7 @@ import pkg_resources
 import pydantic
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
-from pydantic.error_wrappers import display_errors
+from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -263,7 +264,7 @@ class InvalidMetadata(CompilerException):
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
         errors = validation_error.errors()
         if errors:
-            msg += "\n" + textwrap.indent(display_errors(errors), " " * 2)
+            msg += "\n" + textwrap.indent(str(validation_error), " " * 2)
         return msg
 
 
@@ -832,8 +833,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         raise InvalidModuleException(
             f"Invalid module at {pkg_installation_dir}: found module package but it has no {ModuleV2.MODULE_FILE}. "
             "This occurs when you install or build modules from source incorrectly. "
-            "Always use the `inmanta module install` and `inmanta module build` commands to "
-            "respectively install and build modules from source. Make sure to uninstall the broken package first."
+            "Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` to "
+            "respectively build a module from source and install the distribution package. "
+            "Make sure to uninstall the broken package first."
         )
 
     @classmethod
@@ -1216,12 +1218,18 @@ TMetadata = TypeVar("TMetadata", bound="Metadata")
 
 @stable_api
 class Metadata(BaseModel):
+    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+        # By default pydantic does not coerce to strings. However, our raw metadata may be typed incorrectly,
+        # e.g. in case of yaml, 1.0.0 is a string but 1.0 is a float
+        coerce_numbers_to_str=True
+    )
+
     name: str
     description: Optional[str] = None
     freeze_recursive: bool = False
-    freeze_operator: str = Field(default="~=", regex=FreezeOperator.get_regex_for_validation())
+    freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
 
-    _raw_parser: Type[RawParser]
+    _raw_parser: typing.ClassVar[Type[RawParser]]
 
     @classmethod
     def parse(cls: Type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
@@ -1241,14 +1249,14 @@ class MetadataFieldRequires(BaseModel):
     requires: List[str] = []
 
     @classmethod
-    def to_list(cls, v: object) -> List[object]:
+    def to_list(cls, v: object) -> list[object]:
         if v is None:
             return []
         if not isinstance(v, list):
             return [v]
         return v
 
-    @validator("requires", pre=True)
+    @field_validator("requires", mode="before")
     @classmethod
     def requires_to_list(cls, v: object) -> object:
         return cls.to_list(v)
@@ -1261,9 +1269,9 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
-    deprecated: Optional[bool]
+    deprecated: Optional[bool] = None
 
-    @validator("version")
+    @field_validator("version")
     @classmethod
     def is_pep440_version(cls, v: str) -> str:
         try:
@@ -1346,9 +1354,9 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     compiler_version: Optional[str] = None
 
-    _raw_parser: Type[YamlParser] = YamlParser
+    _raw_parser: typing.ClassVar[Type[YamlParser]] = YamlParser
 
-    @validator("compiler_version")
+    @field_validator("compiler_version", mode="after")
     @classmethod
     def is_pep440_version_v1(cls, v: str) -> str:
         return cls.is_pep440_version(v)
@@ -1394,9 +1402,9 @@ class ModuleV2Metadata(ModuleMetadata):
     install_requires: List[str]
     version_tag: str = ""
 
-    _raw_parser: Type[CfgParser] = CfgParser
+    _raw_parser: typing.ClassVar[Type[CfgParser]] = CfgParser
 
-    @validator("version")
+    @field_validator("version")
     @classmethod
     def is_base_version(cls, v: str) -> str:
         version_obj: version.Version = version.Version(v)
@@ -1425,7 +1433,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         return v.base_version, get_version_tag(v)
 
-    @validator("version_tag")
+    @field_validator("version_tag")
     @classmethod
     def is_valid_version_tag(cls, v: str) -> str:
         try:
@@ -1434,7 +1442,7 @@ class ModuleV2Metadata(ModuleMetadata):
             raise ValueError(f"Version tag {v} is not PEP440 compliant") from e
         return v
 
-    @validator("name")
+    @field_validator("name")
     @classmethod
     def validate_name_field(cls, v: str) -> str:
         """
@@ -1561,18 +1569,22 @@ class ProjectPipConfig(env.PipConfig):
         For development, it is recommended to set this option to false, both for portability
         (and related compatibility with tools like pytest-inmanta-lsm) and for security
         (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
+
+        See the :ref:`section<specify_location_pip>` about setting up pip index for more information.
     """
 
-    class Config:
+    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
         # use alias generator have `-` in names
-        alias_generator = hyphenize
+        alias_generator=hyphenize,
         # allow use of aliases
-        allow_population_by_field_name = True
-        extra = "ignore"
+        populate_by_name=True,
+        extra="ignore",
+    )
 
-    @pydantic.root_validator(pre=True)
+    @pydantic.model_validator(mode="before")
+    @classmethod
     def __alert_extra_field__(cls, values: dict[str, object]) -> dict[str, object]:
-        extra_fields = values.keys() - cls.__fields__.keys() - {v.alias for v in cls.__fields__.values()}
+        extra_fields = values.keys() - cls.model_fields.keys() - {v.alias for v in cls.model_fields.values()}
 
         for extra_field in extra_fields:
             # This is cfr adr 0000
@@ -1594,8 +1606,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
         repositories. This path is not automatically included in the modulepath!
-    :param install_mode: (Optional) This key determines what version of a module should be selected when a module
-        is downloaded. For more information see :class:`InstallMode`.
+    :param install_mode: (Optional) [DEPRECATED] This key was used to determine what version of a module should be selected
+        when a module is downloaded. For more information see :class:`InstallMode`. This should now be set via the ``pre``
+        option of the ``pip`` section.
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
         in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
         can have the following values:
@@ -1603,16 +1616,16 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
-        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. See
-          :py:class:`inmanta.module.ProjectPipConfig` for more details.
+        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section.
+          Refer to the :ref:`migration guide<migrate_to_project_wide_pip_config>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
         project. Similar to the module, version constraints are defined using
         `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
+    :param freeze_recursive: (Optional) This key determines if the freeze command will behave recursively or not. If
         freeze_recursive is set to false or not set, the current version of all modules imported directly in the main.cf file
-        will be set in project.yml. If it is set to true, the versions of all modules used in this project will set in
+        will be set in project.yml. If it is set to true, the versions of all modules used in this project will be set in
         project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
         Valid values are [==, ~=, >=]. *Default is '~='*
@@ -1647,9 +1660,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
     """
 
-    _raw_parser: Type[YamlParser] = YamlParser
+    _raw_parser: typing.ClassVar[Type[YamlParser]] = YamlParser
+
     _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
-    _re_relation_precedence_rule_compiled: re.Pattern[str] = re.compile(_re_relation_precedence_rule)
+    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_re_relation_precedence_rule)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1660,21 +1674,23 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-    relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
+    relation_precedence_policy: List[
+        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
+    ] = []
     strict_deps_check: bool = True
     agent_install_dependency_modules: bool = False
     pip: ProjectPipConfig = ProjectPipConfig()
 
-    @validator("modulepath", pre=True)
+    @field_validator("modulepath", mode="before")
     @classmethod
     def modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
 
-    @validator("repo", pre=True)
+    @field_validator("repo", mode="before")
     @classmethod
-    def validate_repo_field(cls, v: object) -> List[Dict[Any, Any]]:
+    def validate_repo_field(cls, v: object) -> list[dict[object, object]]:
         v_as_list = cls.to_list(v)
-        result = []
+        result: list[dict[object, object]] = []
         for elem in v_as_list:
             if isinstance(elem, str):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
@@ -3319,8 +3335,9 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(
                 f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
-                " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
-                " install and build modules from source. Make sure to uninstall the broken package first."
+                " incorrectly. Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` "
+                "to respectively build a module from source and install the distribution package. "
+                "Make sure to uninstall the broken package first."
             )
 
     @classmethod

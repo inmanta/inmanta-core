@@ -1016,7 +1016,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
 
             discovered_resources_raw: abc.Mapping[ResourceIdStr, TDiscovered] = self.discover_resources(ctx, resource)
             discovered_resources: abc.Sequence[DiscoveredResource] = [
-                DiscoveredResource(discovered_resource_id=resource_id, values=values.dict())
+                DiscoveredResource(discovered_resource_id=resource_id, values=values.model_dump())
                 for resource_id, values in discovered_resources_raw.items()
             ]
             result = self.run_sync(partial(_call_discovered_resource_create_batch, discovered_resources))

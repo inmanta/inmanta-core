@@ -164,17 +164,17 @@ Becomes:
 
 **Please note, code completion and navigation work on modules that are imported in the** ``main.cf`` **file**.
 
-V2 module source
-================
+Pip index for V2 modules and V1 modules' dependencies
+=====================================================
 
-Add the pip index where your modules are hosted to ``project.yml`` as a repo of type ``package``.
+Add the pip index where your modules and dependencies are hosted to ``project.yml`` in the ``pip.index-url`` :ref:`section<specify_location_pip>`.
 For example, for modules hosted on PyPi:
 
 .. code-block:: yaml
 
-    repo:
-        - url: https://pypi.org/simple
-          type: package
+    pip:
+        index-url: https://pypi.org/simple/
+
 
 
 Setting up a module
@@ -205,7 +205,7 @@ For a v2 module, use the v2 cookiecutter template, then install the module:
 
     pip install cookiecutter
     cookiecutter https://github.com/inmanta/inmanta-module-template.git
-    inmanta module install -e ./<module-name>
+    pip install -e ./<module-name>
 
 This will install a Python package with the name ``inmanta-module-<module-name>`` in the active environment.
 

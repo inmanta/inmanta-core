@@ -280,7 +280,7 @@ Setting up the dev environment
 ##############################
 To set up the development environment for a project, activate your development Python environment and
 install the project with ``inmanta project install``. To set up the environment for a single v2 module,
-run ``inmanta module install -e`` instead.
+run ``pip install -e .`` instead.
 
 The following subsections explain any additional steps you need to take if you want to make changes
 to one of the dependent modules as well.
@@ -295,7 +295,7 @@ v2 modules
 ----------
 All other modules are v2 and have been installed by ``inmanta project install`` into the active Python
 environment. If you want to be able to make changes to one of these modules, the easiest way is to
-check out the module repo separately and run ``inmanta module install -e <path>`` on it, overwriting the published
+check out the module repo separately and run ``pip install -e <path>`` on it, overwriting the published
 package that was installed previously. This will install the module in editable form: any changes you make
 to the checked out files will be picked up by the compiler. You can also do this prior to installing the
 project, in which case the pre-installed module will remain installed in editable form when you install
@@ -329,6 +329,9 @@ for supplying the agents with the appropriate ``inmanta_plugins`` packages.
 The only exception to this rule is when using the ``inmanta export`` command. It exports a project and all its modules'
 ``inmanta_plugins`` packages to the orchestrator server. When this method is used, the orchestrator does not install any modules
 from the Python package repository but instead contains all Python code as present in the local Python environment.
+
+.. _setting_up_pip_index_authentication:
+
 
 Configure the Inmanta server to install modules from a private python package repository
 ----------------------------------------------------------------------------------------
