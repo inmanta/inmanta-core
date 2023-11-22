@@ -17,7 +17,9 @@
 """
 
 import datetime
+from collections import abc
 from enum import Enum
+from typing import Optional
 
 from inmanta.stable_api import stable_api
 
@@ -193,9 +195,13 @@ class LogLevel(str, Enum):
     def to_int(self) -> int:
         return LOG_LEVEL_AS_INTEGER[self]
 
+    @classmethod
+    def _missing_(cls, value: object) -> Optional["LogLevel"]:
+        return INTEGER_AS_LOG_LEVEL.get(value, None) if isinstance(value, int) else None
+
 
 # Mapping each log level to its integer value
-LOG_LEVEL_AS_INTEGER = {
+LOG_LEVEL_AS_INTEGER: abc.Mapping[LogLevel, int] = {
     LogLevel.CRITICAL: 50,
     LogLevel.ERROR: 40,
     LogLevel.WARNING: 30,
@@ -204,11 +210,7 @@ LOG_LEVEL_AS_INTEGER = {
     LogLevel.TRACE: 3,
 }
 
-# The following code registers the integer log levels as values
-# in the LogLevel enum.  It allows to pass them in the constructor
-# as if it was an integer enum: LogLevel(50) == LogLevel.CRITICAL
-for level, value in LOG_LEVEL_AS_INTEGER.items():
-    LogLevel._value2member_map_[value] = level
+INTEGER_AS_LOG_LEVEL: abc.Mapping[int, LogLevel] = {value: log_level for log_level, value in LOG_LEVEL_AS_INTEGER.items()}
 
 INMANTA_URN = "urn:inmanta:"
 
@@ -336,3 +338,5 @@ MODULE_CHANGELOG_FILE = "CHANGELOG.md"
 
 
 DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+
+MODULE_PKG_NAME_PREFIX = "inmanta-module-"

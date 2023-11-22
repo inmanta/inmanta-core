@@ -30,6 +30,7 @@ import tempfile
 import textwrap
 import traceback
 import types
+import typing
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
@@ -44,7 +45,8 @@ from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
 from typing import (
-    Any,
+    Annotated,
+    ClassVar,
     Dict,
     Generic,
     Iterable,
@@ -65,10 +67,10 @@ from typing import (
 
 import more_itertools
 import pkg_resources
+import pydantic
 import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
-from pydantic import BaseModel, Field, NameEmail, ValidationError, constr, validator
-from pydantic.error_wrappers import display_errors
+from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
@@ -262,11 +264,15 @@ class InvalidMetadata(CompilerException):
     def _extend_msg_with_validation_information(cls, msg: str, validation_error: ValidationError) -> str:
         errors = validation_error.errors()
         if errors:
-            msg += "\n" + textwrap.indent(display_errors(errors), " " * 2)
+            msg += "\n" + textwrap.indent(str(validation_error), " " * 2)
         return msg
 
 
 class ModuleDeprecationWarning(InmantaWarning):
+    pass
+
+
+class ProjectConfigurationWarning(InmantaWarning):
     pass
 
 
@@ -675,7 +681,10 @@ class ModuleSource(Generic[TModule]):
 
 @stable_api
 class ModuleV2Source(ModuleSource["ModuleV2"]):
-    def __init__(self, urls: List[str]) -> None:
+    def __init__(self, urls: Sequence[str] = []) -> None:
+        """
+        :param urls: retained for backward compatibility
+        """
         self.urls: List[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
 
     @classmethod
@@ -713,17 +722,10 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
-        if not self.urls and not project.metadata.pip.use_config_file:
-            raise Exception(
-                f"Attempting to install a v2 module {module_name} but no v2 module source is configured. Add the relevant pip "
-                f"indexes to the project config file. e.g. to add PyPi as a module source, add the following to "
-                "the `pip` section of the project's `project.yml`:"
-                "\n\t  index_urls:"
-                "\n\t\t  - https://pypi.org/simple"
-                "\nAnother option is to set the use_config_file project option to true to use the system's pip config file."
-            )
+
+        project.metadata.pip.assert_has_source(f"a v2 module {module_name}")
+
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
-        allow_pre_releases = project is not None and project.install_mode in {InstallMode.prerelease, InstallMode.master}
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
@@ -745,11 +747,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         try:
             self.log_pre_install_information(module_name, module_spec)
             modules_pre_install = self.take_v2_modules_snapshot(header="Modules versions before installation:")
-            env.process_env.install_from_index(
+            env.process_env.install_for_config(
                 requirements,
-                self.urls,
-                allow_pre_releases=allow_pre_releases,
-                use_pip_config=project.metadata.pip.use_config_file,
+                project.metadata.pip,
             )
             self.log_post_install_information(module_name)
             self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
@@ -833,8 +833,9 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         raise InvalidModuleException(
             f"Invalid module at {pkg_installation_dir}: found module package but it has no {ModuleV2.MODULE_FILE}. "
             "This occurs when you install or build modules from source incorrectly. "
-            "Always use the `inmanta module install` and `inmanta module build` commands to "
-            "respectively install and build modules from source. Make sure to uninstall the broken package first."
+            "Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` to "
+            "respectively build a module from source and install the distribution package. "
+            "Make sure to uninstall the broken package first."
         )
 
     @classmethod
@@ -1217,18 +1218,26 @@ TMetadata = TypeVar("TMetadata", bound="Metadata")
 
 @stable_api
 class Metadata(BaseModel):
+    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+        # By default pydantic does not coerce to strings. However, our raw metadata may be typed incorrectly,
+        # e.g. in case of yaml, 1.0.0 is a string but 1.0 is a float
+        coerce_numbers_to_str=True
+    )
+
     name: str
     description: Optional[str] = None
     freeze_recursive: bool = False
-    freeze_operator: str = Field(default="~=", regex=FreezeOperator.get_regex_for_validation())
+    freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
 
-    _raw_parser: Type[RawParser]
+    _raw_parser: typing.ClassVar[Type[RawParser]]
 
     @classmethod
     def parse(cls: Type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
         raw: Mapping[str, object] = cls._raw_parser.parse(source)
         try:
-            return cls(**raw)
+            return cls(
+                **raw,
+            )
         except ValidationError as e:
             if isinstance(source, TextIOBase):
                 raise InvalidMetadata(msg=f"Metadata defined in {source.name} is invalid:", validation_error=e) from e
@@ -1240,14 +1249,14 @@ class MetadataFieldRequires(BaseModel):
     requires: List[str] = []
 
     @classmethod
-    def to_list(cls, v: object) -> List[object]:
+    def to_list(cls, v: object) -> list[object]:
         if v is None:
             return []
         if not isinstance(v, list):
             return [v]
         return v
 
-    @validator("requires", pre=True)
+    @field_validator("requires", mode="before")
     @classmethod
     def requires_to_list(cls, v: object) -> object:
         return cls.to_list(v)
@@ -1260,9 +1269,9 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
-    deprecated: Optional[bool]
+    deprecated: Optional[bool] = None
 
-    @validator("version")
+    @field_validator("version")
     @classmethod
     def is_pep440_version(cls, v: str) -> str:
         try:
@@ -1345,9 +1354,9 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
 
     compiler_version: Optional[str] = None
 
-    _raw_parser: Type[YamlParser] = YamlParser
+    _raw_parser: typing.ClassVar[Type[YamlParser]] = YamlParser
 
-    @validator("compiler_version")
+    @field_validator("compiler_version", mode="after")
     @classmethod
     def is_pep440_version_v1(cls, v: str) -> str:
         return cls.is_pep440_version(v)
@@ -1393,9 +1402,9 @@ class ModuleV2Metadata(ModuleMetadata):
     install_requires: List[str]
     version_tag: str = ""
 
-    _raw_parser: Type[CfgParser] = CfgParser
+    _raw_parser: typing.ClassVar[Type[CfgParser]] = CfgParser
 
-    @validator("version")
+    @field_validator("version")
     @classmethod
     def is_base_version(cls, v: str) -> str:
         version_obj: version.Version = version.Version(v)
@@ -1424,7 +1433,7 @@ class ModuleV2Metadata(ModuleMetadata):
 
         return v.base_version, get_version_tag(v)
 
-    @validator("version_tag")
+    @field_validator("version_tag")
     @classmethod
     def is_valid_version_tag(cls, v: str) -> str:
         try:
@@ -1433,7 +1442,7 @@ class ModuleV2Metadata(ModuleMetadata):
             raise ValueError(f"Version tag {v} is not PEP440 compliant") from e
         return v
 
-    @validator("name")
+    @field_validator("name")
     @classmethod
     def validate_name_field(cls, v: str) -> str:
         """
@@ -1534,21 +1543,55 @@ class RelationPrecedenceRule:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
 
+def hyphenize(field: str) -> str:
+    """Alias generator to convert python names (with `_`) to config file name (with `-`)"""
+    return field.replace("_", "-")
+
+
 @stable_api
-class ProjectPipConfig(BaseModel):
+class ProjectPipConfig(env.PipConfig):
     """
-    :param use_config_file: Indicates whether the pip configuration files have to be taken into account when installing
-        Python packages.
-    :param index_urls: List of pip indexes to use project-wide. These repositories should be
-        `PEP 503 <https://www.python.org/dev/peps/pep-0503/>`_ (the simple repository API)
-        compliant. If more than one index url is configured, they will all be passed to pip. This is generally only
+    :param index_url: one pip index url for this project.
+    :param extra_index_url:  additional pip index urls for this project. This is generally only
         recommended if all configured indexes are under full control of the end user to protect against dependency
         confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
         `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
+    :param pre:  allow pre-releases when installing Python packages, i.e. pip --pre.
+        If null, behaves like false unless pip.use-system-config=true, in which case system config is respected.
+    :param use_system_config: defaults to false.
+        When true, sets the pip's index url, extra index urls and pre according to the respective settings outlined above
+        but otherwise respect any pip environment variables and/or config in the pip config file,
+        including any extra-index-urls.
+
+        If no indexes are configured in pip.index-url/pip.extra-index-url, this option falls back to pip's default behavior,
+        meaning it uses the pip index url from the environment, the config file, or PyPi, in that order.
+
+        For development, it is recommended to set this option to false, both for portability
+        (and related compatibility with tools like pytest-inmanta-lsm) and for security
+        (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
+
+        See the :ref:`section<specify_location_pip>` about setting up pip index for more information.
     """
 
-    use_config_file: bool = False
-    index_urls: List[str] = []
+    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+        # use alias generator have `-` in names
+        alias_generator=hyphenize,
+        # allow use of aliases
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def __alert_extra_field__(cls, values: dict[str, object]) -> dict[str, object]:
+        extra_fields = values.keys() - cls.model_fields.keys() - {v.alias for v in cls.model_fields.values()}
+
+        for extra_field in extra_fields:
+            # This is cfr adr 0000
+            warnings.warn(
+                ProjectConfigurationWarning(f"Found unexpected configuration value 'pip.{extra_field}' in 'project.yml'")
+            )
+        return values
 
 
 @stable_api
@@ -1563,8 +1606,9 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     :param modulepath: (Optional) This value is a list of paths where Inmanta should search for modules.
     :param downloadpath: (Optional) This value determines the path where Inmanta should download modules from
         repositories. This path is not automatically included in the modulepath!
-    :param install_mode: (Optional) This key determines what version of a module should be selected when a module
-        is downloaded. For more information see :class:`InstallMode`.
+    :param install_mode: (Optional) [DEPRECATED] This key was used to determine what version of a module should be selected
+        when a module is downloaded. For more information see :class:`InstallMode`. This should now be set via the ``pre``
+        option of the ``pip`` section.
     :param repo: (Optional) A list (a yaml list) of repositories where Inmanta can find modules. Inmanta tries each repository
         in the order they appear in the list. Each element of this list requires a ``type`` and a ``url`` field. The type field
         can have the following values:
@@ -1572,16 +1616,16 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         * git: When the type is set to git, the url field should contain a template of the Git repo URL. Inmanta creates the
           git repo url by formatting {} or {0} with the name of the module. If no formatter is present it appends the name
           of the module to the URL.
-        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section. See
-          :py:class:`inmanta.module.ProjectPipConfig` for more details.
+        * package: [DEPRECATED] Setting up pip indexes should be done via the ``index_urls`` option of the ``pip`` section.
+          Refer to the :ref:`migration guide<migrate_to_project_wide_pip_config>` for more information.
 
         The old syntax, which only defines a Git URL per list entry is maintained for backward compatibility.
     :param requires: (Optional) This key can contain a list (a yaml list) of version constraints for modules used in this
         project. Similar to the module, version constraints are defined using
         `PEP440 syntax <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
-    :param freeze_recursive: (Optional) This key determined if the freeze command will behave recursively or not. If
+    :param freeze_recursive: (Optional) This key determines if the freeze command will behave recursively or not. If
         freeze_recursive is set to false or not set, the current version of all modules imported directly in the main.cf file
-        will be set in project.yml. If it is set to true, the versions of all modules used in this project will set in
+        will be set in project.yml. If it is set to true, the versions of all modules used in this project will be set in
         project.yml.
     :param freeze_operator: (Optional) This key determines the comparison operator used by the freeze command.
         Valid values are [==, ~=, >=]. *Default is '~='*
@@ -1616,9 +1660,10 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
                 when installing Python packages (See: :py:class:`inmanta.module.ProjectPipConfig` for more details).
     """
 
-    _raw_parser: Type[YamlParser] = YamlParser
+    _raw_parser: typing.ClassVar[Type[YamlParser]] = YamlParser
+
     _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
-    _re_relation_precedence_rule_compiled: re.Pattern[str] = re.compile(_re_relation_precedence_rule)
+    _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_re_relation_precedence_rule)
 
     author: Optional[str] = None
     author_email: Optional[NameEmail] = None
@@ -1629,30 +1674,35 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     downloadpath: Optional[str] = None
     install_mode: InstallMode = InstallMode.release
     requires: List[str] = []
-    relation_precedence_policy: List[constr(strip_whitespace=True, regex=_re_relation_precedence_rule, min_length=1)] = []
+    relation_precedence_policy: List[
+        Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
+    ] = []
     strict_deps_check: bool = True
     agent_install_dependency_modules: bool = False
     pip: ProjectPipConfig = ProjectPipConfig()
 
-    @validator("modulepath", pre=True)
+    @field_validator("modulepath", mode="before")
     @classmethod
     def modulepath_to_list(cls, v: object) -> object:
         return cls.to_list(v)
 
-    @validator("repo", pre=True)
+    @field_validator("repo", mode="before")
     @classmethod
-    def validate_repo_field(cls, v: object) -> List[Dict[Any, Any]]:
+    def validate_repo_field(cls, v: object) -> list[dict[object, object]]:
         v_as_list = cls.to_list(v)
-        result = []
+        result: list[dict[object, object]] = []
         for elem in v_as_list:
             if isinstance(elem, str):
                 # Ensure backward compatibility with the version of Inmanta that didn't have support for the type field.
                 result.append({"url": elem, "type": ModuleRepoType.git})
             elif isinstance(elem, dict):
                 if elem["type"] == ModuleRepoType.package.value:
-                    LOGGER.warning(
-                        "Setting a pip index through the `repo -> url` option with type `package` in the project.yml file "
-                        "is deprecated. Please set the pip index url through the `pip -> index_urls` option instead."
+                    warnings.warn(
+                        ProjectConfigurationWarning(
+                            "Setting a pip index through the `repo.url` option with type `package` in the project.yml file "
+                            "is no longer supported and will be ignored. "
+                            "Please set the pip index url through the `pip.index_url` option instead."
+                        )
                     )
                 result.append(elem)
             else:
@@ -1666,12 +1716,15 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         return [RelationPrecedenceRule.from_string(rule_as_str) for rule_as_str in self.relation_precedence_policy]
 
     def get_index_urls(self) -> List[str]:
-        # Once setting repos with type package is no longer supported, this method can return self.pip.index_urls alone.
-        index_urls_deprecated_option: List[str] = [repo.url for repo in self.repo if repo.type == ModuleRepoType.package]
-
+        """For backward compatibility with ISO6"""
         # This ensures no duplicates are returned and insertion order is preserved.
         # i.e. the left-most index will be passed to pip as --index-url and the others as --extra-index-url
-        return list({value: None for value in itertools.chain(self.pip.index_urls, index_urls_deprecated_option)})
+        return list(
+            {
+                value: None
+                for value in itertools.chain([self.pip.index_url] if self.pip.index_url else [], self.pip.extra_index_url)
+            }
+        )
 
 
 @stable_api
@@ -1945,7 +1998,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self._ast_cache: Optional[Tuple[List[Statement], BasicBlock]] = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
-        self.module_source: ModuleV2Source = ModuleV2Source(self.metadata.get_index_urls())
+        self.module_source: ModuleV2Source = ModuleV2Source()
         self.module_source_v1: ModuleV1Source = ModuleV1Source(
             local_repo=CompositeModuleRepo([make_repo(x) for x in self.modulepath]),
             remote_repo=CompositeModuleRepo(
@@ -2082,7 +2135,6 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         self.load_module_recursive(install=True, bypass_module_cache=bypass_module_cache)
 
-        indexes_urls: List[str] = self.metadata.get_index_urls()
         # Verify non-python part
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
@@ -2092,12 +2144,11 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
 
         if len(pyreq) > 0:
             # upgrade both direct and transitive module dependencies: eager upgrade strategy
-            self.virtualenv.install_from_index(
+            self.virtualenv.install_for_config(
                 pyreq,
+                config=self.metadata.pip,
                 upgrade=update_dependencies,
-                index_urls=indexes_urls if indexes_urls else None,
                 upgrade_strategy=env.PipUpgradeStrategy.EAGER,
-                use_pip_config=self.metadata.pip.use_config_file,
             )
 
         self.verify()
@@ -2411,6 +2462,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         except InvalidModuleException:
             raise
         except env.ConflictingRequirements:
+            raise
+        except env.PackageNotFound:
             raise
         except Exception as e:
             raise InvalidModuleException(f"Could not load module {module_name}") from e
@@ -3266,7 +3319,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
 class ModuleV2(Module[ModuleV2Metadata]):
     MODULE_FILE = "setup.cfg"
     GENERATION = ModuleGeneration.V2
-    PKG_NAME_PREFIX = "inmanta-module-"
+    PKG_NAME_PREFIX = const.MODULE_PKG_NAME_PREFIX
 
     def __init__(
         self,
@@ -3282,8 +3335,9 @@ class ModuleV2(Module[ModuleV2Metadata]):
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
             raise InvalidModuleException(
                 f"The module at {path} contains no _init.cf file. This occurs when you install or build modules from source"
-                " incorrectly. Always use the `inmanta module install` and `inmanta module build` commands to respectively"
-                " install and build modules from source. Make sure to uninstall the broken package first."
+                " incorrectly. Always use the `inmanta module build` command followed by `pip install ./dist/<dist-package>` "
+                "to respectively build a module from source and install the distribution package. "
+                "Make sure to uninstall the broken package first."
             )
 
     @classmethod

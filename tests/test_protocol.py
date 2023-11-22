@@ -30,7 +30,6 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import pydantic
 import pytest
 import tornado
-from pydantic.types import StrictBool
 from tornado import web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.httputil import url_concat
@@ -169,11 +168,11 @@ async def test_diff(client):
     assert diff.code == 200
     assert len(diff.result["diff"]) == 5
 
-    diff = await client.diff(0, hb)
+    diff = await client.diff("0", hb)
     assert diff.code == 200
     assert len(diff.result["diff"]) == 4
 
-    diff = await client.diff(ha, 0)
+    diff = await client.diff(ha, "0")
     assert diff.code == 200
     assert len(diff.result["diff"]) == 4
 
@@ -384,10 +383,7 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
 
     class Project(BaseModel):
         source: str
-        validate_: bool
-
-        class Config:
-            fields = {"validate_": {"alias": "validate"}}
+        validate_: bool = pydantic.Field(..., alias="validate")
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
@@ -811,7 +807,7 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     """Test dict which may have None as a value"""
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    types = Union[pydantic.StrictInt, pydantic.StrictStr]
+    types = Union[int, str]
 
     class Result(BaseModel):
         val: Optional[types]
@@ -938,8 +934,8 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime, "
-        "bytes or a List of these types or a Dict with str keys and values of these types."
+        "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
+        "bytes, Url or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
@@ -961,8 +957,8 @@ async def test_method_definition():
             """
 
     assert (
-        "Type object of argument name must be a either BaseModel, Enum, UUID, str, float, int, StrictNonIntBool, datetime, "
-        "bytes or a List of these types or a Dict with str keys and values of these types."
+        "Type object of argument name must be one of BaseModel, Enum, UUID, str, float, int, bool, datetime, "
+        "bytes, Url or a List of these types or a Dict with str keys and values of these types."
     ) in str(e.value)
 
     @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=["api"])
@@ -980,7 +976,7 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
     """Test use of union types"""
     configure(unused_tcp_port, database_name, postgres_db.port)
 
-    SimpleTypes = Union[float, int, StrictBool, str]  # NOQA
+    SimpleTypes = Union[float, int, bool, str]  # NOQA
     AttributeTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]  # NOQA
 
     class ProjectServer(ServerSlice):
@@ -1021,17 +1017,19 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
     result = await client.test_method(data=5, version=3)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert 5 == result.result["data"][0]
+    # The integer is passed as a string in the url of the get call. This causes it to become a string. To prevent this
+    # the argument needs to be typed as an int
+    assert "5" == result.result["data"][0]
 
     result = await client.test_method(data=5)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert 5 == result.result["data"][0]
+    assert "5" == result.result["data"][0]
 
     result = await client.test_method(data=5, version=7)
     assert result.code == 200
     assert len(result.result["data"]) == 1
-    assert 5 == result.result["data"][0]
+    assert "5" == result.result["data"][0]
 
 
 async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name, async_finalizer):
@@ -1071,8 +1069,8 @@ async def test_basemodel_validation(unused_tcp_port, postgres_db, database_name,
     name = [d for d in details if d["loc"] == ["data", "name"]][0]
     value = [d for d in details if d["loc"] == ["data", "value"]][0]
 
-    assert name["msg"] == "field required"
-    assert value["msg"] == "field required"
+    assert name["msg"].lower() == "field required"
+    assert value["msg"].lower() == "field required"
 
     # Check the validation of the return value
     result = await client.test_method(data={"name": "X", "value": "Y"})
@@ -2016,8 +2014,17 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
 
     response: Result = await client.test_method(timestamp=now)
     assert response.code == 200
-    assert all(pydantic.parse_obj_as(datetime.datetime, timestamp) == naive_utc for timestamp in response.result["data"])
 
+    def convert_to_naive_utc(timestamp: str) -> datetime.datetime:
+        datetime_obj = pydantic.parse_obj_as(datetime.datetime, timestamp)
+        if datetime_obj.tzinfo:
+            datetime_obj = datetime_obj.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+        return datetime_obj
+
+    timestamps = [convert_to_naive_utc(timestamp) for timestamp in response.result["data"]]
+
+    assert all(timestamp == naive_utc for timestamp in timestamps)
     response: Result = await client.test_method(timestamp=now.astimezone(datetime.timezone.utc))
     assert response.code == 200
 

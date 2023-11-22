@@ -515,8 +515,9 @@ requires:
     assert isinstance(cause, InvalidMetadata)
     assert (
         f"Metadata defined in {inmanta_module_v1.get_metadata_file_path()} is invalid:\n"
-        + "  requires -> 0\n"
-        + "    str type expected (type=type_error.str)"
+        "  1 validation error for ModuleV1Metadata\n"
+        "  requires.0\n"
+        "    Input should be a valid string [type=string_type, input_value={'std': 'std > 1.0.0'}, input_type=dict]"
         in cause.msg
     )
 
@@ -624,8 +625,12 @@ packages = find_namespace:
     )
     with pytest.raises(InvalidMetadata) as e:
         module.ModuleV2(None, inmanta_module_v2.get_root_dir_of_module())
-    assert f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n  version\n" in str(e.value)
-    assert error_msg in str(e.value)
+    assert (
+        f"Metadata defined in {inmanta_module_v2.get_metadata_file_path()} is invalid:\n"
+        "  1 validation error for ModuleV2Metadata\n"
+        "  version\n"
+        f"    Value error, {error_msg} [type=value_error, input_value='{version}', input_type=str]\n" in str(e.value)
+    )
 
 
 def test_module_v2_incompatible_commands(caplog, local_module_package_index: str, snippetcompiler, modules_v2_dir: str) -> None:
@@ -638,7 +643,7 @@ def test_module_v2_incompatible_commands(caplog, local_module_package_index: str
 import minimalv1module
 import minimalv2module
         """.strip(),
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=[module.InmantaModuleRequirement.parse("minimalv2module").get_python_package_requirement()],
         autostd=False,
     )

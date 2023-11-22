@@ -20,12 +20,11 @@ import json
 import re
 from typing import Callable, Dict, List, Optional, Type, Union
 
-from pydantic.schema import model_schema
-from pydantic.typing import NoneType
+from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
 
 from inmanta import util
-from inmanta.data.model import BaseModel, patch_pydantic_field_type_schema
+from inmanta.data.model import BaseModel
 from inmanta.protocol.common import ArgOption, MethodProperties, ReturnValue, UrlMethod
 from inmanta.protocol.openapi.model import (
     Components,
@@ -157,11 +156,9 @@ class OpenApiTypeConverter:
 
     def __init__(self) -> None:
         self.components = Components(schemas={})
-        self.ref_prefix = "#/components/schemas/"
-        self.ref_regex = re.compile(self.ref_prefix + r"(.*)")
-
-        # Applying some monkey patching to pydantic
-        patch_pydantic_field_type_schema()
+        self._pydantic_ref_key = "$defs"
+        self.openapi_ref_prefix = "#/components/schemas/"
+        self._ref_regex = re.compile(re.escape(self.openapi_ref_prefix) + r"(.*)")
 
     def get_openapi_type_of_parameter(self, parameter_type: inspect.Parameter) -> Schema:
         schema = self.get_openapi_type(parameter_type.annotation)
@@ -169,13 +166,14 @@ class OpenApiTypeConverter:
             schema.default = parameter_type.default
         return schema
 
-    def _handle_pydantic_model(self, type_annotation: Type, by_alias: bool = True) -> Schema:
-        # JsonSchema stores the model (and sub-model) definitions at #/definitions,
-        # but OpenAPI requires them to be placed at "#/components/schemas/"
-        # The ref_prefix changes the references, but the actual schemas are still at #/definitions
-        schema = model_schema(type_annotation, by_alias=by_alias, ref_prefix=self.ref_prefix)
-        if "definitions" in schema.keys():
-            definitions: Dict[str, Dict[str, object]] = schema.pop("definitions")
+    def _handle_pydantic_model(self, type_annotation: BaseModel, by_alias: bool = True) -> Schema:
+        schema = type_annotation.model_json_schema(by_alias=by_alias, ref_template=f"{self.openapi_ref_prefix}{{model}}")
+        # pydantic.BaseModel.model_json_schema() stores the model (and sub-model) definitions at #/$defs/{model}
+        # (pydantic.main.DEFAULT_REF_TEMPLATE) but OpenAPI requires them to be placed at "#/components/schemas/"
+        # The ref_template tells pydantic to update the references (the referring side) but not the schema location (the
+        # referred side). So we need to perform that translation manually.
+        if self._pydantic_ref_key in schema.keys():
+            definitions: Dict[str, Dict[str, object]] = schema.pop(self._pydantic_ref_key)
             if self.components.schemas is not None:
                 for key, definition in definitions.items():
                     definition = self._add_type_field_to_enum_value(definition)
@@ -188,24 +186,25 @@ class OpenApiTypeConverter:
         populate the type field. This way the rendered API documentation doesn't include all possible
         enum values. This method makes sure that the type attribute of an enum is always populated.
         """
-        if definition.get("enum") is not None and not definition.get("type"):
-            # Convert Python type to a type known by OpenAPI
-            if all(isinstance(e, bool) for e in definition["enum"]):
-                definition["type"] = OpenApiDataTypes.BOOLEAN.value
-            elif all(isinstance(e, int) for e in definition["enum"]):
-                definition["type"] = OpenApiDataTypes.INTEGER.value
-            elif all(isinstance(e, float) or isinstance(e, int) for e in definition["enum"]):
-                definition["type"] = OpenApiDataTypes.NUMBER.value
-            else:
-                definition["type"] = OpenApiDataTypes.STRING.value
+        if definition.get("enum") is not None:
+            if not definition.get("type"):
+                # Convert Python type to a type known by OpenAPI
+                if all(isinstance(e, bool) for e in definition["enum"]):
+                    definition["type"] = OpenApiDataTypes.BOOLEAN.value
+                elif all(isinstance(e, int) for e in definition["enum"]):
+                    definition["type"] = OpenApiDataTypes.INTEGER.value
+                elif all(isinstance(e, float) or isinstance(e, int) for e in definition["enum"]):
+                    definition["type"] = OpenApiDataTypes.NUMBER.value
+                else:
+                    definition["type"] = OpenApiDataTypes.STRING.value
+            # OpenAPI expects enum values to be strings
+            definition["enum"] = [str(e) for e in definition["enum"]]
         return definition
 
     def get_openapi_type(self, type_annotation: Type) -> Schema:
         class Sub(BaseModel):
             the_field: type_annotation
-
-            class Config:
-                arbitrary_types_allowed = True
+            model_config = ConfigDict(arbitrary_types_allowed=True)
 
         pydantic_result = self._handle_pydantic_model(Sub).properties["the_field"]
         pydantic_result.title = None
@@ -218,7 +217,7 @@ class OpenApiTypeConverter:
 
         :param reference: The reference to the schema
         """
-        ref_match = self.ref_regex.match(reference)
+        ref_match = self._ref_regex.match(reference)
         if not ref_match:
             return None
 
@@ -475,7 +474,7 @@ class OperationHandler:
             if not url_method_properties.envelope:
                 raise RuntimeError("Methods returning a ReturnValue object should always have an envelope")
 
-            if type_args[0] != NoneType:
+            if type_args[0] is not type(None):
                 return_properties[url_method_properties.envelope_key] = self.type_converter.get_openapi_type(type_args[0])
 
         else:

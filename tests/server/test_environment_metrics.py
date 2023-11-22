@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import functools
+import operator
 import uuid
 from collections import abc, defaultdict
 from collections.abc import AsyncIterator, Sequence
@@ -39,8 +41,8 @@ from inmanta.server.services.environment_metrics_service import (
     MetricValueTimer,
     ResourceCountMetricsCollector,
 )
-from inmanta.util import get_compiler_version
-from utils import ClientHelper, get_as_naive_datetime
+from inmanta.util import get_compiler_version, parse_timestamp
+from utils import ClientHelper
 
 env_uuid = uuid.uuid4()
 
@@ -801,7 +803,7 @@ async def test_compile_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
-    expected_total_compile_time = sum(compile_times)
+    expected_total_compile_time = functools.reduce(operator.add, compile_times)
 
     assert len(result_timer) == 1
     assert any(
@@ -828,7 +830,7 @@ async def test_compile_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(compile_times)
-    expected_total_compile_time = sum(compile_times)
+    expected_total_compile_time = functools.reduce(operator.add, compile_times)
 
     # 1 new entry
     assert len(result_timer) == 2
@@ -943,7 +945,7 @@ async def test_compile_wait_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_wait_time = sum(wait_times)
+    expected_total_wait_time = functools.reduce(operator.add, wait_times)
 
     assert len(result_timer) == 1
     assert any(
@@ -969,7 +971,7 @@ async def test_compile_wait_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_wait_time = sum(wait_times)
+    expected_total_wait_time = functools.reduce(operator.add, wait_times)
 
     # 1 new entry
     assert len(result_timer) == 2
@@ -990,7 +992,7 @@ async def test_compile_wait_time_metric(client, server):
     result_timer = await data.EnvironmentMetricsTimer.get_list()
 
     expected_count = len(wait_times)
-    expected_total_wait_time = sum(wait_times)
+    expected_total_wait_time = functools.reduce(operator.add, wait_times)
 
     # 1 new entry
     assert len(result_timer) == 3
@@ -1238,10 +1240,10 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_1h)
-    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
-    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert parse_timestamp(result.result["data"]["start"]) == start_interval
+    assert parse_timestamp(result.result["data"]["end"]) == start_interval_plus_1h
+    expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
+    assert [parse_timestamp(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 2
     assert result.result["data"]["metrics"]["gauge_metric1"] == [sum(i for _ in range(6)) / 6 + 0.5 for i in range(10)]
     assert result.result["data"]["metrics"]["timer_metric1"] == [(sum(i for _ in range(6)) + 1.5) / (2 * 6) for i in range(10)]
@@ -1258,10 +1260,10 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval_min_6_min)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_6_min)
-    expected_timestamps = [get_as_naive_datetime(start_interval), get_as_naive_datetime(start_interval_plus_6_min)]
-    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert parse_timestamp(result.result["data"]["start"]) == start_interval_min_6_min
+    assert parse_timestamp(result.result["data"]["end"]) == start_interval_plus_6_min
+    expected_timestamps = [start_interval, start_interval_plus_6_min]
+    assert [parse_timestamp(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None, 0.5]
 
@@ -1275,10 +1277,10 @@ async def test_get_environment_metrics_api_endpoint(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval_min_6_min)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(start_interval_plus_6_min)
-    expected_timestamps = [get_as_naive_datetime(start_interval_plus_6_min)]
-    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert parse_timestamp(result.result["data"]["start"]) == start_interval_min_6_min
+    assert parse_timestamp(result.result["data"]["end"]) == start_interval_plus_6_min
+    expected_timestamps = [start_interval_plus_6_min]
+    assert [parse_timestamp(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [0.5]
 
@@ -1347,10 +1349,11 @@ async def test_compile_rate_metric(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(end_interval)
-    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
-    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+
+    assert parse_timestamp(result.result["data"]["start"]) == start_interval
+    assert parse_timestamp(result.result["data"]["end"]) == end_interval
+    expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
+    assert [parse_timestamp(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["orchestrator.compile_rate"] == [
         sum((i * 6) + j for j in range(6)) * nb_datapoints for i in range(nb_datapoints)
@@ -1368,10 +1371,10 @@ async def test_compile_rate_metric(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200
-    assert datetime.fromisoformat(result.result["data"]["start"]) == get_as_naive_datetime(start_interval)
-    assert datetime.fromisoformat(result.result["data"]["end"]) == get_as_naive_datetime(end_interval)
-    expected_timestamps = [get_as_naive_datetime(start_interval + timedelta(minutes=(i + 1) * 6)) for i in range(nb_datapoints)]
-    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert parse_timestamp(result.result["data"]["start"]) == start_interval
+    assert parse_timestamp(result.result["data"]["end"]) == end_interval
+    expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
+    assert [parse_timestamp(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert all(m == 0 for m in result.result["data"]["metrics"]["orchestrator.compile_rate"])
 
@@ -1387,7 +1390,7 @@ async def test_metric_aggregation_no_date(
     """
     env1_id = await environment_creator(client, project_default, env_name="env1")
 
-    start_interval = datetime.now()
+    start_interval = datetime.now().astimezone()
     end_interval = start_interval + timedelta(hours=1)
     nb_datapoints = 10
     result = await client.get_environment_metrics(
@@ -1398,10 +1401,10 @@ async def test_metric_aggregation_no_date(
         nb_datapoints=nb_datapoints,
     )
     assert result.code == 200, result.result
-    assert datetime.fromisoformat(result.result["data"]["start"]) == start_interval
-    assert datetime.fromisoformat(result.result["data"]["end"]) == end_interval
+    assert parse_timestamp(result.result["data"]["start"]) == start_interval
+    assert parse_timestamp(result.result["data"]["end"]) == end_interval
     expected_timestamps = [start_interval + timedelta(minutes=(i + 1) * 6) for i in range(nb_datapoints)]
-    assert [datetime.fromisoformat(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
+    assert [parse_timestamp(timestamp) for timestamp in result.result["data"]["timestamps"]] == expected_timestamps
     assert len(result.result["data"]["metrics"]) == 1
     assert result.result["data"]["metrics"]["gauge_metric1"] == [None for _ in range(10)]
 
@@ -1576,13 +1579,11 @@ async def test_get_environment_metrics_api_endpoint_round_timestamp(
     )
 
     assert result.code == 200, result.result
-    assert get_as_naive_datetime(start_interval_reply) == datetime.fromisoformat(result.result["data"]["start"])
-    assert get_as_naive_datetime(end_interval_reply) == datetime.fromisoformat(result.result["data"]["end"])
-    timestamps = [datetime.fromisoformat(t) for t in result.result["data"]["timestamps"]]
+    assert start_interval_reply == parse_timestamp(result.result["data"]["start"])
+    assert end_interval_reply == parse_timestamp(result.result["data"]["end"])
+    timestamps = [parse_timestamp(t) for t in result.result["data"]["timestamps"]]
     assert len(timestamps) == nb_datapoints_reply
-    assert timestamps == [
-        get_as_naive_datetime(start_interval_reply + timedelta(hours=3) * (i + 1)) for i in range(nb_datapoints_reply)
-    ]
+    assert timestamps == [start_interval_reply + timedelta(hours=3) * (i + 1) for i in range(nb_datapoints_reply)]
     expected_metrics = [5.0 for _ in range(nb_datapoints_reply)]
     # Take the additional datapoints on the boundary of the first two time windows into account
     expected_metrics[0] = (3 * 5 + 1) / 4

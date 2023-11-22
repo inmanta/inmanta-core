@@ -32,7 +32,6 @@ from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
 from typing import (
-    Any,
     Awaitable,
     Callable,
     Dict,
@@ -301,7 +300,8 @@ class ColumnType:
             # It is as expected
             return value
         if self.base_type == bool:
-            return pydantic.validators.bool_validator(value)
+            ta = pydantic.TypeAdapter(bool)
+            return ta.validate_python(value)
         if self.base_type == datetime.datetime and isinstance(value, str):
             return api_boundary_datetime_normalizer(dateutil.parser.isoparse(value))
         if issubclass(self.base_type, (str, int)) and isinstance(value, (str, int, bool)):
@@ -1209,7 +1209,7 @@ class Field(Generic[T]):
             jsv = json.loads(value)
             return self.field_type(**jsv)
         if self.field_type == pydantic.AnyHttpUrl:
-            return pydantic.tools.parse_obj_as(pydantic.AnyHttpUrl, value)
+            return pydantic.TypeAdapter(pydantic.AnyHttpUrl).validate_python(value)
 
         raise TypeError(
             "Field %s should have the correct type (%s instead of %s)" % (name, self.field_type.__name__, type(value).__name__)
@@ -1475,7 +1475,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     def _get_names_of_primary_key_fields(cls) -> List[str]:
         return [name for name, value in cls.get_field_metadata().items() if value.is_part_of_primary_key()]
 
-    def _get_filter_on_primary_key_fields(self, offset: int = 1) -> Tuple[str, List[Any]]:
+    def _get_filter_on_primary_key_fields(self, offset: int = 1) -> Tuple[str, List[object]]:
         names_primary_key_fields = self._get_names_of_primary_key_fields()
         query = {field_name: self.__getattribute__(field_name) for field_name in names_primary_key_fields}
         return self._get_composed_filter(offset=offset, **query)
@@ -1530,7 +1530,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         raise AttributeError(name)
 
     @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, Any]) -> Dict[str, Any]:
+    def _convert_field_names_to_db_column_names(cls, field_dict: dict[str, object]) -> dict[str, object]:
         return field_dict
 
     def get_value(self, name: str, default_value: Optional[object] = None) -> object:
@@ -1710,7 +1710,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
+    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
         """
         Update this document in the database. It will update the fields in this object and send a full update to database.
         Use update_fields to only update specific fields.
@@ -1905,8 +1905,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         order_by_column: Optional[str] = None,
         order: Optional[str] = None,
         limit: Optional[int] = None,
-        start: Optional[Any] = None,
-        end: Optional[Any] = None,
+        start: Optional[object] = None,
+        end: Optional[object] = None,
         no_obj: Optional[bool] = None,
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -1988,7 +1988,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name: str, value: Any, index: int) -> Tuple[str, List[object]]:
+    def _get_filter(cls, name: str, value: object, index: int) -> Tuple[str, List[object]]:
         if value is None:
             return (name + " IS NULL", [])
         filter_statement = name + "=$" + str(index)
@@ -2162,7 +2162,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         offset: int,
         order_by_column: ColumnNameStr,
         id_column: ColumnNameStr,
-        start: Optional[Any] = None,
+        start: Optional[object] = None,
         first_id: Optional[Union[uuid.UUID, str]] = None,
     ) -> Tuple[List[str], List[object]]:
         filter_statements = []
@@ -2182,7 +2182,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         offset: int,
         order_by_column: ColumnNameStr,
         id_column: ColumnNameStr,
-        end: Optional[Any] = None,
+        end: Optional[object] = None,
         last_id: Optional[Union[uuid.UUID, str]] = None,
     ) -> Tuple[List[str], List[object]]:
         filter_statements = []
@@ -2424,14 +2424,12 @@ AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
 ENVIRONMENT_AGENT_TRIGGER_METHOD = "environment_agent_trigger_method"
-AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
 AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
 AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
 AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
-AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 AUTO_FULL_COMPILE = "auto_full_compile"
@@ -2602,13 +2600,6 @@ class Environment(BaseDocument):
             f"For auto deploy, {AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY} is used.",
             allowed_values=[opt.name for opt in const.AgentTriggerMethod],
         ),
-        AUTOSTART_SPLAY: Setting(
-            name=AUTOSTART_SPLAY,
-            typ="int",
-            default=10,
-            doc="[DEPRECATED] Splay time for autostarted agents.",
-            validator=convert_int,
-        ),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(
             name=AUTOSTART_AGENT_DEPLOY_INTERVAL,
             typ="str",
@@ -2663,14 +2654,6 @@ class Environment(BaseDocument):
             validator=convert_agent_map,
             doc="A dict with key the name of agents that should be automatically started. The value "
             "is either an empty string or an agent map string. See also: :inmanta.config:option:`config.agent-map`",
-            agent_restart=True,
-        ),
-        AUTOSTART_AGENT_INTERVAL: Setting(
-            name=AUTOSTART_AGENT_INTERVAL,
-            default=600,
-            typ="int",
-            validator=convert_int,
-            doc="[DEPRECATED] Agent interval for autostarted agents in seconds",
             agent_restart=True,
         ),
         SERVER_COMPILE: Setting(
@@ -2739,11 +2722,6 @@ class Environment(BaseDocument):
         ),
     }
 
-    _renamed_settings_map = {
-        AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
-        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY,
-    }  # name new_option -> name deprecated_option
-
     @classmethod
     def get_setting_definition(cls, setting_name: str) -> Setting:
         """
@@ -2761,15 +2739,6 @@ class Environment(BaseDocument):
         """
         if key not in self._settings:
             raise KeyError()
-
-        if key in self._renamed_settings_map:
-            name_deprecated_setting = self._renamed_settings_map[key]
-            if name_deprecated_setting in self.settings and key not in self.settings:
-                warnings.warn(
-                    "Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
-                    category=DeprecationWarning,
-                )
-                return self.settings[name_deprecated_setting]
 
         if key in self.settings:
             return self.settings[key]
@@ -3103,7 +3072,7 @@ class UnknownParameter(BaseDocument):
     source: str
     resource_id: m.ResourceIdStr = ""
     version: int
-    metadata: Optional[Dict[str, Any]]
+    metadata: Optional[Dict[str, object]]
     resolved: bool = False
 
     def copy(self, new_version: int) -> "UnknownParameter":
@@ -3453,7 +3422,7 @@ class Agent(BaseDocument):
         return base
 
     @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, str]) -> Dict[str, str]:
+    def _convert_field_names_to_db_column_names(cls, field_dict: dict[str, object]) -> dict[str, object]:
         if "primary" in field_dict:
             field_dict["id_primary"] = field_dict["primary"]
             del field_dict["primary"]
@@ -3688,7 +3657,7 @@ class Compile(BaseDocument):
     do_export: bool = False
     force_update: bool = False
     metadata: JsonType = {}
-    environment_variables: Optional[JsonType] = {}
+    environment_variables: Optional[dict[str, str]] = {}
 
     success: Optional[bool]
     handled: bool = False
@@ -4052,7 +4021,7 @@ class ResourceAction(BaseDocument):
     started: datetime.datetime
     finished: Optional[datetime.datetime] = None
 
-    messages: Optional[List[Dict[str, Any]]] = None
+    messages: Optional[List[Dict[str, object]]] = None
     status: Optional[const.ResourceState] = None
     changes: Optional[Dict[m.ResourceIdStr, Dict[str, object]]] = None
     change: Optional[const.Change] = None
@@ -4071,10 +4040,12 @@ class ResourceAction(BaseDocument):
             for message in self.messages:
                 message = json.loads(message)
                 if "timestamp" in message:
+                    ta = pydantic.TypeAdapter(datetime.datetime)
                     # use pydantic instead of datetime.strptime because strptime has trouble parsing isoformat timezone offset
-                    message["timestamp"] = pydantic.parse_obj_as(datetime.datetime, message["timestamp"])
-                    if message["timestamp"].tzinfo is None:
+                    timestamp = ta.validate_python(message["timestamp"])
+                    if timestamp.tzinfo is None:
                         raise Exception("Found naive timestamp in the database, this should not be possible")
+                    message["timestamp"] = timestamp
                 new_messages.append(message)
             self.messages = new_messages
 
@@ -4174,8 +4145,8 @@ class ResourceAction(BaseDocument):
 
     async def set_and_save(
         self,
-        messages: List[Dict[str, Any]],
-        changes: Dict[str, Any],
+        messages: List[Dict[str, object]],
+        changes: Dict[str, object],
         status: Optional[const.ResourceState],
         change: Optional[const.Change],
         finished: Optional[datetime.datetime],
@@ -4462,7 +4433,7 @@ class Resource(BaseDocument):
     last_produced_events: Optional[datetime.datetime] = None
 
     # State related
-    attributes: Dict[str, Any] = {}
+    attributes: Dict[str, object] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
@@ -4766,7 +4737,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resources_for_version_raw(
         cls, environment: uuid.UUID, version: int, projection: Optional[List[str]], *, connection: Optional[Connection] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Dict[str, object]]:
         if not projection:
             projection = "*"
         else:
@@ -4816,7 +4787,7 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: Any) -> "Resource":
+    def new(cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, **kwargs: object) -> "Resource":
         vid = resources.Id.parse_id(resource_version_id)
 
         attr = dict(
@@ -5116,11 +5087,11 @@ class Resource(BaseDocument):
             doc.make_hash()
         await super(Resource, cls).insert_many(documents, connection=connection)
 
-    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
+    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
         self.make_hash()
         await super(Resource, self).update(connection=connection, **kwargs)
 
-    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: Any) -> None:
+    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
         self.make_hash()
         await super(Resource, self).update_fields(connection=connection, **kwargs)
 
@@ -5132,7 +5103,7 @@ class Resource(BaseDocument):
             return []
         return list(self.attributes["requires"])
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, object]:
         self.make_hash()
         dct = super(Resource, self).to_dict()
         self.__mangle_dict(dct)
@@ -5194,7 +5165,7 @@ class ConfigurationModel(BaseDocument):
     released: bool = False
     deployed: bool = False
     result: const.VersionState = const.VersionState.pending
-    version_info: Optional[Dict[str, Any]] = None
+    version_info: Optional[Dict[str, object]] = None
     is_suitable_for_partial_compiles: bool
 
     total: int = 0
@@ -5366,7 +5337,7 @@ class ConfigurationModel(BaseDocument):
         no_obj: Optional[bool] = None,
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-        **query: Any,
+        **query: object,
     ) -> List["ConfigurationModel"]:
         # sanitize and validate order parameters
         if order is None:
@@ -5670,8 +5641,8 @@ class ConfigurationModel(BaseDocument):
         resources = await Resource.get_resources_for_version_raw(environment, version, projection_a, connection=connection)
 
         # to increment
-        increment: list[abc.Mapping[str, Any]] = []
-        not_increment: list[abc.Mapping[str, Any]] = []
+        increment: list[abc.Mapping[str, object]] = []
+        not_increment: list[abc.Mapping[str, object]] = []
         # todo in this version
         work: list[abc.Mapping[str, object]] = [r for r in resources if r["status"] not in UNDEPLOYABLE_NAMES]
 
@@ -5936,7 +5907,7 @@ class DryRun(BaseDocument):
     date: datetime.datetime
     total: int = 0
     todo: int = 0
-    resources: Dict[str, Any] = {}
+    resources: Dict[str, object] = {}
 
     @classmethod
     async def update_resource(cls, dryrun_id: uuid.UUID, resource_id: m.ResourceVersionIdStr, dryrun_data: JsonType) -> None:

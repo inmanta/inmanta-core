@@ -65,6 +65,7 @@ from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -395,9 +396,10 @@ class ResourceService(protocol.ServerSlice):
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_utc_isoformat(timestamp),
+            "timestamp": util.datetime_iso_format(timestamp),
             "args": [],
         }
+
         await self.resource_action_update(
             env,
             resources_version_ids,
@@ -572,7 +574,9 @@ class ResourceService(protocol.ServerSlice):
     ) -> None:
         resource_id_str = resource_id.resource_version_str()
         finished = datetime.datetime.now().astimezone()
-        changes_with_rvid = {resource_id_str: {attr_name: attr_change.dict()} for attr_name, attr_change in changes.items()}
+        changes_with_rvid = {
+            resource_id_str: {attr_name: attr_change.model_dump()} for attr_name, attr_change in changes.items()
+        }
 
         if status not in VALID_STATES_ON_STATE_UPDATE:
             error_and_log(
@@ -633,7 +637,7 @@ class ResourceService(protocol.ServerSlice):
                 await resource_action.set_and_save(
                     messages=[
                         {
-                            **log.dict(),
+                            **log.model_dump(),
                             "timestamp": log.timestamp.astimezone().isoformat(timespec="microseconds"),
                         }
                         for log in messages
@@ -879,13 +883,6 @@ class ResourceService(protocol.ServerSlice):
                                 )
                             },
                         )
-
-                def parse_timestamp(timestamp: str) -> datetime.datetime:
-                    try:
-                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
-                    except ValueError:
-                        # interpret naive datetimes as UTC
-                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
                 for msg in messages:
                     # All other data is stored in the database. The msg was already formatted at the client side.

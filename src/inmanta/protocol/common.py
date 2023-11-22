@@ -28,12 +28,12 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from enum import Enum
+from functools import partial
 from inspect import Parameter
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    ClassVar,
     Coroutine,
     Dict,
     Generic,
@@ -55,17 +55,17 @@ import docstring_parser
 import jwt
 import pydantic
 import typing_inspect
-from pydantic.error_wrappers import ValidationError
+from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
 from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
-from inmanta.data.model import BaseModel, validator_timezone_aware_timestamps
+from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes, StrictNonIntBool
+from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
 
 from . import exceptions
 
@@ -343,13 +343,7 @@ class InvalidMethodDefinition(Exception):
 
 
 VALID_URL_ARG_TYPES = (Enum, uuid.UUID, str, float, int, bool, datetime)
-VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, StrictNonIntBool, datetime, bytes)
-
-
-class MethodArgumentsBaseModel(pydantic.BaseModel):
-    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
-        validator_timezone_aware_timestamps
-    )
+VALID_SIMPLE_ARG_TYPES = (BaseModel, Enum, uuid.UUID, str, float, int, bool, datetime, bytes, pydantic.AnyUrl)
 
 
 class MethodProperties(object):
@@ -477,7 +471,7 @@ class MethodProperties(object):
         """
         try:
             out = self.argument_validator(**values)
-            return {f: getattr(out, f) for f in out.__fields__.keys()}
+            return {f: getattr(out, f) for f in out.model_fields.keys()}
         except ValidationError as e:
             error_msg = f"Failed to validate argument\n{str(e)}"
             LOGGER.exception(error_msg)
@@ -500,7 +494,7 @@ class MethodProperties(object):
         return create_model(
             f"{self.function.__name__}_arguments",
             **{param.name: to_tuple(param) for param in sig.parameters.values() if param.name != self._varkw_name},
-            __base__=MethodArgumentsBaseModel,
+            __base__=DateTimeNormalizerModel,
         )
 
     def arguments_in_url(self) -> bool:
@@ -643,7 +637,8 @@ class MethodProperties(object):
             args = typing_inspect.get_args(arg_type, evaluate=True)
             if len(args) == 0:
                 raise InvalidMethodDefinition(
-                    f"Type {arg_type} of argument {arg} must be have a subtype plain List, Dict or Literal is not allowed."
+                    f"Type {arg_type} of argument {arg} must have a type parameter:"
+                    " non-parametrized List, Dict or Literal is not allowed."
                 )
             elif is_literal_type:  # A generic Literal
                 if not all(isinstance(a, Enum) for a in args):
@@ -688,7 +683,7 @@ class MethodProperties(object):
         else:
             valid_types = ", ".join([x.__name__ for x in VALID_SIMPLE_ARG_TYPES])
             raise InvalidMethodDefinition(
-                f"Type {arg_type.__name__} of argument {arg} must be a either {valid_types} or a List of these types or a "
+                f"Type {arg_type.__name__} of argument {arg} must be one of {valid_types} or a List of these types or a "
                 "Dict with str keys and values of these types."
             )
 
@@ -963,7 +958,7 @@ class UrlMethod(object):
 
 
 # Util functions
-def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
+def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
@@ -971,7 +966,7 @@ def custom_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
         return const.UNKNOWN_STRING
 
     # handle common python types
-    return util.api_boundary_json_encoder(o)
+    return util.api_boundary_json_encoder(o, tz_aware)
 
 
 def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
@@ -984,10 +979,10 @@ def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[Lis
     return code, value
 
 
-def json_encode(value: ReturnTypes) -> str:
+def json_encode(value: object, tz_aware: bool = True) -> str:
     """Our json encode is able to also serialize other types than a dict."""
     # see json_encode in tornado.escape
-    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+    return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
 def gzipped_json(value: JsonType) -> Tuple[bool, Union[bytes, str]]:
