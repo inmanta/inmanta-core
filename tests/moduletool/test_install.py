@@ -215,14 +215,17 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
-def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
+def test_module_install(tmpdir, snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
     """
     Make sure it is possible to install a module in both non-editable and editable mode
     """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
 
-    module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    source_module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    module_path: str = os.path.join(tmpdir, "minimalv2module")
+    shutil.copytree(source_module_path, module_path)
+
     python_module_name: str = "inmanta-module-minimalv2module"
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
