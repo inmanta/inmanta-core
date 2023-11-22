@@ -135,8 +135,10 @@ def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch:
 
     :param id: The id of the environment to modify.
     :param name: The new name for the environment.
-    :param repository: Optional. The URL (in git format) of the repository.
+    :param repository: Optional. The URL of the repository.
     :param branch: Optional. The name of the branch in the repository.
+
+    If 'repository' or 'branch' is provided as None, the corresponding attribute of the environment remains unchanged.
     """
 
 
@@ -170,8 +172,12 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     Get an environment and all versions associated.
 
     :param id: The id of the environment to return.
-    :param versions: Optional. Include this many available versions for this environment.
-    :param resources: Optional. Include this many available resources for this environment.
+    :param versions: Optional. If provided and greater than 0, include this many of the most recent versions for this
+                     environment, ordered in descending order of their version number.
+                     If not provided or 0, no version information is included.
+    :param resources: Optional. If provided and greater than 0, include a report of all resources in the environment,
+                     The number of resources included in the report is up to the specified 'resources' value.
+                     If not provided or 0, no resource information is included.
     """
 
 
@@ -238,12 +244,13 @@ def get_setting(tid: uuid.UUID, id: str):
     agent_server=True,
     client_types=[const.ClientType.api, const.ClientType.agent],
 )
-def delete_setting(tid: uuid.UUID, id: str):
+def delete_setting(tid: uuid.UUID, key: str):
     """
-    Delete a setting.
+    Delete a setting identified by the 'key' from the specified environment.
 
-    :param tid: The id of the environment.
-    :param id: The id of the setting to delete.
+    :param tid: The id of the environment from which the setting is to be deleted.
+    :param key: The key of the setting to delete.
+
     """
 
 
@@ -275,7 +282,10 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
 )
 def clear_environment(id: uuid.UUID):
     """
-    Clear all data from this environment.
+    Clears an environment by removing most of its associated data.
+    This method deletes various components associated with the specified environment from the database,
+    including agents, compile data, parameters, notifications, code, resources, and configuration models.
+    However, it retains the entry in the Environment table itself and settings are kept.
 
     :param id: The id of the environment to be cleared.
 
@@ -419,6 +429,7 @@ def get_resource(
     :param log_limit: Optional. Limit the number of logs included in the response, up to a maximum of 1000.
                       To retrieve more entries, use  /api/v2/resource_actions
                       (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
+                      If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -484,6 +495,7 @@ def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     :param tid: The id of the environment
     :param start: Optional. parameter to control the amount of results that are returned. 0 is the latest version.
     :param limit: Optional. parameter to control the amount of results returned, up to a maximum of 1000.
+                  If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -500,6 +512,7 @@ def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: 
                     up to a maximum of 1000.
                     To retrieve more entries, use /api/v2/resource_actions
                     (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
+                    If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -802,22 +815,27 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 @method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_code(tid: uuid.UUID, id: int, resource: str):
     """
-    Get the code for a given version of the configuration model
+    Retrieve the source code associated with a specific version of a configuration model for a given resource in an environment.
 
-    :param tid: The environment the code belongs to
-    :param id: The id (version) of the configuration model
-    :param resource: The id of the resource to get the code from
+    :param tid: The id of the environment to which the code belongs.
+    :param id: The version number of the configuration model.
+    :param resource: The identifier of the resource. This should be a resource ID, not a resource version ID.
     """
 
 
 @method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     """
-    Upload the supporting code to the server
+    Upload batches of code for various resources associated with a specific version of a configuration model in an environment.
 
-    :param tid: The environment the code belongs to
-    :param id: The id (version) of the configuration model
-    :param resources: a dict mapping resources to dicts mapping file names to file hashes
+    :param tid: The id of the environment to which the code belongs.
+    :param id: The version number of the configuration model.
+    :param resources: A dictionary where each key is a string representing a resource type.
+                  For each resource type, the value is a dictionary. This nested dictionary's keys are file names,
+                  and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
+                  and a list of requirements.
+
+    The method validates that all provided file references are valid and checks for conflicts with existing code entries.
     """
 
 
@@ -848,6 +866,7 @@ def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     :param start: Optional. Reports after start
     :param end: Optional. Reports before end
     :param limit: Optional. Maximum number of results, up to a maximum of 1000
+                  If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -875,6 +894,7 @@ def list_agent_processes(
     :param start: Optional. Agent processes after start (sorted by sid in ASC)
     :param end: Optional. Agent processes before end (sorted by sid in ASC)
     :param limit: Optional. Maximum number of results, up to a maximum of 1000
+                  If None, a default limit (set to 1000) is applied.
 
     :raises BadRequest: limit parameter can not exceed 1000
     :raises NotFound: The given environment id does not exist!
@@ -913,7 +933,8 @@ def list_agents(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     :param tid: The environment the agents are defined in
     :param start: Optional. Agent after start (sorted by name in ASC)
     :param end: Optional. Agent before end (sorted by name in ASC)
-    :param limit: Optional. Maximum number of results, up to a maximum of 1000
+    :param limit: Optional. Maximum number of results, up to a maximum of 1000.
+                  If None, a default limit (set to 1000) is applied.
 
     :raises BadRequest: limit parameter can not exceed 1000
     :raises NotFound: The given environment id does not exist!
