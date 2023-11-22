@@ -53,7 +53,6 @@ from inmanta import const, env
 from inmanta.ast import CompilerException
 from inmanta.command import CLIException, ShowUsageException
 from inmanta.const import CF_CACHE_DIR, MAX_UPDATE_ATTEMPT
-from inmanta.data.model import PipConfig
 from inmanta.module import (
     DummyProject,
     FreezeOperator,

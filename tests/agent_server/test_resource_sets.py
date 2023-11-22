@@ -106,7 +106,7 @@ async def test_resource_sets_via_put_version(server, client, environment, client
         version=version,
     )
     assert pip_config_result.code == 200
-    assert pip_config_result.result["data"] == None
+    assert pip_config_result.result["data"] is None
 
 
 async def test_put_partial_version_allocation(server, client, environment, clienthelper) -> None:
@@ -197,7 +197,7 @@ async def test_put_partial_version_allocation(server, client, environment, clien
     # also assert pip config can be None on put_partial
     pip_config_result = await client.get_pip_config(tid=environment, version=full_version + 2)
     assert pip_config_result.code == 200
-    assert pip_config_result.result["data"] == None
+    assert pip_config_result.result["data"] is None
 
 
 async def test_put_partial_replace_resource_set(server, client, environment, clienthelper):

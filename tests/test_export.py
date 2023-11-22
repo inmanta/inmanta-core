@@ -18,7 +18,6 @@
 import json
 import logging
 import os
-import shutil
 from typing import Dict, List, Optional
 
 import pytest
@@ -31,7 +30,7 @@ from inmanta.data import Environment, Resource
 from inmanta.export import DependencyCycleException
 from inmanta.server import SLICE_RESOURCE
 from inmanta.server.server import Server
-from utils import LogSequence, v1_module_from_template
+from utils import LogSequence
 
 
 async def assert_resource_set_assignment(environment, assignment: Dict[str, Optional[str]]) -> None:
