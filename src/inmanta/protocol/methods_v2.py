@@ -376,6 +376,8 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
 def reserve_version(tid: uuid.UUID) -> int:
     """
     Reserve a version number in this environment.
+
+    :param tid: The id of the environment in which the version number is to be reserved.
     """
 
 
@@ -715,6 +717,10 @@ def resource_list(
 )
 def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ReleasedResourceDetails:
     """
+    :param tid: The id of the environment from which the resource's details are being requested.
+    :param rid: The unique identifier (ResourceIdStr) of the resource. This value specifies the particular resource
+                for which detailed information is being requested.
+
     :return: The details of the latest released version of a resource
     :raise NotFound: This exception is raised when the referenced environment or resource is not found
     """
@@ -909,6 +915,9 @@ def get_compile_reports(
 )
 def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
+    :param tid: The id of the environment in which the compilation process occurred.
+    :param id: The id of the compile for which the details are being requested.
+
     :return: The details of a compile
     :raise NotFound: This exception is raised when the referenced environment or compile is not found
     """
