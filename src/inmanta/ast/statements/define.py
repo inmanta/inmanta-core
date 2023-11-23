@@ -489,8 +489,6 @@ class DefineRelation(BiStatement):
         # for access to results
         self.annotations = [exp[0] for exp in self.annotation_expression]
 
-        self.anchors.extend((y for x in annotations for y in x.get_anchors()))
-
         self.left: Relationside = left
         self.right: Relationside = right
 
@@ -527,9 +525,6 @@ class DefineRelation(BiStatement):
         # Duplicate checking is in entity.normalize
         # Because here we don't know if all entities have been defined
 
-        self.anchors.append(TypeReferenceAnchor(self.left[0].namespace, self.left[0]))
-        self.anchors.append(TypeReferenceAnchor(self.right[0].namespace, self.right[0]))
-
         left_end: Optional[RelationAttribute]
         if self.left[1] is not None:
             left_end = RelationAttribute(right, left, str(self.left[1]), self.left[1].get_location())
@@ -564,6 +559,10 @@ class DefineRelation(BiStatement):
     def normalize(self) -> None:
         for _, exp in self.annotation_expression:
             exp.normalize()
+
+        self.anchors.extend((anchor for _, exp in self.annotation_expression for anchor in exp.get_anchors()))
+        self.anchors.append(TypeReferenceAnchor(self.left[0].namespace, self.left[0]))
+        self.anchors.append(TypeReferenceAnchor(self.right[0].namespace, self.right[0]))
 
 
 class DefineIndex(DefinitionStatement):
