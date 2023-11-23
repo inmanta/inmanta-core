@@ -363,7 +363,7 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
 )
 def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
-    Delete a specific setting from an environment's configuration.
+    Reset the given setting to its default value.
 
     :param tid: The id of the environment from which the setting is to be deleted.
     :param id: The identifier of the setting to be deleted.
