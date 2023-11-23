@@ -133,6 +133,7 @@ class DefineEntity(TypeDefinitionStatement):
         if "-" in name:
             raise HyphenException(lname)
 
+        self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
         self.name = name
         self.attributes = attributes
         if comment is not None:
@@ -211,7 +212,6 @@ class DefineEntity(TypeDefinitionStatement):
                 raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
                 parent_type = self.namespace.get_type(parent)
-                self.anchors.append(TypeReferenceAnchor(self.namespace, parent))
                 if parent_type is self.type:
                     raise TypingException(self, "Entity can not be its own parent (%s) " % parent)
                 if not isinstance(parent_type, Entity):
