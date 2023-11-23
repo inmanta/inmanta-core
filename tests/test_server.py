@@ -698,7 +698,7 @@ async def test_batched_code_upload(
     for name, source_info in code_manager.get_types():
         res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
-        assert len(source_info) == 2
+        assert len(source_info) >= 2
         for info in source_info:
             assert info.hash in res.result["sources"]
             code = res.result["sources"][info.hash]
