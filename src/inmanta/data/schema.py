@@ -21,7 +21,8 @@ import pkgutil
 import re
 from itertools import takewhile
 from types import ModuleType
-from typing import Any, Callable, List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
+from collections.abc import Callable
 from collections.abc import Coroutine
 
 from asyncpg import Connection, UndefinedColumnError, UndefinedTableError
@@ -122,7 +123,7 @@ class DBSchema:
             # lock table
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             # get legacy column, under lock => if column no longer exists -> other process has already performed migration
-            legacy_column: Optional[Record] = await self.connection.fetchrow(
+            legacy_column: Record | None = await self.connection.fetchrow(
                 """
                 SELECT EXISTS(
                     SELECT 1
@@ -154,7 +155,7 @@ class DBSchema:
             else:
                 self.logger.info("Other process has already performed a database upgrade.")
 
-    async def _legacy_migration_row(self, all_versions: Optional[list[int]] = None) -> None:
+    async def _legacy_migration_row(self, all_versions: list[int] | None = None) -> None:
         """
         Migration for this instance's row to new (2021) schema management. Backfills the installed_versions column for this
         instance based on the legacy_version column and the currently available versions. Assumes all versions lower than the
@@ -180,7 +181,7 @@ class DBSchema:
                 self.name,
             )
 
-    async def _update_db_schema(self, update_functions: Optional[list[Version]] = None) -> None:
+    async def _update_db_schema(self, update_functions: list[Version] | None = None) -> None:
         """
         Main update function
 
@@ -243,7 +244,7 @@ class DBSchema:
 
         :raises TableNotFound:
         """
-        versions: Optional[Record] = None
+        versions: Record | None = None
         try:
             versions = await self.connection.fetchrow(
                 f"select installed_versions from {SCHEMA_VERSION_TABLE} where name=$1", self.name

@@ -70,8 +70,8 @@ class VersionConflict:
     """
 
     requirement: Requirement
-    installed_version: Optional[version.Version] = None
-    owner: Optional[str] = None
+    installed_version: version.Version | None = None
+    owner: str | None = None
 
     def __str__(self) -> str:
         owner = ""
@@ -98,7 +98,7 @@ class ConflictingRequirements(CompilerException):
 
     """
 
-    def __init__(self, message: str, conflicts: Optional[set[VersionConflict]] = None):
+    def __init__(self, message: str, conflicts: set[VersionConflict] | None = None):
         CompilerException.__init__(self, msg=message)
         self.conflicts = conflicts
 
@@ -122,7 +122,7 @@ class ConflictingRequirements(CompilerException):
 
         return "\n".join(out)
 
-    def get_conflicts_string(self) -> Optional[str]:
+    def get_conflicts_string(self) -> str | None:
         if not self.conflicts:
             return None
         msg = ""
@@ -136,7 +136,7 @@ class ConflictingRequirements(CompilerException):
             return False
         return any(conflict.installed_version is None for conflict in self.conflicts)
 
-    def get_advice(self) -> Optional[str]:
+    def get_advice(self) -> str | None:
         """
         Derive an end-user centric message from the conflicts
         """
@@ -180,7 +180,7 @@ class PythonWorkingSet:
         def _are_installed_recursive(
             reqs: Sequence[Requirement],
             seen_requirements: Sequence[Requirement],
-            contained_in_extra: Optional[str] = None,
+            contained_in_extra: str | None = None,
         ) -> bool:
             """
             Recursively check the given reqs are installed in this working set
@@ -207,7 +207,7 @@ class PythonWorkingSet:
                     return False
                 if r.extras:
                     for extra in r.extras:
-                        distribution: Optional[Distribution] = pkg_resources.working_set.find(r)
+                        distribution: Distribution | None = pkg_resources.working_set.find(r)
                         if distribution is None:
                             return False
                         pkgs_required_by_extra: set[Requirement] = set(distribution.requires(extras=(extra,))) - set(
@@ -331,10 +331,10 @@ class PipConfig(BaseModel):
         (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
     """
 
-    index_url: Optional[str] = None
+    index_url: str | None = None
     # Singular to be consistent with pip itself
     extra_index_url: Sequence[str] = []
-    pre: Optional[bool] = None
+    pre: bool | None = None
     use_system_config: bool = False
 
     def has_source(self) -> bool:
@@ -371,7 +371,7 @@ class PipCommandBuilder:
 
     @classmethod
     def compose_list_command(
-        cls, python_path: str, format: Optional[PipListFormat] = None, only_editable: bool = False
+        cls, python_path: str, format: PipListFormat | None = None, only_editable: bool = False
     ) -> list[str]:
         """
         Generate a `pip list` command for the given arguments.
@@ -400,12 +400,12 @@ class Pip(PipCommandBuilder):
         cls,
         python_path: str,
         config: PipConfig,
-        requirements: Optional[Sequence[Requirement]] = None,
-        requirements_files: Optional[list[str]] = None,
+        requirements: Sequence[Requirement] | None = None,
+        requirements_files: list[str] | None = None,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        constraints_files: Optional[list[str]] = None,
-        paths: Optional[list[LocalPackagePath]] = None,
+        constraints_files: list[str] | None = None,
+        paths: list[LocalPackagePath] | None = None,
     ) -> None:
         """
         Perform a pip install according to the given config
@@ -568,7 +568,7 @@ class PythonEnvironment:
     Inmanta product packages don't change.
     """
 
-    def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
+    def __init__(self, *, env_path: str | None = None, python_path: str | None = None) -> None:
         if (env_path is None) == (python_path is None):
             raise ValueError("Exactly one of `env_path` and `python_path` needs to be specified")
         self.env_path: str
@@ -634,7 +634,7 @@ class PythonEnvironment:
         requirements: list[Requirement],
         config: PipConfig,
         upgrade: bool = False,
-        constraint_files: Optional[list[str]] = None,
+        constraint_files: list[str] | None = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
     ) -> None:
@@ -669,12 +669,12 @@ class PythonEnvironment:
     def install_from_index(
         self,
         requirements: list[Requirement],
-        index_urls: Optional[list[str]] = None,
+        index_urls: list[str] | None = None,
         upgrade: bool = False,
         allow_pre_releases: bool = False,
-        constraint_files: Optional[list[str]] = None,
+        constraint_files: list[str] | None = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: Optional[bool] = False,
+        use_pip_config: bool | None = False,
     ) -> None:
         """This method provides backward compatibility with ISO6"""
         if len(requirements) == 0:
@@ -703,7 +703,7 @@ class PythonEnvironment:
     def install_from_source(
         self,
         paths: list[LocalPackagePath],
-        constraint_files: Optional[list[str]] = None,
+        constraint_files: list[str] | None = None,
     ) -> None:
         """
         Install one or more packages from source. Any path arguments should be local paths to a package directory or wheel.
@@ -725,7 +725,7 @@ class PythonEnvironment:
         *,
         upgrade: bool = False,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
-        use_pip_config: Optional[bool] = False,
+        use_pip_config: bool | None = False,
     ) -> None:
         """
         Install requirements from a list of requirement strings. This method uses the Python package repositories
@@ -774,7 +774,7 @@ class CommandRunner:
         self.logger = logger
 
     def run_command_and_log_output(
-        self, cmd: list[str], env: Optional[dict[str, str]] = None, stderr: Optional[int] = None, cwd: Optional[str] = None
+        self, cmd: list[str], env: dict[str, str] | None = None, stderr: int | None = None, cwd: str | None = None
     ) -> str:
         output: bytes = b""  # Make sure the var is always defined in the except bodies
         try:
@@ -800,7 +800,7 @@ class CommandRunner:
         cmd: list[str],
         shell: bool = False,
         timeout: float = 10,
-        env_vars: Optional[Mapping[str, str]] = None,
+        env_vars: Mapping[str, str] | None = None,
     ) -> tuple[int, list[str]]:
         """
         Similar to the _run_command_and_log_output method, but here, the output is logged on the fly instead of at the end
@@ -842,7 +842,7 @@ class ActiveEnv(PythonEnvironment):
     _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
     _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
 
-    def __init__(self, *, env_path: Optional[str] = None, python_path: Optional[str] = None) -> None:
+    def __init__(self, *, env_path: str | None = None, python_path: str | None = None) -> None:
         super().__init__(env_path=env_path, python_path=python_path)
 
     def is_using_virtual_env(self) -> bool:
@@ -865,7 +865,7 @@ class ActiveEnv(PythonEnvironment):
         requirements: list[Requirement],
         config: PipConfig,
         upgrade: bool = False,
-        constraint_files: Optional[list[str]] = None,
+        constraint_files: list[str] | None = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
     ) -> None:
@@ -879,8 +879,8 @@ class ActiveEnv(PythonEnvironment):
     @classmethod
     def get_constraint_violations_for_check(
         cls,
-        strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[Requirement]] = None,
+        strict_scope: Pattern[str] | None = None,
+        constraints: list[Requirement] | None = None,
     ) -> tuple[set[VersionConflict], set[VersionConflict]]:
         """
         Return the constraint violations that exist in this venv. Returns a tuple of non-strict and strict violations,
@@ -889,7 +889,7 @@ class ActiveEnv(PythonEnvironment):
 
         class OwnedRequirement(NamedTuple):
             requirement: Requirement
-            owner: Optional[str] = None
+            owner: str | None = None
 
             def is_owned_by(self, owners: abc.Set[str]) -> bool:
                 return self.owner is None or self.owner in owners
@@ -945,8 +945,8 @@ class ActiveEnv(PythonEnvironment):
     @classmethod
     def check(
         cls,
-        strict_scope: Optional[Pattern[str]] = None,
-        constraints: Optional[list[Requirement]] = None,
+        strict_scope: Pattern[str] | None = None,
+        constraints: list[Requirement] | None = None,
     ) -> None:
         """
         Check this Python environment for incompatible dependencies in installed packages.
@@ -970,7 +970,7 @@ class ActiveEnv(PythonEnvironment):
             LOGGER.warning("%s", violation)
 
     @classmethod
-    def check_legacy(cls, in_scope: Pattern[str], constraints: Optional[list[Requirement]] = None) -> bool:
+    def check_legacy(cls, in_scope: Pattern[str], constraints: list[Requirement] | None = None) -> bool:
         """
         Check this Python environment for incompatible dependencies in installed packages. This method is a legacy method
         in the sense that it has been replaced with a more correct check defined in self.check(). This method is invoked
@@ -1010,7 +1010,7 @@ class ActiveEnv(PythonEnvironment):
         return len(constraint_violations) == 0
 
     @classmethod
-    def get_module_file(cls, module: str) -> Optional[tuple[Optional[str], Loader]]:
+    def get_module_file(cls, module: str) -> tuple[str | None, Loader] | None:
         """
         Get the location of the init file for a Python module within the active environment. Returns the file path as observed
         by Python. For editable installs, this may or may not be a symlink to the actual location (see implementation
@@ -1018,7 +1018,7 @@ class ActiveEnv(PythonEnvironment):
 
         :return: A tuple of the path and the associated loader, if the module is found.
         """
-        spec: Optional[ModuleSpec]
+        spec: ModuleSpec | None
         try:
             spec = importlib.util.find_spec(module)
         # inmanta.loader.PluginModuleLoader raises ImportError if module is not found
@@ -1078,7 +1078,7 @@ Singleton representing the Python environment this process is running in.
 
 
 @stable_api
-def mock_process_env(*, python_path: Optional[str] = None, env_path: Optional[str] = None) -> None:
+def mock_process_env(*, python_path: str | None = None, env_path: str | None = None) -> None:
     """
     Overrides the process environment information. This forcefully sets the environment that is recognized as the outer Python
     environment. This function should only be called when a Python environment has been set up dynamically and this environment
@@ -1102,9 +1102,9 @@ class VirtualEnv(ActiveEnv):
         super().__init__(env_path=env_path)
         self.validate_path(env_path)
         self.env_path: str = env_path
-        self.virtual_python: Optional[str] = None
+        self.virtual_python: str | None = None
         self._using_venv: bool = False
-        self._parent_python: Optional[str] = None
+        self._parent_python: str | None = None
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
     def validate_path(self, path: str) -> None:
@@ -1287,7 +1287,7 @@ import sys
         requirements: list[Requirement],
         config: PipConfig,
         upgrade: bool = False,
-        constraint_files: Optional[list[str]] = None,
+        constraint_files: list[str] | None = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
     ) -> None:

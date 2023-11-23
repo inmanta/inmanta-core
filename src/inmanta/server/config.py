@@ -144,8 +144,8 @@ server_ssl_cert = Option(
 
 def ssl_enabled():
     """Is ssl enabled on the server, given the current server config"""
-    ssl_key: Optional[str] = server_ssl_key.get()
-    ssl_cert: Optional[str] = server_ssl_cert.get()
+    ssl_key: str | None = server_ssl_key.get()
+    ssl_cert: str | None = server_ssl_cert.get()
     return ssl_key is not None and ssl_cert is not None
 
 

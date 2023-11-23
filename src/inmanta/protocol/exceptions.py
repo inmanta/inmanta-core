@@ -31,7 +31,7 @@ class BaseHttpException(web.HTTPError):
     :meth:`inmanta.protocol.common.MethodProperties._get_http_status_code_for_exception`
     """
 
-    def __init__(self, status_code: int = 500, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, status_code: int = 500, message: str | None = None, details: JsonType | None = None) -> None:
         super().__init__(status_code, message)
         self.details = details
 
@@ -57,7 +57,7 @@ class Forbidden(BaseHttpException):
     An exception raised when access is denied (403)
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, message: str | None = None, details: JsonType | None = None) -> None:
         msg = "Access denied"
         if message is not None:
             msg += ": " + message
@@ -70,7 +70,7 @@ class UnauthorizedException(BaseHttpException):
     An exception raised when access to this resource is unauthorized
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, message: str | None = None, details: JsonType | None = None) -> None:
         msg = "Access to this resource is unauthorized"
         if message is not None:
             msg += ": " + message
@@ -83,7 +83,7 @@ class BadRequest(BaseHttpException):
     This exception is raised for a malformed request
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, message: str | None = None, details: JsonType | None = None) -> None:
         msg = "Invalid request"
         if message is not None:
             msg += ": " + message
@@ -96,7 +96,7 @@ class NotFound(BaseHttpException):
     This exception is used to indicate that a request or reference resource was not found.
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, message: str | None = None, details: JsonType | None = None) -> None:
         msg = "Request or referenced resource does not exist"
         if message is not None:
             msg += ": " + message
@@ -109,7 +109,7 @@ class Conflict(BaseHttpException):
     This exception is used to indicate that a request conflicts with the current state of the resource.
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, message: str | None = None, details: JsonType | None = None) -> None:
         msg = "Request conflicts with the current state of the resource"
         if message is not None:
             msg += ": " + message
@@ -122,7 +122,7 @@ class ServerError(BaseHttpException):
     An unexpected error occurred in the server
     """
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, message: str | None = None, details: JsonType | None = None) -> None:
         msg = "An unexpected error occurred in the server while processing the request"
         if message is not None:
             msg += ": " + message
@@ -133,7 +133,7 @@ class ServerError(BaseHttpException):
 class ShutdownInProgress(BaseHttpException):
     """This request can not be fulfilled because the server is going down"""
 
-    def __init__(self, message: Optional[str] = None, details: Optional[JsonType] = None) -> None:
+    def __init__(self, message: str | None = None, details: JsonType | None = None) -> None:
         msg = "Can not complete this request as a shutdown is on progress"
         if message is not None:
             msg += ": " + message

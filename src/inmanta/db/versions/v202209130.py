@@ -66,14 +66,14 @@ async def update(connection: Connection) -> None:
 
 class ColumnDefinition(typing.NamedTuple):
     name: str
-    default: Optional[str]
+    default: str | None
 
 
 @dataclass(frozen=True)
 class EnumDefinition:
     name: str
     values: abc.Sequence[str]
-    deleted_values: abc.Mapping[str, Optional[str]]  # deleted values mapped to new value if any currently exist
+    deleted_values: abc.Mapping[str, str | None]  # deleted values mapped to new value if any currently exist
     columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]]  # columns with defaults
 
 

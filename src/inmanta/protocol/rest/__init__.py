@@ -47,7 +47,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 def authorize_request(
-    auth_data: Optional[MutableMapping[str, str]], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
+    auth_data: MutableMapping[str, str] | None, metadata: dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
     Authorize a request based on the given data
@@ -84,7 +84,7 @@ class CallArguments:
     """
 
     def __init__(
-        self, properties: common.MethodProperties, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self, properties: common.MethodProperties, message: dict[str, object | None], request_headers: Mapping[str, str]
     ) -> None:
         """
         :param method_config: The method configuration that contains the metadata and functions to call
@@ -142,7 +142,7 @@ class CallArguments:
         value = self._get_header_value_for(arg)
         return value is not None
 
-    def _get_header_value_for(self, arg: str) -> Optional[str]:
+    def _get_header_value_for(self, arg: str) -> str | None:
         """
         Return the header value that belongs to the given call argument or None when the header was not set.
 
@@ -153,7 +153,7 @@ class CallArguments:
         opts = self._properties.arg_options[arg]
         return self._request_headers.get(opts.header)
 
-    def _map_headers(self, arg: str) -> Optional[object]:
+    def _map_headers(self, arg: str) -> object | None:
         if not self._is_header_param(arg):
             return None
 
@@ -166,7 +166,7 @@ class CallArguments:
 
         return value
 
-    def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> Optional[object]:
+    def get_default_value(self, arg_name: str, arg_position: int, default_start: int) -> object | None:
         """
         Get a default value for an argument
         """
@@ -175,7 +175,7 @@ class CallArguments:
         else:
             raise exceptions.BadRequest("Field '%s' is required." % arg_name)
 
-    async def _run_getters(self, arg: str, value: Optional[object]) -> Optional[object]:
+    async def _run_getters(self, arg: str, value: object | None) -> object | None:
         """
         Run any available getters on value
         """
@@ -217,7 +217,7 @@ class CallArguments:
         call_args = {}
 
         for i, arg in enumerate(args):
-            arg_type: Optional[type[object]] = self._argspec.annotations.get(arg)
+            arg_type: type[object] | None = self._argspec.annotations.get(arg)
             if arg in self._message:
                 # Argument is parameter in body of path of HTTP request
                 if (
@@ -480,7 +480,7 @@ class RESTBase(util.TaskHandler):
     def id(self) -> str:
         return self._id
 
-    def _decode(self, body: bytes) -> Optional[JsonType]:
+    def _decode(self, body: bytes) -> JsonType | None:
         """
         Decode a response body
         """
@@ -500,7 +500,7 @@ class RESTBase(util.TaskHandler):
         config: common.UrlMethod,
         message: dict[str, object],
         request_headers: Mapping[str, str],
-        auth: Optional[MutableMapping[str, str]] = None,
+        auth: MutableMapping[str, str] | None = None,
     ) -> common.Response:
         try:
             if kwargs is None or config is None:

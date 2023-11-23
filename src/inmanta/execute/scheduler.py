@@ -65,7 +65,7 @@ class Scheduler:
     """
 
     def __init__(
-        self, track_dataflow: bool = False, relation_precedence_rules: Optional[list["RelationPrecedenceRule"]] = None
+        self, track_dataflow: bool = False, relation_precedence_rules: list["RelationPrecedenceRule"] | None = None
     ) -> None:
         if relation_precedence_rules is None:
             relation_precedence_rules = []
@@ -322,7 +322,7 @@ class Scheduler:
         For performance reasons, we keep progress potential local and instead detect this situation here.
         """
 
-        def resolve_proxies(variable: Optional[VariableABC]) -> Optional[VariableABC]:
+        def resolve_proxies(variable: VariableABC | None) -> VariableABC | None:
             if variable is None or not isinstance(variable, ResultVariableProxy):
                 return variable
             return resolve_proxies(variable.variable)
@@ -331,7 +331,7 @@ class Scheduler:
         freeze_candidates: list[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
-                real_rv: Optional[VariableABC] = resolve_proxies(rv)
+                real_rv: VariableABC | None = resolve_proxies(rv)
                 if isinstance(real_rv, DelayedResultVariable):
                     if real_rv.hasValue:
                         # get_progress_potential fails when there is a value already
@@ -546,7 +546,7 @@ class PrioritisedDelayedResultVariableQueue:
     def __init__(
         self,
         attributes_with_precedence_rule: list[RelationAttribute],
-        drvs: Optional[list[DelayedResultVariable[object]]] = None,
+        drvs: list[DelayedResultVariable[object]] | None = None,
     ) -> None:
         relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
         # A queue that indicates a valid order in which the self._constraint_variables have to be returned
@@ -648,7 +648,7 @@ class RelationPrecedenceGraph:
     A graph representation of the relation precedence policy provided to the compiler.
     """
 
-    def __init__(self, relation_attributes_with_precedence_rule: Optional[list[RelationAttribute]] = None) -> None:
+    def __init__(self, relation_attributes_with_precedence_rule: list[RelationAttribute] | None = None) -> None:
         if relation_attributes_with_precedence_rule is None:
             relation_attributes_with_precedence_rule = []
         # The root nodes of the graph, where all other nodes attach to.

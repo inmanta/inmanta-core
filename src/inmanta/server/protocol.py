@@ -22,7 +22,8 @@ import time
 import uuid
 from collections import defaultdict
 from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
+from collections.abc import Callable
 from collections.abc import Sequence
 
 import importlib_metadata
@@ -100,7 +101,7 @@ class Server(endpoints.Endpoint):
     def __init__(self, connection_timout: int = 120) -> None:
         super().__init__("server")
         self._slices: dict[str, ServerSlice] = {}
-        self._slice_sequence: Optional[list[ServerSlice]] = None
+        self._slice_sequence: list[ServerSlice] | None = None
         self._handlers: list[routing.Rule] = []
         self.connection_timout = connection_timout
         self.sessions_handler = SessionManager()
@@ -310,7 +311,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         self,
         call: TaskMethod,
         interval: float = 60,
-        initial_delay: Optional[float] = None,
+        initial_delay: float | None = None,
         cancel_on_stop: bool = True,
         quiet_mode: bool = False,
     ) -> None:
@@ -340,7 +341,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
         """
         self._sched.remove(ScheduledTask(action=call, schedule=CronSchedule(cron=cron)))
 
-    def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
+    def add_static_handler(self, location: str, path: str, default_filename: str | None = None, start: bool = False) -> None:
         """
         Configure a static handler to serve data from the specified path.
         """
@@ -370,7 +371,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
             )
         )
 
-    def get_extension_status(self) -> Optional[ExtensionStatus]:
+    def get_extension_status(self) -> ExtensionStatus | None:
         ext_name = self.name.split(".")[0]
         source_package_name = self.__class__.__module__.split(".")[0]
         # workaround for #2586
@@ -427,7 +428,7 @@ class Session:
         self._timeout = timout
         self._sessionstore: SessionManager = sessionstore
         self._seen: float = time.monotonic()
-        self._callhandle: Optional[asyncio.TimerHandle] = None
+        self._callhandle: asyncio.TimerHandle | None = None
         self.expired: bool = False
 
         self.last_dispatched_call: float = 0
@@ -442,7 +443,7 @@ class Session:
         # Disable expiry in certain tests
         if not disable_expire_check:
             self.check_expire()
-        self._queue: queues.Queue[Optional[common.Request]] = queues.Queue()
+        self._queue: queues.Queue[common.Request | None] = queues.Queue()
 
         self.client = ReturnClient(str(sid), self)
 
@@ -483,7 +484,7 @@ class Session:
         """
         try:
             await asyncio.wait_for(future, timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             LOGGER.warning(log_message)
 
     def put_call(self, call_spec: common.Request, timeout: int = 10, expect_reply: bool = True) -> asyncio.Future:
@@ -508,7 +509,7 @@ class Session:
 
         return future
 
-    async def get_calls(self, no_hang: bool) -> Optional[list[common.Request]]:
+    async def get_calls(self, no_hang: bool) -> list[common.Request] | None:
         """
         Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
         fails.
@@ -651,7 +652,7 @@ class SessionManager(ServerSlice):
 
         # Config
         interval: int = opt.agent_timeout.get()
-        hangtime: Optional[int] = opt.agent_hangtime.get()
+        hangtime: int | None = opt.agent_hangtime.get()
 
         if hangtime is None:
             hangtime = int(interval * 3 / 4)
@@ -729,7 +730,7 @@ class SessionManager(ServerSlice):
     @handle(methods.heartbeat, env="tid")
     async def heartbeat(
         self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names: list[str], nodename: str, no_hang: bool = False
-    ) -> Union[int, tuple[int, dict[str, str]]]:
+    ) -> int | tuple[int, dict[str, str]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
         session: Session = await self.get_or_create_session(sid, env.id, set(endpoint_names), nodename)
@@ -756,7 +757,7 @@ class SessionManager(ServerSlice):
     @handle(methods.heartbeat_reply)
     async def heartbeat_reply(
         self, sid: uuid.UUID, reply_id: uuid.UUID, data: JsonType
-    ) -> Union[int, tuple[int, dict[str, str]]]:
+    ) -> int | tuple[int, dict[str, str]]:
         try:
             env = self._sessions[sid]
             env.set_reply(reply_id, data)

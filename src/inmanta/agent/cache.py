@@ -22,7 +22,8 @@ import logging
 import sys
 import time
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from collections.abc import Callable
 
 from inmanta.resources import Resource
 from inmanta.stable_api import stable_api
@@ -40,7 +41,7 @@ class Scope:
 
 
 class CacheItem:
-    def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Optional[Callable[[Any], None]]) -> None:
+    def __init__(self, key: str, scope: Scope, value: Any, call_on_delete: Callable[[Any], None] | None) -> None:
         self.key = key
         self.scope = scope
         self.value = value
@@ -208,7 +209,7 @@ class AgentCache:
             self.nextAction = item.time
         self._advance_time()
 
-    def _get_key(self, key: str, resource: Optional[Resource], version: int) -> str:
+    def _get_key(self, key: str, resource: Resource | None, version: int) -> str:
         key_parts = [key]
         if resource is not None:
             key_parts.append(str(resource.id.resource_str()))
@@ -220,10 +221,10 @@ class AgentCache:
         self,
         key: str,
         value: Any,
-        resource: Optional[Resource] = None,
+        resource: Resource | None = None,
         version: int = 0,
         timeout: int = 5000,
-        call_on_delete: Optional[Callable[[Any], None]] = None,
+        call_on_delete: Callable[[Any], None] | None = None,
     ) -> None:
         """
         add a value to the cache with the given key
@@ -235,7 +236,7 @@ class AgentCache:
         """
         self._cache(CacheItem(self._get_key(key, resource, version), Scope(timeout, version), value, call_on_delete))
 
-    def find(self, key: str, resource: Optional[Resource] = None, version: int = 0) -> Any:
+    def find(self, key: str, resource: Resource | None = None, version: int = 0) -> Any:
         """
         find a value in the cache with the given key
 
@@ -253,7 +254,7 @@ class AgentCache:
         timeout: int = 5000,
         ignore: set[str] = set(),
         cache_none: bool = True,
-        call_on_delete: Optional[Callable[[Any], None]] = None,
+        call_on_delete: Callable[[Any], None] | None = None,
         **kwargs,
     ) -> object:
         """

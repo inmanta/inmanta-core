@@ -76,7 +76,7 @@ class FileService(protocol.ServerSlice):
 
     async def get_file_internal(self, file_hash: str) -> bytes:
         """get_file, but on return code 200, content is not encoded"""
-        file: Optional[File] = await File.get_one(content_hash=file_hash)
+        file: File | None = await File.get_one(content_hash=file_hash)
         if not file:
             raise NotFound()
         return file.content

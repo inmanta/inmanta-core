@@ -54,6 +54,6 @@ def entity_instance(entity: str) -> InstanceNode:
         (AttributeNode(entity_instance("MyEntity"), "n"), "attribute n on __config__::MyEntity instance"),
     ],
 )
-def test_dataflow_repr(instance: Union[Node, NodeReference], expected_repr: str) -> None:
+def test_dataflow_repr(instance: Node | NodeReference, expected_repr: str) -> None:
     assert repr(instance) == expected_repr
     assert str(instance) == expected_repr

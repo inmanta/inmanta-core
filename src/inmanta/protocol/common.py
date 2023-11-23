@@ -33,7 +33,6 @@ from inspect import Parameter
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Dict,
     Generic,
     List,
@@ -46,6 +45,7 @@ from typing import (
     cast,
     get_type_hints,
 )
+from collections.abc import Callable
 from collections.abc import Coroutine, Iterable, MutableMapping
 from urllib import parse
 
@@ -93,7 +93,7 @@ class ArgOption:
         self,
         getter: Callable[[Any, dict[str, str]], Coroutine[Any, Any, Any]],
         # Type is Any to Any because it transforms from method to handler but in the current typing there is no link
-        header: Optional[str] = None,
+        header: str | None = None,
         reply_header: bool = True,
     ) -> None:
         """
@@ -112,7 +112,7 @@ class Request:
     A protocol request
     """
 
-    def __init__(self, url: str, method: str, headers: dict[str, str], body: Optional[JsonType]) -> None:
+    def __init__(self, url: str, method: str, headers: dict[str, str], body: JsonType | None) -> None:
         self._url = url
         self._method = method
         self._headers = headers
@@ -120,10 +120,10 @@ class Request:
         # Reply ID is used to send back the result
         # If None, no reply is expected
         #  i.e. this call will immediately return, potentially even before the request is dispatched
-        self._reply_id: Optional[uuid.UUID] = None
+        self._reply_id: uuid.UUID | None = None
 
     @property
-    def body(self) -> Optional[JsonType]:
+    def body(self) -> JsonType | None:
         return self._body
 
     @property
@@ -141,7 +141,7 @@ class Request:
     def set_reply_id(self, reply_id: uuid.UUID) -> None:
         self._reply_id = reply_id
 
-    def get_reply_id(self) -> Optional[uuid.UUID]:
+    def get_reply_id(self) -> uuid.UUID | None:
         return self._reply_id
 
     reply_id = property(get_reply_id, set_reply_id)
@@ -155,7 +155,7 @@ class Request:
 
     @classmethod
     def from_dict(cls, value: JsonType) -> "Request":
-        reply_id: Optional[str] = None
+        reply_id: str | None = None
         if "reply_id" in value:
             reply_id = cast(str, value["reply_id"])
             del value["reply_id"]
@@ -180,9 +180,9 @@ class ReturnValue(Generic[T]):
         self,
         status_code: int = 200,
         headers: MutableMapping[str, str] = {},
-        response: Optional[T] = None,
+        response: T | None = None,
         content_type: str = JSON_CONTENT,
-        links: Optional[dict[str, str]] = None,
+        links: dict[str, str] | None = None,
     ) -> None:
         self._status_code = status_code
         self._warnings: list[str] = []
@@ -259,7 +259,7 @@ class Response:
         cls,
         result: ReturnValue,
         envelope: bool,
-        envelope_key: Optional[str] = None,
+        envelope_key: str | None = None,
     ) -> "Response":
         """
         Create a response from a return value
@@ -373,11 +373,11 @@ class MethodProperties:
         operation: str,
         reply: bool,
         arg_options: dict[str, ArgOption],
-        timeout: Optional[int],
+        timeout: int | None,
         server_agent: bool,
-        api: Optional[bool],
+        api: bool | None,
         agent_server: bool,
-        validate_sid: Optional[bool],
+        validate_sid: bool | None,
         client_types: list[const.ClientType],
         api_version: int,
         api_prefix: str,
@@ -439,7 +439,7 @@ class MethodProperties:
         self._enforce_auth = enforce_auth
         self.function = function
         self._varkw: bool = varkw
-        self._varkw_name: Optional[str] = None
+        self._varkw_name: str | None = None
 
         self._parsed_docstring = docstring_parser.parse(text=function.__doc__, style=docstring_parser.DocstringStyle.REST)
         self._docstring_parameter_map = {p.arg_name: p.description for p in self._parsed_docstring.params}
@@ -481,7 +481,7 @@ class MethodProperties:
         """
         sig = inspect.signature(self.function)
 
-        def to_tuple(param: Parameter) -> tuple[object, Optional[object]]:
+        def to_tuple(param: Parameter) -> tuple[object, object | None]:
             if param.annotation is Parameter.empty:
                 return (Any, param.default if param.default is not Parameter.empty else None)
             if param.default is not Parameter.empty:
@@ -695,7 +695,7 @@ class MethodProperties:
         return self._arg_options
 
     @property
-    def timeout(self) -> Optional[int]:
+    def timeout(self) -> int | None:
         return self._timeout
 
     @property
@@ -731,20 +731,20 @@ class MethodProperties:
         return self._api_version
 
     @stable_api
-    def get_long_method_description(self) -> Optional[str]:
+    def get_long_method_description(self) -> str | None:
         """
         Return the full description present in the docstring of the method, excluding the first paragraph.
         """
         return self._parsed_docstring.long_description
 
     @stable_api
-    def get_short_method_description(self) -> Optional[str]:
+    def get_short_method_description(self) -> str | None:
         """
         Return the first paragraph of the description present in the docstring of the method.
         """
         return self._parsed_docstring.short_description
 
-    def get_description_for_param(self, param_name: str) -> Optional[str]:
+    def get_description_for_param(self, param_name: str) -> str | None:
         """
         Return the description for a certain parameter present in the docstring.
         """
@@ -883,14 +883,14 @@ class MethodProperties:
         return Request(url=url, method=self.operation, headers=headers, body=body)
 
     def _encode_dict_for_get(
-        self, query_param_name: str, query_param_value: dict[str, Union[Any, list[Any]]]
+        self, query_param_name: str, query_param_value: dict[str, Any | list[Any]]
     ) -> dict[str, str]:
         """Dicts are encoded in the following manner: param = {'ab': 1, 'cd': 2} to param.abc=1&param.cd=2"""
         sub_dict = {f"{query_param_name}.{key}": value for key, value in query_param_value.items()}
         return sub_dict
 
     @stable_api
-    def get_openapi_parameter_type_for(self, param_name: str) -> Optional[openapi_model.ParameterType]:
+    def get_openapi_parameter_type_for(self, param_name: str) -> openapi_model.ParameterType | None:
         """
         Return the openapi ParameterType for the parameter with the given param_name or None when the parameter
         with the given name is not an OpenAPI parameter (but a RequestBodyParameter for example).
@@ -938,14 +938,14 @@ class UrlMethod:
         return self._method_name
 
     @property
-    def short_method_description(self) -> Optional[str]:
+    def short_method_description(self) -> str | None:
         """
         Return the first paragraph of the description present in the docstring of the method
         """
         return self._properties.get_short_method_description()
 
     @property
-    def long_method_description(self) -> Optional[str]:
+    def long_method_description(self) -> str | None:
         """
         Return the full description present in the docstring of the method, excluding the first paragraph.
         """
@@ -956,7 +956,7 @@ class UrlMethod:
 
 
 # Util functions
-def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, util.JSONSerializable]:
+def custom_json_encoder(o: object, tz_aware: bool = True) -> ReturnTypes | util.JSONSerializable:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
@@ -967,7 +967,7 @@ def custom_json_encoder(o: object, tz_aware: bool = True) -> Union[ReturnTypes, 
     return util.api_boundary_json_encoder(o, tz_aware)
 
 
-def attach_warnings(code: int, value: Optional[JsonType], warnings: Optional[list[str]]) -> tuple[int, JsonType]:
+def attach_warnings(code: int, value: JsonType | None, warnings: list[str] | None) -> tuple[int, JsonType]:
     if value is None:
         value = {}
     if warnings:
@@ -983,7 +983,7 @@ def json_encode(value: object, tz_aware: bool = True) -> str:
     return json.dumps(value, default=partial(custom_json_encoder, tz_aware=tz_aware)).replace("</", "<\\/")
 
 
-def gzipped_json(value: JsonType) -> tuple[bool, Union[bytes, str]]:
+def gzipped_json(value: JsonType) -> tuple[bool, bytes | str]:
     json_string = json_encode(value)
     if len(json_string) < web.GZipContentEncoding.MIN_LENGTH:
         return False, json_string
@@ -1004,7 +1004,7 @@ def shorten(msg: str, max_len: int = 10) -> str:
 
 
 def encode_token(
-    client_types: list[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
+    client_types: list[str], environment: str | None = None, idempotent: bool = False, expire: float | None = None
 ) -> str:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
     if cfg is None:
@@ -1080,15 +1080,15 @@ class Result:
     A result of a method call
     """
 
-    def __init__(self, code: int = 0, result: Optional[JsonType] = None) -> None:
+    def __init__(self, code: int = 0, result: JsonType | None = None) -> None:
         self._result = result
         self.code = code
         """
         The result code of the method call.
         """
-        self._callback: Optional[Callable[["Result"], None]] = None
+        self._callback: Callable[["Result"], None] | None = None
 
-    def get_result(self) -> Optional[JsonType]:
+    def get_result(self) -> JsonType | None:
         """
         Only when the result is marked as available the result can be returned
         """
@@ -1097,11 +1097,11 @@ class Result:
         raise Exception("The result is not yet available")
 
     @property
-    def result(self) -> Optional[JsonType]:
+    def result(self) -> JsonType | None:
         return self.get_result()
 
     @result.setter
-    def set_result(self, value: Optional[JsonType]) -> None:
+    def set_result(self, value: JsonType | None) -> None:
         if not self.available():
             self._result = value
             if self._callback:

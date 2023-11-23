@@ -83,13 +83,13 @@ def test_dataflow_assignment_node_nested_tentative(graph: DataflowGraph) -> None
     assignment_node: AssignableNode = x_a_n.assignment_node()
 
     assert isinstance(x, VariableNodeReference)
-    instance: Optional[InstanceNode] = x.node.equivalence.tentative_instance
+    instance: InstanceNode | None = x.node.equivalence.tentative_instance
     assert instance is not None
-    a: Optional[AttributeNode] = instance.get_attribute("a")
+    a: AttributeNode | None = instance.get_attribute("a")
     assert a is not None
-    instance2: Optional[InstanceNode] = a.equivalence.tentative_instance
+    instance2: InstanceNode | None = a.equivalence.tentative_instance
     assert instance2 is not None
-    n: Optional[AttributeNode] = instance2.get_attribute("n")
+    n: AttributeNode | None = instance2.get_attribute("n")
 
     assert assignment_node == n
 
@@ -126,7 +126,7 @@ def test_attribute_assignment(graph: DataflowGraph, instantiate: bool) -> None:
         assert x.node.equivalence.tentative_instance is not None
         instance = x.node.equivalence.tentative_instance
 
-    n: Optional[AttributeNode] = instance.get_attribute("n")
+    n: AttributeNode | None = instance.get_attribute("n")
     assert n is not None
     assert len(n.value_assignments) == 1
     assert n.value_assignments[0].rhs == ValueNode(42).reference()
@@ -143,16 +143,16 @@ def test_dataflow_tentative_attribute_propagation(graph: DataflowGraph) -> None:
     x_a_n: AssignableNodeReference = get_dataflow_node(graph, "x.a.n")
     x_a_n.assign(ValueNode(42).reference(), Statement(), graph)
 
-    def assert_tentative_a_n(var: AssignableNode, values: Optional[set[int]] = None) -> None:
+    def assert_tentative_a_n(var: AssignableNode, values: set[int] | None = None) -> None:
         if values is None:
             values = {42}
-        instance: Optional[InstanceNode] = var.equivalence.tentative_instance
+        instance: InstanceNode | None = var.equivalence.tentative_instance
         assert instance is not None
-        a: Optional[AttributeNode] = instance.get_attribute("a")
+        a: AttributeNode | None = instance.get_attribute("a")
         assert a is not None
-        instance2: Optional[InstanceNode] = a.equivalence.tentative_instance
+        instance2: InstanceNode | None = a.equivalence.tentative_instance
         assert instance2 is not None
-        n: Optional[AttributeNode] = instance2.get_attribute("n")
+        n: AttributeNode | None = instance2.get_attribute("n")
         assert n is not None
         assert len(n.value_assignments) == len(values)
         assert {assignment.rhs.node.value for assignment in n.value_assignments} == values
@@ -193,7 +193,7 @@ def test_dataflow_tentative_attribute_propagation_on_equivalence(graph: Dataflow
     y.assign(create_instance().reference(), Statement(), graph)
 
     assert len(y.node.instance_assignments) == 1
-    y_n: Optional[AttributeNode] = y.node.instance_assignments[0].rhs.node().get_attribute("n")
+    y_n: AttributeNode | None = y.node.instance_assignments[0].rhs.node().get_attribute("n")
     assert y_n is not None
 
     assert len(y_n.value_assignments) == 1
@@ -210,13 +210,13 @@ def test_dataflow_tentative_attribute_propagation_to_uninitialized_attribute(gra
 
     x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
-    instance: Optional[InstanceNode] = x.node.equivalence.tentative_instance
+    instance: InstanceNode | None = x.node.equivalence.tentative_instance
     assert instance is not None
-    u_node: Optional[AttributeNode] = instance.get_attribute("u")
+    u_node: AttributeNode | None = instance.get_attribute("u")
     assert u_node is not None
-    instance2: Optional[InstanceNode] = u_node.equivalence.tentative_instance
+    instance2: InstanceNode | None = u_node.equivalence.tentative_instance
     assert instance2 is not None
-    n: Optional[AttributeNode] = instance2.get_attribute("n")
+    n: AttributeNode | None = instance2.get_attribute("n")
     assert n is not None
     assert len(n.value_assignments) == 1
     assert n.value_assignments[0].rhs.node.value == 42
@@ -233,9 +233,9 @@ def test_dataflow_tentative_attribute_propagation_over_uninitialized_attribute(g
     u.assign(x_y, Statement(), graph)
 
     assert isinstance(y, VariableNodeReference)
-    instance: Optional[InstanceNode] = y.node.equivalence.tentative_instance
+    instance: InstanceNode | None = y.node.equivalence.tentative_instance
     assert instance is not None
-    n: Optional[AttributeNode] = instance.get_attribute("n")
+    n: AttributeNode | None = instance.get_attribute("n")
     assert n is not None
     assert len(n.value_assignments) == 1
     assert n.value_assignments[0].rhs.node.value == 42

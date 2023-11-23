@@ -50,11 +50,11 @@ T = TypeVar("T")
 class Feature(Generic[T]):
     """A feature offered by a slice"""
 
-    def __init__(self, slice: str, name: str, description: str = "", default_value: Optional[T] = None) -> None:
+    def __init__(self, slice: str, name: str, description: str = "", default_value: T | None = None) -> None:
         self._name: str = name
         self._slice: str = slice
         self._description = description
-        self._default_value: Optional[T] = default_value
+        self._default_value: T | None = default_value
 
     @property
     def name(self) -> str:
@@ -65,7 +65,7 @@ class Feature(Generic[T]):
         return self._slice
 
     @property
-    def default_value(self) -> Optional[T]:
+    def default_value(self) -> T | None:
         return self._default_value
 
     def __str__(self) -> str:
@@ -87,7 +87,7 @@ class StringListFeature(Feature[list[str]]):
 
 
 class ProductMetadata:
-    def __init__(self, product: str, edition: str, license: str, version: Optional[str]) -> None:
+    def __init__(self, product: str, edition: str, license: str, version: str | None) -> None:
         self.product = product
         self.edition = edition
         self.license = license
@@ -186,7 +186,7 @@ class FeatureManager:
 class ApplicationContext:
     def __init__(self) -> None:
         self._slices: list[ServerSlice] = []
-        self._feature_manager: Optional[FeatureManager] = None
+        self._feature_manager: FeatureManager | None = None
 
     def register_slice(self, slice: ServerSlice) -> None:
         assert slice is not None

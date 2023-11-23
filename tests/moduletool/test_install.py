@@ -520,7 +520,7 @@ def test_project_install(
     ProjectTool().execute("install", [])
 
     for fq_mod_name in fq_mod_names:
-        module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        module_info: tuple[str | None, Loader] | None = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
@@ -581,7 +581,7 @@ def test_project_install_preinstalled(
     )
 
     def assert_module_install() -> None:
-        module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        module_info: tuple[str | None, Loader] | None = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None

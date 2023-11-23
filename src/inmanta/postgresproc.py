@@ -29,7 +29,7 @@ INITDB_BIN = "initdb"
 LOGGER = logging.getLogger(__name__)
 
 
-def find_executable(executable: str) -> Optional[str]:
+def find_executable(executable: str) -> str | None:
     """
     Scan PATH for an executable.
     """
@@ -53,7 +53,7 @@ def find_executable(executable: str) -> Optional[str]:
 
 class PostgresProc:
     def __init__(
-        self, port: int, pg_ctl_bin: Optional[str] = None, initdb_bin: Optional[str] = None, db_path: Optional[str] = None
+        self, port: int, pg_ctl_bin: str | None = None, initdb_bin: str | None = None, db_path: str | None = None
     ) -> None:
         self.port = port
         self.db_path = db_path

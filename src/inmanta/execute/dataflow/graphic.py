@@ -164,7 +164,7 @@ class GraphicGraph:
                 continue
             self._assignments.add(assignment)
             rhs: Node
-            label: Optional[str] = None
+            label: str | None = None
 
             if isinstance(assignment.rhs, InstanceNodeReference):
                 rhs = assignment.rhs.top_node()

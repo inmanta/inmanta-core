@@ -30,19 +30,19 @@ from inmanta.execute.runtime import OptionVariable
 from inmanta.module import ModuleV2InV1PathException
 
 
-def bold(content: Optional[str] = None) -> str:
+def bold(content: str | None = None) -> str:
     if content is None:
         return "\033[1m"
     return f"\033[1m{content}\033[0m"
 
 
-def underline(content: Optional[str] = None) -> str:
+def underline(content: str | None = None) -> str:
     if content is None:
         return "\033[4m"
     return f"\033[4m{content}\033[0m"
 
 
-def noformat(content: Optional[str] = None) -> str:
+def noformat(content: str | None = None) -> str:
     return "\033[0m"
 
 
@@ -216,7 +216,7 @@ class ExplainerFactory:
     def explain(self, problem: CompilerException) -> list[str]:
         return [explanation for explainer in self.get_explainers() for explanation in explainer.explain(problem)]
 
-    def explain_and_format(self, problem: CompilerException, plain: bool = True) -> Optional[str]:
+    def explain_and_format(self, problem: CompilerException, plain: bool = True) -> str | None:
         """
         :param plain: remove tty color codes, only return plain text
         """

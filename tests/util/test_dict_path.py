@@ -266,8 +266,8 @@ def test_wild_composed_path() -> None:
 def test_parsing_keyed_list(
     dict_path_str: str,
     valid_path: bool,
-    relation: Optional[DictPathValue],
-    key_value_pairs: Optional[Sequence[tuple[Optional[DictPathValue], Optional[DictPathValue]]]],
+    relation: DictPathValue | None,
+    key_value_pairs: Sequence[tuple[DictPathValue | None, DictPathValue | None]] | None,
 ) -> None:
     """
     Verify whether the KeyedList/WildKeyedList classes correctly parse
@@ -317,7 +317,7 @@ def test_parsing_keyed_list_error() -> None:
         (r"abc*def", False, None),
     ],
 )
-def test_parsing_in_dict(dict_path_str: str, valid_path: bool, key: Optional[DictPathValue]) -> None:
+def test_parsing_in_dict(dict_path_str: str, valid_path: bool, key: DictPathValue | None) -> None:
     """
     Verify whether the WildInDict/InDict classes correctly parse a dict path.
     """
@@ -432,7 +432,7 @@ WILD_PATH_TEST_CONTAINER = {
 )
 def test_dict_path_get_elements(
     wild_path: bool,
-    container: Optional[object],
+    container: object | None,
     dict_path: str,
     result: object,
     wild_only: bool,
@@ -473,7 +473,7 @@ def test_dict_path_get_elements(
         ({"l": [{"k": 1}]}, "l[k=1].new[k=10][k2=20].field", {"l": [{"k": 1, "new": [{"k": "10", "k2": "20", "field": {}}]}]}),
     ],
 )
-def test_dict_path_get_element_construct(container: Optional[object], dict_path: str, result: Optional[object]) -> None:
+def test_dict_path_get_element_construct(container: object | None, dict_path: str, result: object | None) -> None:
     """
     Verify the get_element behavior of non-wildcard enabled dict paths when construct=True.
 

@@ -59,7 +59,7 @@ Bash = abc.Callable[[str], abc.Awaitable[CliResult]]
 
 @pytest.fixture
 def workon_environments_dir(server: Server) -> abc.Iterator[py.path.local]:
-    state_dir: Optional[str] = config.Config.get("config", "state-dir")
+    state_dir: str | None = config.Config.get("config", "state-dir")
     assert state_dir is not None
     yield py.path.local(state_dir).join("server", "environments")
 
@@ -251,7 +251,7 @@ async def test_workon_python_check(
 
 
 @pytest.mark.parametrize_any("option", [None, "-h", "--help"])
-async def test_workon_help(workon_bash: Bash, option: Optional[str]) -> None:
+async def test_workon_help(workon_bash: Bash, option: str | None) -> None:
     """
     Verify output of `inmanta-workon --help`.
     """
@@ -408,9 +408,9 @@ async def assert_workon_state(
     workon_bash: Bash,
     arg: str,
     *,
-    pre_activate: Optional[str] = None,
-    post_activate: Optional[str] = None,
-    inmanta_user: Optional[str] = None,
+    pre_activate: str | None = None,
+    post_activate: str | None = None,
+    inmanta_user: str | None = None,
     expected_dir: py.path.local,
     invert_success_assert: bool = False,
     invert_working_dir_assert: bool = False,

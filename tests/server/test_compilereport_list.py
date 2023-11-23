@@ -44,7 +44,7 @@ async def env_with_compile_reports(client, environment):
         get automatically cleaned up by the server process that cleans up old compiles.
         hours=-i ensures they are returned in ascending chronological order
         """
-        requested = datetime.datetime.now().astimezone(datetime.timezone.utc) - datetime.timedelta(days=5, hours=-i)
+        requested = datetime.datetime.now().astimezone(datetime.UTC) - datetime.timedelta(days=5, hours=-i)
         compile_requested_timestamps.append(requested)
         await data.Compile(
             id=uuid.uuid4(),
@@ -225,13 +225,13 @@ async def test_compile_reports_filters(server, client, env_with_compile_reports)
     assert result.code == 200
     assert len(result.result["data"]) == 3
     assert parse_timestamp(result.result["data"][0]["requested"]) == compile_requested_timestamps[4].astimezone(
-        datetime.timezone.utc
+        datetime.UTC
     )
     assert parse_timestamp(result.result["data"][1]["requested"]) == compile_requested_timestamps[5].astimezone(
-        datetime.timezone.utc
+        datetime.UTC
     )
     assert parse_timestamp(result.result["data"][2]["requested"]) == compile_requested_timestamps[6].astimezone(
-        datetime.timezone.utc
+        datetime.UTC
     )
 
 

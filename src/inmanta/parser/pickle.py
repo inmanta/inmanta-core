@@ -23,7 +23,7 @@ from inmanta.ast import Namespace
 
 
 class ASTPickler(Pickler):
-    def persistent_id(self, obj: object) -> Optional[tuple[str, str]]:
+    def persistent_id(self, obj: object) -> tuple[str, str] | None:
         if isinstance(obj, Namespace):
             # Don't pickle namespaces
             return ("Namespace", obj.get_full_name())

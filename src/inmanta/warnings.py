@@ -49,9 +49,9 @@ class WarningRule:
     :param module: A regex that must match the name of the module generating the warning.
     """
 
-    def __init__(self, action: WarningBehaviour, module: Optional[str] = None) -> None:
+    def __init__(self, action: WarningBehaviour, module: str | None = None) -> None:
         self.action: WarningBehaviour = action
-        self.module: Optional[str] = module
+        self.module: str | None = module
 
     def apply(self) -> None:
         if self.module is not None:
@@ -71,11 +71,11 @@ class WarningOption:
     would add a rule to ignore Inmanta warnings but leave other warning's behaviour as is.
     """
 
-    def __init__(self, name: str, options: dict[Union[str, bool], WarningRule]) -> None:
+    def __init__(self, name: str, options: dict[str | bool, WarningRule]) -> None:
         self.name: str = name
-        self.options: dict[Union[str, bool], WarningRule] = options
+        self.options: dict[str | bool, WarningRule] = options
 
-    def apply(self, option: Union[str, bool]) -> None:
+    def apply(self, option: str | bool) -> None:
         """
         Apply the warning rule tied to the given option.
         """
@@ -104,7 +104,7 @@ class WarningsManager:
     ]
 
     @classmethod
-    def apply_config(cls, config: Optional[Mapping[str, Union[str, bool]]]) -> None:
+    def apply_config(cls, config: Mapping[str, str | bool] | None) -> None:
         """
         Sets all known options based on values in config.
         """
@@ -114,7 +114,7 @@ class WarningsManager:
         # apply all options, given the corresponding values in the config
         for option in cls.options:
             try:
-                value: Union[str, bool] = config[option.name]
+                value: str | bool = config[option.name]
                 option.apply(value)
             except KeyError:
                 pass
@@ -134,12 +134,12 @@ class WarningsManager:
     @classmethod
     def _showwarning(
         cls,
-        message: Union[str, Warning],
+        message: str | Warning,
         category: type[Warning],
         filename: str,
         lineno: int,
-        file: Optional[TextIO] = None,
-        line: Optional[str] = None,
+        file: TextIO | None = None,
+        line: str | None = None,
     ) -> None:
         """
         Shows a warning.

@@ -490,7 +490,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
     now = datetime.datetime.now()
 
     async def insert_agent_proc_and_instances(
-        env_id: uuid.UUID, hostname: str, expired_proc: Optional[datetime.datetime], expired_instances: list[datetime.datetime]
+        env_id: uuid.UUID, hostname: str, expired_proc: datetime.datetime | None, expired_instances: list[datetime.datetime]
     ) -> None:
         agent_proc = data.AgentProcess(hostname=hostname, environment=env_id, expired=expired_proc, sid=uuid.uuid4())
         await agent_proc.insert()

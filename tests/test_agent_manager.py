@@ -96,7 +96,7 @@ class MockSession:
         pass
 
 
-async def assert_agent_state(env_id: UUID, name: str, state: AgentStatus, sid: Optional[UUID]) -> None:
+async def assert_agent_state(env_id: UUID, name: str, state: AgentStatus, sid: UUID | None) -> None:
     agent = await data.Agent.get(env_id, name)
 
     assert agent.get_status() == state
@@ -119,9 +119,9 @@ async def assert_state_agents(
     s1: AgentStatus,
     s2: AgentStatus,
     s3: AgentStatus,
-    sid1: Optional[UUID] = None,
-    sid2: Optional[UUID] = None,
-    sid3: Optional[UUID] = None,
+    sid1: UUID | None = None,
+    sid2: UUID | None = None,
+    sid3: UUID | None = None,
 ) -> None:
     await assert_agent_state(env_id, "agent1", s1, sid1)
     await assert_agent_state(env_id, "agent2", s2, sid2)
@@ -133,9 +133,9 @@ def assert_state_agents_retry(
     s1: AgentStatus,
     s2: AgentStatus,
     s3: AgentStatus,
-    sid1: Optional[UUID] = None,
-    sid2: Optional[UUID] = None,
-    sid3: Optional[UUID] = None,
+    sid1: UUID | None = None,
+    sid2: UUID | None = None,
+    sid3: UUID | None = None,
 ) -> typing.Callable[[], None]:
     async def func() -> bool:
         try:
@@ -851,7 +851,7 @@ async def test_agent_actions(server, client, async_finalizer):
                     return False
                 if not paused:
                     live_session = agent_manager.tid_endpoint_to_session[(env_id, agent_name)]
-                    agent_instance: Optional[data.AgentInstance] = await data.AgentInstance.get_by_id(agent_from_db.primary)
+                    agent_instance: data.AgentInstance | None = await data.AgentInstance.get_by_id(agent_from_db.primary)
                     if agent_instance is None:
                         LOGGER.info("Agent %s in environment %s is not paused, but no AgentInstance exists", agent_name, env_id)
                         return False
@@ -990,7 +990,7 @@ async def test_agent_on_resume_actions(server, environment, client, agent_factor
     result = await client.agent_action(environment, name="agent2", action=AgentAction.pause.value)
     assert result.code == 200
 
-    async def assert_agents_on_resume_state(agent_states: dict[str, Optional[bool]]) -> None:
+    async def assert_agents_on_resume_state(agent_states: dict[str, bool | None]) -> None:
         for agent_name, on_resume in agent_states.items():
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.unpause_on_resume is on_resume
@@ -1191,7 +1191,7 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
     exception_message = "The start of the agent failed"
 
     async def _dummy_fork_inmanta(
-        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+        self, args: list[str], outfile: str | None, errfile: str | None, cwd: str | None = None
     ) -> subprocess.Process:
         raise Exception(exception_message)
 

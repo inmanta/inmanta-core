@@ -18,7 +18,8 @@
 
 from collections.abc import Mapping
 from copy import copy
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
+from collections.abc import Callable
 from collections.abc import Iterable, Sequence
 
 from inmanta.ast import NotFoundException, RuntimeException

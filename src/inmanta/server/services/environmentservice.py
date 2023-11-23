@@ -168,7 +168,7 @@ class EnvironmentService(protocol.ServerSlice):
         for env in await data.Environment.get_list(details=False):
             await self._enable_schedules(env)
 
-    async def _enable_schedules(self, env: data.Environment, setting: Optional[data.Setting] = None) -> None:
+    async def _enable_schedules(self, env: data.Environment, setting: data.Setting | None = None) -> None:
         """
         Schedules appropriate actions for a single environment according to the settting value. Overrides old schedules.
 
@@ -211,7 +211,7 @@ class EnvironmentService(protocol.ServerSlice):
     # v1 handlers
     @handle(methods.create_environment)
     async def create_environment(
-        self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: Optional[uuid.UUID]
+        self, project_id: uuid.UUID, name: str, repository: str, branch: str, environment_id: uuid.UUID | None
     ) -> Apireturn:
         return (
             200,
@@ -224,7 +224,7 @@ class EnvironmentService(protocol.ServerSlice):
 
     @handle(methods.get_environment, environment_id="id", api_version=1)
     async def get_environment(
-        self, environment_id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None
+        self, environment_id: uuid.UUID, versions: int | None = None, resources: int | None = None
     ) -> Apireturn:
         versions = 0 if versions is None else int(versions)
         resources = 0 if resources is None else int(resources)
@@ -258,7 +258,7 @@ class EnvironmentService(protocol.ServerSlice):
         async with self.agent_state_lock:
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
-                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                    refreshed_env: data.Environment | None = await data.Environment.get_by_id(env.id, connection=connection)
                     if refreshed_env is None:
                         raise NotFound("Environment %s does not exist" % env.id)
 
@@ -275,7 +275,7 @@ class EnvironmentService(protocol.ServerSlice):
         async with self.agent_state_lock:
             async with data.Environment.get_connection() as connection:
                 async with connection.transaction():
-                    refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+                    refreshed_env: data.Environment | None = await data.Environment.get_by_id(env.id, connection=connection)
                     if refreshed_env is None:
                         raise NotFound("Environment %s does not exist" % env.id)
 
@@ -342,7 +342,7 @@ class EnvironmentService(protocol.ServerSlice):
         name: str,
         repository: str,
         branch: str,
-        environment_id: Optional[uuid.UUID],
+        environment_id: uuid.UUID | None,
         description: str = "",
         icon: str = "",
     ) -> model.Environment:
@@ -409,11 +409,11 @@ class EnvironmentService(protocol.ServerSlice):
         self,
         environment_id: uuid.UUID,
         name: str,
-        repository: Optional[str],
-        branch: Optional[str],
-        project_id: Optional[uuid.UUID] = None,
-        description: Optional[str] = None,
-        icon: Optional[str] = None,
+        repository: str | None,
+        branch: str | None,
+        project_id: uuid.UUID | None = None,
+        description: str | None = None,
+        icon: str | None = None,
     ) -> model.Environment:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
@@ -606,7 +606,7 @@ class EnvironmentService(protocol.ServerSlice):
                 )
 
     async def notify_listeners(
-        self, action: EnvironmentAction, updated_env: model.Environment, original_env: Optional[model.Environment] = None
+        self, action: EnvironmentAction, updated_env: model.Environment, original_env: model.Environment | None = None
     ) -> None:
         for listener in self.listeners[action]:
             try:

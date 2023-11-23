@@ -68,10 +68,10 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
 
     async def insert_param(
         name: str,
-        resource_id: Optional[str] = None,
+        resource_id: str | None = None,
         source: str = "fact",
-        updated: Optional[datetime] = None,
-        metadata: Optional[dict[str, str]] = None,
+        updated: datetime | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> uuid.UUID:
         param_id = uuid.uuid4()
         await data.Parameter(

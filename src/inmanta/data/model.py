@@ -35,7 +35,7 @@ from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=datetime.timezone.utc)
+        return value.replace(tzinfo=datetime.UTC)
     else:
         return value
 
@@ -95,7 +95,7 @@ class FeatureStatus(BaseModel):
 
     slice: str
     name: str
-    value: Optional[object] = None
+    value: object | None = None
 
 
 class StatusResponse(BaseModel):
@@ -106,7 +106,7 @@ class StatusResponse(BaseModel):
     product: str
     edition: str
     version: str
-    license: Union[str, dict[str, SimpleTypes]]
+    license: str | dict[str, SimpleTypes]
     extensions: list[ExtensionStatus]
     slices: list[SliceStatus]
     features: list[FeatureStatus]
@@ -126,10 +126,10 @@ class CompileData(BaseModel):
 
 class CompileRunBase(BaseModel):
     id: uuid.UUID
-    remote_id: Optional[uuid.UUID] = None
+    remote_id: uuid.UUID | None = None
     environment: uuid.UUID
-    requested: Optional[datetime.datetime] = None
-    started: Optional[datetime.datetime] = None
+    requested: datetime.datetime | None = None
+    started: datetime.datetime | None = None
 
     do_export: bool
     force_update: bool
@@ -139,36 +139,36 @@ class CompileRunBase(BaseModel):
     partial: bool
     removed_resource_sets: list[str]
 
-    exporter_plugin: Optional[str] = None
+    exporter_plugin: str | None = None
 
-    notify_failed_compile: Optional[bool] = None
-    failed_compile_message: Optional[str] = None
+    notify_failed_compile: bool | None = None
+    failed_compile_message: str | None = None
 
 
 class CompileRun(CompileRunBase):
-    compile_data: Optional[CompileData] = None
+    compile_data: CompileData | None = None
 
 
 class CompileReport(CompileRunBase):
-    completed: Optional[datetime.datetime] = None
-    success: Optional[bool] = None
-    version: Optional[int] = None
+    completed: datetime.datetime | None = None
+    success: bool | None = None
+    version: int | None = None
 
 
 class CompileRunReport(BaseModel):
     id: uuid.UUID
     started: datetime.datetime
-    completed: Optional[datetime.datetime] = None
+    completed: datetime.datetime | None = None
     command: str
     name: str
     errstream: str
     outstream: str
-    returncode: Optional[int] = None
+    returncode: int | None = None
 
 
 class CompileDetails(CompileReport):
-    compile_data: Optional[CompileData] = None
-    reports: Optional[list[CompileRunReport]] = None
+    compile_data: CompileData | None = None
+    reports: list[CompileRunReport] | None = None
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
@@ -192,12 +192,12 @@ class AttributeStateChange(BaseModel):
     Changes in the attribute
     """
 
-    current: Optional[object] = None
-    desired: Optional[object] = None
+    current: object | None = None
+    desired: object | None = None
 
     @field_validator("current", "desired")
     @classmethod
-    def check_serializable(cls, v: Optional[object]) -> Optional[object]:
+    def check_serializable(cls, v: object | None) -> object | None:
         """
         Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
         """
@@ -230,8 +230,8 @@ class Environment(BaseModel):
     repo_branch: str
     settings: dict[str, EnvSettingType]
     halted: bool
-    description: Optional[str] = None
-    icon: Optional[str] = None
+    description: str | None = None
+    icon: str | None = None
 
 
 class Project(BaseModel):
@@ -266,7 +266,7 @@ class EnvironmentSetting(BaseModel):
     recompile: bool
     update_model: bool
     agent_restart: bool
-    allowed_values: Optional[list[EnvSettingType]] = None
+    allowed_values: list[EnvSettingType] | None = None
 
 
 class EnvironmentSettingsReponse(BaseModel):
@@ -280,7 +280,7 @@ class ModelMetadata(BaseModel):
     inmanta_compile_state: const.Compilestate = Field(default=const.Compilestate.success, alias="inmanta:compile:state")
     message: str
     type: str
-    extra_data: Optional[JsonType] = None
+    extra_data: JsonType | None = None
 
 
 class ResourceMinimal(BaseModel):
@@ -308,10 +308,10 @@ class Resource(BaseModel):
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
-    last_deploy: Optional[datetime.datetime] = None
+    last_deploy: datetime.datetime | None = None
     attributes: JsonType
     status: const.ResourceState
-    resource_set: Optional[str] = None
+    resource_set: str | None = None
 
 
 class ResourceAction(BaseModel):
@@ -321,12 +321,12 @@ class ResourceAction(BaseModel):
     action_id: uuid.UUID
     action: const.ResourceAction
     started: datetime.datetime
-    finished: Optional[datetime.datetime] = None
-    messages: Optional[list[JsonType]] = None
-    status: Optional[const.ResourceState] = None
-    changes: Optional[JsonType] = None
-    change: Optional[const.Change] = None
-    send_event: Optional[bool] = None  # Deprecated field
+    finished: datetime.datetime | None = None
+    messages: list[JsonType] | None = None
+    status: const.ResourceState | None = None
+    changes: JsonType | None = None
+    change: const.Change | None = None
+    send_event: bool | None = None  # Deprecated field
 
 
 class ResourceDeploySummary(BaseModel):
@@ -366,7 +366,7 @@ class LogLine(BaseModel):
 
     level: const.LogLevel
     msg: str
-    args: list[Optional[ArgumentTypes]] = []
+    args: list[ArgumentTypes | None] = []
     kwargs: JsonType = {}
     timestamp: datetime.datetime
 
@@ -486,7 +486,7 @@ class ReleasedResourceDetails(ResourceDetails):
     :param requires_status: The id and status of the resources this resource requires
     """
 
-    last_deploy: Optional[datetime.datetime] = None
+    last_deploy: datetime.datetime | None = None
     first_generated_time: datetime.datetime
     first_generated_version: int
     status: ReleasedResourceState
@@ -524,8 +524,8 @@ class AttributeDiff(BaseModel):
     :param to_value_compare: A stringified, diff-friendly form of the 'to_value' field
     """
 
-    from_value: Optional[object] = None
-    to_value: Optional[object] = None
+    from_value: object | None = None
+    to_value: object | None = None
     from_value_compare: str
     to_value_compare: str
 
@@ -548,8 +548,8 @@ class Parameter(BaseModel):
     value: str
     environment: uuid.UUID
     source: str
-    updated: Optional[datetime.datetime] = None
-    metadata: Optional[JsonType] = None
+    updated: datetime.datetime | None = None
+    metadata: JsonType | None = None
 
 
 class Fact(Parameter):
@@ -570,11 +570,11 @@ class Agent(BaseModel):
 
     environment: uuid.UUID
     name: str
-    last_failover: Optional[datetime.datetime] = None
+    last_failover: datetime.datetime | None = None
     paused: bool
-    process_id: Optional[uuid.UUID] = None
-    process_name: Optional[str] = None
-    unpause_on_resume: Optional[bool] = None
+    process_id: uuid.UUID | None = None
+    process_name: str | None = None
+    unpause_on_resume: bool | None = None
     status: const.AgentStatus
 
 
@@ -582,10 +582,10 @@ class AgentProcess(BaseModel):
     sid: uuid.UUID
     hostname: str
     environment: uuid.UUID
-    first_seen: Optional[datetime.datetime] = None
-    last_seen: Optional[datetime.datetime] = None
-    expired: Optional[datetime.datetime] = None
-    state: Optional[dict[str, Union[dict[str, list[str]], dict[str, str], dict[str, float], str]]] = None
+    first_seen: datetime.datetime | None = None
+    last_seen: datetime.datetime | None = None
+    expired: datetime.datetime | None = None
+    state: dict[str, dict[str, list[str]] | dict[str, str] | dict[str, float] | str] | None = None
 
 
 class DesiredStateLabel(BaseModel):
@@ -614,7 +614,7 @@ class DryRun(BaseModel):
     id: uuid.UUID
     environment: uuid.UUID
     model: int
-    date: Optional[datetime.datetime] = None
+    date: datetime.datetime | None = None
     total: int = 0
     todo: int = 0
 
@@ -676,7 +676,7 @@ class EnvironmentMetricsResult(BaseModel):
     start: datetime.datetime
     end: datetime.datetime
     timestamps: list[datetime.datetime]
-    metrics: dict[str, list[Optional[Union[float, dict[str, float]]]]]
+    metrics: dict[str, list[float | dict[str, float] | None]]
 
 
 class AuthMethod(str, Enum):

@@ -201,7 +201,7 @@ def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
 def test_process_env_install_from_index(
     tmpdir: str,
     tmpvenv_active: tuple[py.path.local, py.path.local],
-    version: Optional[version.Version],
+    version: version.Version | None,
 ) -> None:
     """
     Install a package from a pip index into the process_env. Assert any version specs are respected.
@@ -329,7 +329,7 @@ def test_active_env_get_module_file(
     assert env.ActiveEnv.get_module_file(module_name) is None
     env.process_env.install_for_config([Requirement.parse(package_name)], pip_config)
     assert package_name in env.process_env.get_installed_packages()
-    module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    module_info: tuple[str | None, Loader] | None = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None
@@ -363,7 +363,7 @@ def test_active_env_get_module_file_editable_namespace_package(
         config=PipConfig(use_system_config=False, index_url=local_module_package_index),
     )
     assert package_name in env.process_env.get_installed_packages()
-    module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    module_info: tuple[str | None, Loader] | None = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None

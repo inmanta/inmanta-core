@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from inmanta.ast import BasicBlock, Statement  # noqa: F401
 
 
-def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
+def do_compile(refs: abc.Mapping[object, object] | None = None) -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Perform a complete compilation run for the current project (as returned by :py:meth:`inmanta.module.Project.get`)
 
@@ -110,7 +110,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[tuple[Location, AnchorTarget]]:
+def anchormap(refs: abc.Mapping[object, object] | None = None) -> Sequence[tuple[Location, AnchorTarget]]:
     """
     Return all lexical references
 
@@ -148,8 +148,8 @@ class Compiler:
                     * key="facts"; value=Dict with the following structure: {"<resource_id": {"<fact_name>": "<fact_value"}}
     """
 
-    def __init__(self, cf_file: str = "main.cf", refs: Optional[abc.Mapping[object, object]] = None) -> None:
-        self.__root_ns: Optional[Namespace] = None
+    def __init__(self, cf_file: str = "main.cf", refs: abc.Mapping[object, object] | None = None) -> None:
+        self.__root_ns: Namespace | None = None
         self._data: CompileData = CompileData()
         self.plugins: dict[str, Plugin] = {}
         self.refs = refs if refs is not None else {}
@@ -214,7 +214,7 @@ class Compiler:
 
             mod_ns = mod_ns[1:]
 
-            ns: Optional[Namespace] = self.__root_ns
+            ns: Namespace | None = self.__root_ns
             for part in mod_ns:
                 if ns is None:
                     break
@@ -298,7 +298,7 @@ class Compiler:
                 if add_trace(cause):
                     handled = True
             if not handled:
-                trace: Optional[str] = None
+                trace: str | None = None
                 if isinstance(exception, UnsetException):
                     if (
                         exception.instance is not None
@@ -316,7 +316,7 @@ class Compiler:
                     variable: ResultVariable = exception.variable
                     trace = DataTraceRenderer.render(variable.get_dataflow_node())
                 elif isinstance(exception, AttributeException):
-                    node_ref: Optional[dataflow.InstanceNodeReference] = exception.instance.instance_node
+                    node_ref: dataflow.InstanceNodeReference | None = exception.instance.instance_node
                     assert node_ref is not None
                     trace = DataTraceRenderer.render(
                         dataflow.InstanceAttributeNodeReference(node_ref.top_node(), exception.attribute)

@@ -20,7 +20,8 @@
 import builtins
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union
+from collections.abc import Callable
 from collections.abc import Coroutine, Mapping, Sequence
 
 import pydantic
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 StrictNonIntBool = pydantic.StrictBool
 
 
-def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
+def issubclass(sub: type, super: type | tuple[type, ...]) -> bool:
     """
     Alternative issubclass implementation that interpretes instances of NewType for the first argument as their super type.
     """

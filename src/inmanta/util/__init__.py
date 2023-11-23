@@ -38,7 +38,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import BinaryIO, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import BinaryIO, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
+from collections.abc import Callable
 from collections.abc import Awaitable, Coroutine, Iterator
 
 import asyncpg
@@ -99,7 +100,7 @@ def hash_file_streaming(file_handle: BinaryIO) -> str:
     return h.hexdigest()
 
 
-def is_call_ok(result: Union[int, tuple[int, JsonType]]) -> bool:
+def is_call_ok(result: int | tuple[int, JsonType]) -> bool:
     if isinstance(result, tuple):
         if len(result) == 2:
             code, reply = result
@@ -181,7 +182,7 @@ class IntervalSchedule(TaskSchedule):
     """
 
     interval: float
-    initial_delay: Optional[float] = None
+    initial_delay: float | None = None
 
     def get_initial_delay(self) -> float:
         return self.initial_delay if self.initial_delay is not None else self.interval
@@ -221,7 +222,7 @@ class CronSchedule(TaskSchedule):
 
     def get_next_delay(self) -> float:
         # always interpret cron schedules as UTC
-        now: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
+        now: datetime.datetime = datetime.datetime.now(datetime.UTC)
         return self._crontab.next(now=now)
 
     def log(self, action: TaskMethod) -> None:
@@ -285,7 +286,7 @@ class Scheduler:
     def add_action(
         self,
         action: TaskMethod,
-        schedule: Union[TaskSchedule, int],  # int for backward compatibility,
+        schedule: TaskSchedule | int,  # int for backward compatibility,
         cancel_on_stop: bool = True,
         quiet_mode: bool = False,
     ) -> ScheduledTask:
@@ -409,10 +410,10 @@ def datetime_iso_format(timestamp: datetime.datetime, *, tz_aware: bool = True) 
         if tz_aware:
             if timestamp.tzinfo:
                 return timestamp
-            return timestamp.replace(tzinfo=datetime.timezone.utc)
+            return timestamp.replace(tzinfo=datetime.UTC)
 
         if timestamp.tzinfo:
-            return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            return timestamp.astimezone(datetime.UTC).replace(tzinfo=None)
         return timestamp
 
     return convert_timestamp().isoformat(timespec="microseconds")
@@ -426,7 +427,7 @@ def parse_timestamp(timestamp: str) -> datetime.datetime:
         return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
     except ValueError:
         # interpret naive datetimes as UTC
-        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
+        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.UTC)
 
 
 class JSONSerializable(ABC):
@@ -506,7 +507,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
-def add_future(future: Union[Future, Coroutine]) -> Task:
+def add_future(future: Future | Coroutine) -> Task:
     """
     Add a future to the ioloop to be handled, but do not require the result.
     """
@@ -523,7 +524,7 @@ def add_future(future: Union[Future, Coroutine]) -> Task:
 
 
 async def retry_limited(
-    fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
+    fun: abc.Callable[..., bool] | abc.Callable[..., abc.Awaitable[bool]],
     timeout: float,
     interval: float = 0.1,
     *args: object,
@@ -554,9 +555,9 @@ async def retry_limited(
         await asyncio.sleep(interval)
         result = await fun_wrapper()
     if not result:
-        raise asyncio.TimeoutError(f"Wait condition was not reached after hard limit of {hard_timeout} seconds")
+        raise TimeoutError(f"Wait condition was not reached after hard limit of {hard_timeout} seconds")
     if time.time() - start > timeout:
-        raise asyncio.TimeoutError(
+        raise TimeoutError(
             f"Wait condition was met after {time.time() - start} seconds, but soft limit was set to {timeout} seconds"
         )
 
@@ -583,7 +584,7 @@ class TaskHandler:
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop: bool = True) -> Task:
+    def add_background_task(self, future: Future | Coroutine, cancel_on_stop: bool = True) -> Task:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
@@ -682,7 +683,7 @@ class NamedSubLock:
         await self.parent.acquire(self.name)
 
     async def __aexit__(
-        self, exc_type: Optional[type[BaseException]], exc_value: Optional[BaseException], traceback: Optional[TracebackType]
+        self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None
     ) -> None:
         await self.parent.release(self.name)
 

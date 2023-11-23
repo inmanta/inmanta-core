@@ -72,7 +72,7 @@ async def env_with_resources(server, client):
     cm = data.ConfigurationModel(
         environment=env2.id,
         version=8,
-        date=datetime.datetime.now(tz=datetime.timezone.utc),
+        date=datetime.datetime.now(tz=datetime.UTC),
         total=1,
         released=True,
         version_info={},
@@ -84,7 +84,7 @@ async def env_with_resources(server, client):
     cm = data.ConfigurationModel(
         environment=env3.id,
         version=8,
-        date=datetime.datetime.now(tz=datetime.timezone.utc),
+        date=datetime.datetime.now(tz=datetime.UTC),
         total=1,
         released=True,
         version_info={},
@@ -338,23 +338,23 @@ async def test_resource_history(client, server, env_with_resources):
         )
     expected = [
         {
-            "date": cm_times[1].astimezone(datetime.timezone.utc),
+            "date": cm_times[1].astimezone(datetime.UTC),
             "attributes": resources[resource_with_long_history][1].attributes,
         },
         {
-            "date": cm_times[2].astimezone(datetime.timezone.utc),
+            "date": cm_times[2].astimezone(datetime.UTC),
             "attributes": resources[resource_with_long_history][2].attributes,
         },
         {
-            "date": cm_times[4].astimezone(datetime.timezone.utc),
+            "date": cm_times[4].astimezone(datetime.UTC),
             "attributes": resources[resource_with_long_history][4].attributes,
         },
         {
-            "date": cm_times[5].astimezone(datetime.timezone.utc),
+            "date": cm_times[5].astimezone(datetime.UTC),
             "attributes": resources[resource_with_long_history][5].attributes,
         },
         {
-            "date": cm_times[7].astimezone(datetime.timezone.utc),
+            "date": cm_times[7].astimezone(datetime.UTC),
             "attributes": resources[resource_with_long_history][7].attributes,
         },
     ]

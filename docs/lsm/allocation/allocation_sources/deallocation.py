@@ -39,7 +39,7 @@ class PGServiceIdAllocator(ExternalServiceIdAllocator[int]):
         """Close connection"""
         self.conn.close()
 
-    def _get_value_from_result(self, result: Optional[tuple[int]]) -> Optional[int]:
+    def _get_value_from_result(self, result: tuple[int] | None) -> int | None:
         if result and result[0]:
             return result[0]
         return None

@@ -308,11 +308,11 @@ def test_eager_promises_promise_cleanup(snippetcompiler, compiler_keep_promise_s
     )
     root_ns: Namespace
     _, root_ns = compiler.do_compile()
-    config_ns: Optional[Namespace] = root_ns.get_child("__config__")
+    config_ns: Namespace | None = root_ns.get_child("__config__")
     assert config_ns is not None
 
-    a1_var: Union[Type, ResultVariable[object]] = config_ns.lookup("a1")
-    a2_var: Union[Type, ResultVariable[object]] = config_ns.lookup("a2")
+    a1_var: Type | ResultVariable[object] = config_ns.lookup("a1")
+    a2_var: Type | ResultVariable[object] = config_ns.lookup("a2")
     assert isinstance(a1_var, ResultVariable)
     assert isinstance(a2_var, ResultVariable)
 

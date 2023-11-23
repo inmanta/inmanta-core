@@ -19,7 +19,8 @@
 
 import argparse
 from collections import abc
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
+from collections.abc import Callable
 
 FunctionType = Callable[[argparse.Namespace], None]
 ParserConfigType = Callable[[argparse.ArgumentParser, abc.Sequence[argparse.ArgumentParser]], None]
@@ -50,7 +51,7 @@ class Commander:
         name: str,
         function: FunctionType,
         help_msg: str,
-        parser_config: Optional[ParserConfigType],
+        parser_config: ParserConfigType | None,
         require_project: bool = False,
         aliases: list[str] = [],
         add_verbose_flag: bool = True,
@@ -98,7 +99,7 @@ class command:  # noqa: N801
         self,
         name: str,
         help_msg: str,
-        parser_config: Optional[ParserConfigType] = None,
+        parser_config: ParserConfigType | None = None,
         require_project: bool = False,
         aliases: list[str] = [],
         add_verbose_flag: bool = True,

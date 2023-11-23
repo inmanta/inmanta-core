@@ -67,7 +67,7 @@ class Statement(Namespaced):
         Namespaced.__init__(self)
         self.namespace = None  # type: Namespace
         self.anchors = []  # type: List[Anchor]
-        self.lexpos: Optional[int] = None
+        self.lexpos: int | None = None
 
     def get_namespace(self) -> "Namespace":
         return self.namespace
@@ -231,7 +231,7 @@ class ExpressionStatement(RequiresEmitStatement):
         """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         """
         :param lhs_attribute: The left hand side attribute if this expression is a right hand side in an attribute assignment.
             If not None, that caller is responsible for making sure the reference resolves to the correct instance as soon as
@@ -329,7 +329,7 @@ class VariableReferenceHook(RawResumer):
         if self.instance is not None:
             # get the Instance
             instance_requires: dict[object, object] = {}
-            unset: Optional[VariableABC] = None
+            unset: VariableABC | None = None
             for k, v in requires.items():
                 try:
                     instance_requires[k] = v.get_value()
@@ -457,7 +457,7 @@ class EagerPromise(VariableResumer):
         super().__init__()
         self.static: StaticEagerPromise = static
         self.responsible: DynamicStatement = responsible
-        self._promise: Optional[ProgressionPromise] = None
+        self._promise: ProgressionPromise | None = None
         self._fulfilled: bool = False
 
     def _acquire(self, variable: VariableABC) -> None:
@@ -498,7 +498,7 @@ class ReferenceStatement(ExpressionStatement):
         self.children: Sequence[ExpressionStatement] = children
         self.anchors.extend(anchor for e in self.children for anchor in e.get_anchors())
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         for c in self.children:
             c.normalize()
 
@@ -544,7 +544,7 @@ class AssignStatement(DynamicStatement):
         out.extend(self.rhs.requires())  # type : List[str]
         return out
 
-    def _add_to_dataflow_graph(self, graph: Optional[DataflowGraph]) -> None:
+    def _add_to_dataflow_graph(self, graph: DataflowGraph | None) -> None:
         """
         Adds this assignment to the resolver's data flow graph.
         """
@@ -557,9 +557,9 @@ class Literal(ExpressionStatement):
     def __init__(self, value: object) -> None:
         ExpressionStatement.__init__(self)
         self.value = value
-        self.lexpos: Optional[int] = None
+        self.lexpos: int | None = None
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         pass
 
     def __repr__(self) -> str:

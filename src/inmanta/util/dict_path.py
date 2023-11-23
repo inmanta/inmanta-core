@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple, Type, TypeVar, Union, overload
 from collections.abc import Sequence
 
 from inmanta.stable_api import stable_api
-from typing_extensions import TypeGuard
+from typing import TypeGuard
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class DictPathValue(abc.ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def matches(self, value: Optional[object]) -> bool:
+    def matches(self, value: object | None) -> bool:
         """
         Return true iff the given value matches this value.
         """
@@ -70,7 +70,7 @@ class DictPathValue(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def value(self) -> Optional[str]:
+    def value(self) -> str | None:
         """
         Return the unescaped data value.
         """
@@ -116,12 +116,12 @@ class NormalValue(DictPathValue):
     def __init__(self, value: str) -> None:
         super(DictPathValue, self).__init__()
         self._value: str = value
-        self._numeric_value: Optional[float] = self._try_parse_numeric(value)
+        self._numeric_value: float | None = self._try_parse_numeric(value)
 
     def escape(self) -> str:
         return WildDictPath.PATTERN_SPECIAL_CHARACTER.sub(r"\\\1", self._value)
 
-    def matches(self, value: Optional[object]) -> bool:
+    def matches(self, value: object | None) -> bool:
         if value is None:
             return False
 
@@ -134,7 +134,7 @@ class NormalValue(DictPathValue):
         return self._value == str(value)
 
     @staticmethod
-    def _try_parse_numeric(value: str) -> Optional[float]:
+    def _try_parse_numeric(value: str) -> float | None:
         try:
             return float(value)
         except (ValueError, TypeError):
@@ -161,7 +161,7 @@ class WildCardValue(DictPathValue):
     def escape(self) -> str:
         return self.WILDCARD_CHARACTER
 
-    def matches(self, value: Optional[object]) -> bool:
+    def matches(self, value: object | None) -> bool:
         return True
 
     @property
@@ -180,7 +180,7 @@ class NullValue(DictPathValue):
     def escape(self) -> str:
         return self.NULL_VALUE_CHARACTER
 
-    def matches(self, value: Optional[object]) -> bool:
+    def matches(self, value: object | None) -> bool:
         return value is None
 
     @property
@@ -250,7 +250,7 @@ class WildDictPath(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def parse(cls: type[TWDP], inp: str) -> Optional[TWDP]:
+    def parse(cls: type[TWDP], inp: str) -> TWDP | None:
         pass
 
     def _validate_container(self, container: object) -> TypeGuard[dict[object, object]]:
@@ -305,7 +305,7 @@ class WildInDict(WildDictPath):
         key_value = DictPathValue.create(key)
         if not isinstance(key_value, NormalValue) and not isinstance(key_value, WildCardValue):
             raise InvalidPathException(f"Invalid dictionary key {key}")
-        self.key: Union[NormalValue, WildCardValue] = key_value
+        self.key: NormalValue | WildCardValue = key_value
 
     def get_elements(self, container: object) -> list[object]:
         if self._validate_container(container):
@@ -323,7 +323,7 @@ class WildInDict(WildDictPath):
         return [self]
 
     @classmethod
-    def parse(cls: type[TWID], inp: str) -> Optional[TWID]:
+    def parse(cls: type[TWID], inp: str) -> TWID | None:
         match = cls.IN_DICT_PATTERN.fullmatch(inp)
         if match:
             return cls(inp)
@@ -427,7 +427,7 @@ class WildKeyedList(WildDictPath):
         """
 
     def __init__(
-        self, relation: str, key_value_pairs: Union[str, Sequence[tuple[str, str]]], key_value: Optional[str] = None
+        self, relation: str, key_value_pairs: str | Sequence[tuple[str, str]], key_value: str | None = None
     ) -> None:
         if isinstance(key_value_pairs, str):
             LOGGER.warning(
@@ -448,12 +448,12 @@ class WildKeyedList(WildDictPath):
         if len({pair[0] for pair in key_value_pairs}) != len(key_value_pairs):
             raise ValueError("No duplicate keys allowed in keyed list path")
 
-        self.key_value_pairs: Sequence[tuple[Union[NormalValue, WildCardValue], DictPathValue]] = [
+        self.key_value_pairs: Sequence[tuple[NormalValue | WildCardValue, DictPathValue]] = [
             (self._parse_key(pair[0]), self._parse_value(pair[1])) for pair in key_value_pairs
         ]
 
     @classmethod
-    def _parse_key(cls, key: str) -> Union[NormalValue, WildCardValue]:
+    def _parse_key(cls, key: str) -> NormalValue | WildCardValue:
         """
         Parse a key string into the corresponding dict path object.
         """
@@ -502,7 +502,7 @@ class WildKeyedList(WildDictPath):
         return [self]
 
     @classmethod
-    def parse(cls: type[TWKL], inp: str) -> Optional[TWKL]:
+    def parse(cls: type[TWKL], inp: str) -> TWKL | None:
         match = cls.KEYED_LIST_PATTERN.fullmatch(inp)
         if match:
             group_dct = match.groupdict()
@@ -513,7 +513,7 @@ class WildKeyedList(WildDictPath):
             return cls(group_dct["relation"], pairs)
         return None
 
-    def get_key_value_pairs(self) -> Sequence[tuple[str, Optional[str]]]:
+    def get_key_value_pairs(self) -> Sequence[tuple[str, str | None]]:
         """
         Return a list of tuples, where each element in the list is a literal (unescaped) key-value pair for this WildKeyedList.
         """
@@ -535,7 +535,7 @@ class WildComposedPath(WildDictPath):
     element_types: Sequence[type[WildDictPath]] = [WildInDict, WildKeyedList]
     COMPOSED_DICT_PATH_PATTERN = re.compile(r"(?:[^.\\]|\\.)+")
 
-    def __init__(self, path_str: Optional[str] = None, path: Optional[Sequence[WildDictPath]] = None) -> None:
+    def __init__(self, path_str: str | None = None, path: Sequence[WildDictPath] | None = None) -> None:
         if (path_str is None) == (path is None):
             raise ValueError("Either path or path_str should be set")
 
@@ -576,7 +576,7 @@ class WildComposedPath(WildDictPath):
         return [parse_element(e) for e in splitted_path_str]
 
     @classmethod
-    def parse(cls: type[TWCP], inp: str) -> Optional[TWCP]:
+    def parse(cls: type[TWCP], inp: str) -> TWCP | None:
         try:
             path = cls.do_parse(path_str=inp)
             return cls(path=path)
@@ -798,7 +798,7 @@ class KeyedList(DictPath, WildKeyedList):
     """
 
     def __init__(
-        self, relation: str, key_value_pairs: Union[str, Sequence[tuple[str, str]]], key_value: Optional[str] = None
+        self, relation: str, key_value_pairs: str | Sequence[tuple[str, str]], key_value: str | None = None
     ) -> None:
         if isinstance(key_value_pairs, str):
             assert key_value is not None
@@ -807,11 +807,11 @@ class KeyedList(DictPath, WildKeyedList):
             assert key_value is None
             WildKeyedList.__init__(self, relation, key_value_pairs)
         # Override type annotation from super class
-        self.key_value_pairs: Sequence[tuple[NormalValue, Union[NormalValue, NullValue]]]
+        self.key_value_pairs: Sequence[tuple[NormalValue, NormalValue | NullValue]]
 
     @classmethod
     def _parse_key(cls, key: str) -> NormalValue:
-        result: Union[NormalValue, WildCardValue] = super()._parse_key(key)
+        result: NormalValue | WildCardValue = super()._parse_key(key)
         if isinstance(result, WildCardValue):
             raise ValueError(f"The Wildcard ('{WildCardValue.WILDCARD_CHARACTER}') can not be used in DictPath's")
         return result
@@ -834,7 +834,7 @@ class KeyedList(DictPath, WildKeyedList):
             if self.relation.value not in outer:
                 outer[self.relation.value] = []
             the_list = self._validate_inner_container(outer[self.relation.value])
-            new_dict: dict[Optional[str], Optional[str]] = {key.value: value.value for key, value in self.key_value_pairs}
+            new_dict: dict[str | None, str | None] = {key.value: value.value for key, value in self.key_value_pairs}
             the_list.append(new_dict)
             return new_dict
 
@@ -888,7 +888,7 @@ class ComposedPath(DictPath, WildComposedPath):
 
     element_types: Sequence[type[DictPath]] = [InDict, KeyedList]
 
-    def __init__(self, path_str: Optional[str] = None, path: Optional[Sequence[DictPath]] = None) -> None:
+    def __init__(self, path_str: str | None = None, path: Sequence[DictPath] | None = None) -> None:
         WildComposedPath.__init__(self, path_str, path)
         self.expanded_path: Sequence[DictPath]
 

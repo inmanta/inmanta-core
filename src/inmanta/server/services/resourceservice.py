@@ -21,7 +21,8 @@ import logging
 import os
 import uuid
 from collections import abc, defaultdict
-from typing import Any, Callable, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
+from collections.abc import Callable
 from collections.abc import Sequence
 
 from asyncpg.connection import Connection
@@ -114,7 +115,7 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_handlers: dict[uuid.UUID, logging.Handler] = {}
 
         # Dict: environment_id: (model_version, increment, negative_increment)
-        self._increment_cache: dict[uuid.UUID, Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]] = {}
+        self._increment_cache: dict[uuid.UUID, tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] | None] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -183,7 +184,7 @@ class ResourceService(protocol.ServerSlice):
         except KeyError:
             pass
 
-    def close_resource_action_logger(self, env: uuid.UUID, logger: Optional[logging.Logger] = None) -> None:
+    def close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger | None = None) -> None:
         """Close the given logger for the given env.
         :param env: The environment to close the logger for
         :param logger: The logger to close, if the logger is none it is retrieved
@@ -253,7 +254,7 @@ class ResourceService(protocol.ServerSlice):
     async def get_resources_in_latest_version(
         self,
         environment: data.Environment,
-        resource_type: Optional[ResourceType] = None,
+        resource_type: ResourceType | None = None,
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
     ) -> list[Resource]:
         result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
@@ -381,7 +382,7 @@ class ResourceService(protocol.ServerSlice):
         timestamp: datetime.datetime,
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -428,7 +429,7 @@ class ResourceService(protocol.ServerSlice):
         status: ResourceState,
         message: str,
         fail_on_error: bool,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
         can_overwrite_available: bool = True,
     ) -> None:
         """
@@ -523,7 +524,7 @@ class ResourceService(protocol.ServerSlice):
                 )
 
     async def get_increment(
-        self, env: data.Environment, version: int, connection: Optional[Connection] = None
+        self, env: data.Environment, version: int, connection: Connection | None = None
     ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
@@ -536,7 +537,7 @@ class ResourceService(protocol.ServerSlice):
             When the connection is in a transaction, we will always invalidate the cache
         """
 
-        def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
+        def _get_cache_entry() -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] | None:
             """
             Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
             or None if no such cache entry exists.
@@ -551,7 +552,7 @@ class ResourceService(protocol.ServerSlice):
                 return None
             return incr, neg_incr
 
-        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
+        increment: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] | None = _get_cache_entry()
         if increment is None or (connection is not None and connection.is_in_transaction()):
             lock = self._increment_cache_locks[env.id]
             async with lock:
@@ -570,7 +571,7 @@ class ResourceService(protocol.ServerSlice):
         status: ResourceState,
         messages: list[LogLine] = [],
         changes: dict[str, AttributeStateChange] = {},
-        change: Optional[Change] = None,
+        change: Change | None = None,
         keep_increment_cache: bool = False,
     ) -> None:
         resource_id_str = resource_id.resource_version_str()
@@ -752,7 +753,7 @@ class ResourceService(protocol.ServerSlice):
         action: const.ResourceAction,
         started: datetime.datetime,
         finished: datetime.datetime,
-        status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
+        status: const.ResourceState | const.DeprecatedResourceState | None,
         messages: list[dict[str, Any]],
         changes: dict[str, Any],
         change: const.Change,
@@ -760,7 +761,7 @@ class ResourceService(protocol.ServerSlice):
         keep_increment_cache: bool = False,
         is_increment_notification: bool = False,
         *,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> Apireturn:
         """
         :param is_increment_notification: is this the increment calucation setting the deployed status,
@@ -769,8 +770,8 @@ class ResourceService(protocol.ServerSlice):
         """
 
         def convert_legacy_state(
-            status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]]
-        ) -> Optional[const.ResourceState]:
+            status: const.ResourceState | const.DeprecatedResourceState | None
+        ) -> const.ResourceState | None:
             if status is None or isinstance(status, const.ResourceState):
                 return status
             if status == const.DeprecatedResourceState.processing_events:
@@ -910,7 +911,7 @@ class ResourceService(protocol.ServerSlice):
                 )
 
                 async def update_fields_resource(
-                    resource: data.Resource, connection: Optional[Connection] = None, **kwargs: object
+                    resource: data.Resource, connection: Connection | None = None, **kwargs: object
                 ) -> None:
                     """
                     This method ensures that the `last_non_deploying_status` field in the database
@@ -1036,15 +1037,15 @@ class ResourceService(protocol.ServerSlice):
     async def get_resource_actions(
         self,
         env: data.Environment,
-        resource_type: Optional[str] = None,
-        agent: Optional[str] = None,
-        attribute: Optional[str] = None,
-        attribute_value: Optional[str] = None,
-        log_severity: Optional[str] = None,
-        limit: Optional[int] = 0,
-        action_id: Optional[uuid.UUID] = None,
-        first_timestamp: Optional[datetime.datetime] = None,
-        last_timestamp: Optional[datetime.datetime] = None,
+        resource_type: str | None = None,
+        agent: str | None = None,
+        attribute: str | None = None,
+        attribute_value: str | None = None,
+        log_severity: str | None = None,
+        limit: int | None = 0,
+        action_id: uuid.UUID | None = None,
+        first_timestamp: datetime.datetime | None = None,
+        last_timestamp: datetime.datetime | None = None,
     ) -> ReturnValue[list[ResourceAction]]:
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
@@ -1083,12 +1084,12 @@ class ResourceService(protocol.ServerSlice):
         links = {}
 
         def _get_query_params(
-            resource_type: Optional[str] = None,
-            agent: Optional[str] = None,
-            attribute: Optional[str] = None,
-            attribute_value: Optional[str] = None,
-            log_severity: Optional[str] = None,
-            limit: Optional[int] = 0,
+            resource_type: str | None = None,
+            agent: str | None = None,
+            attribute: str | None = None,
+            attribute_value: str | None = None,
+            log_severity: str | None = None,
+            limit: int | None = 0,
         ) -> dict:
             query_params = {
                 "resource_type": resource_type,
@@ -1145,12 +1146,12 @@ class ResourceService(protocol.ServerSlice):
     async def resource_list(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        first_id: Optional[ResourceVersionIdStr] = None,
-        last_id: Optional[ResourceVersionIdStr] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: ResourceVersionIdStr | None = None,
+        last_id: ResourceVersionIdStr | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
     ) -> ReturnValueWithMeta[Sequence[LatestReleasedResource]]:
@@ -1179,11 +1180,11 @@ class ResourceService(protocol.ServerSlice):
         self,
         env: data.Environment,
         rid: ResourceIdStr,
-        limit: Optional[int] = None,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
+        limit: int | None = None,
+        first_id: str | None = None,
+        last_id: str | None = None,
+        start: datetime.datetime | None = None,
+        end: datetime.datetime | None = None,
         sort: str = "date.desc",
     ) -> ReturnValue[Sequence[ResourceHistory]]:
         try:
@@ -1207,10 +1208,10 @@ class ResourceService(protocol.ServerSlice):
         self,
         env: data.Environment,
         rid: ResourceIdStr,
-        limit: Optional[int] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        start: datetime.datetime | None = None,
+        end: datetime.datetime | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "timestamp.desc",
     ) -> ReturnValue[Sequence[ResourceLog]]:
         try:
@@ -1225,12 +1226,12 @@ class ResourceService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        limit: Optional[int] = None,
-        first_id: Optional[ResourceVersionIdStr] = None,
-        last_id: Optional[ResourceVersionIdStr] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: ResourceVersionIdStr | None = None,
+        last_id: ResourceVersionIdStr | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "resource_type.desc",
     ) -> ReturnValueWithMeta[Sequence[VersionedResource]]:
         try:
@@ -1282,9 +1283,9 @@ class ResourceService(protocol.ServerSlice):
     async def discovered_resources_get_batch(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        limit: int | None = None,
+        start: str | None = None,
+        end: str | None = None,
         sort: str = "discovered_resource_id.asc",
     ) -> ReturnValue[Sequence[DiscoveredResource]]:
         try:

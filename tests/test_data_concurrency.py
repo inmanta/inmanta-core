@@ -40,7 +40,7 @@ def slowdown_queries(
     monkeypatch,
     *,
     cls: type[data.BaseDocument] = data.BaseDocument,
-    query_funcs: Optional[abc.Collection[str]] = None,
+    query_funcs: abc.Collection[str] | None = None,
     delay: float = 1,
 ) -> None:
     """

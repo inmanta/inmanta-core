@@ -253,7 +253,7 @@ def test_module_v2_source_get_installed_module_editable(
     )
 
     source: module.ModuleV2Source = module.ModuleV2Source()
-    mod: Optional[module.ModuleV2] = source.get_installed_module(module.DummyProject(autostd=False), module_name)
+    mod: module.ModuleV2 | None = source.get_installed_module(module.DummyProject(autostd=False), module_name)
     assert mod is not None
     # os.path.realpath because snippetcompiler uses symlinks
     assert os.path.realpath(mod.path) == (
@@ -272,7 +272,7 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
 
     # make sure the v1 module finder is configured and discovered by env.process_env
     assert PluginModuleFinder.MODULE_FINDER is not None
-    module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.std")
+    module_info: tuple[str | None, Loader] | None = env.process_env.get_module_file("inmanta_plugins.std")
     assert module_info is not None
     path, loader = module_info
     assert path is not None
@@ -361,7 +361,7 @@ def test_module_v2_incorrect_install_warning(
     module_dir: str = str(tmpdir.join("mymodule"))
     shutil.copytree(os.path.join(modules_v2_dir, "minimalv2module"), module_dir)
 
-    def verify_exception(expected: Optional[str]) -> None:
+    def verify_exception(expected: str | None) -> None:
         """
         Verify AST loading fails with the expected message, or succeeds if expected is None.
         """
@@ -416,8 +416,8 @@ def test_from_path(tmpdir: py.path.local, projects_dir: str, modules_dir: str, m
     def check(
         path: str,
         *,
-        subdir: Optional[str] = None,
-        expected: Mapping[type[module.ModuleLike], Optional[type[module.ModuleLike]]],
+        subdir: str | None = None,
+        expected: Mapping[type[module.ModuleLike], type[module.ModuleLike] | None],
     ) -> None:
         """
         Check the functionality for the given path and expected outcomes.
@@ -429,7 +429,7 @@ def test_from_path(tmpdir: py.path.local, projects_dir: str, modules_dir: str, m
         """
         full_path: str = os.path.join(path, *([subdir] if subdir is not None else []))
         for cls, tp in expected.items():
-            result: Optional[module.ModuleLike] = cls.from_path(full_path)
+            result: module.ModuleLike | None = cls.from_path(full_path)
             assert (result is None) is (tp is None)
             if tp is not None:
                 assert isinstance(result, tp)

@@ -247,7 +247,7 @@ std::print(f"{  a .b . c . n_c }")
     assert out == expected_output
 
 
-def check_range(variable: Union[Reference, AttributeReference], start: int, end: int):
+def check_range(variable: Reference | AttributeReference, start: int, end: int):
     assert variable.location.start_char == start, f"{variable=} expected {start=} got {variable.location.start_char=}"
     assert variable.location.end_char == end, f"{variable=} expected {end=} got {variable.location.end_char=}"
 

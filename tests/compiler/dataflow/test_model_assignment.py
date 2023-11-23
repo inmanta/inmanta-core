@@ -116,7 +116,7 @@ x.n = 42
     x: AssignableNodeReference = get_dataflow_node(graph, "x")
     assert isinstance(x, VariableNodeReference)
     assert len(x.node.instance_assignments) == 1
-    n: Optional[AttributeNode] = x.node.instance_assignments[0].rhs.node().get_attribute("n")
+    n: AttributeNode | None = x.node.instance_assignments[0].rhs.node().get_attribute("n")
     assert n is not None
     assert len(n.value_assignments) == 1
     assignment: Assignment[ValueNodeReference] = n.value_assignments[0]
@@ -289,7 +289,7 @@ y = A(n = 4)
     )
 
     def assert_rv(result_variable: ResultVariable) -> None:
-        node_ref: Optional[AssignableNodeReference] = result_variable.get_dataflow_node()
+        node_ref: AssignableNodeReference | None = result_variable.get_dataflow_node()
         assert node_ref is not None
         nodes: list[AssignableNode] = list(node_ref.nodes())
         assert len(nodes) == 1

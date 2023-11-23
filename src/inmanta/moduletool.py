@@ -119,7 +119,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -> Optional[bool]:
+def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -> bool | None:
     """
     Perform input validation on the --no-strict-deps-check and --strict-deps-check options and
     return True iff strict dependency checking should be used.
@@ -137,7 +137,7 @@ def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -
 class ModuleLikeTool:
     """Shared code for modules and projects"""
 
-    def execute(self, cmd: Optional[str], args: argparse.Namespace) -> None:
+    def execute(self, cmd: str | None, args: argparse.Namespace) -> None:
         """
         Execute the given subcommand
         """
@@ -154,7 +154,7 @@ class ModuleLikeTool:
                 msg = f"{cmd} does not exist."
             raise ShowUsageException(msg)
 
-    def get_project(self, load: bool = False, strict_deps_check: Optional[bool] = None) -> Project:
+    def get_project(self, load: bool = False, strict_deps_check: bool | None = None) -> Project:
         project = Project.get(strict_deps_check=strict_deps_check)
         if load:
             project.load()
@@ -196,7 +196,7 @@ class ModuleLikeTool:
 
                 # We do not support revision for deprecated methods
                 revision = False
-                change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
+                change_type: ChangeType | None = ChangeType.parse_from_bools(revision, patch, minor, major)
                 if change_type:
                     outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
                 else:
@@ -394,7 +394,7 @@ compatible with the dependencies specified by the updated modules.
         )
         add_deps_check_arguments(update)
 
-    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: Optional[str]) -> None:
+    def freeze(self, outfile: str | None, recursive: bool | None, operator: str | None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
@@ -453,8 +453,8 @@ compatible with the dependencies specified by the updated modules.
 
     def update(
         self,
-        module: Optional[str] = None,
-        project: Optional[Project] = None,
+        module: str | None = None,
+        project: Project | None = None,
         no_strict_deps_check: bool = False,
         strict_deps_check: bool = False,
     ) -> None:
@@ -504,7 +504,7 @@ compatible with the dependencies specified by the updated modules.
 
         attempt = 0
         done = False
-        last_failure: Optional[CompilerException] = None
+        last_failure: CompilerException | None = None
 
         while not done and attempt < MAX_UPDATE_ATTEMPT:
             LOGGER.info("Performing update attempt %d of %d", attempt + 1, MAX_UPDATE_ATTEMPT)
@@ -801,7 +801,7 @@ When a development release is done using the \--dev option, this command:
             raise CLIException("Either --v1 or --v2 has to be set", exitcode=1)
         if v1 and v2:
             raise CLIException("--v1 and --v2 cannot be set together", exitcode=1)
-        module_like: Optional[ModuleLike] = ModuleLike.from_path(path=os.getcwd())
+        module_like: ModuleLike | None = ModuleLike.from_path(path=os.getcwd())
         if module_like is None:
             raise CLIException("Current working directory doesn't contain an Inmanta module or project", exitcode=1)
         try:
@@ -836,7 +836,7 @@ When a development release is done using the \--dev option, this command:
         ModuleConverter(module).convert_in_place()
 
     def build(
-        self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
+        self, path: str | None = None, output_dir: str | None = None, dev_build: bool = False, byte_code: bool = False
     ) -> str:
         """
         Build a v2 module and return the path to the build artifact.
@@ -865,7 +865,7 @@ When a development release is done using the \--dev option, this command:
             # see #721
             return DummyProject()
 
-    def construct_module(self, project: Optional[Project], path: str) -> Module:
+    def construct_module(self, project: Project | None, path: str) -> Module:
         """Construct a V1 or V2 module from a folder"""
         try:
             return ModuleV2(project, path)
@@ -877,7 +877,7 @@ When a development release is done using the \--dev option, this command:
             except InvalidMetadata as e:
                 raise InvalidModuleException(e.msg)
 
-    def get_module(self, module: Optional[str] = None, project: Optional[Project] = None) -> Module:
+    def get_module(self, module: str | None = None, project: Project | None = None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             project = self.get_project_for_module(module)
@@ -887,7 +887,7 @@ When a development release is done using the \--dev option, this command:
             project = self.get_project(load=True)
             return project.get_module(module, allow_v1=True)
 
-    def get_modules(self, module: Optional[str] = None) -> list[Module]:
+    def get_modules(self, module: str | None = None) -> list[Module]:
         if module is not None:
             return [self.get_module(module)]
         else:
@@ -1018,7 +1018,7 @@ version: 0.0.1dev0"""
             t.add_row(row)
         print(t.draw())
 
-    def install(self, editable: bool = False, path: Optional[str] = None) -> None:
+    def install(self, editable: bool = False, path: str | None = None) -> None:
         """
         This command is no longer supported.
         Use 'pip install -e .' to install a module in editable mode.
@@ -1031,7 +1031,7 @@ version: 0.0.1dev0"""
             exitcode=1,
         )
 
-    def status(self, module: Optional[str] = None) -> None:
+    def status(self, module: str | None = None) -> None:
         """
         a git status on all modules and report
         """
@@ -1041,7 +1041,7 @@ version: 0.0.1dev0"""
                 continue
             mod.status()
 
-    def push(self, module: Optional[str] = None) -> None:
+    def push(self, module: str | None = None) -> None:
         """
         Push all modules
         """
@@ -1060,8 +1060,8 @@ version: 0.0.1dev0"""
     def commit(
         self,
         message: str,
-        module: Optional[str] = None,
-        version: Optional[str] = None,
+        module: str | None = None,
+        version: str | None = None,
         dev: bool = False,
         major: bool = False,
         minor: bool = False,
@@ -1096,7 +1096,7 @@ version: 0.0.1dev0"""
         if not dev or tag:
             gitprovider.tag(module._path, str(outversion))
 
-    def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
+    def freeze(self, outfile: str | None, recursive: bool | None, operator: str, module: str | None = None) -> None:
         """
         !!! Big Side-effect !!! sets yaml parser to be order preserving
         """
@@ -1173,7 +1173,7 @@ version: 0.0.1dev0"""
         LOGGER.debug("Previous release was %s", version_previous_release)
 
         assert version_previous_release <= current_version
-        current_diff: Optional[ChangeType] = ChangeType.diff(low=version_previous_release, high=current_version)
+        current_diff: ChangeType | None = ChangeType.diff(low=version_previous_release, high=current_version)
 
         LOGGER.debug("Different from current to previous release is %s", current_diff)
 
@@ -1232,13 +1232,13 @@ version: 0.0.1dev0"""
     def release(
         self,
         dev: bool,
-        message: Optional[str] = None,
+        message: str | None = None,
         revision: bool = False,
         patch: bool = False,
         minor: bool = False,
         major: bool = False,
         commit_all: bool = False,
-        changelog_message: Optional[str] = None,
+        changelog_message: str | None = None,
     ) -> None:
         """
         Execute the release command.
@@ -1265,11 +1265,11 @@ version: 0.0.1dev0"""
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
 
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
-        changelog: Optional[ModuleChangelog] = (
+        changelog: ModuleChangelog | None = (
             ModuleChangelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
         )
 
-        requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
+        requested_version_bump: ChangeType | None = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
             # Dev always bumps
             requested_version_bump = ChangeType.PATCH
@@ -1522,7 +1522,7 @@ class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
 
     def __init__(self) -> None:
         super().__init__()
-        self._isolated_env: Optional[DefaultIsolatedEnv] = None
+        self._isolated_env: DefaultIsolatedEnv | None = None
 
     @classmethod
     def get_instance(cls) -> "DefaultIsolatedEnvCached":
@@ -1626,7 +1626,7 @@ class V2ModuleBuilder:
         # Set build_tag
         if not config_in.has_section("egg_info"):
             config_in.add_section("egg_info")
-        timestamp_uct = datetime.datetime.now(datetime.timezone.utc)
+        timestamp_uct = datetime.datetime.now(datetime.UTC)
         timestamp_uct_str = timestamp_uct.strftime("%Y%m%d%H%M%S")
         config_in.set("egg_info", "tag_build", f".dev{timestamp_uct_str}")
         # Write file back
@@ -1710,7 +1710,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
-    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern[str]] = None) -> set[str]:
+    def _get_files_in_directory(self, directory: str, ignore: Pattern[str] | None = None) -> set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.
 
@@ -1858,7 +1858,7 @@ graft inmanta_plugins/{self._module.name}/templates
             )
 
     @classmethod
-    def get_pyproject(cls, in_folder: str, warn_on_merge: bool = False, build_requires: Optional[list[str]] = None) -> str:
+    def get_pyproject(cls, in_folder: str, warn_on_merge: bool = False, build_requires: list[str] | None = None) -> str:
         """
         Adds this to the existing config
 

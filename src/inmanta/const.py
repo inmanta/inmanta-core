@@ -337,6 +337,6 @@ PG_ADVISORY_KEY_RELEASE_VERSION = 2
 MODULE_CHANGELOG_FILE = "CHANGELOG.md"
 
 
-DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.UTC)
 
 MODULE_PKG_NAME_PREFIX = "inmanta-module-"

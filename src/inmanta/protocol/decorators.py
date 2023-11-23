@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 import inspect
-from typing import Callable, Dict, List, Optional, TypeVar, Union
+from typing import Dict, List, Optional, TypeVar, Union
+from collections.abc import Callable
 
 from inmanta import const
 from inmanta.types import Apireturn, HandlerType, MethodType
@@ -36,7 +37,7 @@ class handle:  # noqa: N801
     :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: Callable[..., Apireturn], api_version: Optional[int] = None, **kwargs: str) -> None:
+    def __init__(self, method: Callable[..., Apireturn], api_version: int | None = None, **kwargs: str) -> None:
         self.method = method
         self.mapping: dict[str, str] = kwargs
         self._api_version = api_version
@@ -62,11 +63,11 @@ def method(
     operation: str = "POST",
     reply: bool = True,
     arg_options: dict[str, common.ArgOption] = {},
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     server_agent: bool = False,
-    api: Optional[bool] = None,
+    api: bool | None = None,
     agent_server: bool = False,
-    validate_sid: Optional[bool] = None,
+    validate_sid: bool | None = None,
     client_types: list[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",
@@ -128,15 +129,15 @@ def method(
 
 
 def typedmethod(
-    path: Union[str, list[str]],
+    path: str | list[str],
     operation: str = "POST",
     reply: bool = True,
     arg_options: dict[str, common.ArgOption] = {},
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     server_agent: bool = False,
-    api: Optional[bool] = None,
+    api: bool | None = None,
     agent_server: bool = False,
-    validate_sid: Optional[bool] = None,
+    validate_sid: bool | None = None,
     client_types: list[const.ClientType] = [const.ClientType.api],
     api_version: int = 1,
     api_prefix: str = "api",

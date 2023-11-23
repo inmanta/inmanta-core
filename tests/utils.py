@@ -61,7 +61,7 @@ def get_all_subclasses(cls: type[T]) -> set[type[T]]:
 
 
 async def retry_limited(
-    fun: Union[abc.Callable[..., bool], abc.Callable[..., abc.Awaitable[bool]]],
+    fun: abc.Callable[..., bool] | abc.Callable[..., abc.Awaitable[bool]],
     timeout: float,
     interval: float = 0.1,
     *args: object,
@@ -69,7 +69,7 @@ async def retry_limited(
 ) -> None:
     try:
         await util.retry_limited(fun, timeout, interval, *args, **kwargs)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise AssertionError("Bounded wait failed")
 
 
@@ -402,11 +402,11 @@ def create_python_package(
     pkg_version: version.Version,
     path: str,
     *,
-    requirements: Optional[Sequence[Requirement]] = None,
+    requirements: Sequence[Requirement] | None = None,
     install: bool = False,
     editable: bool = False,
-    publish_index: Optional[PipIndex] = None,
-    optional_dependencies: Optional[dict[str, Sequence[Requirement]]] = None,
+    publish_index: PipIndex | None = None,
+    optional_dependencies: dict[str, Sequence[Requirement]] | None = None,
 ) -> None:
     """
     Creates an empty Python package.
@@ -487,17 +487,17 @@ author = Inmanta <code@inmanta.com>
 
 def module_from_template(
     source_dir: str,
-    dest_dir: Optional[str] = None,
+    dest_dir: str | None = None,
     *,
-    new_version: Optional[version.Version] = None,
-    new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
-    new_extras: Optional[abc.Mapping[str, abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]]] = None,
+    new_version: version.Version | None = None,
+    new_name: str | None = None,
+    new_requirements: Sequence[module.InmantaModuleRequirement | Requirement] | None = None,
+    new_extras: abc.Mapping[str, abc.Sequence[module.InmantaModuleRequirement | Requirement]] | None = None,
     install: bool = False,
     editable: bool = False,
-    publish_index: Optional[PipIndex] = None,
-    new_content_init_cf: Optional[str] = None,
-    new_content_init_py: Optional[str] = None,
+    publish_index: PipIndex | None = None,
+    new_content_init_cf: str | None = None,
+    new_content_init_py: str | None = None,
     in_place: bool = False,
 ) -> module.ModuleV2Metadata:
     """
@@ -519,7 +519,7 @@ def module_from_template(
     """
 
     def to_python_requires(
-        requires: abc.Sequence[Union[module.InmantaModuleRequirement, Requirement]]
+        requires: abc.Sequence[module.InmantaModuleRequirement | Requirement]
     ) -> abc.Iterator[Requirement]:
         return (str(req if isinstance(req, Requirement) else req.get_python_package_requirement()) for req in requires)
 
@@ -598,11 +598,11 @@ def v1_module_from_template(
     source_dir: str,
     dest_dir: str,
     *,
-    new_version: Optional[version.Version] = None,
-    new_name: Optional[str] = None,
-    new_requirements: Optional[Sequence[Union[module.InmantaModuleRequirement, Requirement]]] = None,
-    new_content_init_cf: Optional[str] = None,
-    new_content_init_py: Optional[str] = None,
+    new_version: version.Version | None = None,
+    new_name: str | None = None,
+    new_requirements: Sequence[module.InmantaModuleRequirement | Requirement] | None = None,
+    new_content_init_cf: str | None = None,
+    new_content_init_py: str | None = None,
 ) -> module.ModuleV2Metadata:
     """
     Creates a v1 module from a template.
@@ -649,7 +649,7 @@ def v1_module_from_template(
 
 
 def parse_datetime_to_utc(time: str) -> datetime.datetime:
-    return datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
+    return datetime.datetime.strptime(time, "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.UTC)
 
 
 async def resource_action_consistency_check():

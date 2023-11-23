@@ -50,7 +50,8 @@ from collections import abc
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
+from collections.abc import Callable
 from collections.abc import Coroutine
 
 import click
@@ -124,7 +125,7 @@ def start_agent(options: argparse.Namespace) -> None:
     # The call to configure() should be done as soon as possible.
     # If an AsyncHTTPClient is started before this call, the max_client
     # will not be taken into account.
-    max_clients: Optional[int] = Config.get("agent_rest_transport", "max_clients", None)
+    max_clients: int | None = Config.get("agent_rest_transport", "max_clients", None)
     if max_clients:
         AsyncHTTPClient.configure(None, max_clients=max_clients)
 
@@ -178,7 +179,7 @@ def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, No
         # ensure shutdown when the ioloop is stuck
         os._exit(const.EXIT_HARD)
 
-    def handle_signal(signum: signal.Signals, frame: Optional[FrameType]) -> None:
+    def handle_signal(signum: signal.Signals, frame: FrameType | None) -> None:
         # force shutdown, even when the ioloop is stuck
         # schedule off the loop
         t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
@@ -186,7 +187,7 @@ def setup_signal_handlers(shutdown_function: Callable[[], Coroutine[Any, Any, No
         t.start()
         ioloop.add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
 
-    def handle_signal_dump(signum: signal.Signals, frame: Optional[FrameType]) -> None:
+    def handle_signal_dump(signum: signal.Signals, frame: FrameType | None) -> None:
         context_dump(ioloop)
 
     signal.signal(signal.SIGTERM, handle_signal)
@@ -608,8 +609,8 @@ def export(options: argparse.Namespace) -> None:
 
         summary_reporter = CompileSummaryReporter()
 
-        types: Optional[dict[str, inmanta_type.Type]]
-        scopes: Optional[Namespace]
+        types: dict[str, inmanta_type.Type] | None
+        scopes: Namespace | None
 
         t1 = time.time()
         with summary_reporter.compiler_exception.capture():
@@ -658,7 +659,7 @@ class ExceptionCollector:
     This class defines a context manager that captures any unhandled exception raised within the context.
     """
 
-    exception: Optional[Exception] = None
+    exception: Exception | None = None
 
     def has_exception(self) -> bool:
         return self.exception is not None

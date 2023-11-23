@@ -811,25 +811,25 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
     types = Union[int, str]
 
     class Result(BaseModel):
-        val: Optional[types]
+        val: types | None
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
-        def test_method(data: dict[str, Optional[types]]) -> Result:  # NOQA
+        def test_method(data: dict[str, types | None]) -> Result:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: dict[str, Optional[types]]) -> Result:
+        async def test_method(self, data: dict[str, types | None]) -> Result:
             assert len(data) == 1
             assert "test" in data
             return Result(val=data["test"])
 
         @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
-        def test_method2(data: Optional[str] = None) -> None:  # NOQA
+        def test_method2(data: str | None = None) -> None:  # NOQA
             pass
 
         @protocol.handle(test_method2)
-        async def test_method2(self, data: Optional[str] = None) -> None:
+        async def test_method2(self, data: str | None = None) -> None:
             assert data is None
 
     rs = Server()
@@ -969,7 +969,7 @@ async def test_method_definition():
 
 def test_optional():
     @protocol.typedmethod(path="/service_types/<service_type>", operation="DELETE", client_types=["api"])
-    def lcm_service_type_delete(tid: uuid.UUID, service_type: str, version: Optional[str] = None) -> None:
+    def lcm_service_type_delete(tid: uuid.UUID, service_type: str, version: str | None = None) -> None:
         """Delete an existing service type."""
 
 
@@ -982,21 +982,21 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
-        def test_method(data: SimpleTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
+        def test_method(data: SimpleTypes, version: int | None = None) -> list[SimpleTypes]:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: SimpleTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
+        async def test_method(self, data: SimpleTypes, version: int | None = None) -> list[SimpleTypes]:  # NOQA
             if isinstance(data, list):
                 return data
             return [data]
 
         @protocol.typedmethod(path="/testp", operation="POST", client_types=["api"])
-        def test_methodp(data: AttributeTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
+        def test_methodp(data: AttributeTypes, version: int | None = None) -> list[SimpleTypes]:  # NOQA
             pass
 
         @protocol.handle(test_methodp)
-        async def test_methodp(self, data: AttributeTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
+        async def test_methodp(self, data: AttributeTypes, version: int | None = None) -> list[SimpleTypes]:  # NOQA
             if isinstance(data, list):
                 return data
             return [data]
@@ -1447,13 +1447,13 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
         )
         def test_method(
             tid: uuid.UUID, project: str, include_deleted: bool = False
-        ) -> list[Union[uuid.UUID, Project, bool]]:  # NOQA
+        ) -> list[uuid.UUID | Project | bool]:  # NOQA
             pass
 
         @protocol.handle(test_method)
         async def test_method(
             tid: uuid.UUID, project: Project, include_deleted: bool = False
-        ) -> list[Union[uuid.UUID, Project, bool]]:  # NOQA
+        ) -> list[uuid.UUID | Project | bool]:  # NOQA
             return [tid, project, include_deleted]
 
     rs = Server()
@@ -1581,14 +1581,14 @@ async def test_2277_typedmethod_return_optional(async_finalizer, return_value: o
         client_types=[const.ClientType.api],
         api_version=1,
     )
-    def test_method_typed() -> Optional[int]:
+    def test_method_typed() -> int | None:
         """
         A typedmethod used for testing.
         """
 
     class TestSlice(ServerSlice):
         @protocol.handle(test_method_typed)
-        async def test_method_typed_implementation(self) -> Optional[int]:
+        async def test_method_typed_implementation(self) -> int | None:
             return return_value  # type: ignore
 
     configure(unused_tcp_port, "", "")
@@ -1719,11 +1719,11 @@ async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, as
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, filter: Optional[dict[str, str]] = None) -> str:  # NOQA
+        def test_method(id: str, name: str, filter: dict[str, str] | None = None) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, filter: Optional[dict[str, str]] = None) -> str:  # NOQA
+        async def test_method(self, id: str, name: str, filter: dict[str, str] | None = None) -> str:  # NOQA
             return ",".join(filter.keys()) if filter is not None else ""
 
     rs = Server()
@@ -1753,11 +1753,11 @@ async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, datab
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, filter: Optional[dict[str, list[str]]] = None) -> str:  # NOQA
+        def test_method(id: str, name: str, filter: dict[str, list[str]] | None = None) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, filter: Optional[dict[str, list[str]]] = None) -> str:  # NOQA
+        async def test_method(self, id: str, name: str, filter: dict[str, list[str]] | None = None) -> str:  # NOQA
             return ",".join(filter.keys()) if filter is not None else ""
 
     rs = Server()
@@ -1821,19 +1821,19 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, sort: Optional[list[int]] = None) -> str:  # NOQA
+        def test_method(id: str, name: str, sort: list[int] | None = None) -> str:  # NOQA
             pass
 
         @protocol.typedmethod(path="/test_uuid/<id>", operation="GET", client_types=["api"])
-        def test_method_uuid(id: str, sort: Optional[list[uuid.UUID]] = None) -> str:  # NOQA
+        def test_method_uuid(id: str, sort: list[uuid.UUID] | None = None) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, sort: Optional[list[int]] = None) -> str:  # NOQA
+        async def test_method(self, id: str, name: str, sort: list[int] | None = None) -> str:  # NOQA
             return str(sort) if sort else ""
 
         @protocol.handle(test_method_uuid)
-        async def test_method_uuid(self, id: str, sort: Optional[list[uuid.UUID]] = None) -> str:  # NOQA
+        async def test_method_uuid(self, id: str, sort: list[uuid.UUID] | None = None) -> str:  # NOQA
             return str(sort) if sort else ""
 
     rs = Server()
@@ -1987,7 +1987,7 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
 
     timezone: datetime.timezone = datetime.timezone(datetime.timedelta(hours=2))
     now: datetime.datetime = datetime.datetime.now().astimezone(timezone)
-    naive_utc: datetime.datetime = now.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    naive_utc: datetime.datetime = now.astimezone(datetime.UTC).replace(tzinfo=None)
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
@@ -2000,8 +2000,8 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
             assert timestamp == now
             return [
                 now,
-                now.astimezone(datetime.timezone.utc),
-                now.astimezone(datetime.timezone.utc).replace(tzinfo=None),
+                now.astimezone(datetime.UTC),
+                now.astimezone(datetime.UTC).replace(tzinfo=None),
             ]
 
     rs = Server()
@@ -2019,17 +2019,17 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
     def convert_to_naive_utc(timestamp: str) -> datetime.datetime:
         datetime_obj = pydantic.parse_obj_as(datetime.datetime, timestamp)
         if datetime_obj.tzinfo:
-            datetime_obj = datetime_obj.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            datetime_obj = datetime_obj.astimezone(datetime.UTC).replace(tzinfo=None)
 
         return datetime_obj
 
     timestamps = [convert_to_naive_utc(timestamp) for timestamp in response.result["data"]]
 
     assert all(timestamp == naive_utc for timestamp in timestamps)
-    response: Result = await client.test_method(timestamp=now.astimezone(datetime.timezone.utc))
+    response: Result = await client.test_method(timestamp=now.astimezone(datetime.UTC))
     assert response.code == 200
 
-    response: Result = await client.test_method(timestamp=now.astimezone(datetime.timezone.utc).replace(tzinfo=None))
+    response: Result = await client.test_method(timestamp=now.astimezone(datetime.UTC).replace(tzinfo=None))
     assert response.code == 200
 
     response: Result = await client.test_method(timestamp=now.replace(tzinfo=None))
@@ -2052,7 +2052,7 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
     response = await request(now)
     assert response.code == 200
 
-    response = await request(now.astimezone(datetime.timezone.utc).replace(tzinfo=None))
+    response = await request(now.astimezone(datetime.UTC).replace(tzinfo=None))
     assert response.code == 200
 
     with pytest.raises(tornado.httpclient.HTTPClientError):

@@ -163,7 +163,7 @@ class VariableABC(Generic[T_co]):
         """
         raise NotImplementedError()
 
-    def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
+    def get_progression_promise(self, provider: "Statement") -> ProgressionPromise | None:
         """
         Acquires a promise to progress this variable without necessarily setting a value. It is allowed to acquire a progression
         promise greedily (overpromise) when a provider is likely to produce progress. The promise should then be fulfilled as
@@ -221,12 +221,12 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
 
     __slots__ = ("location", "provider", "waiters", "value", "hasValue", "type", "_node")
 
-    def __init__(self, value: Optional[T] = None) -> None:
+    def __init__(self, value: T | None = None) -> None:
         self.waiters: "List[Waiter]" = []
-        self.value: Optional[T] = value
+        self.value: T | None = value
         self.hasValue: bool = False
-        self.type: Optional[Type] = None
-        self._node: Optional[dataflow.AssignableNodeReference] = None
+        self.type: Type | None = None
+        self._node: dataflow.AssignableNodeReference | None = None
 
     def set_type(self, mytype: Type) -> None:
         self.type = mytype
@@ -336,10 +336,10 @@ class ResultVariableProxy(VariableABC[T]):
 
     __slots__ = ("variable", "_listeners", "_waiters")
 
-    def __init__(self, variable: Optional[VariableABC[T]] = None) -> None:
-        self.variable: Optional[VariableABC[T]] = variable
-        self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
-        self._waiters: Optional[list["Waiter"]] = []
+    def __init__(self, variable: VariableABC[T] | None = None) -> None:
+        self.variable: VariableABC[T] | None = variable
+        self._listeners: list[tuple[ResultCollector[T], Location]] | None = []
+        self._waiters: list["Waiter"] | None = []
 
     def connect(self, variable: VariableABC[T]) -> None:
         """
@@ -466,10 +466,10 @@ class DelayedResultVariable(ResultVariable[T]):
 
     __slots__ = ("queued", "queues", "promises", "done_promises")
 
-    def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
+    def __init__(self, queue: "QueueScheduler", value: T | None = None) -> None:
         ResultVariable.__init__(self, value)
-        self.promises: Optional[list[IPromise]] = []
-        self.done_promises: Optional[set[IPromise]] = set()
+        self.promises: list[IPromise] | None = []
+        self.done_promises: set[IPromise] | None = set()
         self.queued = False
         self.queues = queue
         if self.can_get():
@@ -482,7 +482,7 @@ class DelayedResultVariable(ResultVariable[T]):
             self.promises.append(promise)
         return promise
 
-    def get_progression_promise(self, provider: "Statement") -> Optional[ProgressionPromise]:
+    def get_progression_promise(self, provider: "Statement") -> ProgressionPromise | None:
         if self.promises is None:
             return None
         promise: ProgressionPromise = ProgressionPromise(self, provider)
@@ -552,7 +552,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
 
     def __init__(self, queue: "QueueScheduler") -> None:
         # use dict for easy lookup with reliable ordering
-        self._listeners: Optional[dict[ResultCollector["Instance"], None]] = {}
+        self._listeners: dict[ResultCollector["Instance"], None] | None = {}
         # Cache count for waiters without progress potential. Meaning waiters associated with either a purely gradual
         # listener or with a listener that indicated it is done.
         self._nb_gradual_waiters: int = 0
@@ -866,7 +866,7 @@ class QueueScheduler:
     def remove_from_all(self, item: "Waiter") -> None:
         self.allwaiters.remove(item)
 
-    def get_tracker(self) -> Optional[Tracker]:
+    def get_tracker(self) -> Tracker | None:
         return None
 
     def for_tracker(self, tracer: Tracker) -> "QueueScheduler":
@@ -1007,7 +1007,7 @@ class HangUnit(Waiter):
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
         requires: dict[object, VariableABC],
-        target: Optional[ResultVariable],
+        target: ResultVariable | None,
         resumer: "Resumer",
     ) -> None:
         Waiter.__init__(self, queue_scheduler)
@@ -1087,9 +1087,9 @@ class Resolver:
 
     def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
         self.namespace = namespace
-        self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
+        self.dataflow_graph: DataflowGraph | None = DataflowGraph(self) if enable_dataflow_graph else None
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Namespace | None = None) -> Typeorvalue:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
         if root is not None:
@@ -1113,7 +1113,7 @@ class Resolver:
         except NotFoundException:
             # This block is only executed if the model contains a reference to an undefined variable.
             # Since we don't know in which scope it should be defined, we assume top scope.
-            root_graph: Optional[DataflowGraph] = self.get_root_resolver().dataflow_graph
+            root_graph: DataflowGraph | None = self.get_root_resolver().dataflow_graph
             assert root_graph is not None
             return root_graph.get_own_variable(name)
 
@@ -1137,7 +1137,7 @@ class VariableResolver(Resolver):
             DataflowGraph(self, parent=self.parent.dataflow_graph) if self.parent.dataflow_graph is not None else None
         )
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Namespace | None = None) -> Typeorvalue:
         if root is None and name == self.name:
             return self.variable
         return self.parent.lookup(name, root)
@@ -1152,11 +1152,11 @@ class NamespaceResolver(Resolver):
     def __init__(self, parent: Resolver, lecial_root: Namespace) -> None:
         self.parent = parent
         self.root = lecial_root
-        self.dataflow_graph: Optional[DataflowGraph] = None
+        self.dataflow_graph: DataflowGraph | None = None
         if parent.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, parent.dataflow_graph)
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Namespace | None = None) -> Typeorvalue:
         if root is not None:
             return self.parent.lookup(name, root)
         return self.parent.lookup(name, self.root)
@@ -1175,14 +1175,14 @@ class ExecutionContext(Resolver):
         self.block = block
         self.slots: dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
         self.resolver = resolver
-        self.dataflow_graph: Optional[DataflowGraph] = None
+        self.dataflow_graph: DataflowGraph | None = None
         if resolver.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             for name, var in self.slots.items():
                 node_ref: dataflow.AssignableNodeReference = dataflow.AssignableNode(name).reference()
                 var.set_dataflow_node(node_ref)
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Namespace | None = None) -> Typeorvalue:
         if "::" in name:
             return self.resolver.lookup(name, root)
         if name in self.slots:
@@ -1211,7 +1211,7 @@ class Instance(ExecutionContext):
         Locatable.set_location(self, location)
         self.locations.append(location)
 
-    def get_location(self) -> Optional[Location]:
+    def get_location(self) -> Location | None:
         return Locatable.get_location(self)
 
     location = property(get_location, set_location)
@@ -1249,8 +1249,8 @@ class Instance(ExecutionContext):
             self.slots[attr_name] = attribute.get_new_result_variable(self, queue)
         # TODO: this is somewhat ugly. Is there a cleaner way to enforce this constraint
         assert (resolver.dataflow_graph is None) == (node is None)
-        self.dataflow_graph: Optional[DataflowGraph] = None
-        self.instance_node: Optional[dataflow.InstanceNodeReference] = node
+        self.dataflow_graph: DataflowGraph | None = None
+        self.instance_node: dataflow.InstanceNodeReference | None = node
         if self.instance_node is not None:
             self.dataflow_graph = DataflowGraph(self, resolver.dataflow_graph)
             for name, var in self.slots.items():

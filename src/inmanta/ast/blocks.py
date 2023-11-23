@@ -127,7 +127,7 @@ class BasicBlock:
 
     def shadowed_variables(
         self,
-        surrounding_vars: Optional[dict[str, frozenset[Locatable]]] = None,
+        surrounding_vars: dict[str, frozenset[Locatable]] | None = None,
     ) -> Iterator[tuple[str, frozenset[Locatable], frozenset[Locatable]]]:
         """
         Returns an iterator over variables shadowed in this block or its nested blocks.

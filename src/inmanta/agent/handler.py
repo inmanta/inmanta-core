@@ -25,7 +25,8 @@ from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from concurrent.futures import Future
 from functools import partial
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from collections.abc import Callable
 
 from tornado import concurrent
 
@@ -102,15 +103,15 @@ class InvalidOperation(Exception):
 
 @stable_api
 def cache(
-    func: Optional[T_FUNC] = None,
+    func: T_FUNC | None = None,
     ignore: list[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
     cache_none: bool = True,
     # deprecated parameter kept for backwards compatibility: if set, overrides cache_none
-    cacheNone: Optional[bool] = None,  # noqa: N803
-    call_on_delete: Optional[Callable[[Any], None]] = None,
-) -> Union[T_FUNC, Callable[[T_FUNC], T_FUNC]]:
+    cacheNone: bool | None = None,  # noqa: N803
+    call_on_delete: Callable[[Any], None] | None = None,
+) -> T_FUNC | Callable[[T_FUNC], T_FUNC]:
     """
     decorator for methods in resource handlers to provide caching
 
@@ -214,8 +215,8 @@ class HandlerContext(LoggerABC):
         self,
         resource: resources.Resource,
         dry_run: bool = False,
-        action_id: Optional[uuid.UUID] = None,
-        logger: Optional[logging.Logger] = None,
+        action_id: uuid.UUID | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         self._resource = resource
         self._dry_run = dry_run
@@ -231,7 +232,7 @@ class HandlerContext(LoggerABC):
         if action_id is None:
             action_id = uuid.uuid4()
         self._action_id = action_id
-        self._status: Optional[ResourceState] = None
+        self._status: ResourceState | None = None
         self._logs: list[data.LogLine] = []
         self.logger: logging.Logger
         if logger is None:
@@ -266,7 +267,7 @@ class HandlerContext(LoggerABC):
         return self._action_id
 
     @property
-    def status(self) -> Optional[const.ResourceState]:
+    def status(self) -> const.ResourceState | None:
         return self._status
 
     @property
@@ -360,7 +361,7 @@ class HandlerContext(LoggerABC):
         pass
 
     @overload  # noqa: F811
-    def update_changes(self, changes: dict[str, dict[str, Optional[SimpleTypes]]]) -> None:
+    def update_changes(self, changes: dict[str, dict[str, SimpleTypes | None]]) -> None:
         pass
 
     @overload  # noqa: F811
@@ -369,11 +370,11 @@ class HandlerContext(LoggerABC):
 
     def update_changes(  # noqa: F811
         self,
-        changes: Union[
-            dict[str, AttributeStateChange],
-            dict[str, dict[str, Optional[SimpleTypes]]],
-            dict[str, tuple[SimpleTypes, SimpleTypes]],
-        ],
+        changes: (
+            dict[str, AttributeStateChange] |
+            dict[str, dict[str, SimpleTypes | None]] |
+            dict[str, tuple[SimpleTypes, SimpleTypes]]
+        ),
     ) -> None:
         """
         Update the changes list with changes
@@ -446,7 +447,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             raise Exception("Unsupported: no resource mgmt in RH")
         else:
             self._io = io
-        self._client: Optional[protocol.SessionClient] = None
+        self._client: protocol.SessionClient | None = None
         # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
         self._ioloop = agent.process._io_loop
 
@@ -661,7 +662,7 @@ class HandlerAPI(ABC, Generic[TResource]):
             self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
 
-    def get_file(self, hash_id: str) -> Optional[bytes]:
+    def get_file(self, hash_id: str) -> bytes | None:
         """
         Retrieve a file from the fileserver identified with the given id.
 
@@ -1142,7 +1143,7 @@ class Commander:
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> Optional[type[ResourceHandler[Any]]]:
+    def get_provider_class(cls, resource_type: str, name: str) -> type[ResourceHandler[Any]] | None:
         """
         Return the class of the handler for the given type and with the given name
         """

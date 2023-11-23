@@ -71,7 +71,7 @@ def test_repo_parsing(repo):
     ],
 )
 def test_relation_precedence_policy_parsing(
-    precedence_rule: str, valid: bool, expected_precedence_rule: Optional[RelationPrecedenceRule]
+    precedence_rule: str, valid: bool, expected_precedence_rule: RelationPrecedenceRule | None
 ) -> None:
     if valid:
         assert expected_precedence_rule is not None

@@ -100,10 +100,10 @@ class RequestedPagingBoundaries:
 
     def __init__(
         self,
-        start: Optional[PRIMITIVE_SQL_TYPES],
-        end: Optional[PRIMITIVE_SQL_TYPES],
-        first_id: Optional[PRIMITIVE_SQL_TYPES],
-        last_id: Optional[PRIMITIVE_SQL_TYPES],
+        start: PRIMITIVE_SQL_TYPES | None,
+        end: PRIMITIVE_SQL_TYPES | None,
+        first_id: PRIMITIVE_SQL_TYPES | None,
+        last_id: PRIMITIVE_SQL_TYPES | None,
     ) -> None:
         self.start = start
         self.end = end
@@ -160,12 +160,12 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
     def __init__(
         self,
         order: T_ORDER,
-        limit: Optional[int] = None,
-        first_id: Optional[PRIMITIVE_SQL_TYPES] = None,
-        last_id: Optional[PRIMITIVE_SQL_TYPES] = None,
-        start: Optional[PRIMITIVE_SQL_TYPES] = None,
-        end: Optional[PRIMITIVE_SQL_TYPES] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: PRIMITIVE_SQL_TYPES | None = None,
+        last_id: PRIMITIVE_SQL_TYPES | None = None,
+        start: PRIMITIVE_SQL_TYPES | None = None,
+        end: PRIMITIVE_SQL_TYPES | None = None,
+        filter: dict[str, list[str]] | None = None,
     ) -> None:
         self.limit = self.validate_limit(limit)
         self.raw_filter = filter or {}
@@ -189,7 +189,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         return {}
 
-    async def get_data(self) -> tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
+    async def get_data(self) -> tuple[Sequence[T_DTO], PagingBoundaries | None]:
         query_builder = self.get_base_query()
 
         # In this method, we use `data.Resource`
@@ -285,7 +285,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         try:
             dtos, paging_boundaries_in = await self.get_data()
 
-            paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries]
+            paging_boundaries: PagingBoundaries | RequestedPagingBoundaries
             if paging_boundaries_in:
                 paging_boundaries = paging_boundaries_in
             else:
@@ -300,7 +300,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
     # Paging helpers
 
-    async def _get_page_count(self, bounds: Union[PagingBoundaries, RequestedPagingBoundaries]) -> PagingMetadata:
+    async def _get_page_count(self, bounds: PagingBoundaries | RequestedPagingBoundaries) -> PagingMetadata:
         """
         Construct the page counts,
 
@@ -374,7 +374,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
     async def prepare_paging_links(
         self,
         dtos: Sequence[T_DTO],
-        paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries],
+        paging_boundaries: PagingBoundaries | RequestedPagingBoundaries,
         meta: PagingMetadata,
     ) -> dict[str, str]:
         """
@@ -382,7 +382,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         links = {}
 
-        url_query_params: dict[str, Optional[Union[SimpleTypes, list[str]]]] = {
+        url_query_params: dict[str, SimpleTypes | list[str] | None] = {
             "limit": self.limit,
             "sort": str(self.order),
         }
@@ -396,14 +396,14 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         if dtos:
             base_url = self.get_base_url()
 
-            def value_to_string(value: Union[str, int, UUID, datetime]) -> str:
+            def value_to_string(value: str | int | UUID | datetime) -> str:
                 if isinstance(value, datetime):
                     # Accross API boundaries, all naive datetime instances are assumed UTC.
                     # Returns ISO timestamp.
                     return datetime_iso_format(value, tz_aware=opt.server_tz_aware_timestamps.get())
                 return str(value)
 
-            def make_link(**args: Optional[Union[str, int, UUID, datetime]]) -> str:
+            def make_link(**args: str | int | UUID | datetime | None) -> str:
                 params = url_query_params.copy()
                 params.update({k: value_to_string(v) for k, v in args.items() if v is not None})
                 return f"{base_url}?{parse.urlencode(params, doseq=True)}"
@@ -441,7 +441,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
             # TODO: last links
         return links
 
-    def validate_limit(self, limit: Optional[int]) -> int:
+    def validate_limit(self, limit: int | None) -> int:
         if limit is None:
             return APILIMIT
         if limit > APILIMIT:
@@ -453,12 +453,12 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
     def __init__(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        first_id: Optional[ResourceVersionIdStr] = None,
-        last_id: Optional[ResourceVersionIdStr] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: ResourceVersionIdStr | None = None,
+        last_id: ResourceVersionIdStr | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
     ) -> None:
@@ -490,7 +490,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
+        def subquery_latest_version_for_single_resource(higher_than: str | None) -> str:
             """
             Returns a subquery to select a single row from a resource table:
                 - for the first resource id higher than the given boundary
@@ -572,13 +572,13 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         self,
         environment: data.Environment,
         version: int,
-        limit: Optional[int] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "resource_type.desc",
-        first_id: Optional[ResourceVersionIdStr] = None,
-        last_id: Optional[ResourceVersionIdStr] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        first_id: ResourceVersionIdStr | None = None,
+        last_id: ResourceVersionIdStr | None = None,
+        start: str | None = None,
+        end: str | None = None,
     ) -> None:
         super().__init__(
             order=VersionedResourceOrder.parse_from_string(sort),
@@ -629,13 +629,13 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
     def __init__(
         self,
         environment: data.Environment,
-        limit: Optional[int] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "resource_type.desc",
-        first_id: Optional[UUID] = None,
-        last_id: Optional[UUID] = None,
-        start: Optional[datetime] = None,
-        end: Optional[datetime] = None,
+        first_id: UUID | None = None,
+        last_id: UUID | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> None:
         super().__init__(
             order=CompileReportOrder.parse_from_string(sort),
@@ -702,11 +702,11 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
     def __init__(
         self,
         environment: data.Environment,
-        limit: Optional[int] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "resource_type.desc",
-        start: Optional[int] = None,
-        end: Optional[int] = None,
+        start: int | None = None,
+        end: int | None = None,
     ) -> None:
         super().__init__(
             order=DesiredStateVersionOrder.parse_from_string(sort),
@@ -759,12 +759,12 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         self,
         environment: data.Environment,
         rid: ResourceIdStr,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         sort: str = "resource_type.desc",
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        start: Optional[datetime] = None,
-        end: Optional[datetime] = None,
+        first_id: str | None = None,
+        last_id: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> None:
         super().__init__(
             order=ResourceHistoryOrder.parse_from_string(sort),
@@ -850,11 +850,11 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         self,
         environment: data.Environment,
         rid: ResourceIdStr,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         sort: str = "resource_type.desc",
-        filter: Optional[dict[str, list[str]]] = None,
-        start: Optional[datetime] = None,
-        end: Optional[datetime] = None,
+        filter: dict[str, list[str]] | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> None:
         super().__init__(
             order=ResourceLogOrder.parse_from_string(sort),
@@ -877,7 +877,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             "action": ContainsFilterResourceAction,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: dict[str, list[str]] | None) -> dict[str, QueryFilter]:
         # Change the api names of the filters to the names used internally in the database
         query = super().process_filters(filter)
         if query.get("minimal_log_level"):
@@ -947,13 +947,13 @@ class FactsView(DataView[FactOrder, Fact]):
     def __init__(
         self,
         environment: data.Environment,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         sort: str = "resource_type.desc",
-        first_id: Optional[UUID] = None,
-        last_id: Optional[UUID] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        first_id: UUID | None = None,
+        last_id: UUID | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        filter: dict[str, list[str]] | None = None,
     ) -> None:
         super().__init__(
             order=FactOrder.parse_from_string(sort),
@@ -1005,13 +1005,13 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
     def __init__(
         self,
         environment: data.Environment,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         sort: str = "resource_type.desc",
-        first_id: Optional[UUID] = None,
-        last_id: Optional[UUID] = None,
-        start: Optional[datetime] = None,
-        end: Optional[datetime] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        first_id: UUID | None = None,
+        last_id: UUID | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        filter: dict[str, list[str]] | None = None,
     ) -> None:
         super().__init__(
             order=NotificationOrder.parse_from_string(sort),
@@ -1066,13 +1066,13 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
     def __init__(
         self,
         environment: data.Environment,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         sort: str = "resource_type.desc",
-        first_id: Optional[UUID] = None,
-        last_id: Optional[UUID] = None,
-        start: Optional[Union[str, datetime]] = None,
-        end: Optional[Union[str, datetime]] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        first_id: UUID | None = None,
+        last_id: UUID | None = None,
+        start: str | datetime | None = None,
+        end: str | datetime | None = None,
+        filter: dict[str, list[str]] | None = None,
     ) -> None:
         super().__init__(
             order=ParameterOrder.parse_from_string(sort),
@@ -1123,13 +1123,13 @@ class AgentView(DataView[AgentOrder, model.Agent]):
     def __init__(
         self,
         environment: data.Environment,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         sort: str = "resource_type.desc",
-        start: Optional[Union[datetime, bool, str]] = None,
-        end: Optional[Union[datetime, bool, str]] = None,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        start: datetime | bool | str | None = None,
+        end: datetime | bool | str | None = None,
+        first_id: str | None = None,
+        last_id: str | None = None,
+        filter: dict[str, list[str]] | None = None,
     ) -> None:
         super().__init__(
             order=AgentOrder.parse_from_string(sort),
@@ -1150,7 +1150,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
             "status": ContainsFilter,
         }
 
-    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
+    def process_filters(self, filter: dict[str, list[str]] | None) -> dict[str, QueryFilter]:
         out_filter = super().process_filters(filter)
         # name is ambiguous, qualify
         if "name" in out_filter:
@@ -1205,10 +1205,10 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
     def __init__(
         self,
         environment: data.Environment,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         sort: str = "discovered_resource_id.asc",
-        start: Optional[str] = None,
-        end: Optional[str] = None,
+        start: str | None = None,
+        end: str | None = None,
     ) -> None:
         super().__init__(
             order=DiscoveredResourceOrder.parse_from_string(sort),
@@ -1259,9 +1259,9 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
     def __init__(
         self,
         prelude_query_builder: SimpleQueryBuilder,
-        select_clause: Optional[str] = None,
-        from_clause: Optional[str] = None,
-        db_order: Optional[DatabaseOrderV2] = None,
+        select_clause: str | None = None,
+        from_clause: str | None = None,
+        db_order: DatabaseOrderV2 | None = None,
         backward_paging: bool = False,
     ) -> None:
         super().__init__(
@@ -1318,7 +1318,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
         )
 
     def order_and_limit(
-        self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
+        self, db_order: DatabaseOrderV2, limit: int | None = None, backward_paging: bool = False
     ) -> "PreludeBasedFilteringQueryBuilder":
         """Set the order and limit of the query"""
         return PreludeBasedFilteringQueryBuilder(

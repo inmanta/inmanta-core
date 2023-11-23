@@ -217,8 +217,8 @@ class ModuleLoadingException(WrappingRuntimeException):
         self,
         name: str,
         stmt: "DefineImport",
-        cause: Union[InvalidModuleException, ModuleNotFoundException],
-        msg: Optional[str] = None,
+        cause: InvalidModuleException | ModuleNotFoundException,
+        msg: str | None = None,
     ) -> None:
         """
         :param name: The name of the module that could not be loaded.
@@ -242,7 +242,7 @@ class ModuleMetadataFileNotFound(InvalidModuleException):
 class ModuleV2InV1PathException(InvalidModuleException):
     def __init__(self, project: Optional["Project"], module: "ModuleV2", msg: str) -> None:
         super().__init__(msg)
-        self.project: Optional[Project] = project
+        self.project: Project | None = project
         self.module: ModuleV2 = module
 
 
@@ -252,7 +252,7 @@ class InvalidMetadata(CompilerException):
     This exception is raised if the metadata file of a project or module is invalid.
     """
 
-    def __init__(self, msg: str, validation_error: Optional[ValidationError] = None) -> None:
+    def __init__(self, msg: str, validation_error: ValidationError | None = None) -> None:
         if validation_error is not None:
             msg = self._extend_msg_with_validation_information(msg, validation_error)
         super().__init__(msg=msg)
@@ -285,7 +285,7 @@ class PluginModuleLoadException(Exception):
     Exception representing an error during plugin module loading.
     """
 
-    def __init__(self, cause: Exception, module: str, fq_import: str, path: str, lineno: Optional[int]) -> None:
+    def __init__(self, cause: Exception, module: str, fq_import: str, path: str, lineno: int | None) -> None:
         """
         :param cause: The exception raised by the import.
         :param module: The name of the Inmanta module.
@@ -297,7 +297,7 @@ class PluginModuleLoadException(Exception):
         self.module: str = module
         self.fq_import: str = fq_import
         self.path: str = path
-        self.lineno: Optional[int] = lineno
+        self.lineno: int | None = lineno
         lineno_suffix = f":{self.lineno}" if self.lineno is not None else ""
         super().__init__(
             "%s while loading plugin module %s at %s: %s"
@@ -310,12 +310,12 @@ class PluginModuleLoadException(Exception):
         )
 
     def get_cause_type_name(self) -> str:
-        module: Optional[str] = type(self.cause).__module__
+        module: str | None = type(self.cause).__module__
         name: str = type(self.cause).__qualname__
         return name if module is None or module == "builtins" else f"{module}.{name}"
 
     def to_compiler_exception(self) -> CompilerException:
-        module: Optional[str] = type(self.cause).__module__
+        module: str | None = type(self.cause).__module__
         name: str = type(self.cause).__qualname__
         cause_type_name = name if module is None or module == "builtins" else f"{module}.{name}"
 
@@ -344,7 +344,7 @@ class GitProvider:
     def fetch(self, repo: str) -> None:
         pass
 
-    def status(self, repo: str, untracked_files_mode: Optional[UntrackedFilesMode] = None) -> str:
+    def status(self, repo: str, untracked_files_mode: UntrackedFilesMode | None = None) -> str:
         pass
 
     def get_all_tags(self, repo: str) -> list[str]:
@@ -364,7 +364,7 @@ class GitProvider:
         repo: str,
         message: str,
         commit_all: bool,
-        add: Optional[abc.Sequence[str]] = None,
+        add: abc.Sequence[str] | None = None,
         raise_exc_when_nothing_to_commit: bool = True,
     ) -> None:
         pass
@@ -378,7 +378,7 @@ class GitProvider:
     def pull(self, repo: str) -> str:
         pass
 
-    def get_remote(self, repo: str) -> Optional[str]:
+    def get_remote(self, repo: str) -> str | None:
         pass
 
     def is_git_repository(self, repo: str) -> bool:
@@ -409,7 +409,7 @@ class CLIGitProvider(GitProvider):
             ["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env
         )
 
-    def status(self, repo: str, untracked_files_mode: Optional[UntrackedFilesMode] = None) -> str:
+    def status(self, repo: str, untracked_files_mode: UntrackedFilesMode | None = None) -> str:
         """
         Return the output of the `git status --porcelain` command.
 
@@ -451,7 +451,7 @@ class CLIGitProvider(GitProvider):
         repo: str,
         message: str,
         commit_all: bool,
-        add: Optional[abc.Sequence[str]] = None,
+        add: abc.Sequence[str] | None = None,
         raise_exc_when_nothing_to_commit: bool = True,
     ) -> None:
         """
@@ -492,7 +492,7 @@ class CLIGitProvider(GitProvider):
     def pull(self, repo: str) -> str:
         return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
-    def get_remote(self, repo: str) -> Optional[str]:
+    def get_remote(self, repo: str) -> str | None:
         """
         Returns the remote tracking repo given a local repo or None if the remote is not yet configured
         """
@@ -544,19 +544,19 @@ gitprovider = CLIGitProvider()
 
 
 class ModuleSource(Generic[TModule]):
-    def get_installed_module(self, project: Optional["Project"], module_name: str) -> Optional[TModule]:
+    def get_installed_module(self, project: Optional["Project"], module_name: str) -> TModule | None:
         """
         Returns a module object for a module if it is installed.
 
         :param project: The project associated with the module.
         :param module_name: The name of the module.
         """
-        path: Optional[str] = self.path_for(module_name)
+        path: str | None = self.path_for(module_name)
         return self.from_path(project, module_name, path) if path is not None else None
 
     def get_module(
         self, project: "Project", module_spec: list[InmantaModuleRequirement], install: bool = False
-    ) -> Optional[TModule]:
+    ) -> TModule | None:
         """
         Returns the appropriate module instance for a given module spec.
 
@@ -566,7 +566,7 @@ class ModuleSource(Generic[TModule]):
         :param install: Whether to attempt to install the module if it hasn't been installed yet.
         """
         module_name: str = self._get_module_name(module_spec)
-        installed: Optional[TModule] = self.get_installed_module(project, module_name)
+        installed: TModule | None = self.get_installed_module(project, module_name)
 
         def _should_install_module() -> bool:
             """
@@ -613,14 +613,14 @@ class ModuleSource(Generic[TModule]):
         """
         raise NotImplementedError("Abstract method")
 
-    def _log_version_snapshot(self, header: Optional[str], version_snapshot: dict[str, version.Version]) -> None:
+    def _log_version_snapshot(self, header: str | None, version_snapshot: dict[str, version.Version]) -> None:
         if version_snapshot:
             out = [header] if header is not None else []
             out.extend(f"{mod}: {version}" for mod, version in version_snapshot.items())
             LOGGER.debug("\n".join(out))
 
     def _log_snapshot_difference(
-        self, version_snapshot: dict[str, version.Version], previous_snapshot: dict[str, version.Version], header: Optional[str]
+        self, version_snapshot: dict[str, version.Version], previous_snapshot: dict[str, version.Version], header: str | None
     ) -> None:
         set_pre_install: set[tuple[str, version.Version]] = set(previous_snapshot.items())
         set_post_install: set[tuple[str, version.Version]] = set(version_snapshot.items())
@@ -640,7 +640,7 @@ class ModuleSource(Generic[TModule]):
             LOGGER.debug("\n".join(out))
 
     @abstractmethod
-    def install(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional[TModule]:
+    def install(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> TModule | None:
         """
         Attempt to install a module given a module spec. Updates a module that is already installed only if it does not match
         the constraints.
@@ -652,7 +652,7 @@ class ModuleSource(Generic[TModule]):
         raise NotImplementedError("Abstract method")
 
     @abstractmethod
-    def path_for(self, name: str) -> Optional[str]:
+    def path_for(self, name: str) -> str | None:
         """
         Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
         """
@@ -685,7 +685,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         self.urls: list[str] = [url if not os.path.exists(url) else os.path.abspath(url) for url in urls]
 
     @classmethod
-    def get_installed_version(cls, module_name: str) -> Optional[version.Version]:
+    def get_installed_version(cls, module_name: str) -> version.Version | None:
         """
         Returns the version for a module if it is installed.
         """
@@ -723,7 +723,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         project.metadata.pip.assert_has_source(f"a v2 module {module_name}")
 
         requirements: list[Requirement] = [req.get_python_package_requirement() for req in module_spec]
-        preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
+        preinstalled: ModuleV2 | None = self.get_installed_module(project, module_name)
 
         # Get known requires and add them to prevent invalidating constraints through updates
         # These could be constraints (-c) as well, but that requires additional sanitation
@@ -752,7 +752,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
             self.log_snapshot_difference_v2_modules(modules_pre_install, header="Modules versions after installation:")
         except env.PackageNotFound:
             return None
-        path: Optional[str] = self.path_for(module_name)
+        path: str | None = self.path_for(module_name)
         if path is None:
             python_package: str = ModuleV2Source.get_package_name_for(module_name)
             namespace_package: str = self.get_namespace_package_name(module_name)
@@ -762,7 +762,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def log_pre_install_information(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v2) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
-    def take_v2_modules_snapshot(self, header: Optional[str] = None) -> dict[str, version.Version]:
+    def take_v2_modules_snapshot(self, header: str | None = None) -> dict[str, version.Version]:
         """
         Log and return a dictionary containing currently installed v2 modules and their versions.
 
@@ -774,7 +774,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
         return version_snapshot
 
     def log_snapshot_difference_v2_modules(
-        self, previous_snapshot: dict[str, version.Version], header: Optional[str] = None
+        self, previous_snapshot: dict[str, version.Version], header: str | None = None
     ) -> None:
         """
         Logs a diff view of v2 inmanta modules currently installed (in alphabetical order) and their version.
@@ -794,17 +794,17 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
 
         :param module_name: The module's name.
         """
-        installed_version: Optional[version.Version] = self.get_installed_version(module_name)
+        installed_version: version.Version | None = self.get_installed_version(module_name)
         LOGGER.debug("Successfully installed module %s (v2) version %s", module_name, installed_version)
 
-    def path_for(self, name: str) -> Optional[str]:
+    def path_for(self, name: str) -> str | None:
         """
         Returns the path to the module root directory. Should be called prior to configuring the module finder for v1 modules.
         """
         if name.startswith(ModuleV2.PKG_NAME_PREFIX):
             raise ValueError("PythonRepo instances work with inmanta module names, not Python package names.")
         package: str = self.get_namespace_package_name(name)
-        mod_spec: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(package)
+        mod_spec: tuple[str | None, Loader] | None = env.ActiveEnv.get_module_file(package)
         if mod_spec is None:
             return None
         init, mod_loader = mod_spec
@@ -859,7 +859,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
     def log_pre_install_information(self, module_name: str, module_spec: list[InmantaModuleRequirement]) -> None:
         LOGGER.debug("Installing module %s (v1) %s.", module_name, super()._format_constraints(module_name, module_spec))
 
-    def take_modules_snapshot(self, project: "Project", header: Optional[str] = None) -> dict[str, version.Version]:
+    def take_modules_snapshot(self, project: "Project", header: str | None = None) -> dict[str, version.Version]:
         """
         Log and return a dictionary containing currently loaded modules and their versions.
 
@@ -871,7 +871,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
         return version_snapshot
 
     def log_snapshot_difference_v1_modules(
-        self, project: "Project", previous_snapshot: dict[str, version.Version], header: Optional[str] = None
+        self, project: "Project", previous_snapshot: dict[str, version.Version], header: str | None = None
     ) -> None:
         """
         Logs a diff view on inmanta modules (both v1 and v2) currently loaded (in alphabetical order) and their version.
@@ -904,7 +904,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
 
     def install(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional["ModuleV1"]:
         module_name: str = self._get_module_name(module_spec)
-        preinstalled: Optional[ModuleV1] = self.get_installed_module(project, module_name)
+        preinstalled: ModuleV1 | None = self.get_installed_module(project, module_name)
         if preinstalled is not None:
             preinstalled_version: str = str(preinstalled.version)
             if all(preinstalled_version in constraint for constraint in module_spec):
@@ -946,7 +946,7 @@ class ModuleV1Source(ModuleSource["ModuleV1"]):
 
             return module
 
-    def path_for(self, name: str) -> Optional[str]:
+    def path_for(self, name: str) -> str | None:
         return self.local_repo.path_for(name)
 
     @classmethod
@@ -958,7 +958,7 @@ class ModuleRepo:
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
 
-    def path_for(self, name: str) -> Optional[str]:
+    def path_for(self, name: str) -> str | None:
         # same class is used for search path and remote repos, perhaps not optimal
         raise NotImplementedError("Abstract method")
 
@@ -981,7 +981,7 @@ class CompositeModuleRepo(ModuleRepo):
                 return True
         return False
 
-    def path_for(self, name: str) -> Optional[str]:
+    def path_for(self, name: str) -> str | None:
         for child in self.children:
             result = child.path_for(name)
             if result is not None:
@@ -993,7 +993,7 @@ class CompositeModuleRepo(ModuleRepo):
 
 
 class LocalFileRepo(ModuleRepo):
-    def __init__(self, root: str, parent_root: Optional[str] = None) -> None:
+    def __init__(self, root: str, parent_root: str | None = None) -> None:
         if parent_root is None:
             self.root = os.path.abspath(root)
         else:
@@ -1007,7 +1007,7 @@ class LocalFileRepo(ModuleRepo):
             LOGGER.debug("could not clone repo", exc_info=True)
             return False
 
-    def path_for(self, name: str) -> Optional[str]:
+    def path_for(self, name: str) -> str | None:
         path = os.path.join(self.root, name)
         if os.path.exists(path):
             return path
@@ -1035,7 +1035,7 @@ class RemoteRepo(ModuleRepo):
             LOGGER.debug("could not clone repo", exc_info=True)
             return False
 
-    def path_for(self, name: str) -> Optional[str]:
+    def path_for(self, name: str) -> str | None:
         raise NotImplementedError("Should only be called on local repos")
 
     def is_empty(self) -> bool:
@@ -1043,7 +1043,7 @@ class RemoteRepo(ModuleRepo):
         return False
 
 
-def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
+def make_repo(path: str, root: str | None = None) -> LocalFileRepo | RemoteRepo:
     """
     Returns the appropriate `ModuleRepo` instance (v1) for the given path.
     """
@@ -1116,13 +1116,13 @@ class FreezeOperator(str, Enum):
 class RawParser(ABC):
     @classmethod
     @abstractmethod
-    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+    def parse(cls, source: str | TextIO) -> Mapping[str, object]:
         raise NotImplementedError()
 
 
 class YamlParser(RawParser):
     @classmethod
-    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+    def parse(cls, source: str | TextIO) -> Mapping[str, object]:
         try:
             return yaml.safe_load(source)
         except yaml.YAMLError as e:
@@ -1134,7 +1134,7 @@ class YamlParser(RawParser):
 
 class CfgParser(RawParser):
     @classmethod
-    def parse(cls, source: Union[str, TextIO]) -> Mapping[str, object]:
+    def parse(cls, source: str | TextIO) -> Mapping[str, object]:
         try:
             config: configparser.ConfigParser = configparser.ConfigParser()
             config.read_string(source if isinstance(source, str) else source.read())
@@ -1222,14 +1222,14 @@ class Metadata(BaseModel):
     )
 
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     freeze_recursive: bool = False
     freeze_operator: str = Field(default="~=", pattern=FreezeOperator.get_regex_for_validation())
 
     _raw_parser: typing.ClassVar[type[RawParser]]
 
     @classmethod
-    def parse(cls: type[TMetadata], source: Union[str, TextIO]) -> TMetadata:
+    def parse(cls: type[TMetadata], source: str | TextIO) -> TMetadata:
         raw: Mapping[str, object] = cls._raw_parser.parse(source)
         try:
             return cls(
@@ -1266,7 +1266,7 @@ TModuleMetadata = TypeVar("TModuleMetadata", bound="ModuleMetadata")
 class ModuleMetadata(ABC, Metadata):
     version: str
     license: str
-    deprecated: Optional[bool] = None
+    deprecated: bool | None = None
 
     @field_validator("version")
     @classmethod
@@ -1349,7 +1349,7 @@ class ModuleV1Metadata(ModuleMetadata, MetadataFieldRequires):
       Valid values are [==, ~=, >=]. *Default is '~='*
     """
 
-    compiler_version: Optional[str] = None
+    compiler_version: str | None = None
 
     _raw_parser: typing.ClassVar[type[YamlParser]] = YamlParser
 
@@ -1473,7 +1473,7 @@ class ModuleV2Metadata(ModuleMetadata):
             )
         return result
 
-    def to_config(self, inp: Optional[configparser.ConfigParser] = None) -> configparser.ConfigParser:
+    def to_config(self, inp: configparser.ConfigParser | None = None) -> configparser.ConfigParser:
         if inp:
             out = inp
         else:
@@ -1522,7 +1522,7 @@ class RelationPrecedenceRule:
         """
         Create a RelationPrecedencePolicy object from its string representation.
         """
-        match: Optional[re.Match[str]] = ProjectMetadata._re_relation_precedence_rule_compiled.fullmatch(rule.strip())
+        match: re.Match[str] | None = ProjectMetadata._re_relation_precedence_rule_compiled.fullmatch(rule.strip())
         if not match:
             raise Exception(
                 f"Invalid rule in relation precedence policy: {rule}. "
@@ -1662,13 +1662,13 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
     _re_relation_precedence_rule: str = r"^(?P<ft>[^\s.]+)\.(?P<fr>[^\s.]+)\s+before\s+(?P<tt>[^\s.]+)\.(?P<tr>[^\s.]+)$"
     _re_relation_precedence_rule_compiled: ClassVar[re.Pattern[str]] = re.compile(_re_relation_precedence_rule)
 
-    author: Optional[str] = None
-    author_email: Optional[NameEmail] = None
-    license: Optional[str] = None
-    copyright: Optional[str] = None
+    author: str | None = None
+    author_email: NameEmail | None = None
+    license: str | None = None
+    copyright: str | None = None
     modulepath: list[str] = []
     repo: list[ModuleRepoInfo] = []
-    downloadpath: Optional[str] = None
+    downloadpath: str | None = None
     install_mode: InstallMode = InstallMode.release
     requires: list[str] = []
     relation_precedence_policy: list[
@@ -1750,7 +1750,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
         """
         subs: tuple[type[ModuleLike], ...] = (Project, Module)
         for sub in subs:
-            instance: Optional[ModuleLike] = sub.from_path(path)
+            instance: ModuleLike | None = sub.from_path(path)
             if instance is not None:
                 return instance
         return None
@@ -1780,7 +1780,7 @@ class ModuleLike(ABC, Generic[TMetadata]):
         with open(metadata_file_path, encoding="utf-8") as fd:
             return self.get_metadata_from_source(source=fd)
 
-    def get_metadata_from_source(self, source: Union[str, TextIO]) -> TMetadata:
+    def get_metadata_from_source(self, source: str | TextIO) -> TMetadata:
         """
         :param source: Either the yaml content as a string or an input stream from the yaml file
         """
@@ -1964,9 +1964,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         path: str,
         autostd: bool = True,
         main_file: str = "main.cf",
-        venv_path: Optional[Union[str, "env.VirtualEnv"]] = None,
+        venv_path: Union[str, "env.VirtualEnv"] | None = None,
         attach_cf_cache: bool = True,
-        strict_deps_check: Optional[bool] = None,
+        strict_deps_check: bool | None = None,
     ) -> None:
         """
         Initialize the project, this includes
@@ -1993,7 +1993,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         self.project_path = path
         self.main_file = main_file
 
-        self._ast_cache: Optional[tuple[list[Statement], BasicBlock]] = None  # Cache for expensive method calls
+        self._ast_cache: tuple[list[Statement], BasicBlock] | None = None  # Cache for expensive method calls
         self._metadata.modulepath = [os.path.abspath(os.path.join(path, x)) for x in self._metadata.modulepath]
         self.module_source: ModuleV2Source = ModuleV2Source()
         self.module_source_v1: ModuleV1Source = ModuleV1Source(
@@ -2035,14 +2035,14 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         else:
             self.strict_deps_check = self._metadata.strict_deps_check
 
-        self._complete_ast: Optional[tuple[list[Statement], list[BasicBlock]]] = None
+        self._complete_ast: tuple[list[Statement], list[BasicBlock]] | None = None
         # Cache for the complete ast
 
     def get_relation_precedence_policy(self) -> list[RelationPrecedenceRule]:
         return self._metadata.get_relation_precedence_rules()
 
     @classmethod
-    def from_path(cls: type[TProject], path: str) -> Optional[TProject]:
+    def from_path(cls: type[TProject], path: str) -> TProject | None:
         return cls(path=path) if os.path.exists(os.path.join(path, cls.PROJECT_FILE)) else None
 
     def install_module(self, module_req: InmantaModuleRequirement, install_as_v1_module: bool) -> None:
@@ -2051,7 +2051,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         corresponding name.
         Does not reinstall if the given module requirement is already met.
         """
-        installed_module: Optional[Module]
+        installed_module: Module | None
         if install_as_v1_module:
             installed_module = self.module_source_v1.install(self, module_spec=[module_req])
         else:
@@ -2075,7 +2075,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         return self._metadata.modulepath
 
     @property
-    def downloadpath(self) -> Optional[str]:
+    def downloadpath(self) -> str | None:
         return self._metadata.downloadpath
 
     def get_metadata_file_path(self) -> str:
@@ -2096,7 +2096,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             raise ProjectNotFoundException("Unable to find an inmanta project (project.yml expected)")
 
     @classmethod
-    def get(cls, main_file: str = "main.cf", strict_deps_check: Optional[bool] = None) -> "Project":
+    def get(cls, main_file: str = "main.cf", strict_deps_check: bool | None = None) -> "Project":
         """
         Get the instance of the project
         """
@@ -2169,7 +2169,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             end = time()
             LOGGER.debug("Plugin loading took %0.03f seconds", end - start)
 
-    def invalidate_state(self, module: Optional[str] = None) -> None:
+    def invalidate_state(self, module: str | None = None) -> None:
         """
         Invalidate this project's state, forcing a reload next time load is called.
 
@@ -2449,7 +2449,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         module_reqs: list[InmantaModuleRequirement] = (
             list(reqs[module_name]) if module_name in reqs else [InmantaModuleRequirement.parse(module_name)]
         )
-        module: Optional[Union[ModuleV1, ModuleV2]]
+        module: ModuleV1 | ModuleV2 | None
         try:
             module = self.module_source.get_module(self, module_reqs, install=install_v2)
             if module is not None and self.module_source_v1.path_for(module_name) is not None:
@@ -2589,7 +2589,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         result: bool = True
         for name, module in self.modules.items():
-            installed: Optional[ModuleV2] = self.module_source.get_installed_module(self, name)
+            installed: ModuleV2 | None = self.module_source.get_installed_module(self, name)
             if installed is None:
                 if module.GENERATION == ModuleGeneration.V1:
                     # Loaded module as V1 and no installed V2 module found: no issues with this module
@@ -2785,7 +2785,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     MODULE_FILE: str
     GENERATION: ModuleGeneration
 
-    def __init__(self, project: Optional[Project], path: str) -> None:
+    def __init__(self, project: Project | None, path: str) -> None:
         """
         Create a new configuration module
 
@@ -2798,7 +2798,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         if self.metadata.deprecated:
             warnings.warn(ModuleDeprecationWarning(f"Module {self.name} has been deprecated"))
-        self._project: Optional[Project] = project
+        self._project: Project | None = project
         self.ensure_versioned()
         self.model_dir = os.path.join(self.path, Module.MODEL_DIR)
 
@@ -2810,7 +2810,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     def from_path(cls, path: str) -> Optional["Module"]:
         subs: tuple[type[Module], ...] = (ModuleV1, ModuleV2)
         for sub in subs:
-            instance: Optional[Module] = sub.from_path(path)
+            instance: Module | None = sub.from_path(path)
             if instance is not None:
                 return instance
         return None
@@ -2976,7 +2976,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         return modules
 
     @abstractmethod
-    def get_plugin_dir(self) -> Optional[str]:
+    def get_plugin_dir(self) -> str | None:
         """
         Return directory containing the python files which define handlers and plugins.
         If no such directory is defined, this method returns None.
@@ -3003,7 +3003,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
-        plugin_dir: Optional[str] = self.get_plugin_dir()
+        plugin_dir: str | None = self.get_plugin_dir()
 
         if plugin_dir is None:
             return iter(())
@@ -3030,9 +3030,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
             try:
                 importlib.import_module(fq_mod_name)
             except Exception as e:
-                tb: Optional[types.TracebackType] = sys.exc_info()[2]
+                tb: types.TracebackType | None = sys.exc_info()[2]
                 stack: traceback.StackSummary = traceback.extract_tb(tb)
-                lineno: Optional[int] = more_itertools.first(
+                lineno: int | None = more_itertools.first(
                     (frame.lineno for frame in reversed(stack) if frame.filename == path_to_file), None
                 )
                 raise PluginModuleLoadException(e, self.name, fq_mod_name, path_to_file, lineno).to_compiler_exception()
@@ -3069,7 +3069,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     MODULE_FILE = "module.yml"
     GENERATION = ModuleGeneration.V1
 
-    def __init__(self, project: Optional[Project], path: str):
+    def __init__(self, project: Project | None, path: str):
         try:
             super().__init__(project, path)
         except InvalidMetadata as e:
@@ -3094,7 +3094,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
             )
 
     @classmethod
-    def from_path(cls: type[TModule], path: str) -> Optional[TModule]:
+    def from_path(cls: type[TModule], path: str) -> TModule | None:
         return cls(project=None, path=path) if os.path.exists(os.path.join(path, cls.MODULE_FILE)) else None
 
     def get_metadata_file_path(self) -> str:
@@ -3105,7 +3105,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         return metadata.name
 
     @property
-    def compiler_version(self) -> Optional[str]:
+    def compiler_version(self) -> str | None:
         """
         Get the minimal compiler version required for this module version. Returns none is the compiler version is not
         constrained.
@@ -3128,7 +3128,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         project: Project,
         modulename: str,
         requirements: Iterable[InmantaModuleRequirement],
-        path: Optional[str] = None,
+        path: str | None = None,
         fetch: bool = True,
         install_mode: InstallMode = InstallMode.release,
     ) -> "ModuleV1":
@@ -3166,10 +3166,10 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     @classmethod
     def get_suitable_version_for(
         cls, modulename: str, requirements: Iterable[InmantaModuleRequirement], path: str, release_only: bool = True
-    ) -> Optional[version.Version]:
+    ) -> version.Version | None:
         versions_str = gitprovider.get_all_tags(path)
 
-        def try_parse(x: str) -> Optional[version.Version]:
+        def try_parse(x: str) -> version.Version | None:
             try:
                 return parse_version(x)
             except Exception:
@@ -3188,8 +3188,8 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     @classmethod
     def __best_for_compiler_version(
         cls, modulename: str, versions: list[version.Version], path: str, comp_version: version.Version
-    ) -> Optional[version.Version]:
-        def get_cv_for(best: version.Version) -> Optional[version.Version]:
+    ) -> version.Version | None:
+        def get_cv_for(best: version.Version) -> version.Version | None:
             cfg_text: str = gitprovider.get_file_for_version(path, str(best), cls.MODULE_FILE)
             metadata: ModuleV1Metadata = cls.get_metadata_file_schema_type().parse(cfg_text)
             if metadata.compiler_version is None:
@@ -3226,7 +3226,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
     def get_metadata_file_schema_type(cls) -> type[ModuleV1Metadata]:
         return ModuleV1Metadata
 
-    def get_plugin_dir(self) -> Optional[str]:
+    def get_plugin_dir(self) -> str | None:
         plugins_dir = os.path.join(self._path, loader.PLUGIN_DIR)
         if not os.path.exists(plugins_dir):
             return None
@@ -3263,7 +3263,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         """
         versions_str: list[str] = gitprovider.get_all_tags(self._path)
 
-        def try_parse(x: str) -> Optional[version.Version]:
+        def try_parse(x: str) -> version.Version | None:
             try:
                 return parse_version(x)
             except Exception:
@@ -3318,13 +3318,13 @@ class ModuleV2(Module[ModuleV2Metadata]):
 
     def __init__(
         self,
-        project: Optional[Project],
+        project: Project | None,
         path: str,
         is_editable_install: bool = False,
-        installed_version: Optional[version.Version] = None,
+        installed_version: version.Version | None = None,
     ) -> None:
         self._is_editable_install = is_editable_install
-        self._version: Optional[version.Version] = installed_version
+        self._version: version.Version | None = installed_version
         super().__init__(project, path)
 
         if not os.path.exists(os.path.join(self.model_dir, "_init.cf")):
@@ -3336,7 +3336,7 @@ class ModuleV2(Module[ModuleV2Metadata]):
             )
 
     @classmethod
-    def from_path(cls: type[TModule], path: str) -> Optional[TModule]:
+    def from_path(cls: type[TModule], path: str) -> TModule | None:
         try:
             return cls(project=None, path=path) if os.path.exists(os.path.join(path, cls.MODULE_FILE)) else None
         except InvalidModuleException:

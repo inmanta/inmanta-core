@@ -109,7 +109,7 @@ class Error(BaseModel):
         Error message.
     """
 
-    location: Optional[Location] = None
+    location: Location | None = None
     """
         Location where this error occurred.
     """

@@ -77,7 +77,7 @@ class OpMetaClass(ABCMeta):
 class IsDefined(ReferenceStatement):
     __slots__ = ("attr", "name")
 
-    def __init__(self, attr: Optional[Reference], name: LocatableString) -> None:
+    def __init__(self, attr: Reference | None, name: LocatableString) -> None:
         if attr:
             children = [attr]
         else:
@@ -237,7 +237,7 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def __init__(self, name: str, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1, op2])
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         super().normalize()
         # lazy execution: we don't immediately emit the second operator so we need to hold its promises until we do
         self._own_eager_promises = list(self.children[1].get_all_eager_promises())

@@ -18,7 +18,8 @@
 import inspect
 import json
 import re
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Dict, List, Optional, Type, Union
+from collections.abc import Callable
 
 from pydantic import ConfigDict
 from typing_inspect import get_args, get_origin, is_generic_type
@@ -48,7 +49,7 @@ from inmanta.server.extensions import FeatureManager
 from inmanta.types import ReturnTypes
 
 
-def openapi_json_encoder(o: object) -> Union[ReturnTypes, util.JSONSerializable]:
+def openapi_json_encoder(o: object) -> ReturnTypes | util.JSONSerializable:
     if isinstance(o, BaseModel):
         return o.dict(by_alias=True, exclude_none=True)
     return util.api_boundary_json_encoder(o)
@@ -75,7 +76,7 @@ class OpenApiConverter:
             )
         ]
 
-    def _get_inmanta_version(self) -> Optional[str]:
+    def _get_inmanta_version(self) -> str | None:
         metadata = self.feature_manager.get_product_metadata()
         return metadata.version
 
@@ -210,7 +211,7 @@ class OpenApiTypeConverter:
         pydantic_result.title = None
         return pydantic_result
 
-    def resolve_reference(self, reference: str) -> Optional[Schema]:
+    def resolve_reference(self, reference: str) -> Schema | None:
         """
         Get a schema from its reference, if this schema exists.  If it doesn't exist, None is
         returned instead.
@@ -249,8 +250,8 @@ class ArgOptionHandler:
 
     def extract_response_headers_from_arg_options(
         self, arg_options: dict[str, ArgOption]
-    ) -> Optional[dict[str, Union[Header, Reference]]]:
-        headers: dict[str, Union[Header, Reference]] = {}
+    ) -> dict[str, Header | Reference] | None:
+        headers: dict[str, Header | Reference] = {}
         for option_name, option in arg_options.items():
             if option.header and option.reply_header:
                 headers[option.header] = Header(
@@ -316,7 +317,7 @@ class FunctionParameterHandler:
         return arg_options_params + path_params
 
     def _convert_path_params_to_openapi(self) -> list[Parameter]:
-        parameters: list[Union[Parameter, Reference]] = []
+        parameters: list[Parameter | Reference] = []
         for parameter_name, parameter_type in self.path_params.items():
             type_description = self.type_converter.get_openapi_type_of_parameter(parameter_type)
             param_description = self.method_properties.get_description_for_param(parameter_name)
@@ -411,7 +412,7 @@ class OperationHandler:
             **extra_params,
         )
 
-    def _get_tags_of_operation(self, url_method: UrlMethod) -> Optional[list[str]]:
+    def _get_tags_of_operation(self, url_method: UrlMethod) -> list[str] | None:
         if url_method.endpoint is not None:
             if hasattr(url_method.endpoint, "_name"):
                 return [url_method.endpoint._name]
@@ -435,13 +436,13 @@ class OperationHandler:
 
         return result
 
-    def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> Optional[dict[str, MediaType]]:
+    def _build_return_value_wrapper(self, url_method_properties: MethodProperties) -> dict[str, MediaType] | None:
         return_type = inspect.signature(url_method_properties.function).return_annotation
 
         if return_type is None or return_type == inspect.Signature.empty:
             return None
 
-        return_properties: Optional[dict[str, Schema]] = None
+        return_properties: dict[str, Schema] | None = None
 
         if return_type == ReturnValue or is_generic_type(return_type) and get_origin(return_type) == ReturnValue:
             # Dealing with the special case of ReturnValue[...]

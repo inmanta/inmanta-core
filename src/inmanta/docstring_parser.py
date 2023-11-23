@@ -40,7 +40,7 @@ class DocString:
         self._attr_description_map: dict[str, str] = {attr.args[1]: attr.description for attr in doc_string.meta}
         self._doc_string: docstring_parser.Docstring = doc_string
 
-    def get_description(self) -> Optional[str]:
+    def get_description(self) -> str | None:
         """
         Return the general description in the docstring.
         """
@@ -51,7 +51,7 @@ class DocString:
         else:
             return self._doc_string.short_description
 
-    def get_description_for_attribute(self, attr_name: str) -> Optional[str]:
+    def get_description_for_attribute(self, attr_name: str) -> str | None:
         """
         Return the description for a certain attribute.
         """

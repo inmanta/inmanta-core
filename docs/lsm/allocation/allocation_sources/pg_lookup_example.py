@@ -53,7 +53,7 @@ class PGRouterResolver(ExternalAttributeAllocator[T]):
             ].get(self.id_attribute)
         return False
 
-    def _get_value_from_result(self, result: Optional[tuple[T]]) -> Optional[T]:
+    def _get_value_from_result(self, result: tuple[T] | None) -> T | None:
         if result and result[0]:
             return result[0]
         return None

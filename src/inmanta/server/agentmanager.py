@@ -136,7 +136,7 @@ class AgentManager(ServerSlice, SessionListener):
     running an agent instance, which might be the primary for a logical agent.
     """
 
-    def __init__(self, closesessionsonstart: bool = True, fact_back_off: Optional[int] = None) -> None:
+    def __init__(self, closesessionsonstart: bool = True, fact_back_off: int | None = None) -> None:
         super().__init__(SLICE_AGENT_MANAGER)
 
         if fact_back_off is None:
@@ -198,14 +198,14 @@ class AgentManager(ServerSlice, SessionListener):
     async def stop(self) -> None:
         await super().stop()
 
-    async def halt_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def halt_agents(self, env: data.Environment, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Halts all agents for an environment. Persists prior paused state.
         """
         await data.Agent.persist_on_halt(env.id, connection=connection)
         await self._pause_agent(env, connection=connection)
 
-    async def resume_agents(self, env: data.Environment, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def resume_agents(self, env: data.Environment, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
@@ -247,7 +247,7 @@ class AgentManager(ServerSlice, SessionListener):
             raise BadRequest(f"Unknown agent action: {action.name}")
 
     async def _pause_agent(
-        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
+        self, env: data.Environment, endpoint: str | None = None, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         """
         Pause a logical agent by pausing an active agent instance if it exists, and removing the logical agent's primary.
@@ -269,7 +269,7 @@ class AgentManager(ServerSlice, SessionListener):
             )
 
     async def _unpause_agent(
-        self, env: data.Environment, endpoint: Optional[str] = None, connection: Optional[asyncpg.connection.Connection] = None
+        self, env: data.Environment, endpoint: str | None = None, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         async with self.session_lock:
             agents = await data.Agent.pause(env=env.id, endpoint=endpoint, paused=False, connection=connection)
@@ -292,8 +292,8 @@ class AgentManager(ServerSlice, SessionListener):
         self,
         env: data.Environment,
         should_be_unpaused_on_resume: bool,
-        endpoint: Optional[str] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        endpoint: str | None = None,
+        connection: asyncpg.connection.Connection | None = None,
     ):
         """
         Set the unpause_on_resume field of an agent (or all agents in an environment when the endpoint is set to None)
@@ -382,7 +382,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     # Seen
     async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
-        endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]] = []
+        endpoints_with_new_primary: list[tuple[str, uuid.UUID | None]] = []
         async with self.session_lock:
             endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
             endpoints_in_session = endpoint_names_snapshot
@@ -404,7 +404,7 @@ class AgentManager(ServerSlice, SessionListener):
         session: protocol.Session,
         endpoints_to_add: set[str],
         endpoints_to_remove: set[str],
-        endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]],
+        endpoints_with_new_primary: list[tuple[str, uuid.UUID | None]],
     ) -> None:
         """
         Note: This method call is allowed to fail when the database connection is lost.
@@ -448,7 +448,7 @@ class AgentManager(ServerSlice, SessionListener):
         tid: uuid.UUID,
         session: protocol.Session,
         endpoint_names: set[str],
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
+        endpoints_with_new_primary: Sequence[tuple[str, uuid.UUID | None]],
         now: datetime,
     ) -> None:
         """
@@ -485,7 +485,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_expiry_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
+        endpoints_with_new_primary: Sequence[tuple[str, uuid.UUID | None]],
         session: protocol.Session,
         now: datetime,
     ) -> None:
@@ -508,7 +508,7 @@ class AgentManager(ServerSlice, SessionListener):
                     await data.Agent.mark_all_as_non_primary(connection=connection)
 
     # Util
-    async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:
+    async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> protocol.Session | None:
         """
         This method searches for a new active session for the given agent. If a new active session if found,
         the in-memory state of the agentmanager is updated to use that new session. No logging is done in the
@@ -554,7 +554,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     async def _failover_endpoints(
         self, session: protocol.Session, endpoints: set[str]
-    ) -> Sequence[tuple[str, Optional[uuid.UUID]]]:
+    ) -> Sequence[tuple[str, uuid.UUID | None]]:
         """
         If the given session is the primary for a given endpoint, failover to a new session.
 
@@ -587,7 +587,7 @@ class AgentManager(ServerSlice, SessionListener):
             return False
         return prim.get_id() == sid
 
-    def get_session_for(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
+    def get_session_for(self, tid: uuid.UUID, endpoint: str) -> protocol.Session | None:
         """
         Return a session that matches the given environment and endpoint.
         This method also returns session to paused or non-live agents.
@@ -605,7 +605,7 @@ class AgentManager(ServerSlice, SessionListener):
             # Agent is down
             return None
 
-    def _get_session_to_failover_agent(self, tid: uuid.UUID, endpoint: str) -> Optional[protocol.Session]:
+    def _get_session_to_failover_agent(self, tid: uuid.UUID, endpoint: str) -> protocol.Session | None:
         current_active_session = self.tid_endpoint_to_session[(tid, endpoint)]
         for session in self.sessions.values():
             if endpoint in session.endpoint_names and session.tid == tid:
@@ -613,7 +613,7 @@ class AgentManager(ServerSlice, SessionListener):
                     return session
         return None
 
-    def get_agent_client(self, tid: uuid.UUID, endpoint: str, live_agent_only: bool = True) -> Optional[ReturnClient]:
+    def get_agent_client(self, tid: uuid.UUID, endpoint: str, live_agent_only: bool = True) -> ReturnClient | None:
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
         key = (tid, endpoint)
@@ -654,7 +654,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     # Agent Management
     async def ensure_agent_registered(
-        self, env: data.Environment, nodename: str, *, connection: Optional[asyncpg.connection.Connection] = None
+        self, env: data.Environment, nodename: str, *, connection: asyncpg.connection.Connection | None = None
     ) -> data.Agent:
         """
         Make sure that an agent has been created in the database
@@ -667,7 +667,7 @@ class AgentManager(ServerSlice, SessionListener):
                 return await self._create_default_agent(env, nodename, connection=connection)
 
     async def _create_default_agent(
-        self, env: data.Environment, nodename: str, *, connection: Optional[asyncpg.connection.Connection] = None
+        self, env: data.Environment, nodename: str, *, connection: asyncpg.connection.Connection | None = None
     ) -> data.Agent:
         """
         This method creates a new agent (agent in the model) in the database.
@@ -700,11 +700,11 @@ class AgentManager(ServerSlice, SessionListener):
     @handle(methods.list_agent_processes)
     async def list_agent_processes(
         self,
-        environment: Optional[UUID],
+        environment: UUID | None,
         expired: bool,
-        start: Optional[UUID] = None,
-        end: Optional[UUID] = None,
-        limit: Optional[int] = None,
+        start: UUID | None = None,
+        end: UUID | None = None,
+        limit: int | None = None,
     ) -> Apireturn:
         """List all agent processes whose sid is after start and before end
 
@@ -757,10 +757,10 @@ class AgentManager(ServerSlice, SessionListener):
     @handle(methods.list_agents, env="tid")
     async def list_agents(
         self,
-        env: Optional[data.Environment],
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        limit: Optional[int] = None,
+        env: data.Environment | None,
+        start: str | None = None,
+        end: str | None = None,
+        limit: int | None = None,
     ) -> Apireturn:
         """List all agents whose name is after start and before end
 
@@ -870,12 +870,12 @@ class AgentManager(ServerSlice, SessionListener):
     async def get_agents(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        start: Optional[Union[datetime, bool, str]] = None,
-        end: Optional[Union[datetime, bool, str]] = None,
-        first_id: Optional[str] = None,
-        last_id: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        start: datetime | bool | str | None = None,
+        end: datetime | bool | str | None = None,
+        first_id: str | None = None,
+        last_id: str | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "name.asc",
     ) -> ReturnValue[Sequence[model.Agent]]:
         try:
@@ -1006,7 +1006,7 @@ class AutostartedAgentManager(ServerSlice):
         agents: list[str],
         restart: bool = False,
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> bool:
         """
         Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
@@ -1034,7 +1034,7 @@ class AutostartedAgentManager(ServerSlice):
 
         async with self.agent_lock:
             # silently ignore requests if this environment is halted
-            refreshed_env: Optional[data.Environment] = await data.Environment.get_by_id(env.id, connection=connection)
+            refreshed_env: data.Environment | None = await data.Environment.get_by_id(env.id, connection=connection)
             if refreshed_env is None:
                 raise Exception("Can't ensure agent: environment %s does not exist" % env.id)
             env = refreshed_env
@@ -1048,7 +1048,7 @@ class AutostartedAgentManager(ServerSlice):
         return False
 
     async def __do_start_agent(
-        self, agents: list[str], env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
+        self, agents: list[str], env: data.Environment, *, connection: asyncpg.connection.Connection | None = None
     ) -> bool:
         """
         Start an agent process for the given agents in the given environment
@@ -1073,7 +1073,7 @@ class AutostartedAgentManager(ServerSlice):
 
         agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
 
-        proc: Optional[subprocess.Process] = None
+        proc: subprocess.Process | None = None
         try:
             proc = await self._fork_inmanta(
                 [
@@ -1111,7 +1111,7 @@ class AutostartedAgentManager(ServerSlice):
             A TimeoutError is raised when not all AgentInstances are active and no new AgentInstance
             became active in the last 5 seconds.
             """
-            agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, set(agents))
+            agent_statuses: dict[str, AgentStatus | None] = await data.Agent.get_statuses(env.id, set(agents))
             # Only wait for agents that are not paused
             expected_agents_in_up_state: set[str] = {
                 agent_name
@@ -1127,7 +1127,7 @@ class AutostartedAgentManager(ServerSlice):
                 await asyncio.sleep(0.1)
                 now = int(time.time())
                 if now - last_new_agent_seen > AUTO_STARTED_AGENT_WAIT:
-                    raise asyncio.TimeoutError()
+                    raise TimeoutError()
                 if now - last_log > AUTO_STARTED_AGENT_WAIT_LOG_INTERVAL:
                     last_log = now
                     LOGGER.debug(
@@ -1152,7 +1152,7 @@ class AutostartedAgentManager(ServerSlice):
         try:
             await _wait_until_agent_instances_are_active()
             LOGGER.debug("Agent with PID %s is up", proc.pid)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             LOGGER.warning("Timeout: agent with PID %s took too long to start", proc.pid)
         return True
 
@@ -1162,7 +1162,7 @@ class AutostartedAgentManager(ServerSlice):
         agent_names: list[str],
         agent_map: dict[str, str],
         *,
-        connection: Optional[asyncpg.connection.Connection],
+        connection: asyncpg.connection.Connection | None,
     ) -> str:
         """
         Generate the config file for the process that hosts the autostarted agents
@@ -1226,8 +1226,8 @@ token=%s
                 token
             )
 
-        ssl_cert: Optional[str] = server_config.server_ssl_key.get()
-        ssl_ca: Optional[str] = server_config.server_ssl_ca_cert.get()
+        ssl_cert: str | None = server_config.server_ssl_key.get()
+        ssl_ca: str | None = server_config.server_ssl_ca_cert.get()
 
         if ssl_ca is not None and ssl_cert is not None:
             # override CA
@@ -1246,7 +1246,7 @@ ssl=True
         return config
 
     async def _fork_inmanta(
-        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+        self, args: list[str], outfile: str | None, errfile: str | None, cwd: str | None = None
     ) -> subprocess.Process:
         """
         Fork an inmanta process from the same code base as the current code
@@ -1284,5 +1284,5 @@ ssl=True
         try:
             unfinished_processes = [proc for proc in procs if proc.returncode is None]
             await asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait()) for proc in unfinished_processes]), timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             LOGGER.warning("Agent processes did not close in time (%s)", procs)

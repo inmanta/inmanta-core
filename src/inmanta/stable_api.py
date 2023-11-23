@@ -15,7 +15,8 @@
 
     Contact: code@inmanta.com
 """
-from typing import Callable, Type, TypeVar
+from typing import Type, TypeVar
+from collections.abc import Callable
 
 T = TypeVar("T", Callable, type)
 

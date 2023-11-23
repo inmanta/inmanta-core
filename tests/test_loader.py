@@ -291,7 +291,7 @@ def test_plugin_module_finder(
         config=PipConfig(use_system_config=True),
     )
 
-    module_to_reload: Optional[ModuleType] = None
+    module_to_reload: ModuleType | None = None
     if reload:
         # load it once before setting up the finder
         module_to_reload = importlib.import_module(python_module)
@@ -306,7 +306,7 @@ def test_plugin_module_finder(
     if reload:
         assert module_to_reload is not None
         importlib.reload(module_to_reload)
-    spec: Optional[importlib.machinery.ModuleSpec] = importlib.util.find_spec(python_module)
+    spec: importlib.machinery.ModuleSpec | None = importlib.util.find_spec(python_module)
     assert spec is not None
     assert spec.loader is not None
     assert isinstance(spec.loader, loader.PluginModuleLoader) == prefer_finder

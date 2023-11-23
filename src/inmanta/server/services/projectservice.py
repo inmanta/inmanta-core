@@ -63,7 +63,7 @@ class ProjectService(protocol.ServerSlice):
 
     # v1 handlers
     @handle(methods.create_project)
-    async def create_project(self, name: str, project_id: Optional[uuid.UUID]) -> Apireturn:
+    async def create_project(self, name: str, project_id: uuid.UUID | None) -> Apireturn:
         return 200, {"project": (await self.project_create(name, project_id)).model_dump()}
 
     @handle(methods.delete_project, project_id="id", api_version=1)
@@ -90,7 +90,7 @@ class ProjectService(protocol.ServerSlice):
 
     # v2 handlers
     @handle(methods_v2.project_create)
-    async def project_create(self, name: str, project_id: Optional[uuid.UUID]) -> model.Project:
+    async def project_create(self, name: str, project_id: uuid.UUID | None) -> model.Project:
         if project_id is None:
             project_id = uuid.uuid4()
 

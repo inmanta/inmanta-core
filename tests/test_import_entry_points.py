@@ -22,20 +22,21 @@
 
 import importlib
 import multiprocessing
-from typing import Callable, Optional
+from typing import Optional
+from collections.abc import Callable
 from collections.abc import Iterator
 
 import pytest
 
 
 @pytest.fixture(scope="session")
-def import_entry_point() -> Iterator[Callable[[str], Optional[int]]]:
+def import_entry_point() -> Iterator[Callable[[str], int | None]]:
     """
     Yields a function that imports a module in a seperate Python process and returns the exit code.
     """
     context = multiprocessing.get_context("spawn")
 
-    def do_import(module: str) -> Optional[int]:
+    def do_import(module: str) -> int | None:
         process = context.Process(target=importlib.import_module, args=(module,))
         process.start()
         process.join()
@@ -106,26 +107,26 @@ def test_import_const(import_entry_point) -> None:
     assert import_entry_point("inmanta.const") == 0
 
 
-def test_import_util(import_entry_point: Callable[[str], Optional[int]]) -> None:
+def test_import_util(import_entry_point: Callable[[str], int | None]) -> None:
     assert import_entry_point("inmanta.util") == 0
 
 
-def test_import_ast(import_entry_point: Callable[[str], Optional[int]]) -> None:
+def test_import_ast(import_entry_point: Callable[[str], int | None]) -> None:
     assert import_entry_point("inmanta.ast.constraint.expression") == 0
 
 
-def test_import_env(import_entry_point: Callable[[str], Optional[int]]) -> None:
+def test_import_env(import_entry_point: Callable[[str], int | None]) -> None:
     assert import_entry_point("inmanta.env") == 0
 
 
-def test_import_compiler(import_entry_point: Callable[[str], Optional[int]]) -> None:
+def test_import_compiler(import_entry_point: Callable[[str], int | None]) -> None:
     assert import_entry_point("inmanta.compiler") == 0
 
 
-def test_import_server(import_entry_point: Callable[[str], Optional[int]]) -> None:
+def test_import_server(import_entry_point: Callable[[str], int | None]) -> None:
     assert import_entry_point("inmanta.server.extensions") == 0
     assert import_entry_point("inmanta.server.bootloader") == 0
 
 
-def test_import_validation_type(import_entry_point: Callable[[str], Optional[int]]) -> None:
+def test_import_validation_type(import_entry_point: Callable[[str], int | None]) -> None:
     assert import_entry_point("inmanta.validation_type") == 0

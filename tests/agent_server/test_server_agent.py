@@ -1917,7 +1917,7 @@ class ResourceProvider:
 
     def get_resource(
         self, resource_container: ResourceContainer, agent: str, key: str, version: str, requires: list[str]
-    ) -> tuple[dict[str, str], Optional[const.ResourceState]]:
+    ) -> tuple[dict[str, str], const.ResourceState | None]:
         base = {
             "key": key,
             "value": "value1",

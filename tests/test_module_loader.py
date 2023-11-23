@@ -395,7 +395,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     """
     module_name: str = "minimalv2module"
 
-    def load(requires: Optional[list[Requirement]] = None) -> None:
+    def load(requires: list[Requirement] | None = None) -> None:
         project: Project = snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
@@ -683,7 +683,7 @@ def test_module_conflicting_dependencies_with_v2_modules(
     modules_v2_dir: str,
     tmpdir: py.path.local,
     caplog,
-    strict_deps_check: Optional[bool],
+    strict_deps_check: bool | None,
 ) -> None:
     """
     Show an error message when installing a module that breaks the dependencies
@@ -760,7 +760,7 @@ def test_module_conflicting_dependencies_with_v1_module(
     modules_dir: str,
     modules_v2_dir: str,
     tmpdir: py.path.local,
-    strict_deps_check: Optional[bool],
+    strict_deps_check: bool | None,
 ) -> None:
     """
     Show an error message when installing a module that breaks the dependencies
@@ -1392,7 +1392,7 @@ async def test_v2_module_editable_with_links(tmpvenv_active: tuple[py.path.local
     os.symlink(os.path.join(module_dir, rel_path_src), module_dir_site_packages)
 
     # verify that module can be found
-    module: Optional[ModuleV2] = ModuleV2Source().get_installed_module(DummyProject(autostd=False), "minimalv2module")
+    module: ModuleV2 | None = ModuleV2Source().get_installed_module(DummyProject(autostd=False), "minimalv2module")
     assert module is not None
     assert module.path == module_dir
 

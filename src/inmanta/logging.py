@@ -67,7 +67,7 @@ class Options(Namespace):
     - `timed`: if true,  adds the time to the formatter in the log lines.
     """
 
-    log_file: Optional[str]
+    log_file: str | None
     log_file_level: str = "INFO"
     verbose: int = 1
     timed: bool = False
@@ -161,7 +161,7 @@ class InmantaLoggerConfig:
             if logger_name == "inmanta.pip":
                 # Log record created by a pip subprocess started by the inmanta.
                 return "pip"
-            match: Optional[re.Match[str]] = self._inmanta_plugin_pkg_regex.match(logger_name)
+            match: re.Match[str] | None = self._inmanta_plugin_pkg_regex.match(logger_name)
             if match:
                 # Log record created by an Inmanta module.
                 return match.groupdict()["module_name"]
@@ -348,10 +348,10 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
     def __init__(
         self,
         logger_config: InmantaLoggerConfig,
-        fmt: Optional[str] = None,
+        fmt: str | None = None,
         *,
         # keep interface minimal: only include fields we actually use
-        log_colors: Optional[LogColors] = None,
+        log_colors: LogColors | None = None,
         reset: bool = True,
         no_color: bool = False,
     ):

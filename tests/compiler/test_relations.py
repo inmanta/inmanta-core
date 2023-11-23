@@ -603,9 +603,9 @@ a.other = null
     )
     root_ns: Namespace
     (_, root_ns) = compiler.do_compile()
-    config_ns: Optional[Namespace] = root_ns.get_child("__config__")
+    config_ns: Namespace | None = root_ns.get_child("__config__")
     assert config_ns is not None
-    a_var: Union[ast_type.Type, ResultVariable] = config_ns.lookup("a")
+    a_var: ast_type.Type | ResultVariable = config_ns.lookup("a")
     assert isinstance(a_var, ResultVariable)
     a: object = a_var.get_value()
     assert isinstance(a, Instance)

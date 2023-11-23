@@ -19,7 +19,8 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
+from collections.abc import Callable
 from collections.abc import AsyncIterator, Awaitable, Iterator
 
 import pydantic
@@ -59,7 +60,7 @@ async def test_timestamp_timezones(
     All timestamps should be timezone-aware.
     """
 
-    async def fetch_timestamps() -> dict[str, list[dict[str, Optional[datetime]]]]:
+    async def fetch_timestamps() -> dict[str, list[dict[str, datetime | None]]]:
         return {
             table: [
                 {**record} for record in await postgresql_client.fetch(f"SELECT %s FROM public.{table};" % ", ".join(columns))
@@ -74,7 +75,7 @@ async def test_timestamp_timezones(
             for msg in record["messages"]
         ]
 
-    def timezone_aware(timestamps: dict[str, list[dict[str, Optional[datetime]]]]) -> Iterator[bool]:
+    def timezone_aware(timestamps: dict[str, list[dict[str, datetime | None]]]) -> Iterator[bool]:
         return (
             timestamp.tzinfo is not None
             for table, rows in timestamps.items()
@@ -103,7 +104,7 @@ async def test_timestamp_timezones(
         """
     )
 
-    naive_timestamps: dict[str, list[dict[str, Optional[datetime]]]] = await fetch_timestamps()
+    naive_timestamps: dict[str, list[dict[str, datetime | None]]] = await fetch_timestamps()
     assert not any(timezone_aware(naive_timestamps))
     naive_action_log_timestamps: list[datetime] = await fetch_action_log_timestamps()
     assert len(naive_action_log_timestamps) > 0
@@ -111,10 +112,10 @@ async def test_timestamp_timezones(
 
     await migrate_v17_to_v202105170()
 
-    migrated_timestamps: dict[str, list[dict[str, Optional[datetime]]]] = await fetch_timestamps()
+    migrated_timestamps: dict[str, list[dict[str, datetime | None]]] = await fetch_timestamps()
     assert all(timezone_aware(migrated_timestamps))
 
-    compile: Optional[Compile] = await Compile.get_by_id(compile_id)
+    compile: Compile | None = await Compile.get_by_id(compile_id)
     assert compile is not None
     assert compile.started is not None
     assert compile.started.tzinfo is not None

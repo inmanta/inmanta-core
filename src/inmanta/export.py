@@ -22,7 +22,8 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from collections.abc import Callable
 from collections.abc import Sequence
 
 import pydantic
@@ -105,8 +106,8 @@ class Exporter:
     """
 
     # instance vars
-    types: Optional[dict[str, Entity]]
-    scopes: Optional[Namespace]
+    types: dict[str, Entity] | None
+    scopes: Namespace | None
     failed: bool  # did the compile fail?
 
     # class vars
@@ -128,16 +129,16 @@ class Exporter:
         """
         cls.__dep_manager.append(function)
 
-    def __init__(self, options: Optional[argparse.Namespace] = None) -> None:
+    def __init__(self, options: argparse.Namespace | None = None) -> None:
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_sets: dict[str, Optional[str]] = {}
+        self._resource_sets: dict[str, str | None] = {}
         self._empty_resource_sets: list[str] = []
         self._resource_state: dict[str, ResourceState] = {}
         self._unknown_objects: set[str] = set()
         # Actual version (placeholder for partial export) is set as soon as export starts.
-        self._version: Optional[int] = None
+        self._version: int | None = None
         self._scope = None
         self.failed = False
 
@@ -200,7 +201,7 @@ class Exporter:
         the resource belongs to.
         This method should only be called after all resources have been extracted from the model.
         """
-        resource_sets: dict[str, Optional[str]] = {}
+        resource_sets: dict[str, str | None] = {}
         resource_set_instances: list["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
         )
@@ -264,7 +265,7 @@ class Exporter:
         # Because dependency managers are only semi-trusted code, we can not assume they respect the proper typing
         # There are already many dependency manager who are somewhat liberal in what they put into the requires set
 
-        def cleanup(requires: Union[ResourceVersionIdStr, Resource, Id]) -> Id:
+        def cleanup(requires: ResourceVersionIdStr | Resource | Id) -> Id:
             """
             Main type cleanup
 
@@ -349,16 +350,16 @@ class Exporter:
 
     def run(
         self,
-        types: Optional[dict[str, Entity]],
-        scopes: Optional[Namespace],
+        types: dict[str, Entity] | None,
+        scopes: Namespace | None,
         metadata: dict[str, str] = {},
         no_commit: bool = False,
         include_status: bool = False,
         model_export: bool = False,
-        export_plugin: Optional[str] = None,
+        export_plugin: str | None = None,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[Sequence[str]] = None,
-    ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, ResourceState]]]:
+        resource_sets_to_remove: Sequence[str] | None = None,
+    ) -> tuple[int, ResourceDict] | tuple[int, ResourceDict, dict[str, ResourceState]]:
         """
         Run the export functions. Return value for partial json export uses 0 as version placeholder.
         """
@@ -463,7 +464,7 @@ class Exporter:
 
         return resources
 
-    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: Optional[int] = None) -> None:
+    def deploy_code(self, conn: protocol.SyncClient, tid: uuid.UUID, version: int | None = None) -> None:
         """Deploy code to the server"""
         if version is None:
             version = int(time.time())
@@ -484,7 +485,7 @@ class Exporter:
 
     def commit_resources(
         self,
-        version: Optional[int],
+        version: int | None,
         resources: list[dict[str, str]],
         metadata: dict[str, str],
         partial_compile: bool,
@@ -541,7 +542,7 @@ class Exporter:
         if LOGGER.isEnabledFor(logging.DEBUG):
             for res in resources:
                 rid = res["id"]
-                resource_set: Optional[str] = self._resource_sets.get(Id.parse_id(rid).resource_str(), None)
+                resource_set: str | None = self._resource_sets.get(Id.parse_id(rid).resource_str(), None)
                 if resource_set is not None:
                     LOGGER.debug("  %s in resource set %s", rid, resource_set)
                 else:
@@ -579,7 +580,7 @@ class Exporter:
         else:
             return version
 
-    def upload_file(self, content: Union[str, bytes]) -> str:
+    def upload_file(self, content: str | bytes) -> str:
         """
         Upload a file to the configuration server. This operation is not
         executed in the transaction.

@@ -56,12 +56,12 @@ def test_union_bool_json():
     """
 
     class Test(pydantic.BaseModel):
-        attr1: typing.Union[pydantic.StrictBool, int]
-        attr2: typing.Union[pydantic.StrictBool]
+        attr1: pydantic.StrictBool | int
+        attr2: pydantic.StrictBool
         attr3: pydantic.StrictBool
-        attr4: typing.Union[types.StrictNonIntBool, int]
-        attr5: typing.Union[bool, int]
-        attr6: typing.Union[int, bool]
+        attr4: types.StrictNonIntBool | int
+        attr5: bool | int
+        attr6: int | bool
 
     x = Test(attr1=True, attr2=True, attr3=True, attr4=True, attr5=True, attr6=True)
 

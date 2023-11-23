@@ -64,7 +64,7 @@ class Entity(NamedType, WithComment):
         after this object has been created
     """
 
-    def __init__(self, name: str, namespace: Namespace, comment: Optional[str] = None) -> None:
+    def __init__(self, name: str, namespace: Namespace, comment: str | None = None) -> None:
         NamedType.__init__(self)
 
         self.__name = name  # type: str
@@ -289,7 +289,7 @@ class Entity(NamedType, WithComment):
         resolver: Resolver,
         queue: QueueScheduler,
         location: Location,
-        node: Optional[dataflow.InstanceNodeReference] = None,
+        node: dataflow.InstanceNodeReference | None = None,
     ) -> "Instance":
         """
         Return an instance of the class defined in this entity.
@@ -499,7 +499,7 @@ class Implementation(NamedType):
     """
 
     def __init__(
-        self, name: str, stmts: BasicBlock, namespace: Namespace, target_type: str, comment: Optional[str] = None
+        self, name: str, stmts: BasicBlock, namespace: Namespace, target_type: str, comment: str | None = None
     ) -> None:
         Named.__init__(self)
         self.name = name
@@ -542,7 +542,7 @@ class Implement(Locatable):
     Define an implementation of an entity in functions of implementations
     """
 
-    comment: Optional[str]
+    comment: str | None
 
     def __init__(self) -> None:
         Locatable.__init__(self)

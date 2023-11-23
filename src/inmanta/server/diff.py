@@ -32,7 +32,7 @@ class Attribute:
             # Sort the requires list
             self._value = sorted([resources.Id.parse_id(req).resource_str() for req in self._value])
 
-        self._compare_value: Optional[str] = None
+        self._compare_value: str | None = None
 
     @property
     def value(self) -> object:
@@ -58,7 +58,7 @@ class Attribute:
         else:
             self._compare_value = str(self.value)
 
-    def compare(self, other: "Attribute") -> Optional[AttributeDiff]:
+    def compare(self, other: "Attribute") -> AttributeDiff | None:
         """Compare this value with other. Other is considered the original value"""
         if self.compare_value == other.compare_value:
             return None
@@ -95,7 +95,7 @@ class Resource:
         self.resource_id = resource_id
         self._attributes = {name: Attribute(name, value) for name, value in attributes.items() if name != "version"}
 
-    def compare(self, other: "Resource") -> Optional[ResourceDiff]:
+    def compare(self, other: "Resource") -> ResourceDiff | None:
         """Compare this resource with another: check which attributes are added, modified and removed.
         The other resource is considered to be the original"""
         other_attributes = set(other._attributes.keys())

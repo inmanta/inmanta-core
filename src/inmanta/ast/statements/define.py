@@ -96,7 +96,7 @@ class DefineAttribute(Statement):
         self,
         attr_type: TypeDeclaration,
         name: LocatableString,
-        default_value: Optional[ExpressionStatement] = None,
+        default_value: ExpressionStatement | None = None,
         remove_default: bool = True,
     ) -> None:
         """
@@ -125,7 +125,7 @@ class DefineEntity(TypeDefinitionStatement):
         self,
         namespace: Namespace,
         lname: LocatableString,
-        comment: Optional[LocatableString],
+        comment: LocatableString | None,
         parents: list[LocatableString],
         attributes: list[DefineAttribute],
     ) -> None:
@@ -151,7 +151,7 @@ class DefineEntity(TypeDefinitionStatement):
         self.type.location = lname.location
 
     def add_attribute(
-        self, attr_type: LocatableString, name: LocatableString, default_value: Optional[ExpressionStatement] = None
+        self, attr_type: LocatableString, name: LocatableString, default_value: ExpressionStatement | None = None
     ) -> None:
         """
         Add an attribute to this entity
@@ -318,7 +318,7 @@ class DefineImplement(DefinitionStatement):
     :param inherit: True iff the entity should inherit all implementations from its parents
     """
 
-    comment: Optional[str] = None
+    comment: str | None = None
 
     def __init__(
         self,
@@ -326,7 +326,7 @@ class DefineImplement(DefinitionStatement):
         implementations: list[LocatableString],
         select: ExpressionStatement,
         inherit: bool = False,
-        comment: Optional[LocatableString] = None,
+        comment: LocatableString | None = None,
     ) -> None:
         DefinitionStatement.__init__(self)
         self.entity = entity_name
@@ -530,7 +530,7 @@ class DefineRelation(BiStatement):
         # Duplicate checking is in entity.normalize
         # Because here we don't know if all entities have been defined
 
-        left_end: Optional[RelationAttribute]
+        left_end: RelationAttribute | None
         if self.left[1] is not None:
             left_end = RelationAttribute(right, left, str(self.left[1]), self.left[1].get_location())
             left_end.target_annotations = self.annotations
@@ -539,7 +539,7 @@ class DefineRelation(BiStatement):
         else:
             left_end = None
 
-        right_end: Optional[RelationAttribute]
+        right_end: RelationAttribute | None
         if self.right[1] is not None:
             if right == left and str(self.left[1]) == str(self.right[1]):
                 # relation is its own inverse

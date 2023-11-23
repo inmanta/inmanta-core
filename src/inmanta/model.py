@@ -193,7 +193,7 @@ class Relation:
     def __init__(
         self,
         mytype: str,
-        multi: tuple[int, Optional[int]],
+        multi: tuple[int, int | None],
         reverse: str,
         comment: str,
         location: Location,

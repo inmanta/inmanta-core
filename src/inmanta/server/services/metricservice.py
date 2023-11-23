@@ -35,7 +35,7 @@ class MetricsService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_METRICS)
-        self._influx_db_reporter: Optional[InfluxReporter] = None
+        self._influx_db_reporter: InfluxReporter | None = None
 
     async def start(self) -> None:
         self.start_auto_benchmark()
