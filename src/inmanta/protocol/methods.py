@@ -250,7 +250,7 @@ def get_setting(tid: uuid.UUID, id: str):
 )
 def delete_setting(tid: uuid.UUID, id: str):
     """
-    Delete a setting identified by the 'key' from the specified environment.
+    Restore the given setting to its default value.
 
     :param tid: The id of the environment from which the setting is to be deleted.
     :param id: The key of the setting to delete.
