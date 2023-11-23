@@ -363,7 +363,6 @@ class DefineImplement(DefinitionStatement):
             implement.comment = self.comment
             implement.constraint = self.select
             implement.location = self.entity_location
-            implement.normalize()
             self.anchors.extend(implement.constraint.get_anchors())
 
             i = 0
