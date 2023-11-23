@@ -603,7 +603,9 @@ class DefineIndex(DefinitionStatement):
                 )
             else:
                 rattribute = entity_type.get_attribute(str_attribute)
-                self.anchors.append(TypeReferenceAnchor(attribute.namespace, attribute))
+                self.anchors.append(
+                    AttributeReferenceAnchor(attribute.get_location(), self.type.namespace, self.type, str(attribute))
+                )
                 assert rattribute is not None  # Make mypy happy
                 if rattribute.is_optional():
                     raise IndexException(
