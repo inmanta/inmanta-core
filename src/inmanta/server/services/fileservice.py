@@ -94,7 +94,7 @@ class FileService(protocol.ServerSlice):
         return list(await File.get_non_existing_files(files))
 
     @handle(methods.diff)
-    async def file_diff(self, a: str, b: str) -> Apireturn:
+    async def file_diff(self, file_id_1: str, file_id_2: str) -> Apireturn:
         """
         Diff the two files identified with the two hashes
         """
@@ -111,10 +111,10 @@ class FileService(protocol.ServerSlice):
                 # keepends for backwards compatibility with <file_handle>.readlines()
                 return file_content.splitlines(keepends=True)
 
-        a_lines = await _get_lines_for_file(content_hash=a)
-        b_lines = await _get_lines_for_file(content_hash=b)
+        file_1_lines = await _get_lines_for_file(content_hash=file_id_1)
+        file_2_lines = await _get_lines_for_file(content_hash=file_id_2)
         try:
-            diff = difflib.unified_diff(a_lines, b_lines, fromfile=a, tofile=b)
+            diff = difflib.unified_diff(file_1_lines, file_2_lines, fromfile=file_id_1, tofile=file_id_2)
         except FileNotFoundError:
             raise NotFound()
 
