@@ -23,10 +23,10 @@ import random
 import time
 import urllib.parse
 import uuid
+from collections.abc import Iterator
 from enum import Enum
 from itertools import chain
 from typing import Any, Dict, List, Optional, Union
-from collections.abc import Iterator
 
 import pydantic
 import pytest

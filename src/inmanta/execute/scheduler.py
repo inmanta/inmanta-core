@@ -20,8 +20,8 @@ import logging
 import os
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Set, Tuple
 from collections.abc import Iterable, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Set, Tuple
 
 from inmanta import plugins
 from inmanta.ast import Anchor, AnchorTarget, CompilerException, CycleException, Location, MultiException, RuntimeException

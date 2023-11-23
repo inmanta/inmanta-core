@@ -47,11 +47,11 @@ import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from collections import abc
+from collections.abc import Coroutine
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
 from typing import Any, Callable, Dict, Optional
-from collections.abc import Coroutine
 
 import click
 from tornado import gen

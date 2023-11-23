@@ -19,10 +19,10 @@ import importlib
 import logging
 import os
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
 from functools import partial
 from typing import Any
-from collections.abc import Generator
 
 import pytest
 import yaml

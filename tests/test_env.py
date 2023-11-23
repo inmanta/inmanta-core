@@ -24,9 +24,9 @@ import subprocess
 import sys
 import tempfile
 from importlib.abc import Loader
+from re import Pattern
 from subprocess import CalledProcessError
 from typing import Dict, List, Optional, Tuple
-from re import Pattern
 from unittest.mock import patch
 
 import pkg_resources

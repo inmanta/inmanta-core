@@ -202,9 +202,7 @@ def test_workon_source_check() -> None:
     Verify that the inmanta-workon register script checks that it is sourced rather than executed and notifies the user in when
     it isn't.
     """
-    process: subprocess.CompletedProcess[str] = subprocess.run(
-        ["bash", WORKON_REGISTER], capture_output=True, text=True
-    )
+    process: subprocess.CompletedProcess[str] = subprocess.run(["bash", WORKON_REGISTER], capture_output=True, text=True)
     assert process.returncode == 1
     assert process.stdout == ""
     assert (

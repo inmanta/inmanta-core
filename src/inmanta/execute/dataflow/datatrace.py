@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Iterable
 from itertools import chain
 from typing import List, Optional
-from collections.abc import Iterable
 
 from inmanta.ast import Locatable, NotFoundException
 from inmanta.ast.statements import Statement

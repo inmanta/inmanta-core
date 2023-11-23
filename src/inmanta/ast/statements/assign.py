@@ -245,9 +245,7 @@ class SetAttribute(AssignStatement, Resumer):
         # This class still implements custom attribute resolution, rather than using the new VariableReferenceHook mechanism
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
-    def resume(
-        self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
-    ) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         if not isinstance(instance, Instance):
             raise TypingException(
@@ -455,9 +453,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         requires[self] = temp
         return requires
 
-    def resume(
-        self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
-    ) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         self.type.lookup_index(
             list(
                 chain(
@@ -511,9 +507,7 @@ class ShortIndexLookup(IndexLookup):
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None
 
-    def resume(
-        self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
-    ) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         root_object = self.rootobject.execute(requires, resolver, queue)
 
         if not isinstance(root_object, Instance):

@@ -21,8 +21,8 @@ import logging
 import os
 import uuid
 from collections import abc, defaultdict
-from typing import Any, Callable, Dict, List, Optional, Union, cast
 from collections.abc import Sequence
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError

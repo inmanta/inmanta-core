@@ -21,9 +21,9 @@ import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
+from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
 from typing import Dict, List, Optional, Union
-from collections.abc import MutableMapping, Sequence
 
 import tornado
 from pyformance import timer

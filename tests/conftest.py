@@ -84,9 +84,9 @@ import traceback
 import uuid
 import venv
 from collections import abc
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
 from typing import Callable, Dict, List, Optional, Tuple, Union
-from collections.abc import AsyncIterator, Awaitable, Iterator
 
 import asyncpg
 import pkg_resources
@@ -1055,9 +1055,7 @@ def pytest_runtest_makereport(item, call):
 
         if resources:
             # we are behind report formatting, so write to report, not item
-            rep.sections.append(
-                ("Resources Kept", "\n".join([f"{label} {resource}" for label, resource in resources.items()]))
-            )
+            rep.sections.append(("Resources Kept", "\n".join([f"{label} {resource}" for label, resource in resources.items()])))
 
 
 class ReentrantVirtualEnv(VirtualEnv):

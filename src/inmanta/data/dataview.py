@@ -19,9 +19,9 @@
 import abc
 import json
 from abc import ABC
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast
-from collections.abc import Sequence
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID

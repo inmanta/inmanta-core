@@ -19,8 +19,8 @@
 import abc
 import logging
 import re
-from typing import Dict, List, Optional, Tuple, Type, TypeVar, Union, overload
 from collections.abc import Sequence
+from typing import Dict, List, Optional, Tuple, Type, TypeVar, Union, overload
 
 from inmanta.stable_api import stable_api
 from typing_extensions import TypeGuard

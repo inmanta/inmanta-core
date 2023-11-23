@@ -18,8 +18,8 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 from collections.abc import Sequence
+from typing import Any, Dict, List, Optional, Set, Tuple, Union  # noqa: F401
 
 from inmanta.ast import (
     CompilerException,
@@ -474,9 +474,7 @@ class Entity(NamedType, WithComment):
     def final(self, excns: list[CompilerException]) -> None:
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
-                excns.append(
-                    NotFoundException(stmt, key, f"No match in index on type {self.get_full_name()} with key {key}")
-                )
+                excns.append(NotFoundException(stmt, key, f"No match in index on type {self.get_full_name()} with key {key}"))
         for _, attr in self.get_attributes().items():
             attr.final(excns)
 

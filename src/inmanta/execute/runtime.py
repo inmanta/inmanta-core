@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
 from collections.abc import Hashable
+from typing import TYPE_CHECKING, Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast

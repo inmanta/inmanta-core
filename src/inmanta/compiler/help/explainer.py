@@ -18,8 +18,8 @@
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Generic, List, Optional, Set, Type, TypeVar
 from collections.abc import Mapping, Sequence
+from typing import Generic, List, Optional, Set, Type, TypeVar
 
 from jinja2 import Environment, PackageLoader
 

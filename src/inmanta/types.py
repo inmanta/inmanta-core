@@ -19,9 +19,9 @@
 
 import builtins
 import uuid
+from collections.abc import Coroutine, Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type, Union
-from collections.abc import Coroutine, Mapping, Sequence
 
 import pydantic
 import typing_inspect

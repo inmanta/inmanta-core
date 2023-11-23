@@ -22,8 +22,8 @@ import re
 import shutil
 import sys
 from collections import abc
-from typing import Dict, List, Optional, Set
 from collections.abc import Sequence
+from typing import Dict, List, Optional, Set
 
 import py
 import pytest

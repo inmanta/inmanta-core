@@ -20,9 +20,9 @@ import logging
 import re
 import string
 from collections import abc
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
-from collections.abc import Iterable
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction

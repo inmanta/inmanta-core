@@ -20,11 +20,11 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Iterator
 from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
 from typing import Dict, List, Optional, Tuple
-from collections.abc import Iterator
 
 import py
 import pytest

@@ -17,9 +17,9 @@
 """
 import copy
 import logging
+from collections.abc import Sequence
 from itertools import chain
 from typing import Dict, Optional, Tuple
-from collections.abc import Sequence
 
 import pytest
 

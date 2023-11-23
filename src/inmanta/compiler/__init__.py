@@ -18,9 +18,9 @@
 import logging
 import sys
 from collections import abc
+from collections.abc import Sequence
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
-from collections.abc import Sequence
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow

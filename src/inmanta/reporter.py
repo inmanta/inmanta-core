@@ -139,9 +139,7 @@ class InfluxReporter(AsyncReporter):
         post_data = []
         for key, metric_values in metrics.items():
             table = self.key + key
-            values = ",".join(
-                ["{}={}".format(k, v if type(v) is not str else f'"{v}"') for (k, v) in metric_values.items()]
-            )
+            values = ",".join(["{}={}".format(k, v if type(v) is not str else f'"{v}"') for (k, v) in metric_values.items()])
             line = f"{table} {values} {timestamp}"
             post_data.append(line)
         post_data_all = "\n".join(post_data)

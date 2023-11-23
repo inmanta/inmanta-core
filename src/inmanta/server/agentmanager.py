@@ -22,10 +22,10 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
-from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 import asyncpg.connection

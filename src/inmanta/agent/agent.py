@@ -27,10 +27,10 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
+from collections.abc import Awaitable, Iterable, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
-from collections.abc import Awaitable, Iterable, Sequence
 
 import pkg_resources
 

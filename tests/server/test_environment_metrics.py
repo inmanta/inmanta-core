@@ -19,10 +19,9 @@ import functools
 import operator
 import uuid
 from collections import abc, defaultdict
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Optional, cast
-from collections.abc import Awaitable
 
 import asyncpg
 import pytest

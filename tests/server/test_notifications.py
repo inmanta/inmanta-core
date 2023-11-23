@@ -18,9 +18,9 @@
 import datetime
 import json
 import uuid
+from collections.abc import Sequence
 from functools import partial
 from operator import itemgetter
-from collections.abc import Sequence
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest

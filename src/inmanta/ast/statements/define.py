@@ -20,8 +20,8 @@
 import logging
 import typing
 import warnings
-from typing import Dict, List, Optional, Tuple
 from collections.abc import Iterator
+from typing import Dict, List, Optional, Tuple
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -292,9 +292,7 @@ class DefineImplementation(TypeDefinitionStatement):
         try:
             cls = self.namespace.get_type(self.entity)
             if not isinstance(cls, Entity):
-                raise TypingException(
-                    self, f"Implementation can only be define for an Entity, but {self.entity} is a {cls}"
-                )
+                raise TypingException(self, f"Implementation can only be define for an Entity, but {self.entity} is a {cls}")
             self.type.set_type(cls)
             self.copy_location(self.type)
         except TypeNotFoundException as e:

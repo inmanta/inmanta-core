@@ -69,9 +69,7 @@ def get_range_operator_parser(
             try:
                 operator = RangeOperator.parse(split[0])
             except ValueError:
-                raise ValueError(
-                    f"Invalid range operator {split[0]} in constraint {single}, expected one of lt, le, gt, ge"
-                )
+                raise ValueError(f"Invalid range operator {split[0]} in constraint {single}, expected one of lt, le, gt, ge")
             bound = parse_value_to_type(single, split[1])
             return (operator, bound)
 

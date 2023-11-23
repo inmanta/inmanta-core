@@ -28,26 +28,12 @@ import uuid
 import warnings
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
+from collections.abc import Awaitable, Iterable, Sequence
 from configparser import RawConfigParser
 from contextlib import AbstractAsyncContextManager
 from itertools import chain
-from typing import (
-    Callable,
-    Dict,
-    Generic,
-    List,
-    NewType,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
-from collections.abc import Awaitable, Iterable, Sequence
 from re import Pattern
+from typing import Callable, Dict, Generic, List, NewType, Optional, Set, Tuple, Type, TypeVar, Union, cast, overload
 from uuid import UUID
 
 import asyncpg

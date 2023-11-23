@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 from collections import abc
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
-from collections.abc import Iterator, Sequence
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -345,9 +345,7 @@ class VariableReferenceHook(RawResumer):
                 instance: object = self.instance.execute(instance_requires, resolver, queue)
 
                 if isinstance(instance, list):
-                    raise RuntimeException(
-                        self, f"can not get attribute {self.name}, {instance} is not an entity but a list"
-                    )
+                    raise RuntimeException(self, f"can not get attribute {self.name}, {instance} is not an entity but a list")
                 if not isinstance(instance, Instance):
                     raise RuntimeException(
                         self,

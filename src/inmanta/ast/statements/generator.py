@@ -22,9 +22,9 @@ import itertools
 import logging
 import uuid
 from collections import abc
+from collections.abc import Iterator
 from itertools import chain
 from typing import Dict, List, Optional, Tuple, Union
-from collections.abc import Iterator
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
@@ -850,9 +850,7 @@ class Constructor(ExpressionStatement):
         for k, v in self.__attributes.items():
             attr = self.type.get_attribute(k)
             if attr is None:
-                raise TypingException(
-                    self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}"
-                )
+                raise TypingException(self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}")
             type_hint = attr.get_type().get_base_type()
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
@@ -894,9 +892,7 @@ class Constructor(ExpressionStatement):
         for k, v in all_attributes.items():
             attribute = self.type.get_attribute(k)
             if attribute is None:
-                raise TypingException(
-                    self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}"
-                )
+                raise TypingException(self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}")
             if k not in inindex:
                 self._indirect_attributes[k] = v
             else:
@@ -1174,9 +1170,7 @@ class Constructor(ExpressionStatement):
             self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
             self.anchors.extend(value.get_anchors())
         else:
-            raise RuntimeException(
-                self, f"The attribute {name} in the constructor call of {self.class_type} is already set."
-            )
+            raise RuntimeException(self, f"The attribute {name} in the constructor call of {self.class_type} is already set.")
 
     def get_attributes(self) -> dict[str, ExpressionStatement]:
         """

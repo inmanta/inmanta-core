@@ -26,6 +26,7 @@ import re
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Coroutine, Iterable, MutableMapping
 from datetime import datetime
 from enum import Enum
 from functools import partial
@@ -46,7 +47,6 @@ from typing import (
     cast,
     get_type_hints,
 )
-from collections.abc import Coroutine, Iterable, MutableMapping
 from urllib import parse
 
 import docstring_parser

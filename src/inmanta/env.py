@@ -26,16 +26,16 @@ import subprocess
 import sys
 import venv
 from collections import abc
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
 from itertools import chain
+from re import Pattern
 from subprocess import CalledProcessError
 from textwrap import indent
 from typing import Dict, List, NamedTuple, Optional, Set, Tuple, TypeVar
-from collections.abc import Iterator, Mapping, Sequence
-from re import Pattern
 
 import pkg_resources
 from pkg_resources import DistInfoDistribution, Distribution, Requirement

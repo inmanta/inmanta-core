@@ -18,10 +18,10 @@
 
 import numbers
 import typing
+from collections.abc import Sequence
 from typing import Callable
 from typing import List as PythonList
 from typing import Optional
-from collections.abc import Sequence
 
 from inmanta.ast import (
     DuplicateException,
