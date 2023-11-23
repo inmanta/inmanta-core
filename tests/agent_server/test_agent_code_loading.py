@@ -263,7 +263,6 @@ def test():
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"], code_loader=True
     )
 
-    # Set the PIP_INDEX_URL, because the agent doesn't have support for custom indexes yet
     await agent.ensure_code(
         environment=environment,
         version=version,
