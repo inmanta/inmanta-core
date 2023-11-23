@@ -179,9 +179,7 @@ def get_environment(id: uuid.UUID, versions: Optional[int] = None, resources: Op
     :param versions: Optional. If provided and greater than 0, include this many of the most recent versions for this
                      environment, ordered in descending order of their version number.
                      If not provided or 0, no version information is included.
-    :param resources: Optional. If provided and greater than 0, include a report of all resources in the environment,
-                     The number of resources included in the report is up to the specified 'resources' value.
-                     If not provided or 0, no resource information is included.
+    :param resources: Optional. If provided and greater than 0, include a summary of the resources in the environment.
     """
 
 

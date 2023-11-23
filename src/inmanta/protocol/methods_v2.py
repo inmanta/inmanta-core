@@ -307,9 +307,9 @@ def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent
 )
 def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
     """
-    :param tid: The id of the environment for which the list of settings is being requested.
-
     List the settings in the current environment ordered by name alphabetically.
+
+    :param tid: The id of the environment for which the list of settings is being requested.
     """
 
 
