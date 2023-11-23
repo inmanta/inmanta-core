@@ -207,7 +207,7 @@ class ModuleLikeTool:
 
         outversion = parse_version(outversion)
         if outversion <= old_version:
-            LOGGER.error("new versions ({}) is not larger then old version ({}), aborting".format(outversion, old_version))
+            LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
             return None
 
         return outversion

@@ -246,7 +246,7 @@ class CompileRun:
                 return False, None
 
             if not os.path.exists(project_dir):
-                await self._info("Creating project directory for environment {} at {}".format(environment_id, project_dir))
+                await self._info(f"Creating project directory for environment {environment_id} at {project_dir}")
                 os.mkdir(project_dir)
 
             # Use a separate venv to compile the project to prevent that packages are installed in the

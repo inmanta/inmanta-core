@@ -209,7 +209,7 @@ class Compiler:
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
-                    "All plugin modules should be loaded in the {} package not in {}".format(const.PLUGINS_PACKAGE, cls.__module__)
+                    f"All plugin modules should be loaded in the {const.PLUGINS_PACKAGE} package not in {cls.__module__}"
                 )
 
             mod_ns = mod_ns[1:]

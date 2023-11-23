@@ -1931,7 +1931,7 @@ class ResourceProvider:
 
         state = None
         if self.state is not None:
-            state = ("test::Resource[{},key={}]".format(agent, key), self.state)
+            state = (f"test::Resource[{agent},key={key}]", self.state)
 
         return base, state
 

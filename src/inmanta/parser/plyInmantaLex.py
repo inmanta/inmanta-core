@@ -211,7 +211,7 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
         start = end - (e - s)
 
         r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
-        raise ParserException(r, t.value, "Regex error in {}: '{}'".format(t.value, error))
+        raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
 
 
 # Define a rule so we can track line numbers

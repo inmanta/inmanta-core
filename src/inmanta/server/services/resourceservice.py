@@ -264,7 +264,7 @@ class ResourceService(protocol.ServerSlice):
         self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
         if not self.agentmanager_service.is_primary(env, sid, agent):
-            return 409, {"message": "This agent is not currently the primary for the endpoint {} (sid: {})".format(agent, sid)}
+            return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
@@ -797,7 +797,7 @@ class ResourceService(protocol.ServerSlice):
             # and needs to be valid
             if status not in VALID_STATES_ON_STATE_UPDATE:
                 error_and_log(
-                    "Status {} is not valid on action {}".format(status, action),
+                    f"Status {status} is not valid on action {action}",
                     resource_ids=resource_ids,
                     action=action,
                     action_id=action_id,

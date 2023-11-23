@@ -251,7 +251,7 @@ class SetAttribute(AssignStatement, Resumer):
         instance = self.instance.execute(requires, resolver, queue)
         if not isinstance(instance, Instance):
             raise TypingException(
-                self, "The object at {} is not an Entity but a {} with value {}".format(self.instance, type(instance), instance)
+                self, f"The object at {self.instance} is not an Entity but a {type(instance)} with value {instance}"
             )
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
@@ -270,10 +270,10 @@ class SetAttribute(AssignStatement, Resumer):
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 
     def pretty_print(self) -> str:
-        return "{}.{} = {}".format(self.instance.pretty_print(), self.attribute_name, self.value.pretty_print())
+        return f"{self.instance.pretty_print()}.{self.attribute_name} = {self.value.pretty_print()}"
 
     def __str__(self) -> str:
-        return "{}.{} = {}".format(str(self.instance), self.attribute_name, str(self.value))
+        return f"{str(self.instance)}.{self.attribute_name} = {str(self.value)}"
 
 
 class GradualSetAttributeHelper(ResultCollector[T]):
@@ -378,7 +378,7 @@ class Assign(AssignStatement):
         return f"{self.name} = {self.value.pretty_print()}"
 
     def __repr__(self) -> str:
-        return "Assign({}, {})".format(self.name, self.value)
+        return f"Assign({self.name}, {self.value})"
 
     def __str__(self) -> str:
         return f"{self.name} = {self.value}"
@@ -420,7 +420,7 @@ class MapLookup(ReferenceStatement):
         return dataflow.NodeStub("MapLookup.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
-        return "{}[{}]".format(repr(self.themap), repr(self.key))
+        return f"{repr(self.themap)}[{repr(self.key)}]"
 
 
 class IndexLookup(ReferenceStatement, Resumer):

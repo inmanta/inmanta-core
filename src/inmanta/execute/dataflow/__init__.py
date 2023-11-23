@@ -379,7 +379,7 @@ class AttributeNodeReference(AssignableNodeReference):
         return self.instance_var_ref == other.instance_var_ref and self.attribute == other.attribute
 
     def __repr__(self) -> str:
-        return "{}.{}".format(repr(self.instance_var_ref), self.attribute)
+        return f"{repr(self.instance_var_ref)}.{self.attribute}"
 
 
 class InstanceAttributeNodeReference(AssignableNodeReference):
@@ -835,7 +835,7 @@ class AttributeNode(AssignableNode):
         self.instance.assign_other_direction(self.name, node_ref, responsible, context)
 
     def __repr__(self) -> str:
-        return "attribute {} on {}".format(super().__repr__(), repr(self.instance))
+        return f"attribute {super().__repr__()} on {repr(self.instance)}"
 
 
 class InstanceNode(Node):

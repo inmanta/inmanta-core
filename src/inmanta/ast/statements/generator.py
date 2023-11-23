@@ -709,7 +709,7 @@ class ConditionalExpression(ExpressionStatement):
         )
 
     def __repr__(self) -> str:
-        return "{} ? {} : {}".format(self.condition, self.if_expression, self.else_expression)
+        return f"{self.condition} ? {self.if_expression} : {self.else_expression}"
 
 
 class ConditionalExpressionResumer(RawResumer):
@@ -839,7 +839,7 @@ class Constructor(ExpressionStatement):
             self.class_type,
             ",".join(
                 chain(
-                    ("{}={}".format(k, v.pretty_print()) for k, v in self.attributes.items()),
+                    (f"{k}={v.pretty_print()}" for k, v in self.attributes.items()),
                     ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
                 )
             ),
@@ -851,7 +851,7 @@ class Constructor(ExpressionStatement):
             attr = self.type.get_attribute(k)
             if attr is None:
                 raise TypingException(
-                    self.__attribute_locations[k], "no attribute {} on type {}".format(k, self.type.get_full_name())
+                    self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}"
                 )
             type_hint = attr.get_type().get_base_type()
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
@@ -895,7 +895,7 @@ class Constructor(ExpressionStatement):
             attribute = self.type.get_attribute(k)
             if attribute is None:
                 raise TypingException(
-                    self.__attribute_locations[k], "no attribute {} on type {}".format(k, self.type.get_full_name())
+                    self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}"
                 )
             if k not in inindex:
                 self._indirect_attributes[k] = v
@@ -1020,11 +1020,11 @@ class Constructor(ExpressionStatement):
             for k, v in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
                     raise RuntimeException(
-                        self, "The attribute {} is set twice in the constructor call of {}.".format(k, self.class_type)
+                        self, f"The attribute {k} is set twice in the constructor call of {self.class_type}."
                     )
                 attribute = type_class.get_attribute(k)
                 if attribute is None:
-                    raise TypingException(self, "no attribute {} on type {}".format(k, type_class.get_full_name()))
+                    raise TypingException(self, f"no attribute {k} on type {type_class.get_full_name()}")
                 kwarg_attrs[k] = v
 
         lhs_inverse_assignment: Optional[tuple[str, object]] = None
@@ -1175,7 +1175,7 @@ class Constructor(ExpressionStatement):
             self.anchors.extend(value.get_anchors())
         else:
             raise RuntimeException(
-                self, "The attribute {} in the constructor call of {} is already set.".format(name, self.class_type)
+                self, f"The attribute {name} in the constructor call of {self.class_type} is already set."
             )
 
     def get_attributes(self) -> dict[str, ExpressionStatement]:

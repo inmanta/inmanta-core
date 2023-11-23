@@ -80,7 +80,7 @@ class WarningOption:
         Apply the warning rule tied to the given option.
         """
         if option not in self.options:
-            raise Exception("Illegal option {} for {}".format(option, self.name))
+            raise Exception(f"Illegal option {option} for {self.name}")
         rule: WarningRule = self.options[option]
         rule.apply()
 
@@ -153,7 +153,7 @@ class WarningsManager:
         """
         # implementation based on warnings._showwarnmsg_impl and logging._showwarning
         if issubclass(category, InmantaWarning):
-            text = "{}: {}".format(category.__name__, message)
+            text = f"{category.__name__}: {message}"
             logger = logging.getLogger("inmanta.warnings")
         else:
             text: str = warnings.formatwarning(

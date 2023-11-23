@@ -224,7 +224,7 @@ async def test_desired_state_versions_paging(
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:{}".format(port)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

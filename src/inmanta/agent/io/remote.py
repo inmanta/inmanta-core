@@ -125,7 +125,7 @@ class SshIO(local.IOBase):
         else:
             python = "python"
 
-        return "ssh={} {}@{}//python={}".format(opts, self._user, self._host, python)
+        return f"ssh={opts} {self._user}@{self._host}//python={python}"
 
     def _execute(self, function_name: str, *args: object, **kwargs: object) -> object:
         with self._lock:

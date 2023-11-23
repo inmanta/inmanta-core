@@ -1056,7 +1056,7 @@ def pytest_runtest_makereport(item, call):
         if resources:
             # we are behind report formatting, so write to report, not item
             rep.sections.append(
-                ("Resources Kept", "\n".join(["{} {}".format(label, resource) for label, resource in resources.items()]))
+                ("Resources Kept", "\n".join([f"{label} {resource}" for label, resource in resources.items()]))
             )
 
 

@@ -118,7 +118,7 @@ class DataflowTestHelper:
             except Exception as e:
                 if isinstance(e, AssertionError):
                     raise e
-                assert False, "Expected {}, got {}".format(expected_error_type, e)
+                assert False, f"Expected {expected_error_type}, got {e}"
 
     def _consume_token_instance(self) -> Optional[str]:
         if self._tokens[0] != "<instance>":

@@ -374,7 +374,7 @@ class Resource(metaclass=ResourceMeta):
                 raise ResourceException("Resource field names can not start with _, reported in %s" % cls.__name__)
             if field in RESERVED_FOR_RESOURCE:
                 raise ResourceException(
-                    "Resource {} is a reserved keyword and not a valid field name, reported in {}".format(field, cls.__name__)
+                    f"Resource {field} is a reserved keyword and not a valid field name, reported in {cls.__name__}"
                 )
 
     def __init__(self, _id: "Id") -> None:
@@ -700,7 +700,7 @@ class HostNotFoundException(Exception):
         from inmanta.data import ResourceAction
 
         ra = ResourceAction()  # @UndefinedVariable
-        ra.message = "Failed to access host {} as user {} over ssh.".format(self.hostname, self.user)
+        ra.message = f"Failed to access host {self.hostname} as user {self.user} over ssh."
         ra.data = {"host": self.hostname, "user": self.user, "error": self.error}
 
         return ra

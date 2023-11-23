@@ -376,10 +376,10 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
         print(line)
     for regex in compiled_regexes_requires_lines:
         if not any(regex.match(line) for line in log_lines):
-            pytest.fail("Required pattern was not found in log lines: {}".format(regex.pattern))
+            pytest.fail(f"Required pattern was not found in log lines: {regex.pattern}")
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.match(line) for line in log_lines):
-            pytest.fail("Forbidden pattern found in log lines: {}".format(regex.pattern))
+            pytest.fail(f"Forbidden pattern found in log lines: {regex.pattern}")
 
 
 def test_check_shutdown():

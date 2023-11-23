@@ -113,7 +113,7 @@ class MultiVersionSetup:
         self, name: str, scenario: str, increment: bool, agent="agent1", requires=[], send_event: bool = False
     ) -> str:
         v = self.firstversion
-        rid = "test::Resource[{},key={}]".format(agent, name)
+        rid = f"test::Resource[{agent},key={name}]"
 
         if increment:
             self.results[agent].append(rid)

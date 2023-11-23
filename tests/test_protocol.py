@@ -192,7 +192,7 @@ async def test_gzip_encoding(server):
     (hash, content, body) = make_random_file(size=1024)
 
     port = opt.get_bind_port()
-    url = "http://localhost:{}/api/v1/file/{}".format(port, hash)
+    url = f"http://localhost:{port}/api/v1/file/{hash}"
 
     zipped, body = protocol.gzipped_json({"content": body})
     assert zipped

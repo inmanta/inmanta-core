@@ -114,7 +114,7 @@ class IsDefined(ReferenceStatement):
 
     def pretty_print(self) -> str:
         if self.attr is not None:
-            name = "{}.{}".format(self.attr.pretty_print(), self.name)
+            name = f"{self.attr.pretty_print()}.{self.name}"
         else:
             name = self.name
         return "%s is defined" % name
@@ -221,7 +221,7 @@ class BinaryOperator(Operator):
         """
 
     def pretty_print(self) -> str:
-        return "({} {} {})".format(self._arguments[0].pretty_print(), self.get_op(), self._arguments[1].pretty_print())
+        return f"({self._arguments[0].pretty_print()} {self.get_op()} {self._arguments[1].pretty_print()})"
 
     def __repr__(self) -> str:
         return self.pretty_print()
@@ -331,7 +331,7 @@ class UnaryOperator(Operator):
         """
 
     def pretty_print(self) -> str:
-        return "({} {})".format(self.get_op(), self._arguments[0].pretty_print())
+        return f"({self.get_op()} {self._arguments[0].pretty_print()})"
 
 
 class Not(UnaryOperator):
@@ -355,7 +355,7 @@ class Not(UnaryOperator):
             Bool().validate(arg)
         except RuntimeException as e:
             e.set_statement(self)
-            e.msg = "Invalid value `{}`: `{}` expects a boolean".format(arg, self.get_op())
+            e.msg = f"Invalid value `{arg}`: `{self.get_op()}` expects a boolean"
             raise e
         return not arg
 
@@ -378,7 +378,7 @@ class Regex(BinaryOperator):
         """
         assert arg2 == self.regex
         if not isinstance(arg1, str):
-            raise TypingException(self, "Regex can only be match with strings. {} is of type {}".format(arg1, type(arg1)))
+            raise TypingException(self, f"Regex can only be match with strings. {arg1} is of type {type(arg1)}")
 
         return self.regex.match(arg1) is not None
 

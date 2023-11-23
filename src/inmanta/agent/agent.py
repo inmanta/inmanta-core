@@ -220,7 +220,7 @@ class ResourceAction(ResourceActionBase):
                 try:
                     if self.is_done():
                         # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "{} {} is no longer active".format(self.gid, self.resource))
+                        self.logger.log(const.LogLevel.TRACE.to_int, f"{self.gid} {self.resource} is no longer active")
                         return
                     result = sum(results, ResourceActionResult(cancel=False))
                     if result.cancel:
@@ -250,7 +250,7 @@ class ResourceAction(ResourceActionBase):
                 try:
                     if self.is_done():
                         # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, "{} {} is no longer active".format(self.gid, self.resource))
+                        self.logger.log(const.LogLevel.TRACE.to_int, f"{self.gid} {self.resource} is no longer active")
                         return
 
                     result = sum(results, ResourceActionResult(cancel=False))
@@ -390,7 +390,7 @@ class DeployRequest:
     def interrupt(self, other: "DeployRequest") -> "DeployRequest":
         """Interrupt this deploy for the other and produce a new request for future rescheduling of this deploy"""
         return DeployRequest(
-            self.is_full_deploy, self.is_periodic, "Restarting run '{}', interrupted for '{}'".format(self.reason, other.reason)
+            self.is_full_deploy, self.is_periodic, f"Restarting run '{self.reason}', interrupted for '{other.reason}'"
         )
 
 
@@ -554,7 +554,7 @@ class ResourceScheduler:
         self.running = new_request
         self.version = resources[0].id.get_version()
         gid = uuid.uuid4()
-        self.logger.info("Running {} for reason: {}".format(gid, self.running.reason))
+        self.logger.info(f"Running {gid} for reason: {self.running.reason}")
 
         # re-generate generation
         self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, self.running.reason) for r in resources}

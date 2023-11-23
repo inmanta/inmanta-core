@@ -169,7 +169,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:{}".format(port)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

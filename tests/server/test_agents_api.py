@@ -152,7 +152,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:{}".format(port)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

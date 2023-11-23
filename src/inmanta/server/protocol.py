@@ -498,7 +498,7 @@ class Session:
                 self._handle_timeout(
                     future,
                     timeout,
-                    "Call {}: {} {} for agent {} timed out.".format(reply_id, call_spec.method, call_spec.url, self._sid),
+                    f"Call {reply_id}: {call_spec.method} {call_spec.url} for agent {self._sid} timed out.",
                 )
             )
             self._replies[reply_id] = future
@@ -711,7 +711,7 @@ class SessionManager(ServerSlice):
             return session
 
     def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: set[str], nodename: str) -> Session:
-        LOGGER.debug("New session with id {} on node {} for env {} with endpoints {}".format(sid, nodename, tid, endpoint_names))
+        LOGGER.debug(f"New session with id {sid} on node {nodename} for env {tid} with endpoints {endpoint_names}")
         return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
     async def expire(self, session: Session, timeout: float) -> None:
@@ -762,5 +762,5 @@ class SessionManager(ServerSlice):
             env.set_reply(reply_id, data)
             return 200
         except Exception:
-            LOGGER.warning("could not deliver agent reply with sid={} and reply_id={}".format(sid, reply_id), exc_info=True)
+            LOGGER.warning(f"could not deliver agent reply with sid={sid} and reply_id={reply_id}", exc_info=True)
             return 500

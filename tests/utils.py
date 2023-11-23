@@ -117,7 +117,7 @@ def assert_equal_ish(minimal, actual, sortby=[]):
 
 def assert_graph(graph, expected):
     lines = [
-        "{}: {}".format(f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.resource_requires
+        f"{f.id.get_attribute_value()}: {t.id.get_attribute_value()}" for f in graph.values() for t in f.resource_requires
     ]
     lines = sorted(lines)
 

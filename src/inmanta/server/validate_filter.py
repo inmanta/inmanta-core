@@ -38,7 +38,7 @@ def parse_range_value_to_date(single_constraint: str, value: str) -> datetime.da
     try:
         datetime_obj: datetime.datetime = dateutil.parser.isoparse(value)
     except ValueError:
-        raise ValueError("Invalid range constraint {}: '{}' is not a valid datetime".format(single_constraint, value))
+        raise ValueError(f"Invalid range constraint {single_constraint}: '{value}' is not a valid datetime")
     else:
         return datetime_obj if datetime_obj.tzinfo is not None else datetime_obj.replace(tzinfo=datetime.timezone.utc)
 
@@ -47,7 +47,7 @@ def parse_range_value_to_int(single_constraint: str, value: str) -> int:
     try:
         return int(value)
     except ValueError:
-        raise ValueError("Invalid range constraint {}: '{}' is not an integer".format(single_constraint, value))
+        raise ValueError(f"Invalid range constraint {single_constraint}: '{value}' is not an integer")
 
 
 S = TypeVar("S", int, datetime.datetime)
@@ -70,7 +70,7 @@ def get_range_operator_parser(
                 operator = RangeOperator.parse(split[0])
             except ValueError:
                 raise ValueError(
-                    "Invalid range operator {} in constraint {}, expected one of lt, le, gt, ge".format(split[0], single)
+                    f"Invalid range operator {split[0]} in constraint {single}, expected one of lt, le, gt, ge"
                 )
             bound = parse_value_to_type(single, split[1])
             return (operator, bound)

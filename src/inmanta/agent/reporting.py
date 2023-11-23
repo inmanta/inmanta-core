@@ -89,7 +89,7 @@ reports["ips"] = report_ips
 
 
 def report_python(agent: "Agent") -> str:
-    return "{} {} {}".format(platform.python_implementation(), platform.python_version(), platform.python_build())
+    return f"{platform.python_implementation()} {platform.python_version()} {platform.python_build()}"
 
 
 reports["python"] = report_python

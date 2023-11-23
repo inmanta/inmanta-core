@@ -276,7 +276,7 @@ class AgentCache:
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
         for k in others:
-            key = "{},{}".format(k, repr(kwargs[k])) + key
+            key = f"{k},{repr(kwargs[k])}" + key
         try:
             return self.find(key, **args)
         except KeyError:

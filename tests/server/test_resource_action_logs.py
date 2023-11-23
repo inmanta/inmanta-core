@@ -208,7 +208,7 @@ async def test_resource_logs_paging(server, client, order_by_column, order, env_
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:{}".format(port)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

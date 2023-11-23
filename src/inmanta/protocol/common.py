@@ -447,7 +447,7 @@ class MethodProperties:
         # validate client types
         for ct in self._client_types:
             if ct not in [client_type for client_type in const.ClientType]:
-                raise InvalidMethodDefinition("Invalid client type {} specified for function {}".format(ct, function))
+                raise InvalidMethodDefinition(f"Invalid client type {ct} specified for function {function}")
 
         self._validate_function_types(typed)
         self.argument_validator = self.arguments_to_pydantic()

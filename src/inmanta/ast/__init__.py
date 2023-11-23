@@ -564,7 +564,7 @@ class CompilerException(Exception, export.Exportable):
         """Make a string representation of this particular exception"""
         location = self.get_location()
         if location is not None:
-            return "{} ({})".format(self.get_message(), location)
+            return f"{self.get_message()} ({location})"
         else:
             return self.get_message()
 
@@ -596,7 +596,7 @@ class CompilerException(Exception, export.Exportable):
         module: Optional[str] = self.__class__.__module__
         name: str = self.__class__.__qualname__
         return export.Error(
-            type=name if module is None else "{}.{}".format(module, name),
+            type=name if module is None else f"{module}.{name}",
             message=self.get_message(),
             location=location.export() if location is not None else None,
         )
@@ -628,7 +628,7 @@ class RuntimeException(CompilerException):
     def format(self) -> str:
         """Make a string representation of this particular exception"""
         if self.stmt is not None:
-            return "{} (reported in {} ({}))".format(self.get_message(), self.stmt, self.get_location())
+            return f"{self.get_message()} (reported in {self.stmt} ({self.get_location()}))"
         return super().format()
 
 
@@ -667,7 +667,7 @@ class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
     def __init__(self, type: LocatableString, ns: Namespace) -> None:
-        RuntimeException.__init__(self, stmt=None, msg="could not find type {} in namespace {}".format(type, ns))
+        RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}")
         self.type = type
         self.ns = ns
         self.set_location(type.get_location())
@@ -696,7 +696,7 @@ class AmbiguousTypeException(TypeNotFoundException):
 def stringify_exception(exn: Exception) -> str:
     if isinstance(exn, CompilerException):
         return str(exn)
-    return "{}: {}".format(exn.__class__.__name__, str(exn))
+    return f"{exn.__class__.__name__}: {str(exn)}"
 
 
 @stable_api
@@ -745,7 +745,7 @@ class ExplicitPluginException(ExternalException):
         module: Optional[str] = self.__cause__.__class__.__module__
         name: str = self.__cause__.__class__.__qualname__
         return export.Error(
-            type=name if module is None else "{}.{}".format(module, name),
+            type=name if module is None else f"{module}.{name}",
             message=self.__cause__.message,
             location=location.export() if location is not None else None,
             category=export.ErrorCategory.plugin,
@@ -780,7 +780,7 @@ class AttributeException(WrappingRuntimeException):
 
     def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: RuntimeException) -> None:
         WrappingRuntimeException.__init__(
-            self, stmt=stmt, msg="Could not set attribute `{}` on instance `{}`".format(attribute, str(instance)), cause=cause
+            self, stmt=stmt, msg=f"Could not set attribute `{attribute}` on instance `{str(instance)}`", cause=cause
         )
         self.attribute = attribute
         self.instance = instance
@@ -791,7 +791,7 @@ class OptionalValueException(RuntimeException):
 
     def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
         RuntimeException.__init__(
-            self, instance, "Optional variable accessed that has no value (attribute `{}` of `{}`)".format(attribute, instance)
+            self, instance, f"Optional variable accessed that has no value (attribute `{attribute}` of `{instance}`)"
         )
         self.instance = instance
         self.attribute = attribute
@@ -911,7 +911,7 @@ class DuplicateException(TypingException):
         self.other = other
 
     def format(self) -> str:
-        return "{} (original at ({})) (duplicate at ({}))".format(self.get_message(), self.location, self.other.get_location())
+        return f"{self.get_message()} (original at ({self.location})) (duplicate at ({self.other.get_location()}))"
 
     def importantance(self) -> int:
         return 40

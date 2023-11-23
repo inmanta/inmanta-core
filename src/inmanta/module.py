@@ -312,12 +312,12 @@ class PluginModuleLoadException(Exception):
     def get_cause_type_name(self) -> str:
         module: Optional[str] = type(self.cause).__module__
         name: str = type(self.cause).__qualname__
-        return name if module is None or module == "builtins" else "{}.{}".format(module, name)
+        return name if module is None or module == "builtins" else f"{module}.{name}"
 
     def to_compiler_exception(self) -> CompilerException:
         module: Optional[str] = type(self.cause).__module__
         name: str = type(self.cause).__qualname__
-        cause_type_name = name if module is None or module == "builtins" else "{}.{}".format(module, name)
+        cause_type_name = name if module is None or module == "builtins" else f"{module}.{name}"
 
         exception = CompilerException(
             f"Unable to load all plug-ins for module {self.module}:"
@@ -1423,7 +1423,7 @@ class ModuleV2Metadata(ModuleMetadata):
             if v.is_prerelease:
                 # e.g. rc
                 assert v.pre is not None
-                return "{}{}".format(v.pre[0], v.pre[1])
+                return f"{v.pre[0]}{v.pre[1]}"
             if v.is_postrelease:
                 return f"post{v.post}"
             return ""
@@ -2688,7 +2688,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         for spec in self._metadata.requires:
             req = [x for x in parse_requirements(spec)]
             if len(req) > 1:
-                print("Module file for {} has bad line in requirements specification {}".format(self._path, spec))
+                print(f"Module file for {self._path} has bad line in requirements specification {spec}")
             reqe = InmantaModuleRequirement(req[0])
             reqs.append(reqe)
         return [*reqs, *self.get_module_v2_requirements()]
@@ -3049,7 +3049,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         return loader.convert_relative_path_to_module(os.path.join(mod_name, loader.PLUGIN_DIR, rel_py_file))
 
     def execute_command(self, cmd: str) -> None:
-        print("executing {} on {} in {}".format(cmd, self.name, self._path))
+        print(f"executing {cmd} on {self.name} in {self._path}")
         print("=" * 10)
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
@@ -3299,7 +3299,7 @@ class ModuleV1(Module[ModuleV1Metadata], ModuleLikeWithYmlMetadataFile):
         """
         Run a git push on this module
         """
-        sys.stdout.write("{} ({}) ".format(self.name, self._path))
+        sys.stdout.write(f"{self.name} ({self._path}) ")
         sys.stdout.flush()
         try:
             print(gitprovider.push(self._path))

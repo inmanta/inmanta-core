@@ -262,7 +262,7 @@ class AttributeReference(Reference):
             attribute.end,
         )
         reference: LocatableString = LocatableString(
-            "{}.{}".format(instance.full_name, attribute), range, instance.locatable_name.lexpos, instance.namespace
+            f"{instance.full_name}.{attribute}", range, instance.locatable_name.lexpos, instance.namespace
         )
         Reference.__init__(self, reference)
         self.attribute = attribute
@@ -331,4 +331,4 @@ class AttributeReference(Reference):
         return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
 
     def __repr__(self) -> str:
-        return "{}.{}".format(repr(self.instance), str(self.attribute))
+        return f"{repr(self.instance)}.{str(self.attribute)}"

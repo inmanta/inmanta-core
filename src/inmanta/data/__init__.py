@@ -1169,7 +1169,7 @@ class Field(Generic[T]):
 
         if self.is_many:
             if not isinstance(value, list):
-                TypeError("Field {} should be a list, but got {}".format(name, type(value).__name__))
+                TypeError(f"Field {name} should be a list, but got {type(value).__name__}")
             else:
                 [self._validate_single(name, v) for v in value]
         else:
@@ -1186,7 +1186,7 @@ class Field(Generic[T]):
 
         if self.is_many:
             if not isinstance(value, list):
-                TypeError("Field {} should be a list, but got {}".format(name, type(value).__name__))
+                TypeError(f"Field {name} should be a list, but got {type(value).__name__}")
             else:
                 return [self._from_db_single(name, v) for v in value]
         return self._from_db_single(name, value)
@@ -1210,7 +1210,7 @@ class Field(Generic[T]):
             return pydantic.TypeAdapter(pydantic.AnyHttpUrl).validate_python(value)
 
         raise TypeError(
-            "Field {} should have the correct type ({} instead of {})".format(name, self.field_type.__name__, type(value).__name__)
+            f"Field {name} should have the correct type ({self.field_type.__name__} instead of {type(value).__name__})"
         )
 
 
@@ -1438,7 +1438,7 @@ class BaseDocument(metaclass=DocumentMeta):
 
         for name, value in kwargs.items():
             if name not in fields:
-                raise AttributeError("{} field is not defined for this document {}".format(name, type(self).__name__.lower()))
+                raise AttributeError(f"{name} field is not defined for this document {type(self).__name__.lower()}")
 
             field = fields[name]
             if not from_postgres:
@@ -1548,7 +1548,7 @@ class BaseDocument(metaclass=DocumentMeta):
             value = self.get_value(name)
 
             if metadata.required and value is None:
-                raise TypeError("{} should have field '{}'".format(self.__name__, name))
+                raise TypeError(f"{self.__name__} should have field '{name}'")
 
             metadata.validate(name, value)
             column_names.append(name)
@@ -2258,7 +2258,7 @@ class BaseDocument(metaclass=DocumentMeta):
             value = self.get_value(name)
 
             if metadata.required and value is None:
-                raise TypeError("{} should have field '{}'".format(self.__name__, name))
+                raise TypeError(f"{self.__name__} should have field '{name}'")
 
             if value is not None:
                 metadata.validate(name, value)
@@ -2394,7 +2394,7 @@ def validate_cron_or_int(value: Union[int, str]) -> str:
             assert isinstance(value, str)  # Make mypy happy
             return validate_cron(value, allow_empty=False)
         except ValueError as e:
-            raise ValueError("'{}' is not a valid cron expression or int: {}".format(value, e))
+            raise ValueError(f"'{value}' is not a valid cron expression or int: {e}")
 
 
 def validate_cron(value: str, allow_empty: bool = True) -> str:
@@ -2405,7 +2405,7 @@ def validate_cron(value: str, allow_empty: bool = True) -> str:
     try:
         CronTab(value)
     except ValueError as e:
-        raise ValueError("'{}' is not a valid cron expression: {}".format(value, e))
+        raise ValueError(f"'{value}' is not a valid cron expression: {e}")
     return value
 
 

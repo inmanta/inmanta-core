@@ -425,7 +425,7 @@ host=localhost
                 sys.stdout.flush()
 
             for res in new:
-                print("{} - {}".format(res, ready[res]))
+                print(f"{res} - {ready[res]}")
 
             print("[%d / %d]" % (deployed, total))
             time.sleep(1)

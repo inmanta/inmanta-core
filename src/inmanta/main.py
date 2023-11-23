@@ -83,7 +83,7 @@ class Client:
             if result.result and key_name in result.result:
                 return result.result[key_name]
 
-            raise Exception("Expected {} in the response of {}.".format(key_name, method_name))
+            raise Exception(f"Expected {key_name} in the response of {method_name}.")
         elif result.code == 404:
             if not allow_none:
                 raise Exception("Requested %s not found on server" % key_name)
@@ -829,7 +829,7 @@ def monitor_deploy(client: Client, environment: str) -> None:
             bar.update(done - last)
             last = done
 
-    click.echo("Complete: {}/{}".format(done, total))
+    click.echo(f"Complete: {done}/{total}")
 
 
 @cmd.group("token", help="Subcommand to manage access tokens")

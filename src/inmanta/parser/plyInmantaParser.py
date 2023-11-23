@@ -1206,7 +1206,7 @@ def p_class_ref_direct(p: YaccProduction) -> None:
 
 def p_class_ref(p: YaccProduction) -> None:
     "class_ref : ns_ref SEP CID"
-    p[0] = "{}::{}".format(str(p[1]), p[3])
+    p[0] = f"{str(p[1])}::{p[3]}"
     merge_lnr_to_string(p, 1, 3)
 
 
@@ -1217,7 +1217,7 @@ def p_class_ref_err_dot(p: YaccProduction) -> None:
     cid: LocatableString = p[3]
     assert namespace
     full_string: LocatableString = LocatableString(
-        "{}.{}".format(var_str, cid),
+        f"{var_str}.{cid}",
         expand_range(var_str.location, cid.location),
         var_str.lexpos,
         namespace,
@@ -1249,7 +1249,7 @@ def p_class_ref_list_term_err(p: YaccProduction) -> None:
 
 def p_ns_ref(p: YaccProduction) -> None:
     "ns_ref : ns_ref SEP ID"
-    p[0] = "{}::{}".format(p[1], p[3])
+    p[0] = f"{p[1]}::{p[3]}"
     merge_lnr_to_string(p, 1, 3)
 
 

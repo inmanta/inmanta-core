@@ -346,7 +346,7 @@ class VariableReferenceHook(RawResumer):
 
                 if isinstance(instance, list):
                     raise RuntimeException(
-                        self, "can not get attribute {}, {} is not an entity but a list".format(self.name, instance)
+                        self, f"can not get attribute {self.name}, {instance} is not an entity but a list"
                     )
                 if not isinstance(instance, Instance):
                     raise RuntimeException(
@@ -372,7 +372,7 @@ class VariableReferenceHook(RawResumer):
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
     def __str__(self) -> str:
-        return "{}.{}".format(self.instance, self.name)
+        return f"{self.instance}.{self.name}"
 
     def __repr__(self) -> str:
         return "{}({!r}, {}, {!r}, propagate_unset={!r})".format(

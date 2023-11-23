@@ -180,7 +180,7 @@ class Config:
             # raise Exception("Config section %s not defined" % (section))
             return None
         if name not in cls.__config_definition[section]:
-            LOGGER.warning("Config name {} not defined in section {}".format(name, section))
+            LOGGER.warning(f"Config name {name} not defined in section {section}")
             # raise Exception("Config name %s not defined in section %s" % (name, section))
             return None
         opt = cls.__config_definition[section][name]
@@ -325,7 +325,7 @@ class Option(Generic[T]):
             has_new_option = cfg.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
                 warnings.warn(
-                    "Config option {} is deprecated. Use {} instead.".format(self.predecessor_option.name, self.name),
+                    f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
                     category=DeprecationWarning,
                 )
                 return self.predecessor_option.get()
@@ -545,7 +545,7 @@ class AuthJWTConfig:
         elif self.algo.lower() == "rs256":
             self.validate_rs265()
         else:
-            raise ValueError("Algorithm {} in {} is not support ".format(self.algo, self.section))
+            raise ValueError(f"Algorithm {self.algo} in {self.section} is not support ")
 
     def validate_generic(self) -> None:
         """
@@ -562,7 +562,7 @@ class AuthJWTConfig:
         self.client_types = is_list(self._config["client_types"])
         for ct in self.client_types:
             if ct not in [client_type for client_type in const.ClientType]:
-                raise ValueError("invalid client_type {} in {}".format(ct, self.section))
+                raise ValueError(f"invalid client_type {ct} in {self.section}")
 
         if "expire" in self._config:
             self.expire = is_int(self._config["expire"])
@@ -584,7 +584,7 @@ class AuthJWTConfig:
         Validate and parse HS256 algorithm configuration
         """
         if "key" not in self._config:
-            raise ValueError("key is required in {} for algorithm {}".format(self.section, self.algo))
+            raise ValueError(f"key is required in {self.section} for algorithm {self.algo}")
 
         self.key = base64.urlsafe_b64decode((self._config["key"] + "==").encode("ascii"))
         if len(self.key) < 32:

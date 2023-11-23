@@ -297,7 +297,7 @@ class BashIO(IOBase):
         """
         args = None
         if user is not None and group is not None:
-            args = ["chown", "{}:{}".format(user, group)]
+            args = ["chown", f"{user}:{group}"]
 
         elif user is not None:
             args = ["chown", user]

@@ -130,7 +130,7 @@ class CodeManager:
         """
         file_name = self.get_object_source(instance)
         if file_name is None:
-            raise SourceNotFoundException("Unable to locate source code of instance {} for entity {}".format(inspect, type_name))
+            raise SourceNotFoundException(f"Unable to locate source code of instance {inspect} for entity {type_name}")
 
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
@@ -406,7 +406,7 @@ def convert_relative_path_to_module(path: str) -> str:
         return const.PLUGINS_PACKAGE
 
     if len(parts) == 1 or parts[1] != PLUGIN_DIR:
-        raise Exception("Error parsing module path: expected 'some_module/{}/some_submodule', got {}".format(PLUGIN_DIR, path))
+        raise Exception(f"Error parsing module path: expected 'some_module/{PLUGIN_DIR}/some_submodule', got {path}")
 
     def strip_py(module: list[str]) -> list[str]:
         """

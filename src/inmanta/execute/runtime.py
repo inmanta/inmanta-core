@@ -723,7 +723,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         except ModifiedAfterFreezeException as e:
             if len(self.value) == self.attribute.high:
                 new_exception: CompilerException = RuntimeException(
-                    None, "Exceeded relation arity on attribute '{}' of instance '{}'".format(self.attribute.name, self.myself)
+                    None, f"Exceeded relation arity on attribute '{self.attribute.name}' of instance '{self.myself}'"
                 )
                 new_exception.set_location(location)
                 raise new_exception
@@ -748,7 +748,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
 
     def __str__(self) -> str:
-        return "ListVariable {} {} = {}".format(self.myself, self.attribute, self.value)
+        return f"ListVariable {self.myself} {self.attribute} = {self.value}"
 
     def get_progress_potential(self) -> int:
         # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
@@ -819,7 +819,7 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return result
 
     def __str__(self) -> str:
-        return "OptionVariable {} {} = {}".format(self.myself, self.attribute, self.value)
+        return f"OptionVariable {self.myself} {self.attribute} = {self.value}"
 
     def get_progress_potential(self) -> int:
         return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
@@ -1276,7 +1276,7 @@ class Instance(ExecutionContext):
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:
-            raise NotFoundException(None, name, "cannot set attribute with name {} on type {}".format(name, str(self.type)))
+            raise NotFoundException(None, name, f"cannot set attribute with name {name} on type {str(self.type)}")
         try:
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:
@@ -1286,10 +1286,10 @@ class Instance(ExecutionContext):
         try:
             return self.slots[name]
         except KeyError:
-            raise NotFoundException(None, name, "could not find attribute with name: {} in type {}".format(name, self.type))
+            raise NotFoundException(None, name, f"could not find attribute with name: {name} in type {self.type}")
 
     def __repr__(self) -> str:
-        return "{} {:02x}".format(self.type, self.sid)
+        return f"{self.type} {self.sid:02x}"
 
     def __str__(self) -> str:
         return "{} (instantiated at {})".format(self.type, ",".join([str(location) for location in self.get_locations()]))
@@ -1330,7 +1330,7 @@ class Instance(ExecutionContext):
                     else:
                         excns.append(
                             proxy.UnsetException(
-                                "The object {} is not complete: attribute {} ({}) is not set".format(self, k, attr.location),
+                                f"The object {self} is not complete: attribute {k} ({attr.location}) is not set",
                                 self,
                                 attr,
                             )

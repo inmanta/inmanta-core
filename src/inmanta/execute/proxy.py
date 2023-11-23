@@ -110,7 +110,7 @@ class DynamicProxy:
                 (key, value) = key_value
                 if not isinstance(key, str):
                     raise RuntimeException(
-                        None, "dict keys should be strings, got {} of type {} with dict value {}".format(key, type(key), value)
+                        None, f"dict keys should be strings, got {key} of type {type(key)} with dict value {value}"
                     )
                 return (key, cls.unwrap(value))
 
@@ -204,7 +204,7 @@ class SequenceProxy(DynamicProxy, JSONSerializable):
     def __getitem__(self, key: str) -> object:
         instance = self._get_instance()
         if isinstance(key, str):
-            raise RuntimeException(self, "can not get a attribute {}, {} is a list".format(key, self._get_instance()))
+            raise RuntimeException(self, f"can not get a attribute {key}, {self._get_instance()} is a list")
 
         return DynamicProxy.return_value(instance[key])
 
@@ -228,7 +228,7 @@ class DictProxy(DynamicProxy, Mapping, JSONSerializable):
     def __getitem__(self, key):
         instance = self._get_instance()
         if not isinstance(key, str):
-            raise RuntimeException(self, "Expected string key, but got {}, {} is a dict".format(key, self._get_instance()))
+            raise RuntimeException(self, f"Expected string key, but got {key}, {self._get_instance()} is a dict")
 
         return DynamicProxy.return_value(instance[key])
 

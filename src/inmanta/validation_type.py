@@ -56,7 +56,7 @@ def regex_string(regex: str) -> object:
 
 @stable_api
 def parametrize_type(
-    base_type: Type[object] | abc.Callable[..., Type[object]],
+    base_type: type[object] | abc.Callable[..., type[object]],
     validation_parameters: Optional[abc.Mapping[str, object]] = None,
     *,
     type_name: Optional[str] = None,

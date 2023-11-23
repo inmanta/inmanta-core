@@ -211,7 +211,7 @@ class CronSchedule(TaskSchedule):
         try:
             crontab = CronTab(self.cron)
         except ValueError as e:
-            raise ValueError("'{}' is not a valid cron expression: {}".format(self.cron, e))
+            raise ValueError(f"'{self.cron}' is not a valid cron expression: {e}")
         # can not assign directly on frozen dataclass, see dataclass docs
         object.__setattr__(self, "_crontab", crontab)
 

@@ -55,7 +55,7 @@ class RESTHandler(tornado.web.RequestHandler):
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
             raise exceptions.BaseHttpException(
-                405, "{} is not supported for this url. Supported methods: {}".format(http_method, allowed)
+                405, f"{http_method} is not supported for this url. Supported methods: {allowed}"
             )
 
         return self._config[http_method]

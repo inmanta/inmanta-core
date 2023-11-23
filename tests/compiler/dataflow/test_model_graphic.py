@@ -54,7 +54,7 @@ class LocationBasedGraphicGraph(GraphicGraph):
     def node_key(self, node: Node) -> str:
         if isinstance(node, InstanceNode):
             assert node.responsible is not None
-            return "cluster_instance_{}_{}".format(dot_stringify(node), dot_stringify(node.responsible.location))
+            return f"cluster_instance_{dot_stringify(node)}_{dot_stringify(node.responsible.location)}"
         elif isinstance(node, ValueNode):
             return "value_%s" % dot_stringify(node.value)
         elif isinstance(node, AttributeNode):
@@ -75,7 +75,7 @@ class LocationBasedGraphicGraph(GraphicGraph):
                 assert isinstance(value, Instance)
                 locatable = value
             assert locatable.location is not None
-            return "assignable_{}_{}".format(dot_stringify(node.name), dot_stringify(locatable.location))
+            return f"assignable_{dot_stringify(node.name)}_{dot_stringify(locatable.location)}"
         assert False
 
 

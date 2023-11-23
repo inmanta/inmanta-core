@@ -74,7 +74,7 @@ def authorize_request(
     if not ok:
         raise exceptions.UnauthorizedException(
             "The authorization token does not have a valid client type for this call."
-            + " ({} provided, {} expected".format(auth_data[ct_key], config.properties.client_types)
+            + f" ({auth_data[ct_key]} provided, {config.properties.client_types} expected"
         )
 
 
@@ -532,7 +532,7 @@ class RESTBase(util.TaskHandler):
             LOGGER.debug(
                 "Calling method %s(%s)",
                 config.handler,
-                ", ".join(["{}='{}'".format(name, common.shorten(str(value))) for name, value in arguments.call_args.items()]),
+                ", ".join([f"{name}='{common.shorten(str(value))}'" for name, value in arguments.call_args.items()]),
             )
 
             result = await config.handler(**arguments.call_args)

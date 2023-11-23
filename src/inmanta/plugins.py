@@ -323,15 +323,15 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         arg_list = []
         for arg in self.arguments:
             if arg.has_default_value():
-                arg_list.append("{}: {}={}".format(arg.arg_name, arg.arg_type, str(arg.default_value)))
+                arg_list.append(f"{arg.arg_name}: {arg.arg_type}={str(arg.default_value)}")
             else:
-                arg_list.append("{}: {}".format(arg.arg_name, arg.arg_type))
+                arg_list.append(f"{arg.arg_name}: {arg.arg_type}")
 
         args = ", ".join(arg_list)
 
         if self._return is None:
-            return "{}({})".format(self.__class__.__function_name__, args)
-        return "{}({}) -> {}".format(self.__class__.__function_name__, args, self._return)
+            return f"{self.__class__.__function_name__}({args})"
+        return f"{self.__class__.__function_name__}({args}) -> {self._return}"
 
     def to_type(self, arg_type: Optional[object], resolver: Namespace) -> Optional[inmanta_type.Type]:
         """
@@ -440,7 +440,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 if not is_valid(expected_arg, expected_type, v):
                     return False
             except KeyError:
-                raise RuntimeException(None, "Invalid keyword argument '{}' for '{}()'".format(k, self.__class__.__function_name__))
+                raise RuntimeException(None, f"Invalid keyword argument '{k}' for '{self.__class__.__function_name__}()'")
         return True
 
     def emit_statement(self) -> "DynamicStatement":
@@ -463,7 +463,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 result = p.communicate()
 
                 if len(result[0]) == 0:
-                    raise Exception("{} requires {} to be available in $PATH".format(self.__function_name__, _bin))
+                    raise Exception(f"{self.__function_name__} requires {_bin} to be available in $PATH")
 
     @classmethod
     def deprecate_function(cls, replaced_by: Optional[str] = None) -> None:
@@ -520,7 +520,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         return value
 
     def get_full_name(self) -> str:
-        return "{}::{}".format(self.ns.get_full_name(), self.__class__.__function_name__)
+        return f"{self.ns.get_full_name()}::{self.__class__.__function_name__}"
 
     def type_string(self) -> str:
         return self.get_full_name()

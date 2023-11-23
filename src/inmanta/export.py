@@ -326,7 +326,7 @@ class Exporter:
                 dot += '\t"%s";\n' % res_id
 
                 for req in res.resource_requires:
-                    dot += '\t"{}" -> "{}";\n'.format(res_id, str(req))
+                    dot += f'\t"{res_id}" -> "{str(req)}";\n'
 
             dot += "}\n"
 
@@ -659,9 +659,9 @@ def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
     path = os.path.join(prefix, "services")
     with open(path, "w+", encoding="utf-8") as fd:
         for svc in types["std::Service"]:
-            fd.write("{} -> {}\n".format(svc.host.name, svc.name))  # type: ignore
+            fd.write(f"{svc.host.name} -> {svc.name}\n")  # type: ignore
 
     path = os.path.join(prefix, "packages")
     with open(path, "w+", encoding="utf-8") as fd:
         for pkg in types["std::Package"]:
-            fd.write("{} -> {}\n".format(pkg.host.name, pkg.name))  # type: ignore
+            fd.write(f"{pkg.host.name} -> {pkg.name}\n")  # type: ignore

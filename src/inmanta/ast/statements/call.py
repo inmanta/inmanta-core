@@ -78,7 +78,7 @@ class FunctionCall(ReferenceStatement):
         for loc_name, expr in kwargs:
             arg_name: str = str(loc_name)
             if arg_name in self.kwargs:
-                raise RuntimeException(self, "Keyword argument {} repeated in function call {}()".format(arg_name, self.name))
+                raise RuntimeException(self, f"Keyword argument {arg_name} repeated in function call {self.name}()")
             self.kwargs[arg_name] = expr
         self.function: Optional[Function] = None
 
@@ -137,7 +137,7 @@ class FunctionCall(ReferenceStatement):
             ",".join(
                 chain(
                     (repr(a) for a in self.arguments),
-                    ("{}={}".format(k, repr(v)) for k, v in self.kwargs.items()),
+                    (f"{k}={repr(v)}" for k, v in self.kwargs.items()),
                     ("%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
                 )
             ),
@@ -149,7 +149,7 @@ class FunctionCall(ReferenceStatement):
             ",".join(
                 chain(
                     (a.pretty_print() for a in self.arguments),
-                    ("{}={}".format(k, v.pretty_print()) for k, v in self.kwargs.items()),
+                    (f"{k}={v.pretty_print()}" for k, v in self.kwargs.items()),
                     ("%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
                 )
             ),

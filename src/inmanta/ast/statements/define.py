@@ -167,7 +167,7 @@ class DefineEntity(TypeDefinitionStatement):
     def get_full_parent_names(self) -> list[str]:
         def resolve_parent(parent: LocatableString) -> str:
             ptype = self.namespace.get_type(parent)
-            assert isinstance(ptype, Entity), "Parents of entities should be entities, but {} is a {}".format(parent, type(ptype))
+            assert isinstance(ptype, Entity), f"Parents of entities should be entities, but {parent} is a {type(ptype)}"
             return ptype.get_full_name()
 
         try:
@@ -293,7 +293,7 @@ class DefineImplementation(TypeDefinitionStatement):
             cls = self.namespace.get_type(self.entity)
             if not isinstance(cls, Entity):
                 raise TypingException(
-                    self, "Implementation can only be define for an Entity, but {} is a {}".format(self.entity, cls)
+                    self, f"Implementation can only be define for an Entity, but {self.entity} is a {cls}"
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
@@ -358,7 +358,7 @@ class DefineImplement(DefinitionStatement):
 
             if not isinstance(entity_type, Entity):
                 raise TypingException(
-                    self, "Implementation can only be define for an Entity, but {} is a {}".format(self.entity, entity_type)
+                    self, f"Implementation can only be define for an Entity, but {self.entity} is a {entity_type}"
                 )
 
             # If one implements statement has parent declared, set to true
@@ -503,7 +503,7 @@ class DefineRelation(BiStatement):
         """
         The represenation of this relation
         """
-        return "Relation({}, {})".format(self.left[0], self.right[0])
+        return f"Relation({self.left[0]}, {self.right[0]})"
 
     def evaluate(self) -> None:
         """
@@ -600,7 +600,7 @@ class DefineIndex(DefinitionStatement):
         for attribute in self.attributes:
             if attribute not in allattributes:
                 raise NotFoundException(
-                    self, attribute, "Attribute '{}' referenced in index is not defined in entity {}".format(attribute, entity_type)
+                    self, attribute, f"Attribute '{attribute}' referenced in index is not defined in entity {entity_type}"
                 )
             else:
                 rattribute = entity_type.get_attribute(attribute)
@@ -608,11 +608,11 @@ class DefineIndex(DefinitionStatement):
                 if rattribute.is_optional():
                     raise IndexException(
                         self,
-                        "Index can not contain optional attributes, Attribute ' {}.{}' is optional".format(attribute, entity_type),
+                        f"Index can not contain optional attributes, Attribute ' {attribute}.{entity_type}' is optional",
                     )
                 if rattribute.is_multi():
                     raise IndexException(
-                        self, "Index can not contain list attributes, Attribute ' {}.{}' is a list".format(attribute, entity_type)
+                        self, f"Index can not contain list attributes, Attribute ' {attribute}.{entity_type}' is a list"
                     )
 
         entity_type.add_index(self.attributes)

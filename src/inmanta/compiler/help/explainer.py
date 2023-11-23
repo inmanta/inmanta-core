@@ -150,7 +150,7 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer[ModifiedAfterFreezeException])
                 attr_rhs = "?"
             else:
                 attr_rhs = problem.stmt.get_attributes()[attr].pretty_print()
-            return "{}.{} = {}".format(attr_rhs, problem.attribute.get_name(), problem.stmt.pretty_print())
+            return f"{attr_rhs}.{problem.attribute.get_name()} = {problem.stmt.pretty_print()}"
 
     def get_arguments(self, problem: ModifiedAfterFreezeException) -> Mapping[str, object]:
         return {

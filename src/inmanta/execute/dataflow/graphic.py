@@ -172,7 +172,7 @@ class GraphicGraph:
                 label = ""
                 instance_var_ref: AssignableNodeReference
                 (label, instance_var_ref) = reduce(
-                    lambda acc, x: (".{}{}".format(x.attribute, acc[0]), x.instance_var_ref),
+                    lambda acc, x: (f".{x.attribute}{acc[0]}", x.instance_var_ref),
                     unroll_attribute_reference(assignment.rhs),
                     ("", cast(AssignableNodeReference, assignment.rhs)),
                 )
@@ -181,7 +181,7 @@ class GraphicGraph:
             elif isinstance(assignment.rhs, DirectNodeReference):
                 rhs = assignment.rhs.node
             else:
-                raise Exception("Unknown node reference {} of type {}".format(assignment.rhs, type(assignment.rhs)))
+                raise Exception(f"Unknown node reference {assignment.rhs} of type {type(assignment.rhs)}")
 
             self.add_node(rhs)
             self.digraph.edge(self.node_key(assignment.lhs), self.node_key(rhs), label=label)

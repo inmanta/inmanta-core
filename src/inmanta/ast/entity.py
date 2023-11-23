@@ -320,11 +320,11 @@ class Entity(NamedType, WithComment):
             return True
 
         if not isinstance(value, Instance):
-            raise RuntimeException(None, "Invalid type for value '{}', should be type {}".format(value, self))
+            raise RuntimeException(None, f"Invalid type for value '{value}', should be type {self}")
 
         value_definition = value.type
         if not (value_definition is self or self.is_subclass(value_definition)):
-            raise RuntimeException(None, "Invalid class type for {}, should be {}".format(value, self))
+            raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
 
         return True
 
@@ -391,7 +391,7 @@ class Entity(NamedType, WithComment):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    key.append("{}={}".format(attribute, attributes[attribute]))
+                    key.append(f"{attribute}={attributes[attribute]}")
 
             if index_ok:
                 keys = ", ".join(key)
@@ -429,7 +429,7 @@ class Entity(NamedType, WithComment):
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
 
-        key = ", ".join(["{}={}".format(k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
+        key = ", ".join([f"{k}={repr(v)}" for (k, v) in sorted(params, key=lambda x: x[0])])
 
         if target is None:
             if key in self._index:
@@ -475,7 +475,7 @@ class Entity(NamedType, WithComment):
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
                 excns.append(
-                    NotFoundException(stmt, key, "No match in index on type {} with key {}".format(self.get_full_name(), key))
+                    NotFoundException(stmt, key, f"No match in index on type {self.get_full_name()} with key {key}")
                 )
         for _, attr in self.get_attributes().items():
             attr.final(excns)
@@ -530,7 +530,7 @@ class Implementation(NamedType):
 
     def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         raise DuplicateException(
-            self, other, "Implementation {} for type {} is already defined".format(self.get_full_name(), self.target_type)
+            self, other, f"Implementation {self.get_full_name()} for type {self.target_type} is already defined"
         )
 
     def get_location(self) -> Location:
