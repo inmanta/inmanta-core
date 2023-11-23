@@ -201,8 +201,11 @@ class Null(inmanta_type.Type):
     def validate(self, value: object | None) -> bool:
         return isinstance(value, NoneValue)
 
+    def type_string(self) -> str | None:
+        return "null"
+
     def type_string_internal(self) -> str:
-        return "Null"
+        return self.type_string()
 
 
 # Define some types which are only used in the context of plugins.
