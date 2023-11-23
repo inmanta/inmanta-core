@@ -219,8 +219,8 @@ def test_constructor_kwargs(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    int n
-    int m
+    number n
+    number m
     string str
 end
 
@@ -245,7 +245,7 @@ def test_2003_constructor_kwargs_default(snippetcompiler, override: bool):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    int v = 0
+    number v = 0
 end
 
 implement Test using std::none
@@ -282,8 +282,8 @@ def test_constructor_kwargs_index_match(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    int n
-    int m
+    number n
+    number m
     string str
 end
 
@@ -309,8 +309,8 @@ def test_indexlookup_kwargs(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    int n
-    int m
+    number n
+    number m
     string str
 end
 
@@ -341,8 +341,8 @@ end
 implement Collection using std::none
 
 entity Test:
-    int n
-    int m
+    number n
+    number m
     string str
 end
 

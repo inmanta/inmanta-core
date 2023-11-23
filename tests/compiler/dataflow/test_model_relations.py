@@ -80,7 +80,7 @@ entity U:
 end
 
 entity V:
-    int n
+    number n
 end
 
 X.u [1] -- U
@@ -117,7 +117,7 @@ entity U:
 end
 
 entity V:
-    int n
+    number n
 end
 
 U.v [1] -- V
@@ -152,9 +152,9 @@ def test_dataflow_model_index(dataflow_test_helper: DataflowTestHelper) -> None:
     dataflow_test_helper.compile(
         """
 entity A:
-    int n
-    int k
-    int l
+    number n
+    number k
+    number l
 end
 
 index A(n)
@@ -186,7 +186,7 @@ def test_dataflow_model_default_attribute(dataflow_test_helper: DataflowTestHelp
     dataflow_test_helper.compile(
         """
 entity A:
-    int n = 42
+    number n = 42
 end
 
 implement A using std::none
@@ -211,7 +211,7 @@ def test_dataflow_model_implementation(dataflow_test_helper: DataflowTestHelper,
     dataflow_test_helper.compile(
         """
 entity A:
-    int n
+    number n
 end
 
 implementation i for A:

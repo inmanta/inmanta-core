@@ -229,12 +229,15 @@ class Primitive(Type):
 @stable_api
 class Number(Primitive):
     """
-    This class represents a float in the configuration model.
+    This class represents an integer or float in the configuration model. On
+    these numbers the following operations are supported:
+
+    +, -, /, *
     """
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [int, float]
 
     def validate(self, value: Optional[object]) -> bool:
         """
@@ -260,17 +263,6 @@ class Number(Primitive):
 
     def type_string_internal(self) -> str:
         return self.type_string()
-
-
-@stable_api
-class Float(Number):
-    """
-    This class is an alias for the Number class and represents a float in
-    the configuration model.
-    """
-
-    def type_string(self) -> str:
-        return "float"
 
 
 @stable_api
@@ -592,7 +584,7 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(self, [NullableType(Integer()), Float(), Bool(), String(), TypedList(self), TypedDict(self)])
+        Union.__init__(self, [NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
 
     def type_string_internal(self) -> str:
         return "Literal"
@@ -696,7 +688,6 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
 
 TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     "string": String(),
-    "float": Float(),
     "number": Number(),
     "int": Integer(),
     "bool": Bool(),

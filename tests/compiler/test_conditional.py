@@ -394,7 +394,7 @@ def test_1804_false_and_condition(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
-    int n
+    number n
 end
 implement A using std::none
 

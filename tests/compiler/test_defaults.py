@@ -230,7 +230,7 @@ Test(t = 12)
 def test_1292_default_type_check4(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-typedef digit as int matching self > 0 and self < 10
+typedef digit as number matching self > 0 and self < 10
 
 entity Test:
     digit t = 12

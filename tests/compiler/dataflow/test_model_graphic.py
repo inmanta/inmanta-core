@@ -193,9 +193,9 @@ def test_dataflow_graphic_instance(graphic_asserter: GraphicAsserter) -> None:
     graphic_asserter(
         """
 entity A:
-    int l
-    int m
-    int n
+    number l
+    number m
+    number n
 end
 
 implement A using std::none
@@ -329,8 +329,8 @@ def test_dataflow_graphic_implementation(graphic_asserter: GraphicAsserter) -> N
     graphic_asserter(
         """
 entity A:
-    int m
-    int n
+    number m
+    number n
 end
 
 implement A using i
@@ -393,8 +393,8 @@ def test_dataflow_graphic_index(graphic_asserter: GraphicAsserter) -> None:
     graphic_asserter(
         """
 entity A:
-    int m
-    int n
+    number m
+    number n
 end
 
 index A(n)

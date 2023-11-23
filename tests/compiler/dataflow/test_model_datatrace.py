@@ -192,11 +192,11 @@ x
             "implementation",
             """
 entity A:
-    int n
+    number n
 end
 
 entity B:
-    int n
+    number n
 end
 
 implementation ia for A:
@@ -260,8 +260,8 @@ x_n
             "index match double assignment",
             """
 entity A:
-    int n
-    int m
+    number n
+    number m
 end
 
 index A(n)
