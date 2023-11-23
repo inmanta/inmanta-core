@@ -31,11 +31,11 @@ def test_dataflow_model_implementation_assignment_from_self(dataflow_test_helper
     dataflow_test_helper.compile(
         """
 entity A:
-    int n
+    number n
 end
 
 entity B:
-    int n
+    number n
 end
 
 A.b [1] -- B

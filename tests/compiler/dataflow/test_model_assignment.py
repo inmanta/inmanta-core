@@ -104,7 +104,7 @@ def test_dataflow_model_attribute_assignment_responsible(dataflow_test_helper: D
     dataflow_test_helper.compile(
         """
 entity Test:
-    int n
+    number n
 end
 implement Test using std::none
 
@@ -204,7 +204,7 @@ def test_dataflow_model_assignment_from_attribute(dataflow_test_helper: Dataflow
     dataflow_test_helper.compile(
         """
 entity A:
-    int n
+    number n
 end
 implement A using std::none
 
@@ -232,7 +232,7 @@ def test_dataflow_model_assignment_outside_constructor(dataflow_test_helper: Dat
     dataflow_test_helper.compile(
         """
 entity A:
-    int n
+    number n
 end
 implement A using std::none
 
@@ -268,7 +268,7 @@ def test_dataflow_model_result_variable(dataflow_test_helper: DataflowTestHelper
     dataflow_test_helper.compile(
         """
 entity A:
-    int n
+    number n
 end
 
 index A(n)

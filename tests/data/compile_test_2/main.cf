@@ -4,7 +4,7 @@ entity ManagedDevice:
     """
         This interface represents all devices that can be managed
     """
-    int  name
+    number  name
 end
 
 implementation none for std::Entity:

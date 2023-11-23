@@ -173,7 +173,7 @@ since any data that flows to the equivalence will also flow to ``x``.
     :linenos:
 
     entity A:
-        int n
+        number n
     end
 
     implement A using std::none
@@ -230,7 +230,7 @@ Let's have a look at an implementation:
     :linenos:
 
     entity A:
-        int n
+        number n
     end
 
     implement A using i
@@ -270,8 +270,8 @@ And finally, an index:
     :linenos:
 
     entity A:
-        int n
-        int m
+        number n
+        number m
     end
 
     index A(n)
@@ -315,7 +315,7 @@ For example, compiling the model below results in three errors, one for each of 
     :linenos:
 
     entity A:
-        int n
+        number n
     end
 
     implement A using std::none
@@ -369,7 +369,7 @@ Let's have a look at the model below:
 
     entity Port:
         string host
-        int portn
+        number portn
     end
 
     index Port(host, portn)
@@ -377,7 +377,7 @@ Let's have a look at the model below:
     entity Service:
         string name
         string host
-        int portn
+        number portn
     end
 
     Service.port [0:1] -- Port.service [0:1]

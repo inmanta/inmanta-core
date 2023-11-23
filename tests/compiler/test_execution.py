@@ -272,7 +272,7 @@ def test_lazy_attibutes(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
-   int id
+   number id
    string value = ""
 end
 
@@ -295,7 +295,7 @@ def test_lazy_attibutes2(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
-   int id
+   number id
    string value
 end
 
@@ -319,7 +319,7 @@ def test_lazy_attibutes3(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity  Thing:
-   int id
+   number id
 end
 
 Thing.value [1] -- StringWrapper

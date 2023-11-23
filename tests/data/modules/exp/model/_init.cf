@@ -35,7 +35,7 @@ Used to test dependency cycles introduced by dependency manager
 """
 	string agent ="agenta"
 	string name = "ida"
-	int do_break = 0
+	number do_break = 0
 end
 
 implement RequiresTest using std::none
