@@ -24,9 +24,9 @@ from inmanta.server.protocol import ServerSlice
 
 class XTestSlice(ServerSlice):
     def __init__(self):
-        super(XTestSlice, self).__init__("testplugin.testslice")
+        super().__init__("testplugin.testslice")
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_SERVER, SLICE_AGENT_MANAGER]
 
 

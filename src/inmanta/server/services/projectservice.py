@@ -48,12 +48,12 @@ class ProjectService(protocol.ServerSlice):
     resource_service: ResourceService
 
     def __init__(self) -> None:
-        super(ProjectService, self).__init__(SLICE_PROJECT)
+        super().__init__(SLICE_PROJECT)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_RESOURCE, SLICE_AUTOSTARTED_AGENT_MANAGER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -77,7 +77,7 @@ class ProjectService(protocol.ServerSlice):
 
     @handle(methods.list_projects)
     async def list_projects(self) -> Apireturn:
-        project_list: List[JsonType] = [x.model_dump() for x in await self.project_list()]
+        project_list: list[JsonType] = [x.model_dump() for x in await self.project_list()]
         for project in project_list:
             project["environments"] = [x["id"] for x in project["environments"]]
         return 200, {"projects": project_list}
@@ -130,7 +130,7 @@ class ProjectService(protocol.ServerSlice):
             raise ServerError(f"A project with name {name} already exists.")
 
     @handle(methods_v2.project_list)
-    async def project_list(self, environment_details: bool = False) -> List[model.Project]:
+    async def project_list(self, environment_details: bool = False) -> list[model.Project]:
         project_list = []
 
         for project in await data.Project.get_list(order_by_column="name", order="ASC"):

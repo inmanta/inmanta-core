@@ -203,7 +203,7 @@ def test_workon_source_check() -> None:
     it isn't.
     """
     process: subprocess.CompletedProcess[str] = subprocess.run(
-        ["bash", WORKON_REGISTER], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        ["bash", WORKON_REGISTER], capture_output=True, text=True
     )
     assert process.returncode == 1
     assert process.stdout == ""

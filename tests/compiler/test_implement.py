@@ -65,7 +65,7 @@ x = Child()
     instance = x.get_value()
     assert isinstance(instance, Instance)
 
-    expected_attrs: Dict[str, int] = {"n": 0 if parents else 1, "m": 0}
+    expected_attrs: dict[str, int] = {"n": 0 if parents else 1, "m": 0}
     for name, value in expected_attrs.items():
         attr: Typeorvalue = instance.lookup(name)
         assert isinstance(attr, ResultVariable)

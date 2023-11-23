@@ -64,7 +64,7 @@ repo: %s
             projectfile.write("\nrequires:")
             for req in deps:
                 if req[1] is not None:
-                    projectfile.write("\n    - {} {}".format(req[0], req[1]))
+                    projectfile.write(f"\n    - {req[0]} {req[1]}")
 
         projectfile.write("\n")
 
@@ -102,7 +102,7 @@ def add_file(modpath, file, content, msg, version=None, dev=False, tag=True):
 
 
 def add_requires(
-    modpath: str, deps: List[Tuple[str, str]], commit_msg: str, version: str, dev: bool = False, tag: bool = True
+    modpath: str, deps: list[tuple[str, str]], commit_msg: str, version: str, dev: bool = False, tag: bool = True
 ) -> None:
     """
     Add the version requirements of dependencies in a module's YAML file and adds the import to the .cf file.
@@ -119,7 +119,7 @@ def add_requires(
     file_path = os.path.join(modpath, mainfile)
     yaml = ruamel.yaml.YAML()
 
-    with open(file_path, "r") as file:
+    with open(file_path) as file:
         data = yaml.load(file)
 
     # Ensure 'requires' field exists and is a list
@@ -143,7 +143,7 @@ def add_requires(
     model = os.path.join(modpath, "model")
 
     init_file_path = os.path.join(model, "_init.cf")
-    with open(init_file_path, "r", encoding="utf-8") as projectfile:
+    with open(init_file_path, encoding="utf-8") as projectfile:
         existing_content = projectfile.read()
 
     import_statements = "\n".join(f"import {module}" for module, _ in deps)
@@ -161,7 +161,7 @@ def add_requires(
 
 def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
     cfgfile = os.path.join(modpath, "module.yml")
-    with open(cfgfile, "r", encoding="utf-8") as fd:
+    with open(cfgfile, encoding="utf-8") as fd:
         cfg = yaml.safe_load(fd)
 
     cfg["compiler_version"] = compiler_version
@@ -246,7 +246,7 @@ def clone_repo(source_dir: str, repo_name: str, destination_dir: str, tag: Optio
     return os.path.join(destination_dir, repo_name)
 
 
-class BadModProvider(object):
+class BadModProvider:
     def __init__(self, parent, badname):
         self.parent = parent
         self.badname = badname

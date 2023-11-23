@@ -57,7 +57,7 @@ TResource = TypeVar("TResource", bound=resources.Resource)
 
 
 @stable_api
-class provider(object):  # noqa: N801
+class provider:  # noqa: N801
     """
     A decorator that registers a new handler.
 
@@ -103,7 +103,7 @@ class InvalidOperation(Exception):
 @stable_api
 def cache(
     func: Optional[T_FUNC] = None,
-    ignore: typing.List[str] = [],
+    ignore: list[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
     cache_none: bool = True,
@@ -219,27 +219,27 @@ class HandlerContext(LoggerABC):
     ) -> None:
         self._resource = resource
         self._dry_run = dry_run
-        self._cache: Dict[str, Any] = {}
+        self._cache: dict[str, Any] = {}
 
         self._purged = False
         self._updated = False
         self._created = False
         self._change = const.Change.nochange
 
-        self._changes: Dict[str, AttributeStateChange] = {}
+        self._changes: dict[str, AttributeStateChange] = {}
 
         if action_id is None:
             action_id = uuid.uuid4()
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
-        self._logs: List[data.LogLine] = []
+        self._logs: list[data.LogLine] = []
         self.logger: logging.Logger
         if logger is None:
             self.logger = LOGGER
         else:
             self.logger = logger
 
-        self._facts: List[Dict[str, Any]] = []
+        self._facts: list[dict[str, Any]] = []
 
     def set_fact(self, fact_id: str, value: str) -> None:
         """
@@ -258,7 +258,7 @@ class HandlerContext(LoggerABC):
         self._facts.append(fact)
 
     @property
-    def facts(self) -> List[Dict[str, Any]]:
+    def facts(self) -> list[dict[str, Any]]:
         return self._facts
 
     @property
@@ -270,7 +270,7 @@ class HandlerContext(LoggerABC):
         return self._status
 
     @property
-    def logs(self) -> List[data.LogLine]:
+    def logs(self) -> list[data.LogLine]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:
@@ -356,23 +356,23 @@ class HandlerContext(LoggerABC):
                 self._changes[fields] = AttributeStateChange()
 
     @overload  # noqa: F811
-    def update_changes(self, changes: Dict[str, AttributeStateChange]) -> None:
+    def update_changes(self, changes: dict[str, AttributeStateChange]) -> None:
         pass
 
     @overload  # noqa: F811
-    def update_changes(self, changes: Dict[str, Dict[str, Optional[SimpleTypes]]]) -> None:
+    def update_changes(self, changes: dict[str, dict[str, Optional[SimpleTypes]]]) -> None:
         pass
 
     @overload  # noqa: F811
-    def update_changes(self, changes: Dict[str, Tuple[SimpleTypes, SimpleTypes]]) -> None:
+    def update_changes(self, changes: dict[str, tuple[SimpleTypes, SimpleTypes]]) -> None:
         pass
 
     def update_changes(  # noqa: F811
         self,
         changes: Union[
-            Dict[str, AttributeStateChange],
-            Dict[str, Dict[str, Optional[SimpleTypes]]],
-            Dict[str, Tuple[SimpleTypes, SimpleTypes]],
+            dict[str, AttributeStateChange],
+            dict[str, dict[str, Optional[SimpleTypes]]],
+            dict[str, tuple[SimpleTypes, SimpleTypes]],
         ],
     ) -> None:
         """
@@ -397,7 +397,7 @@ class HandlerContext(LoggerABC):
                 raise InvalidOperation(f"Reported changes for {attribute} not in a type that is recognized.")
 
     @property
-    def changes(self) -> Dict[str, AttributeStateChange]:
+    def changes(self) -> dict[str, AttributeStateChange]:
         return self._changes
 
     def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
@@ -878,7 +878,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         :param resource: The desired resource state.
         """
 
-    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TPurgeableResource) -> None:
         """
         This method is called by the handler when the resource should be updated.
 
@@ -892,7 +892,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
 
     def calculate_diff(
         self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
-    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    ) -> dict[str, dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
 
@@ -914,7 +914,7 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
             # state defines purged=true but the read_resource fails to set it to false if the resource does exist
             desired = resource
             current: TPurgeableResource = desired.clone(purged=False)
-            changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+            changes: dict[str, dict[str, typing.Any]] = {}
             try:
                 ctx.debug("Calling read_resource")
                 self.read_resource(ctx, current)
@@ -982,7 +982,7 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
           discovered and reported to the server. Objects of this type must a pydantic object.
     """
 
-    def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> Dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: TDiscovery) -> dict[str, object]:
         return {}
 
     @abstractmethod
@@ -1054,15 +1054,15 @@ class DiscoveryHandler(HandlerAPI[TDiscovery], Generic[TDiscovery, TDiscovered])
                 )
 
 
-class Commander(object):
+class Commander:
     """
     This class handles commands
     """
 
-    __command_functions: dict[str, dict[str, Type[ResourceHandler[Any]]]] = defaultdict(dict)
+    __command_functions: dict[str, dict[str, type[ResourceHandler[Any]]]] = defaultdict(dict)
 
     @classmethod
-    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler[Any]]]]:
+    def get_handlers(cls) -> dict[str, dict[str, type[ResourceHandler[Any]]]]:
         return cls.__command_functions
 
     @classmethod
@@ -1075,7 +1075,7 @@ class Commander(object):
 
     @classmethod
     def _get_instance(
-        cls, handler_class: Type[ResourceHandler[Any]], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+        cls, handler_class: type[ResourceHandler[Any]], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
     ) -> ResourceHandler[Any]:
         new_instance = handler_class(agent, io)
         return new_instance
@@ -1121,7 +1121,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: Type[ResourceHandler[Any]]) -> None:
+    def add_provider(cls, resource: str, name: str, provider: type[ResourceHandler[Any]]) -> None:
         """
         Register a new provider
 
@@ -1135,14 +1135,14 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type[ResourceHandler[Any]]]]:
+    def get_providers(cls) -> typing.Iterator[tuple[str, type[ResourceHandler[Any]]]]:
         """Return an iterator over resource type, handler definition"""
         for resource_type, handler_map in cls.__command_functions.items():
             for handle_name, handler_class in handler_map.items():
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type[ResourceHandler[Any]]]:
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[type[ResourceHandler[Any]]]:
         """
         Return the class of the handler for the given type and with the given name
         """

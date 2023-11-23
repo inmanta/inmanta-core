@@ -24,7 +24,7 @@ from inmanta.ast import CompilerException
 
 class CompileData(ast_export.Exportable):
     def __init__(self) -> None:
-        self.errors: List[CompilerException] = []
+        self.errors: list[CompilerException] = []
 
     def add_error(self, error: CompilerException) -> None:
         self.errors.append(error)

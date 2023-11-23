@@ -20,7 +20,8 @@
 import logging
 import typing
 import warnings
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+from collections.abc import Iterator
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
@@ -101,7 +102,7 @@ class DefineAttribute(Statement):
         """
         if default_value is None, this is an explicit removal of a default value
         """
-        super(DefineAttribute, self).__init__()
+        super().__init__()
         if "-" in name.value:
             raise HyphenException(name)
         self.type = attr_type
@@ -125,8 +126,8 @@ class DefineEntity(TypeDefinitionStatement):
         namespace: Namespace,
         lname: LocatableString,
         comment: Optional[LocatableString],
-        parents: List[LocatableString],
-        attributes: List[DefineAttribute],
+        parents: list[LocatableString],
+        attributes: list[DefineAttribute],
     ) -> None:
         name = str(lname)
         TypeDefinitionStatement.__init__(self, namespace, name)
@@ -163,10 +164,10 @@ class DefineEntity(TypeDefinitionStatement):
         """
         return "Entity(%s)" % self.name
 
-    def get_full_parent_names(self) -> List[str]:
+    def get_full_parent_names(self) -> list[str]:
         def resolve_parent(parent: LocatableString) -> str:
             ptype = self.namespace.get_type(parent)
-            assert isinstance(ptype, Entity), "Parents of entities should be entities, but %s is a %s" % (parent, type(ptype))
+            assert isinstance(ptype, Entity), "Parents of entities should be entities, but {} is a {}".format(parent, type(ptype))
             return ptype.get_full_name()
 
         try:
@@ -183,7 +184,7 @@ class DefineEntity(TypeDefinitionStatement):
             entity_type = self.type
             entity_type.comment = self.comment
 
-            add_attributes: Dict[str, Attribute] = {}
+            add_attributes: dict[str, Attribute] = {}
             attribute: DefineAttribute
             for attribute in self.attributes:
                 attr_type: Type = attribute.type.get_type(self.namespace)
@@ -292,7 +293,7 @@ class DefineImplementation(TypeDefinitionStatement):
             cls = self.namespace.get_type(self.entity)
             if not isinstance(cls, Entity):
                 raise TypingException(
-                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, cls)
+                    self, "Implementation can only be define for an Entity, but {} is a {}".format(self.entity, cls)
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
@@ -322,7 +323,7 @@ class DefineImplement(DefinitionStatement):
     def __init__(
         self,
         entity_name: LocatableString,
-        implementations: List[LocatableString],
+        implementations: list[LocatableString],
         select: ExpressionStatement,
         inherit: bool = False,
         comment: Optional[LocatableString] = None,
@@ -357,7 +358,7 @@ class DefineImplement(DefinitionStatement):
 
             if not isinstance(entity_type, Entity):
                 raise TypingException(
-                    self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, entity_type)
+                    self, "Implementation can only be define for an Entity, but {} is a {}".format(self.entity, entity_type)
                 )
 
             # If one implements statement has parent declared, set to true
@@ -467,7 +468,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.expression.normalize()
 
 
-Relationside = Tuple[LocatableString, Optional[LocatableString], Optional[Tuple[int, Optional[int]]]]
+Relationside = tuple[LocatableString, Optional[LocatableString], Optional[tuple[int, Optional[int]]]]
 
 
 class DefineRelation(BiStatement):
@@ -475,9 +476,9 @@ class DefineRelation(BiStatement):
     Define a relation
     """
 
-    annotation_expression: List[Tuple[ResultVariable, ExpressionStatement]]
+    annotation_expression: list[tuple[ResultVariable, ExpressionStatement]]
 
-    def __init__(self, left: Relationside, right: Relationside, annotations: List[ExpressionStatement] = []) -> None:
+    def __init__(self, left: Relationside, right: Relationside, annotations: list[ExpressionStatement] = []) -> None:
         DefinitionStatement.__init__(self)
         if "-" in str(right[1]):
             raise HyphenException(right[1])
@@ -489,7 +490,7 @@ class DefineRelation(BiStatement):
         # for access to results
         self.annotations = [exp[0] for exp in self.annotation_expression]
 
-        self.anchors.extend((y for x in annotations for y in x.get_anchors()))
+        self.anchors.extend(y for x in annotations for y in x.get_anchors())
         self.anchors.append(TypeReferenceAnchor(left[0].namespace, left[0]))
         self.anchors.append(TypeReferenceAnchor(right[0].namespace, right[0]))
 
@@ -502,7 +503,7 @@ class DefineRelation(BiStatement):
         """
         The represenation of this relation
         """
-        return "Relation(%s, %s)" % (self.left[0], self.right[0])
+        return "Relation({}, {})".format(self.left[0], self.right[0])
 
     def evaluate(self) -> None:
         """
@@ -570,7 +571,7 @@ class DefineIndex(DefinitionStatement):
     This defines an index over attributes in an entity
     """
 
-    def __init__(self, entity_type: LocatableString, attributes: List[LocatableString]):
+    def __init__(self, entity_type: LocatableString, attributes: list[LocatableString]):
         DefinitionStatement.__init__(self)
         self.type = entity_type
         self.attributes = [str(a) for a in attributes]
@@ -579,14 +580,14 @@ class DefineIndex(DefinitionStatement):
             [AttributeReferenceAnchor(x.get_location(), entity_type.namespace, entity_type, str(x)) for x in attributes]
         )
 
-    def types(self, recursive: bool = False) -> List[Tuple[str, LocatableString]]:
+    def types(self, recursive: bool = False) -> list[tuple[str, LocatableString]]:
         """
         @see Statement#types
         """
         return [("type", self.type)]
 
     def __repr__(self) -> str:
-        return "index %s(%s)" % (self.type, ", ".join(self.attributes))
+        return "index {}({})".format(self.type, ", ".join(self.attributes))
 
     def evaluate(self) -> None:
         """
@@ -599,7 +600,7 @@ class DefineIndex(DefinitionStatement):
         for attribute in self.attributes:
             if attribute not in allattributes:
                 raise NotFoundException(
-                    self, attribute, "Attribute '%s' referenced in index is not defined in entity %s" % (attribute, entity_type)
+                    self, attribute, "Attribute '{}' referenced in index is not defined in entity {}".format(attribute, entity_type)
                 )
             else:
                 rattribute = entity_type.get_attribute(attribute)
@@ -607,11 +608,11 @@ class DefineIndex(DefinitionStatement):
                 if rattribute.is_optional():
                     raise IndexException(
                         self,
-                        "Index can not contain optional attributes, Attribute ' %s.%s' is optional" % (attribute, entity_type),
+                        "Index can not contain optional attributes, Attribute ' {}.{}' is optional".format(attribute, entity_type),
                     )
                 if rattribute.is_multi():
                     raise IndexException(
-                        self, "Index can not contain list attributes, Attribute ' %s.%s' is a list" % (attribute, entity_type)
+                        self, "Index can not contain list attributes, Attribute ' {}.{}' is a list".format(attribute, entity_type)
                     )
 
         entity_type.add_index(self.attributes)
@@ -622,7 +623,7 @@ class PluginStatement(TypeDefinitionStatement):
     This statement defines a plugin function
     """
 
-    def __init__(self, namespace: Namespace, name: str, function_class: typing.Type[Plugin]) -> None:
+    def __init__(self, namespace: Namespace, name: str, function_class: type[Plugin]) -> None:
         TypeDefinitionStatement.__init__(self, namespace, name)
         self._name = name
         self._function_class = function_class

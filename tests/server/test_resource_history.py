@@ -101,7 +101,7 @@ async def env_with_resources(server, client):
         path: str,
         status: ResourceState,
         version: int,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         agent: str = "internal",
         resource_type: str = "std::File",
         environment: UUID = env.id,
@@ -419,7 +419,7 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     http_client = AsyncHTTPClient()
 
     # Test link for next page
@@ -490,7 +490,7 @@ async def test_history_not_continuous_versions(server, client, environment):
         path: str,
         status: ResourceState,
         version: int,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         agent: str = "internal",
         resource_type: str = "std::File",
     ):

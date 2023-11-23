@@ -156,7 +156,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             assert sorted([x.remote_id for x in self.seen]) == sorted(envs)
             self.reset()
 
-    class HangRunner(object):
+    class HangRunner:
         """
         compile runner mock, hang until released
         """
@@ -186,7 +186,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
         """
 
         def __init__(self):
-            super(HookedCompilerService, self).__init__()
+            super().__init__()
             self.locks = {}
 
         def _get_compile_runner(self, compile: data.Compile, project_dir: str):
@@ -246,7 +246,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
     e2 = [await request_compile(env2) for i in range(4)]
     print("env 1:", e1)
 
-    async def check_compile_in_sequence(env: data.Environment, remote_ids: List[uuid.UUID], idx: int):
+    async def check_compile_in_sequence(env: data.Environment, remote_ids: list[uuid.UUID], idx: int):
         """
         Check integrity of a compile sequence and progress the hangrunner.
         """
@@ -511,10 +511,10 @@ async def test_compilerservice_compile_data(environment_factory: EnvironmentFact
         assert compile_data_a == compile_data
         return compile_data
 
-    errors0: List[ast_export.Error] = (await get_compile_data("x = 0")).errors
+    errors0: list[ast_export.Error] = (await get_compile_data("x = 0")).errors
     assert len(errors0) == 0
 
-    errors1: List[ast_export.Error] = (await get_compile_data("x = 0 x = 1")).errors
+    errors1: list[ast_export.Error] = (await get_compile_data("x = 0 x = 1")).errors
     assert len(errors1) == 1
     error: ast_export.Error = errors1[0]
     assert error.category == ast_export.ErrorCategory.runtime
@@ -1043,7 +1043,7 @@ async def environment_for_cleanup(client_for_cleanup, server_with_frequent_clean
 
 
 @pytest.fixture
-async def old_and_new_compile_report(server_with_frequent_cleanups, environment_for_cleanup) -> Tuple[uuid.UUID, uuid.UUID]:
+async def old_and_new_compile_report(server_with_frequent_cleanups, environment_for_cleanup) -> tuple[uuid.UUID, uuid.UUID]:
     """
     This fixture creates two compile reports. One for a compile that started
     and finished 30 days ago and one that started and finished now.
@@ -1105,7 +1105,7 @@ async def test_compileservice_cleanup(
     server_with_frequent_cleanups,
     client_for_cleanup,
     environment_for_cleanup,
-    old_and_new_compile_report: Tuple[uuid.UUID, uuid.UUID],
+    old_and_new_compile_report: tuple[uuid.UUID, uuid.UUID],
 ):
     """
     Ensure that the process to cleanup old compile reports works correctly.

@@ -310,7 +310,7 @@ def test_dataflow_trace(
     model: str,
     trace: str,
     trace_root: str,
-    exception: Optional[Type[CompilerException]],
+    exception: Optional[type[CompilerException]],
 ) -> None:
     """
     Tests the data trace output.

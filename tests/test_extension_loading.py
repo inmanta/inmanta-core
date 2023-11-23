@@ -21,7 +21,8 @@ import os
 import sys
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Generator
+from typing import Any
+from collections.abc import Generator
 
 import pytest
 import yaml

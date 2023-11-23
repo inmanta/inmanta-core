@@ -125,7 +125,7 @@ class Attribute(Locatable):
         """
         return self.__multi
 
-    def final(self, excns: List[CompilerException]) -> None:
+    def final(self, excns: list[CompilerException]) -> None:
         pass
 
     def has_relation_precedence_rules(self) -> bool:
@@ -154,10 +154,10 @@ class RelationAttribute(Attribute):
         self.depends = False
         self.source_annotations = []
         self.target_annotations = []
-        self.freeze_dependents: Set[RelationAttribute] = set()
+        self.freeze_dependents: set[RelationAttribute] = set()
 
     def __str__(self) -> str:
-        return "%s.%s" % (self.get_entity().get_full_name(), self.name)
+        return "{}.{}".format(self.get_entity().get_full_name(), self.name)
 
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
@@ -186,7 +186,7 @@ class RelationAttribute(Attribute):
     def is_multi(self) -> bool:
         return self.high != 1
 
-    def final(self, excns: List[CompilerException]) -> None:
+    def final(self, excns: list[CompilerException]) -> None:
         for rv in self.source_annotations:
             try:
                 if isinstance(rv.get_value(), Unknown):

@@ -20,7 +20,7 @@ import json
 import uuid
 from functools import partial
 from operator import itemgetter
-from typing import Sequence
+from collections.abc import Sequence
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -169,7 +169,7 @@ async def test_notifications_paging(server, client, environment_with_notificatio
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     http_client = AsyncHTTPClient()
 
     # Test link for next page

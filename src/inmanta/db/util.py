@@ -62,7 +62,7 @@ class PGRestore:
 
     # asyncpg execute method can not read in COPY IN
 
-    def __init__(self, script: List[str], postgresql_client: Connection) -> None:
+    def __init__(self, script: list[str], postgresql_client: Connection) -> None:
         self.commandbuffer = ""
         self.extbuffer = ""
         self.mode = MODE_READ_COMMAND
@@ -143,7 +143,7 @@ class PGRestore:
         self.commandbuffer = ""
 
 
-async def postgres_get_custom_types(postgresql_client: Connection) -> List[str]:
+async def postgres_get_custom_types(postgresql_client: Connection) -> list[str]:
     """
     Returns all custom types defined in the database.
     """
@@ -166,7 +166,7 @@ async def postgres_get_custom_types(postgresql_client: Connection) -> List[str]:
     """
 
     types_in_db = await postgresql_client.fetch(get_custom_types)
-    type_names: List[str] = [str(x["Name"]) for x in types_in_db]
+    type_names: list[str] = [str(x["Name"]) for x in types_in_db]
 
     return type_names
 

@@ -27,7 +27,8 @@ import warnings
 from collections import defaultdict
 from collections.abc import Set
 from enum import Enum
-from typing import Dict, List, Optional, Pattern, cast
+from typing import Dict, List, Optional, cast
+from re import Pattern
 
 from asyncpg import StringDataRightTruncationError
 
@@ -119,16 +120,16 @@ class EnvironmentService(protocol.ServerSlice):
     autostarted_agent_manager: AutostartedAgentManager
     orchestration_service: OrchestrationService
     resource_service: ResourceService
-    listeners: Dict[EnvironmentAction, List[EnvironmentListener]]
+    listeners: dict[EnvironmentAction, list[EnvironmentListener]]
     agent_state_lock: asyncio.Lock
     icon_regex: Pattern[str] = re.compile("^(image/png|image/jpeg|image/webp|image/svg\\+xml);(base64),(.+)$")
 
     def __init__(self) -> None:
-        super(EnvironmentService, self).__init__(SLICE_ENVIRONMENT)
+        super().__init__(SLICE_ENVIRONMENT)
         self.listeners = defaultdict(list)
         self.agent_state_lock = asyncio.Lock()
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [
             SLICE_COMPILER,
             SLICE_SERVER,
@@ -138,7 +139,7 @@ class EnvironmentService(protocol.ServerSlice):
             SLICE_RESOURCE,
         ]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -293,7 +294,7 @@ class EnvironmentService(protocol.ServerSlice):
         return 200
 
     @handle(methods.create_token, env="tid")
-    async def create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> Apireturn:
+    async def create_token(self, env: data.Environment, client_types: list[str], idempotent: bool) -> Apireturn:
         """
         Create a new auth token for this environment
         """
@@ -464,7 +465,7 @@ class EnvironmentService(protocol.ServerSlice):
         return env.to_dto()
 
     @handle(methods_v2.environment_list)
-    async def environment_list(self, details: bool = False) -> List[model.Environment]:
+    async def environment_list(self, details: bool = False) -> list[model.Environment]:
         # data access framework does not support multi-column order by, but multi-environment projects are rare
         # (and discouraged)
         # => sort by primary column in SQL, then do full sort in Python, cheap because mostly sorted already by this point
@@ -505,7 +506,7 @@ class EnvironmentService(protocol.ServerSlice):
         self._delete_environment_dir(env.id)
 
     @handle(methods_v2.environment_create_token, env="tid")
-    async def environment_create_token(self, env: data.Environment, client_types: List[str], idempotent: bool) -> str:
+    async def environment_create_token(self, env: data.Environment, client_types: list[str], idempotent: bool) -> str:
         """
         Create a new auth token for this environment
         """

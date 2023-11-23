@@ -59,7 +59,7 @@ async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata
         raise exceptions.BadRequest(f"Invalid resource version id: {rvid}")
 
 
-ENV_OPTS: Dict[str, ArgOption] = {
+ENV_OPTS: dict[str, ArgOption] = {
     "tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)
 }
 AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
@@ -515,7 +515,7 @@ def put_version(
     unknowns: Optional[list] = None,
     version_info: Optional[dict] = None,
     compiler_version: Optional[str] = None,
-    resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
+    resource_sets: dict[model.ResourceIdStr, Optional[str]] = {},
 ):
     """
     Store a new version of the configuration model
@@ -992,7 +992,7 @@ def get_server_status() -> model.StatusResponse:
     api_version=1,
     envelope_key="queue",
 )
-def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
+def get_compile_queue(tid: uuid.UUID) -> list[model.CompileRun]:
     """
     Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
     """

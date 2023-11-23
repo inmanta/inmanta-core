@@ -30,7 +30,7 @@ from inmanta.server.config import get_bind_port
 
 
 @pytest.fixture
-async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]]:
+async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]]:
     env_id = uuid.UUID(environment)
     version = 1
     await data.ConfigurationModel(
@@ -71,7 +71,7 @@ async def env_with_facts(environment, client) -> Tuple[str, List[str], List[str]
         resource_id: Optional[str] = None,
         source: str = "fact",
         updated: Optional[datetime] = None,
-        metadata: Optional[Dict[str, str]] = None,
+        metadata: Optional[dict[str, str]] = None,
     ) -> uuid.UUID:
         param_id = uuid.uuid4()
         await data.Parameter(
@@ -137,7 +137,7 @@ async def test_get_facts(client, env_with_facts):
     assert result.code == 404
 
 
-async def test_fact_list_filters(client, env_with_facts: Tuple[str, List[str], List[str]]):
+async def test_fact_list_filters(client, env_with_facts: tuple[str, list[str], list[str]]):
     environment, param_ids, resource_ids = env_with_facts
     result = await client.get_all_facts(
         environment,
@@ -197,7 +197,7 @@ async def test_facts_paging(server, client, order_by_column, order, env_with_fac
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     http_client = AsyncHTTPClient()
 
     # Test link for next page

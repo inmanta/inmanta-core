@@ -27,7 +27,7 @@ from compiler.dataflow.conftest import DataflowTestHelper
 def test_dataflow_model_relation(
     dataflow_test_helper: DataflowTestHelper, bidirectional: bool, inherit_relation: bool, assign_first: bool
 ) -> None:
-    relation_stmt: str = "%s.b [1] -- B%s" % ("AParent" if inherit_relation else "A", ".a [1]" if bidirectional else "")
+    relation_stmt: str = "{}.b [1] -- B{}".format("AParent" if inherit_relation else "A", ".a [1]" if bidirectional else "")
     dataflow_test_helper.compile(
         """
 entity AParent:

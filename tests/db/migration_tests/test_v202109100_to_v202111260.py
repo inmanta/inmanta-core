@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import AsyncIterator, Awaitable, Callable, List
+from typing import Callable, List
+from collections.abc import AsyncIterator, Awaitable
 
 import pytest
 from asyncpg import Connection
@@ -34,7 +35,7 @@ async def migrate_v202109100_to_v202111260(
     Returns a callable that performs a v202109100 database restore and migrates to v202111260.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202109100.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v202109100.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
@@ -47,7 +48,7 @@ async def migrate_v202109100_to_v202111260(
 @pytest.mark.slowtest
 async def test_added_environment_columns(
     migrate_v202109100_to_v202111260: Callable[[], Awaitable[None]],
-    get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
+    get_columns_in_db_table: Callable[[str], Awaitable[list[str]]],
 ) -> None:
     """
     Test whether the description and icon columns were added to the environment table.

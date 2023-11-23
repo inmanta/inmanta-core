@@ -25,7 +25,8 @@ import sys
 import tempfile
 from importlib.abc import Loader
 from subprocess import CalledProcessError
-from typing import Dict, List, Optional, Pattern, Tuple
+from typing import Dict, List, Optional, Tuple
+from re import Pattern
 from unittest.mock import patch
 
 import pkg_resources
@@ -137,7 +138,7 @@ def test_install_package_already_installed_in_parent_env(tmpdir):
     assert len(dirs) == 1
     site_dir = dirs[0]
 
-    def _list_dir(path: str, ignore: List[str]) -> List[str]:
+    def _list_dir(path: str, ignore: list[str]) -> list[str]:
         return [d for d in os.listdir(site_dir) if d not in ignore]
 
     # site_dir should only contain a sitecustomize.py file that sets up inheritance from the parent venv
@@ -199,7 +200,7 @@ def test_environment_python_version_multi_digit(tmpdir: py.path.local) -> None:
 @pytest.mark.parametrize_any("version", [None, version.Version("8.6.0")])
 def test_process_env_install_from_index(
     tmpdir: str,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     version: Optional[version.Version],
 ) -> None:
     """
@@ -213,7 +214,7 @@ def test_process_env_install_from_index(
             use_system_config=True,  # we need an upstream for some packages
         ),
     )
-    installed: Dict[str, version.Version] = env.process_env.get_installed_packages()
+    installed: dict[str, version.Version] = env.process_env.get_installed_packages()
     assert package_name in installed
     if version is not None:
         assert installed[package_name] == version
@@ -230,7 +231,7 @@ def test_process_env_install_from_index(
 
 @pytest.mark.slowtest
 def test_process_env_install_from_index_not_found(
-    tmpvenv_active: Tuple[py.path.local, py.path.local], local_module_package_index: str
+    tmpvenv_active: tuple[py.path.local, py.path.local], local_module_package_index: str
 ) -> None:
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
@@ -247,7 +248,7 @@ def test_process_env_install_from_index_not_found(
 
 @pytest.mark.slowtest
 def test_process_env_install_from_index_conflicting_reqs(
-    tmpdir: str, tmpvenv_active: Tuple[py.path.local, py.path.local]
+    tmpdir: str, tmpvenv_active: tuple[py.path.local, py.path.local]
 ) -> None:
     """
     Attempt to install a package with conflicting version requirements from a pip index. Make sure this fails and the
@@ -268,7 +269,7 @@ def test_process_env_install_from_index_conflicting_reqs(
 @pytest.mark.slowtest
 @pytest.mark.parametrize("editable", [True, False])
 def test_process_env_install_from_source(
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
     editable: bool,
 ) -> None:
@@ -291,7 +292,7 @@ def test_process_env_install_from_source(
 def test_active_env_get_module_file(
     local_module_package_index: str,
     tmpdir: py.path.local,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     v1_plugin_loader: bool,
     package_name: str,
 ) -> None:
@@ -328,7 +329,7 @@ def test_active_env_get_module_file(
     assert env.ActiveEnv.get_module_file(module_name) is None
     env.process_env.install_for_config([Requirement.parse(package_name)], pip_config)
     assert package_name in env.process_env.get_installed_packages()
-    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None
@@ -344,7 +345,7 @@ def test_active_env_get_module_file(
 @pytest.mark.slowtest
 def test_active_env_get_module_file_editable_namespace_package(
     tmpdir: str,
-    tmpvenv_active: Tuple[py.path.local, py.path.local],
+    tmpvenv_active: tuple[py.path.local, py.path.local],
     modules_v2_dir: str,
     local_module_package_index,
 ) -> None:
@@ -362,7 +363,7 @@ def test_active_env_get_module_file_editable_namespace_package(
         config=PipConfig(use_system_config=False, index_url=local_module_package_index),
     )
     assert package_name in env.process_env.get_installed_packages()
-    module_info: Optional[Tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
+    module_info: Optional[tuple[Optional[str], Loader]] = env.ActiveEnv.get_module_file(module_name)
     assert module_info is not None
     module_file, mod_loader = module_info
     assert module_file is not None
@@ -382,7 +383,7 @@ def test_active_env_get_module_file_editable_namespace_package(
 
 
 def create_install_package(
-    name: str, version: version.Version, requirements: List[Requirement], local_module_package_index: str
+    name: str, version: version.Version, requirements: list[Requirement], local_module_package_index: str
 ) -> None:
     """
     Creates and installs a simple package with specified requirements. Creates package in a temporary directory and
@@ -442,7 +443,7 @@ def test_active_env_check_basic(
 
     error_msg: str = "Incompatibility between constraint"
 
-    def assert_all_checks(expect_test: Tuple[bool, str] = (True, ""), expect_nonext: Tuple[bool, str] = (True, "")) -> None:
+    def assert_all_checks(expect_test: tuple[bool, str] = (True, ""), expect_nonext: tuple[bool, str] = (True, "")) -> None:
         """
         verify what the check method for 2 different scopes: for an existing package and a non existing one.
 
@@ -490,7 +491,7 @@ def test_active_env_check_constraints(caplog, tmpvenv_active_inherit: str, local
     """
     caplog.set_level(logging.WARNING)
     in_scope: Pattern[str] = re.compile("test-package-.*")
-    constraints: List[Requirement] = [Requirement.parse("test-package-one~=1.0")]
+    constraints: list[Requirement] = [Requirement.parse("test-package-one~=1.0")]
 
     env.ActiveEnv.check(in_scope)
 

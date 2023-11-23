@@ -46,7 +46,7 @@ async def env_with_parameters(server, client, environment: str):
     id_counter = [0x1000]
 
     async def insert_param(
-        name: str, source: str, updated: Optional[datetime.datetime] = None, metadata: Optional[Dict[str, str]] = None
+        name: str, source: str, updated: Optional[datetime.datetime] = None, metadata: Optional[dict[str, str]] = None
     ) -> uuid.UUID:
         id_counter[0] += 1
         param_id = uuid.UUID(int=id_counter[0])
@@ -78,7 +78,7 @@ async def env_with_parameters(server, client, environment: str):
     yield environment, timestamps
 
 
-async def test_parameter_list_filters(client, env_with_parameters: Tuple[str, List[datetime.datetime]]):
+async def test_parameter_list_filters(client, env_with_parameters: tuple[str, list[datetime.datetime]]):
     environment, timestamps = env_with_parameters
     result = await client.get_parameters(
         environment,
@@ -144,7 +144,7 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = "http://localhost:{}".format(port)
     http_client = AsyncHTTPClient()
 
     # Test link for self page

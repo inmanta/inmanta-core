@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import AsyncIterator, Awaitable, Callable, List
+from typing import Callable, List
+from collections.abc import AsyncIterator, Awaitable
 
 import pytest
 from asyncpg import Connection
@@ -33,7 +34,7 @@ async def migrate_v202105170_to_v202106080(
     Returns a callable that performs a v202105170 database restore and migrates to v202106080.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202105170.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v202105170.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
@@ -47,7 +48,7 @@ async def migrate_v202105170_to_v202106080(
 async def test_timestamp_timezones(
     migrate_v202105170_to_v202106080: Callable[[], Awaitable[None]],
     postgresql_client: Connection,
-    get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
+    get_columns_in_db_table: Callable[[str], Awaitable[list[str]]],
 ) -> None:
     """
     Test whether the send_event column was removed from the resourceaction table.

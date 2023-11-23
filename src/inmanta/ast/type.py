@@ -20,7 +20,8 @@ import numbers
 import typing
 from typing import Callable
 from typing import List as PythonList
-from typing import Optional, Sequence
+from typing import Optional
+from collections.abc import Sequence
 
 from inmanta.ast import (
     DuplicateException,
@@ -43,7 +44,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
 
-class BasicResolver(object):
+class BasicResolver:
     def __init__(self, types):
         self.types = types
 
@@ -60,14 +61,14 @@ class BasicResolver(object):
         else:
             cns = namespace
             while cns is not None:
-                full_name = "%s::%s" % (cns.get_full_name(), name)
+                full_name = "{}::{}".format(cns.get_full_name(), name)
                 if full_name in self.types:
                     return self.types[full_name]
                 cns = cns.get_parent()
                 raise TypeNotFoundException(name, namespace)
 
 
-class NameSpacedResolver(object):
+class NameSpacedResolver:
     def __init__(self, ns):
         self.ns = ns
 
@@ -202,7 +203,7 @@ class Primitive(Type):
         """
         Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
         """
-        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
+        exception: RuntimeException = RuntimeException(None, "Failed to cast '{}' to {}".format(value, self))
 
         if isinstance(value, Unknown):
             # propagate unknowns
@@ -279,7 +280,7 @@ class Integer(Number):
         if not super().validate(value):
             return False
         if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+            raise RuntimeException(None, "Invalid value '{}', expected {}".format(value, self.type_string()))
         return True
 
     def type_string(self) -> str:
@@ -382,7 +383,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+            raise RuntimeException(None, "Invalid value '{}', expected {}".format(value, self.type_string()))
 
         return True
 
@@ -570,10 +571,10 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self))
+        raise RuntimeException(None, "Invalid value '{}', expected {}".format(value, self))
 
     def type_string_internal(self) -> str:
-        return "Union[%s]" % ",".join((t.type_string_internal() for t in self.types))
+        return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)
 
 
 @stable_api
@@ -642,13 +643,13 @@ class ConstraintType(NamedType):
         assert self._constraint is not None
         if not self._constraint(value):
             raise RuntimeException(
-                self, "Invalid value %s, does not match constraint `%s`" % (repr(value), self.expression.pretty_print())
+                self, "Invalid value {}, does not match constraint `{}`".format(repr(value), self.expression.pretty_print())
             )
 
         return True
 
     def type_string(self) -> str:
-        return "%s::%s" % (self.namespace, self.name)
+        return "{}::{}".format(self.namespace, self.name)
 
     def type_string_internal(self) -> str:
         return self.type_string()
@@ -686,7 +687,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
     return function
 
 
-TYPES: typing.Dict[str, Type] = {  # Part of the stable API
+TYPES: dict[str, Type] = {  # Part of the stable API
     "string": String(),
     "number": Number(),
     "int": Integer(),

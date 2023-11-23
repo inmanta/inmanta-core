@@ -19,7 +19,8 @@ import inspect
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Type, cast  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
+from collections.abc import Mapping, MutableMapping
 
 import pydantic
 import typing_inspect
@@ -46,7 +47,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 def authorize_request(
-    auth_data: Optional[MutableMapping[str, str]], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
+    auth_data: Optional[MutableMapping[str, str]], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
     Authorize a request based on the given data
@@ -73,17 +74,17 @@ def authorize_request(
     if not ok:
         raise exceptions.UnauthorizedException(
             "The authorization token does not have a valid client type for this call."
-            + " (%s provided, %s expected" % (auth_data[ct_key], config.properties.client_types)
+            + " ({} provided, {} expected".format(auth_data[ct_key], config.properties.client_types)
         )
 
 
-class CallArguments(object):
+class CallArguments:
     """
     This class represents the call arguments for a method call.
     """
 
     def __init__(
-        self, properties: common.MethodProperties, message: Dict[str, Optional[object]], request_headers: Mapping[str, str]
+        self, properties: common.MethodProperties, message: dict[str, Optional[object]], request_headers: Mapping[str, str]
     ) -> None:
         """
         :param method_config: The method configuration that contains the metadata and functions to call
@@ -96,27 +97,27 @@ class CallArguments(object):
         self._argspec: inspect.FullArgSpec = inspect.getfullargspec(self._properties.function)
 
         self._call_args: JsonType = {}
-        self._headers: Dict[str, str] = {}
-        self._metadata: Dict[str, object] = {}
+        self._headers: dict[str, str] = {}
+        self._metadata: dict[str, object] = {}
 
         self._processed: bool = False
 
     @property
-    def call_args(self) -> Dict[str, object]:
+    def call_args(self) -> dict[str, object]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._call_args
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> dict[str, str]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
         return self._headers
 
     @property
-    def metadata(self) -> Dict[str, object]:
+    def metadata(self) -> dict[str, object]:
         if not self._processed:
             raise Exception("Process call first before accessing property")
 
@@ -192,7 +193,7 @@ class CallArguments(object):
         """
         Process the message
         """
-        args: List[str] = list(self._argspec.args)
+        args: list[str] = list(self._argspec.args)
 
         if "self" in args:
             args.remove("self")
@@ -216,7 +217,7 @@ class CallArguments(object):
         call_args = {}
 
         for i, arg in enumerate(args):
-            arg_type: Optional[Type[object]] = self._argspec.annotations.get(arg)
+            arg_type: Optional[type[object]] = self._argspec.annotations.get(arg)
             if arg in self._message:
                 # Argument is parameter in body of path of HTTP request
                 if (
@@ -286,8 +287,8 @@ class CallArguments(object):
         self._processed = True
 
     async def _get_dict_value_from_message(
-        self, arg: str, dict_prefix: str, dict_with_prefixed_names: Dict[str, object]
-    ) -> Dict[str, object]:
+        self, arg: str, dict_prefix: str, dict_with_prefixed_names: dict[str, object]
+    ) -> dict[str, object]:
         value = {k[len(dict_prefix) :]: v for k, v in dict_with_prefixed_names.items()}
         # Check if the values should be converted to lists
         type_args = self._argspec.annotations.get(arg)
@@ -303,7 +304,7 @@ class CallArguments(object):
             value = {key: [val] if not isinstance(val, list) else val for key, val in value.items()}
         return value
 
-    def _is_dict_or_optional_dict(self, arg_type: Type[object]) -> bool:
+    def _is_dict_or_optional_dict(self, arg_type: type[object]) -> bool:
         if typing_inspect.is_optional_type(arg_type):
             arg_type = typing_inspect.get_args(arg_type, evaluate=True)[0]
         arg_type = typing_inspect.get_origin(arg_type) if typing_inspect.get_origin(arg_type) else arg_type
@@ -311,7 +312,7 @@ class CallArguments(object):
             arg_type = type(arg_type)
         return issubclass(arg_type, dict)
 
-    def _validate_union_return(self, arg_type: Type[object], value: object) -> None:
+    def _validate_union_return(self, arg_type: type[object], value: object) -> None:
         """Validate a return with a union type
         :see: protocol.common.MethodProperties._validate_function_types
         """
@@ -337,7 +338,7 @@ class CallArguments(object):
         if typing_inspect.is_generic_type(matching_type):
             self._validate_generic_return(arg_type, matching_type)
 
-    def _validate_generic_return(self, arg_type: Type[object], value: object) -> None:
+    def _validate_generic_return(self, arg_type: type[object], value: object) -> None:
         """Validate List or Dict types.
 
         :note: we return any here because the calling function also returns any.
@@ -494,10 +495,10 @@ class RESTBase(util.TaskHandler):
 
     async def _execute_call(
         self,
-        kwargs: Dict[str, str],
+        kwargs: dict[str, str],
         http_method: str,
         config: common.UrlMethod,
-        message: Dict[str, object],
+        message: dict[str, object],
         request_headers: Mapping[str, str],
         auth: Optional[MutableMapping[str, str]] = None,
     ) -> common.Response:
@@ -531,7 +532,7 @@ class RESTBase(util.TaskHandler):
             LOGGER.debug(
                 "Calling method %s(%s)",
                 config.handler,
-                ", ".join(["%s='%s'" % (name, common.shorten(str(value))) for name, value in arguments.call_args.items()]),
+                ", ".join(["{}='{}'".format(name, common.shorten(str(value))) for name, value in arguments.call_args.items()]),
             )
 
             result = await config.handler(**arguments.call_args)

@@ -39,7 +39,7 @@ from inmanta.types import JsonType
 from inmanta.util import parse_timestamp
 
 
-class Client(object):
+class Client:
     log = logging.getLogger(__name__)
 
     def __init__(self, host: Optional[str], port: Optional[int]) -> None:
@@ -83,7 +83,7 @@ class Client(object):
             if result.result and key_name in result.result:
                 return result.result[key_name]
 
-            raise Exception("Expected %s in the response of %s." % (key_name, method_name))
+            raise Exception("Expected {} in the response of {}.".format(key_name, method_name))
         elif result.code == 404:
             if not allow_none:
                 raise Exception("Requested %s not found on server" % key_name)
@@ -96,17 +96,17 @@ class Client(object):
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> List[Dict[str, Any]]:
+    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> list[dict[str, Any]]:
         """
         Same as do request, but return type is a list of dicts
         """
-        return cast(List[Dict[str, Any]], self.do_request(method_name, key_name, arguments, False))
+        return cast(list[dict[str, Any]], self.do_request(method_name, key_name, arguments, False))
 
-    def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> Dict[str, str]:
+    def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> dict[str, str]:
         """
         Same as do request, but return type is a list of dicts
         """
-        return cast(Dict[str, str], self.do_request(method_name, key_name, arguments, False))
+        return cast(dict[str, str], self.do_request(method_name, key_name, arguments, False))
 
     def to_project_id(self, ref: str) -> uuid.UUID:
         """
@@ -116,9 +116,9 @@ class Client(object):
             project_id = uuid.UUID(ref)
         except ValueError:
             # try to resolve the id as project name
-            projects: List[Dict[str, str]] = self.get_list("list_projects", "projects")
+            projects: list[dict[str, str]] = self.get_list("list_projects", "projects")
 
-            id_list: List[str] = []
+            id_list: list[str] = []
             for project in projects:
                 if ref == project["name"]:
                     id_list.append(project["id"])
@@ -142,9 +142,9 @@ class Client(object):
             env_id = uuid.UUID(ref)
         except ValueError:
             # try to resolve the id as project name
-            envs: List[Dict[str, str]] = self.get_list("list_environments", "environments")
+            envs: list[dict[str, str]] = self.get_list("list_environments", "environments")
 
-            id_list: List[str] = []
+            id_list: list[str] = []
             for env in envs:
                 if ref == env["name"]:
                     if project_id is None or project_id == env["project_id"]:
@@ -162,11 +162,11 @@ class Client(object):
         return env_id
 
 
-def print_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> None:
+def print_table(header: list[str], rows: list[list[str]], data_type: Optional[list[str]] = None) -> None:
     click.echo(get_table(header, rows, data_type))
 
 
-def get_table(header: List[str], rows: List[List[str]], data_type: Optional[List[str]] = None) -> str:
+def get_table(header: list[str], rows: list[list[str]], data_type: Optional[list[str]] = None) -> str:
     """
     Returns a table that would fit in the current terminal.
     """
@@ -307,24 +307,24 @@ def environment_create(client: Client, name: str, project: str, repo_url: str, b
     )
 
 
-def save_config(client: Client, env: Dict[str, str]) -> None:
+def save_config(client: Client, env: dict[str, str]) -> None:
     cfg = """
 [config]
 fact-expire = 1800
-environment=%(env)s
+environment={env}
 
 [compiler_rest_transport]
-host=%(host)s
-port=%(port)s
+host={host}
+port={port}
 
 [cmdline_rest_transport]
-host=%(host)s
-port=%(port)s
-""" % {
-        "env": env["id"],
-        "host": client.host,
-        "port": client.port,
-    }
+host={host}
+port={port}
+""".format(
+        env=env["id"],
+        host=client.host,
+        port=client.port,
+    )
 
     if os.path.exists(".inmanta") and not click.confirm(".inmanta exists, do you want to overwrite it?"):
         click.echo("not writing config", err=True)
@@ -482,11 +482,11 @@ def env_setting(ctx: click.Context) -> None:
 @click.pass_obj
 def env_setting_list(client: Client, environment: str) -> None:
     tid = client.to_environment_id(environment)
-    settings = cast(Dict[str, Dict[str, str]], client.do_request("list_settings", arguments=dict(tid=tid)))
+    settings = cast(dict[str, dict[str, str]], client.do_request("list_settings", arguments=dict(tid=tid)))
 
     table_body = []
     for key in sorted(settings["metadata"].keys()):
-        meta = cast(Dict[str, str], settings["metadata"][key])
+        meta = cast(dict[str, str], settings["metadata"][key])
         value = ""
         if key in settings["settings"]:
             value = str(settings["settings"][key])
@@ -542,7 +542,7 @@ def agent(ctx: click.Context) -> None:
 def agent_list(client: Client, environment: str) -> None:
     env_id = client.to_environment_id(environment)
     agents = client.get_list("list_agents", key_name="agents", arguments=dict(tid=env_id))
-    data: List[List[str]] = []
+    data: list[list[str]] = []
     for agent in agents:
         data.append([agent["name"], agent["environment"], str(agent["paused"]), agent["last_failover"]])
 
@@ -672,7 +672,7 @@ def param_list(client: Client, environment: str) -> None:
     when = now - datetime.timedelta(0, expire)
 
     data = []
-    parameters = cast(List[Dict[str, str]], result["parameters"])
+    parameters = cast(list[dict[str, str]], result["parameters"])
     for p in parameters:
         data.append(
             [
@@ -696,7 +696,7 @@ def param_set(client: Client, environment: str, name: str, value: str) -> None:
     tid = client.to_environment_id(environment)
     # first fetch the parameter
     param_data = cast(
-        Optional[Dict[str, str]],
+        Optional[dict[str, str]],
         client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=""), allow_none=True),
     )
 
@@ -742,7 +742,7 @@ def version_report(client: Client, environment: str, version: str, show_detailed
     if not result:
         return
 
-    agents: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(lambda: []))
+    agents: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     for res in result["resources"]:
         if len(res["actions"]) > 0 or show_detailed_report:
             agents[res["agent"]][res["resource_type"]].append(res)
@@ -755,7 +755,7 @@ def version_report(client: Client, environment: str, version: str, show_detailed
             parsed_resource_version_id = Id.parse_id(ResourceVersionIdStr(agents[agent][t][0]["resource_version_id"]))
             click.echo(
                 click.style("Resource type:", bold=True)
-                + "{type} ({attr})".format(type=t, attr=parsed_resource_version_id.attribute)
+                + f"{t} ({parsed_resource_version_id.attribute})"
             )
             click.echo("-" * 72)
 
@@ -802,10 +802,10 @@ def version_report(client: Client, environment: str, version: str, show_detailed
 def monitor_deploy(client: Client, environment: str) -> None:
     tid = client.to_environment_id(environment)
 
-    versions = cast(Dict[str, List[Dict[str, str]]], client.do_request("list_versions", arguments=dict(tid=tid)))
+    versions = cast(dict[str, list[dict[str, str]]], client.do_request("list_versions", arguments=dict(tid=tid)))
     allversion = versions["versions"]
     try:
-        first: Dict[str, str] = next(version for version in allversion if version["result"] != "pending")
+        first: dict[str, str] = next(version for version in allversion if version["result"] != "pending")
     except StopIteration:
         raise click.ClickException("Environment %s doesn't contain a released configuration model" % environment)
 
@@ -822,14 +822,14 @@ def monitor_deploy(client: Client, environment: str) -> None:
                 last = done
             sleep(1)
             version = cast(
-                Dict[str, Dict[str, int]], client.get_dict("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
+                dict[str, dict[str, int]], client.get_dict("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
             )
             done = version["model"]["done"]
         if done != last:
             bar.update(done - last)
             last = done
 
-    click.echo("Complete: %s/%s" % (done, total))
+    click.echo("Complete: {}/{}".format(done, total))
 
 
 @cmd.group("token", help="Subcommand to manage access tokens")

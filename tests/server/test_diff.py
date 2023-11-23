@@ -47,7 +47,7 @@ async def env_with_versions(environment):
 async def create_resource_in_multiple_versions(
     environment: uuid.UUID,
     path: str,
-    version_attributes_map: Dict[int, Dict[str, object]],
+    version_attributes_map: dict[int, dict[str, object]],
     agent: str = "internal",
     resource_type: str = "std::File",
     status: ResourceState = ResourceState.deployed,

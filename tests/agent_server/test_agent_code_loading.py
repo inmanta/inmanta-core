@@ -33,7 +33,7 @@ from utils import LogSequence
 
 
 async def make_source_structure(
-    into: dict, file: str, module: str, source: str, client: Client, byte_code: bool = False, dependencies: List[str] = []
+    into: dict, file: str, module: str, source: str, client: Client, byte_code: bool = False, dependencies: list[str] = []
 ) -> str:
     with tempfile.TemporaryDirectory() as tmpdirname:
         if byte_code:
