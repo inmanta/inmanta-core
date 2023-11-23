@@ -294,7 +294,6 @@ class DefineImplementation(TypeDefinitionStatement):
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
-            self.block.normalize()
             self.anchors.extend(self.block.get_anchors())
         except TypeNotFoundException as e:
             e.set_statement(self)
