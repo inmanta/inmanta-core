@@ -87,7 +87,7 @@ def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.P
 @typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
-    Modify the given project
+    Rename the given project
 
     :param id: The id of the project to be modified.
     :param name: The new name for the project. This string value will replace the current name of the project.
