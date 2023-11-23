@@ -143,32 +143,32 @@ class FileService(protocol.ServerSlice):
         return list(response.keys())
 
     @handle(methods.diff)
-    async def file_diff(self, a: str, b: str) -> Apireturn:
+    async def file_diff(self, file_id_1: str, file_id_2: str) -> Apireturn:
         """
         Diff the two files identified with the two hashes
         """
-        if a == "" or a == "0":
-            a_lines: List[str] = []
+        if file_id_1 == "" or file_id_1 == "0":
+            file_1_lines: List[str] = []
         else:
-            a_path = os.path.join(self.server_slice._server_storage["files"], a)
-            if not os.path.exists(a_path):
+            file_1_path = os.path.join(self.server_slice._server_storage["files"], file_id_1)
+            if not os.path.exists(file_1_path):
                 raise NotFound()
 
-            with open(a_path, "r", encoding="utf-8") as fd:
-                a_lines = fd.readlines()
+            with open(file_1_path, "r", encoding="utf-8") as fd:
+                file_1_lines = fd.readlines()
 
-        if b == "" or b == "0":
-            b_lines: List[str] = []
+        if file_id_2 == "" or file_id_2 == "0":
+            file_2_lines: List[str] = []
         else:
-            b_path = os.path.join(self.server_slice._server_storage["files"], b)
-            if not os.path.exists(b_path):
+            file_2_path = os.path.join(self.server_slice._server_storage["files"], file_id_2)
+            if not os.path.exists(file_2_path):
                 raise NotFound()
 
-            with open(b_path, "r", encoding="utf-8") as fd:
-                b_lines = fd.readlines()
+            with open(file_2_path, "r", encoding="utf-8") as fd:
+                file_2_lines = fd.readlines()
 
         try:
-            diff = difflib.unified_diff(a_lines, b_lines, fromfile=a, tofile=b)
+            diff = difflib.unified_diff(file_1_lines, file_2_lines, fromfile=file_id_1, tofile=file_id_2)
         except FileNotFoundError:
             raise NotFound()
 

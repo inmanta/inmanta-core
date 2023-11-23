@@ -87,7 +87,10 @@ def project_create(name: str, project_id: uuid.UUID = None) -> model.Project:
 @typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
-    Modify the given project
+    Rename the given project
+
+    :param id: The id of the project to be modified.
+    :param name: The new name for the project. This string value will replace the current name of the project.
     """
 
 
@@ -95,6 +98,8 @@ def project_modify(id: uuid.UUID, name: str) -> model.Project:
 def project_delete(id: uuid.UUID) -> None:
     """
     Delete the given project and all related data
+
+    :param id: The id of the project to be deleted.
     """
 
 
@@ -102,6 +107,7 @@ def project_delete(id: uuid.UUID) -> None:
 def project_list(environment_details: bool = False) -> List[model.Project]:
     """
     Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
+
     :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
@@ -110,6 +116,8 @@ def project_list(environment_details: bool = False) -> List[model.Project]:
 def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
     """
     Get a project and a list of the environments under this project
+
+    :param id: The id for which the project's details are being requested.
     :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
@@ -190,6 +198,7 @@ def environment_delete(id: uuid.UUID) -> None:
 def environment_list(details: bool = False) -> List[model.Environment]:
     """
     Returns a list of environments
+
     :param details: Whether to include the icon and description of the environments in the results
     """
 
@@ -319,6 +328,8 @@ def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent
 def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
     """
     List the settings in the current environment ordered by name alphabetically.
+
+    :param tid: The id of the environment for which the list of settings is being requested.
     """
 
 
@@ -333,7 +344,12 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
 )
 def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingType) -> ReturnValue[None]:
     """
-    Set a value
+    Set a specific setting in an environment's configuration.
+
+    :param tid: The id of the environment where the setting is to be set or updated.
+    :param id: The id of the setting to be set or updated.
+    :param value: The new value for the setting.
+
     """
 
 
@@ -348,7 +364,11 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
 )
 def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSettingsReponse:
     """
-    Get a value
+    Retrieve a specific setting from an environment's configuration.
+
+    :param tid: The id of the environment from which the setting is being retrieved.
+    :param id: The id of the setting to be retrieved.
+
     """
 
 
@@ -363,7 +383,10 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
 )
 def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
-    Delete a value
+    Reset the given setting to its default value.
+
+    :param tid: The id of the environment from which the setting is to be deleted.
+    :param id: The identifier of the setting to be deleted.
     """
 
 
@@ -373,6 +396,8 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
 def reserve_version(tid: uuid.UUID) -> int:
     """
     Reserve a version number in this environment.
+
+    :param tid: The id of the environment in which the version number is to be reserved.
     """
 
 
@@ -380,6 +405,7 @@ def reserve_version(tid: uuid.UUID) -> int:
 def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
+
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     """
 
@@ -711,6 +737,10 @@ def resource_list(
 )
 def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ReleasedResourceDetails:
     """
+    :param tid: The id of the environment from which the resource's details are being requested.
+    :param rid: The unique identifier (ResourceIdStr) of the resource. This value specifies the particular resource
+                for which detailed information is being requested.
+
     :return: The details of the latest released version of a resource
     :raise NotFound: This exception is raised when the referenced environment or resource is not found
     """
@@ -905,6 +935,9 @@ def get_compile_reports(
 )
 def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
+    :param tid: The id of the environment in which the compilation process occurred.
+    :param id: The id of the compile for which the details are being requested.
+
     :return: The details of a compile
     :raise NotFound: This exception is raised when the referenced environment or compile is not found
     """
