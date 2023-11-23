@@ -78,6 +78,7 @@ class Statement(Namespaced):
         return self.location
 
     def get_anchors(self) -> List[Anchor]:
+        """Should only be called after normalization."""
         return self.anchors
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
@@ -528,6 +529,7 @@ class AssignStatement(DynamicStatement):
     def normalize(self) -> None:
         self.rhs.normalize()
         if self.lhs is not None:
+            self.lhs.normalize()
             self.anchors.extend(self.lhs.get_anchors())
         self.anchors.extend(self.rhs.get_anchors())
 

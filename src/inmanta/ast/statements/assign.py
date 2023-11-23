@@ -90,6 +90,7 @@ class CreateList(ReferenceStatement):
         for item in self.items:
             # pass on lhs_attribute to children
             item.normalize(lhs_attribute=lhs_attribute)
+            self.anchors.extend(item.get_anchors())
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
@@ -228,6 +229,7 @@ class SetAttribute(AssignStatement, Resumer):
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # register this assignment as left hand side to the value on the right hand side
         self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
+        self.anchors.extend(self.rhs.get_anchors())
 
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks

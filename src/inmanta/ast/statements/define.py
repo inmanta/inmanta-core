@@ -331,9 +331,6 @@ class DefineImplement(DefinitionStatement):
         self.entity = entity_name
         self.entity_location = entity_name.get_location()
         self.implementations = implementations
-        self.anchors = [TypeReferenceAnchor(x.namespace, x) for x in implementations]
-        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
-        self.anchors.extend(select.get_anchors())
         self.location = entity_name.get_location()
         if inherit and (not isinstance(select, Literal) or select.value is not True):
             raise RuntimeException(self, "Conditional implementation with parents not allowed")
@@ -354,11 +351,11 @@ class DefineImplement(DefinitionStatement):
         """
         try:
             entity_type = self.namespace.get_type(self.entity)
-
             if not isinstance(entity_type, Entity):
                 raise TypingException(
                     self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, entity_type)
                 )
+            self.anchors.append(TypeReferenceAnchor(self.entity.namespace, self.entity))
 
             # If one implements statement has parent declared, set to true
             entity_type.implements_inherits |= self.inherit
@@ -367,6 +364,8 @@ class DefineImplement(DefinitionStatement):
             implement.comment = self.comment
             implement.constraint = self.select
             implement.location = self.entity_location
+            implement.normalize()
+            self.anchors.extend(implement.constraint.get_anchors())
 
             i = 0
             for _impl in self.implementations:
@@ -386,6 +385,7 @@ class DefineImplement(DefinitionStatement):
                     )
 
                 # add it
+                self.anchors.append(TypeReferenceAnchor(_impl.namespace, _impl))
                 implement.implementations.append(impl_obj)
 
             entity_type.add_implement(implement)
@@ -490,8 +490,6 @@ class DefineRelation(BiStatement):
         self.annotations = [exp[0] for exp in self.annotation_expression]
 
         self.anchors.extend((y for x in annotations for y in x.get_anchors()))
-        self.anchors.append(TypeReferenceAnchor(left[0].namespace, left[0]))
-        self.anchors.append(TypeReferenceAnchor(right[0].namespace, right[0]))
 
         self.left: Relationside = left
         self.right: Relationside = right
@@ -528,6 +526,9 @@ class DefineRelation(BiStatement):
         assert isinstance(right, Entity), "%s is not an entity" % right
         # Duplicate checking is in entity.normalize
         # Because here we don't know if all entities have been defined
+
+        self.anchors.append(TypeReferenceAnchor(self.left[0].namespace, self.left[0]))
+        self.anchors.append(TypeReferenceAnchor(self.right[0].namespace, self.right[0]))
 
         left_end: Optional[RelationAttribute]
         if self.left[1] is not None:
