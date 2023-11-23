@@ -205,7 +205,7 @@ For a v2 module, use the v2 cookiecutter template, then install the module:
 
     pip install cookiecutter
     cookiecutter https://github.com/inmanta/inmanta-module-template.git
-    inmanta module install -e ./<module-name>
+    pip install -e ./<module-name>
 
 This will install a Python package with the name ``inmanta-module-<module-name>`` in the active environment.
 

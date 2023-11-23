@@ -1,0 +1,4 @@
+---
+description: "Revert PR: number type should no longer differentiate between integer and decimal notation when used in indexes. Because it breaks a lot of tests."
+change-type: patch
+destination-branches: [master]

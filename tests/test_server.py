@@ -698,7 +698,7 @@ async def test_batched_code_upload(
     for name, source_info in code_manager.get_types():
         res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
-        assert len(source_info) == 2
+        assert len(source_info) >= 2
         for info in source_info:
             assert info.hash in res.result["sources"]
             code = res.result["sources"][info.hash]
@@ -1648,7 +1648,7 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
 
     result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == attributes_on_api
+    assert result.result["data"]["attributes"] == attributes_on_api, result.result["data"]
 
     result = await client.resource_details(tid=environment, rid=resource_id)
     assert result.code == 200

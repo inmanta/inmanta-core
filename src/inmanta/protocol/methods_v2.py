@@ -75,7 +75,7 @@ def put_partial(
 
 # Method for working with projects
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
-def project_create(name: str, project_id: uuid.UUID = None) -> model.Project:
+def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.Project:
     """
     Create a new project
 
@@ -129,7 +129,7 @@ def environment_create(
     name: str,
     repository: Optional[str] = None,
     branch: Optional[str] = None,
-    environment_id: uuid.UUID = None,
+    environment_id: Optional[uuid.UUID] = None,
     description: str = "",
     icon: str = "",
 ) -> model.Environment:
@@ -155,8 +155,8 @@ def environment_create(
 def environment_modify(
     id: uuid.UUID,
     name: str,
-    repository: str = None,
-    branch: str = None,
+    repository: Optional[str] = None,
+    branch: Optional[str] = None,
     project_id: Optional[uuid.UUID] = None,
     description: Optional[str] = None,
     icon: Optional[str] = None,

@@ -33,6 +33,7 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
+from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
 
@@ -283,7 +284,12 @@ def test_plugin_module_finder(
         str(venv_module_dir),
         new_content_init_py="where = 'venv'",
     )
-    moduletool.ModuleTool().install(path=str(venv_module_dir))
+    mod_artifact_path = moduletool.ModuleTool().build(path=str(venv_module_dir))
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
 
     module_to_reload: Optional[ModuleType] = None
     if reload:

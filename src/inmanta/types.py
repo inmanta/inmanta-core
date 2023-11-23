@@ -22,8 +22,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
+import pydantic
 import typing_inspect
-from pydantic import errors, types
 
 if TYPE_CHECKING:
     # Include imports from other modules here and use the quoted annotation in the definition to prevent import loops
@@ -31,33 +31,8 @@ if TYPE_CHECKING:
     from inmanta.protocol.common import ReturnValue  # noqa: F401
 
 
-class StrictNonIntBool(object):
-    """
-    StrictNonIntBool to allow for bools which are not type-coerced and that are not a subclass of int
-    Based on StrictBool from pydantic
-    """
-
-    @classmethod
-    def __get_validators__(cls) -> "types.CallableGenerator":
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value: Any) -> bool:
-        """
-        Ensure that we only allow bools.
-        """
-        if isinstance(value, bool):
-            return value
-
-        raise errors.StrictBoolError()
-
-    @classmethod
-    def __modify_schema__(cls, f_schema: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Should be handled as a boolean in OpenAPI schemas
-        """
-        f_schema["type"] = "boolean"
-        return f_schema
+# kept for backwards compatibility
+StrictNonIntBool = pydantic.StrictBool
 
 
 def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
@@ -69,7 +44,7 @@ def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
     return builtins.issubclass(sub, super)
 
 
-PrimitiveTypes = Union[uuid.UUID, StrictNonIntBool, int, float, datetime, str]
+PrimitiveTypes = Union[uuid.UUID, bool, int, float, datetime, str]
 SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
 JsonType = Dict[str, Any]
