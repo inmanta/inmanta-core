@@ -93,7 +93,7 @@ def test_module_add_v2_module_to_project(
 
     # Create project
     project: Project = snippetcompiler_clean.setup_for_snippet(
-        snippet="", autostd=False, python_package_sources=[local_module_package_index, pip_index.url]
+        snippet="", autostd=False, index_url=local_module_package_index, extra_index_url=[pip_index.url]
     )
 
     requirements_txt_file = os.path.join(project.path, "requirements.txt")
@@ -245,7 +245,7 @@ def test_module_add_preinstalled(tmpdir: py.path.local, modules_v2_dir: str, sni
     """
     module_name: str = "mymodule"
     pip_index = PipIndex(artifact_dir=str(tmpdir.join("pip-index")))
-    snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False, python_package_sources=[pip_index.url])
+    snippetcompiler_clean.setup_for_snippet(snippet="", autostd=False, index_url=pip_index.url)
 
     # preinstall 1.0.0, don't publish to index
     module_from_template(

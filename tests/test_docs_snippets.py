@@ -168,7 +168,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
         my_module::InterfaceDiscovery(host=host)
         """
     )
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)])
+    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await _wait_until_deployment_finishes(client, environment, version=1)
@@ -229,7 +229,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
         my_module::InterfaceDiscovery(name_filter="eth[1-9]", host=host, credentials=credentials)
         """
     )
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)])
+    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await _wait_until_deployment_finishes(client, environment, version=1)

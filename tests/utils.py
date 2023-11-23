@@ -18,6 +18,7 @@
 import asyncio
 import configparser
 import datetime
+import functools
 import json
 import logging
 import os
@@ -31,13 +32,13 @@ from typing import Any, Dict, Optional, Sequence, Type, TypeVar, Union
 import pytest
 import yaml
 from pkg_resources import Requirement, parse_version
-from pydantic.tools import lru_cache
 
 import build
 import build.env
 from _pytest.mark import MarkDecorator
 from inmanta import const, data, env, module, util
 from inmanta.data import ResourceIdStr
+from inmanta.env import PipConfig
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
@@ -359,7 +360,7 @@ def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: 
     }
 
 
-@lru_cache(1)
+@functools.lru_cache(1)
 def get_product_meta_data() -> ProductMetadata:
     """Get the produce meta-data"""
     bootloader = InmantaBootloader()
@@ -469,7 +470,11 @@ author = Inmanta <code@inmanta.com>
                 fd.write(f"\n{option_name} ={requirements_as_string}")
 
     if install:
-        env.process_env.install_from_source([env.LocalPackagePath(path=path, editable=editable)])
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=path, editable=editable)],
+            config=PipConfig(use_system_config=True),
+        )
     if publish_index is not None:
         with build.env.DefaultIsolatedEnv() as build_env:
             builder = build.ProjectBuilder(source_dir=path, python_executable=build_env.python_executable)
@@ -568,7 +573,19 @@ def module_from_template(
     with open(config_file, "w") as fh:
         config.write(fh)
     if install:
-        ModuleTool().install(editable=editable, path=dest_dir)
+        if editable:
+            env.process_env.install_for_config(
+                requirements=[],
+                paths=[env.LocalPackagePath(path=dest_dir, editable=True)],
+                config=PipConfig(use_system_config=True),
+            )
+        else:
+            mod_artifact_path = ModuleTool().build(path=dest_dir)
+            env.process_env.install_for_config(
+                requirements=[],
+                paths=[env.LocalPackagePath(path=mod_artifact_path)],
+                config=PipConfig(use_system_config=True),
+            )
     if publish_index is not None:
         ModuleTool().build(path=dest_dir, output_dir=publish_index.artifact_dir)
         publish_index.publish()

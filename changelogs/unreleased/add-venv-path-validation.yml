@@ -1,0 +1,6 @@
+description: Raise an explicit error when attempting to create a virtual env with invalid characters in its path.
+change-type: patch
+destination-branches: [master, iso6]
+sections:
+  minor-improvement: "{{description}}"
+

@@ -562,7 +562,7 @@ class FormattedString(ReferenceStatement):
     This class is an abstraction around a string containing references to variables.
     """
 
-    __slots__ = ("_format_string", "_variables")
+    __slots__ = ("_format_string",)
 
     def __init__(self, format_string: str, variables: abc.Sequence["Reference"]) -> None:
         super().__init__(variables)
@@ -580,7 +580,7 @@ class StringFormat(FormattedString):
     Create a new string by doing a string interpolation
     """
 
-    __slots__ = ()
+    __slots__ = ("_variables",)
 
     def __init__(self, format_string: str, variables: abc.Sequence[Tuple["Reference", str]]) -> None:
         super().__init__(format_string, [k for (k, _) in variables])
@@ -616,14 +616,21 @@ class FStringFormatter(Formatter):
 class StringFormatV2(FormattedString):
     """
     Create a new string by using python build in formatting
+
     """
 
-    __slots__ = ()
+    __slots__ = ("_variables",)
 
     def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
+        """
+        :param format_string: The string on which to perform substitution
+        :param variables: Sequence of tuples each holding a normalized reference (i.e. stripped of eventual whitespaces ) to a
+         variable to substitute in the format_string and the raw full name of this variable (i.e. including potential
+         whitespaces).
+        """
         only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
-        self._variables = only_refs
+        self._variables: abc.Mapping[Reference, str] = {ref: full_name for (ref, full_name) in variables}
 
     def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         super().execute(requires, resolver, queue)
@@ -632,14 +639,13 @@ class StringFormatV2(FormattedString):
         # We can't cache the formatter because it has no ability to cache the parsed string
 
         kwargs = {}
-        for _var in self._variables:
+        for _var, full_name in self._variables.items():
             value = _var.execute(requires, resolver, queue)
             if isinstance(value, Unknown):
                 return Unknown(self)
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
-
-            kwargs[_var.full_name] = value
+            kwargs[full_name] = value
 
         result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
 
