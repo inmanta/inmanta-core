@@ -324,7 +324,7 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
 )
 def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingType) -> ReturnValue[None]:
     """
-    Set or update a specific setting in an environment's configuration.
+    Set a specific setting in an environment's configuration.
 
     :param tid: The id of the environment where the setting is to be set or updated.
     :param id: The id of the setting to be set or updated.
