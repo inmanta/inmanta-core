@@ -19,7 +19,7 @@
 
 import argparse
 from collections import abc
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Optional
 
 FunctionType = Callable[[argparse.Namespace], None]
 ParserConfigType = Callable[[argparse.ArgumentParser, abc.Sequence[argparse.ArgumentParser]], None]

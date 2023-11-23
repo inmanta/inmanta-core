@@ -25,7 +25,7 @@ from asyncio import queues, subprocess
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Optional, Union, cast
 from uuid import UUID
 
 import asyncpg.connection

@@ -23,7 +23,7 @@ import uuid
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 from uuid import UUID
 
 import psutil

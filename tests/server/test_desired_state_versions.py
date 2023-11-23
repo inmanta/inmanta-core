@@ -19,7 +19,6 @@ import datetime
 import json
 import uuid
 from operator import itemgetter
-from typing import Dict, List, Tuple
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest

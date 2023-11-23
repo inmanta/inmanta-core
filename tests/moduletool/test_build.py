@@ -25,7 +25,7 @@ import sys
 import zipfile
 from importlib.machinery import ModuleSpec
 from types import ModuleType
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 from pytest import MonkeyPatch

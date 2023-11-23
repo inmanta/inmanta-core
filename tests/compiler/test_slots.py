@@ -18,7 +18,7 @@
 import inspect
 from collections import abc
 from itertools import chain
-from typing import List, Type, TypeVar
+from typing import TypeVar
 
 import utils
 from inmanta.ast import Anchor, LocatableString, Location, Range

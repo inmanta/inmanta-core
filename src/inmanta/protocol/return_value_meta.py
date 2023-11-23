@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Dict, Optional, cast
+from typing import Any, Optional, cast
 
 from inmanta.protocol.common import JSON_CONTENT, ReturnValue, T
 from inmanta.types import ArgumentTypes, ReturnTypes

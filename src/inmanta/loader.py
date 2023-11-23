@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
 from itertools import chain, starmap
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
 from inmanta.stable_api import stable_api

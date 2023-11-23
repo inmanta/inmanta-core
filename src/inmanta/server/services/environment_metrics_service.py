@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import asyncpg
 

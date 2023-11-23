@@ -20,7 +20,6 @@ import json
 import logging
 import uuid
 from operator import itemgetter
-from typing import List, Tuple
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest

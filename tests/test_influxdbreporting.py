@@ -17,7 +17,6 @@
 """
 import asyncio
 import re
-from typing import Type
 
 import pytest
 import tornado

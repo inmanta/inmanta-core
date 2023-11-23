@@ -18,7 +18,7 @@
 import logging
 import os
 import shutil
-from typing import List, Optional
+from typing import Optional
 
 import py
 import pytest

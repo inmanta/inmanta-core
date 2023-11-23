@@ -19,7 +19,6 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Set
 
 import pytest
 from pytest import fixture

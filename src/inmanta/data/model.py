@@ -20,7 +20,7 @@ import uuid
 from collections import abc
 from enum import Enum
 from itertools import chain
-from typing import ClassVar, Dict, List, NewType, Optional, Self, Union
+from typing import ClassVar, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema

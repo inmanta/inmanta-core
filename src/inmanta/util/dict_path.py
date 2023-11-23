@@ -20,7 +20,7 @@ import abc
 import logging
 import re
 from collections.abc import Sequence
-from typing import Dict, List, Optional, Tuple, Type, TypeVar, Union, overload
+from typing import Optional, TypeVar, Union, overload
 
 from inmanta.stable_api import stable_api
 from typing_extensions import TypeGuard
@@ -223,14 +223,12 @@ class WildDictPath(abc.ABC):
 
         :param container: the container to search in
         """
-        pass
 
     @abc.abstractmethod
     def to_str(self) -> str:
         """
         Returns the dict path expression represented by this instance.
         """
-        pass
 
     def __str__(self) -> str:
         return self.to_str()
@@ -246,7 +244,6 @@ class WildDictPath(abc.ABC):
         A DictPath can be a combination of multiple DictPaths, this returns all the DictPaths
         that compose this one, or itself if it is not a composition of multiple DictPaths.
         """
-        pass
 
     @classmethod
     @abc.abstractmethod
@@ -659,7 +656,6 @@ class DictPath(WildDictPath):
 
         :raises KeyError: if the element is not found or if more than one occurrence was found.
         """
-        pass
 
     def get_elements(self, container: object) -> list[object]:
         try:
@@ -676,7 +672,6 @@ class DictPath(WildDictPath):
 
         :raises LookupError: if the path leading to the element is not found or if more than one occurrence was found.
         """
-        pass
 
     def __add__(self, other: object) -> "DictPath":
         if not isinstance(other, DictPath):
@@ -692,7 +687,6 @@ class DictPath(WildDictPath):
         """
         Return the dictionary key referenced by this element in the dict path.
         """
-        pass
 
     @abc.abstractmethod
     def remove(self, container: object) -> None:

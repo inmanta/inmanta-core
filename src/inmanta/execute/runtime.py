@@ -17,7 +17,7 @@
 """
 from abc import abstractmethod
 from collections.abc import Hashable
-from typing import TYPE_CHECKING, Deque, Dict, Generic, List, Optional, Set, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Deque, Generic, List, Optional, Set, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
@@ -102,7 +102,6 @@ class ISetPromise(IPromise, Generic[T]):
         """
         Fulfills this promise by setting the owner's value and notifying the owner of the promise's completion.
         """
-        pass
 
 
 class ProgressionPromise(IPromise):
@@ -244,7 +243,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         variable.
         """
         # plain ResultVariable does not track promises -> simply return
-        pass
 
     def is_ready(self) -> bool:
         return self.hasValue
@@ -296,7 +294,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         """
         Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
         """
-        pass
 
     def is_multi(self) -> bool:
         return False

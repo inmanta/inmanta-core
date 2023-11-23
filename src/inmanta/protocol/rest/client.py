@@ -19,7 +19,7 @@
 import logging
 import re
 from asyncio import CancelledError
-from typing import TYPE_CHECKING, Any, AnyStr, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, AnyStr, Optional
 from urllib.parse import unquote
 
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse

@@ -18,7 +18,6 @@
 import json
 from datetime import datetime
 from operator import itemgetter
-from typing import List
 from uuid import UUID
 
 import pytest

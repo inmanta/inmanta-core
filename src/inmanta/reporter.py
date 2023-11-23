@@ -22,7 +22,7 @@ import base64
 import logging
 import time
 from asyncio import Task
-from typing import Dict, Optional
+from typing import Optional
 from urllib.parse import quote
 
 from pyformance import MetricsRegistry, global_registry

@@ -25,7 +25,7 @@ import subprocess
 import sys
 import warnings
 from collections.abc import Iterator
-from typing import Optional, Type
+from typing import Optional
 
 import py
 import pytest

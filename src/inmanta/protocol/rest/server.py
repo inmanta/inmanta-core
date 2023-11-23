@@ -23,7 +23,7 @@ from asyncio import CancelledError
 from collections import defaultdict
 from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import tornado
 from pyformance import timer

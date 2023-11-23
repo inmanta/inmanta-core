@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import py
 import pytest

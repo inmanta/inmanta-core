@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import typing
 
 import pytest
 

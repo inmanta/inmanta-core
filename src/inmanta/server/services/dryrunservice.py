@@ -18,7 +18,7 @@
 import asyncio
 import logging
 import uuid
-from typing import Dict, List, Optional, cast
+from typing import Optional, cast
 
 from inmanta import data
 from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus, ResourceVersionIdStr

@@ -24,7 +24,7 @@ import uuid
 from collections import abc
 from collections.abc import Iterator
 from itertools import chain
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type

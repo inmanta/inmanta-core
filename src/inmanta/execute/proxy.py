@@ -18,7 +18,7 @@
 
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 from inmanta.ast import NotFoundException, RuntimeException
 from inmanta.execute.util import NoneValue, Unknown
@@ -72,8 +72,6 @@ class AttributeNotFound(NotFoundException, AttributeError):
     This previously raised `NotFoundException` which is currently deprecated in this context.
     Its new behavior is to raise an AttributeError for compatibility with Python's builtin `hasattr`.
     """
-
-    pass
 
 
 @stable_api

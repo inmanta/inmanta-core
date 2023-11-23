@@ -19,7 +19,7 @@ import enum
 import inspect
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 from uuid import UUID
 
 import pytest

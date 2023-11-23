@@ -19,7 +19,7 @@
 import logging
 import threading
 import time
-from typing import Callable, Dict, Optional
+from typing import Callable, Optional
 
 from execnet import gateway_bootstrap, multi
 

@@ -25,7 +25,7 @@ import subprocess
 import uuid
 from asyncio import Semaphore
 from collections import abc
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import pkg_resources
 import py.path

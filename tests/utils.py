@@ -28,7 +28,7 @@ from collections import abc
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timezone
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+from typing import Any, Optional, TypeVar, Union
 
 import pytest
 import yaml

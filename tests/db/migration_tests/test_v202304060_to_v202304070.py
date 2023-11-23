@@ -19,7 +19,7 @@ import datetime
 import os
 from collections import abc
 from collections.abc import Awaitable
-from typing import Callable, List
+from typing import Callable
 
 import pytest
 

@@ -18,7 +18,6 @@
 import datetime
 import uuid
 from datetime import timezone
-from typing import Tuple
 
 import pytest
 

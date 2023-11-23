@@ -17,7 +17,7 @@
 """
 
 
-from typing import Optional, Set
+from typing import Optional
 
 import pytest
 

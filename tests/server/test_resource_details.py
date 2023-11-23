@@ -17,7 +17,7 @@
 """
 import datetime
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any
 from uuid import UUID
 
 import pytest

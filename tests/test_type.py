@@ -18,7 +18,6 @@
 
 import typing
 from functools import reduce
-from typing import Tuple
 
 import pytest
 from more_itertools import pairwise

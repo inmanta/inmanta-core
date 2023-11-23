@@ -51,7 +51,7 @@ from collections.abc import Coroutine
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 import click
 from tornado import gen

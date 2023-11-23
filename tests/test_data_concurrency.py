@@ -26,7 +26,7 @@ import asyncio
 import datetime
 import uuid
 from collections import abc
-from typing import Optional, Type, TypeVar
+from typing import Optional, TypeVar
 
 import asyncpg
 import pytest

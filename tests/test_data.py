@@ -24,7 +24,7 @@ import time
 import uuid
 from collections import abc
 from datetime import timezone
-from typing import Dict, List, Optional, Type, cast
+from typing import Optional, cast
 
 import asyncpg
 import pytest

@@ -20,7 +20,7 @@ import logging
 import re
 from collections import abc
 from dataclasses import dataclass
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 from asyncpg import Connection
 

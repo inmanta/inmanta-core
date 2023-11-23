@@ -19,7 +19,7 @@ import logging
 import re
 import typing
 import urllib
-from typing import Dict, Optional
+from typing import Optional
 
 from inmanta.agent.cache import AgentCache
 

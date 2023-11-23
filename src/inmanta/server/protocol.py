@@ -23,7 +23,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web
@@ -260,7 +260,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
 
         Dependencies are up (if present) prior to invocation of this call
         """
-        pass
 
     async def prestop(self) -> None:
         """
@@ -571,7 +570,6 @@ class SessionListener:
         :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
                                         method was called. This parameter provides a snapshot which will not change.
         """
-        pass
 
     async def expire(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
         """
@@ -581,7 +579,6 @@ class SessionListener:
         :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
                                         method was called. This parameter provides a snapshot which will not change.
         """
-        pass
 
     async def seen(self, session: Session, endpoint_names_snapshot: set[str]) -> None:
         """
@@ -591,7 +588,6 @@ class SessionListener:
         :param endpoint_names_snapshot: The endpoint_names field of the session object may be updated after this
                                         method was called. This parameter provides a snapshot which will not change.
         """
-        pass
 
 
 # Internals

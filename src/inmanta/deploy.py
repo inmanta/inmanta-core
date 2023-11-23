@@ -22,7 +22,7 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Dict, Optional, Set, Tuple
+from typing import Optional
 
 from inmanta import config, const, module, postgresproc, protocol
 from inmanta.config import Config

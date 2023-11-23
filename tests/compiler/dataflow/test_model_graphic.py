@@ -20,7 +20,7 @@ import re
 import shutil
 from functools import total_ordering
 from itertools import chain
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Optional
 
 import pytest
 

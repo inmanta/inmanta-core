@@ -17,7 +17,6 @@
 """
 
 import numbers
-import typing
 from collections.abc import Sequence
 from typing import Callable
 from typing import List as PythonList

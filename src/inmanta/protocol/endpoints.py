@@ -24,7 +24,7 @@ from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
 from collections.abc import Coroutine
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Optional
 from urllib import parse
 
 from inmanta import config as inmanta_config
@@ -202,7 +202,6 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         This method is called after starting the client transport, but before sending the first heartbeat.
         """
-        pass
 
     async def start(self) -> None:
         """
@@ -225,13 +224,11 @@ class SessionEndpoint(Endpoint, CallTarget):
         Called when a connection becomes active. i.e. when a first heartbeat is received after startup or
         a first hearbeat after an :py:`on_disconnect`
         """
-        pass
 
     async def on_disconnect(self) -> None:
         """
         Called when the connection is lost unexpectedly (not on shutdown)
         """
-        pass
 
     async def perform_heartbeat(self) -> None:
         """

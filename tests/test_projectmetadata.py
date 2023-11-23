@@ -17,7 +17,7 @@
 """
 import logging
 import re
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 

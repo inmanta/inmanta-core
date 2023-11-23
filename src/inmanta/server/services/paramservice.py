@@ -19,7 +19,7 @@ import datetime
 import logging
 import uuid
 from collections.abc import Sequence
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Optional, Union, cast
 
 from inmanta import data
 from inmanta.const import ParameterSource

@@ -17,7 +17,6 @@
 """
 from collections.abc import Iterable
 from itertools import chain
-from typing import FrozenSet, Set
 
 from inmanta.execute.dataflow import AssignableNode, AttributeNode, AttributeNodeReference
 

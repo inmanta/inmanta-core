@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequenc
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Optional, cast
 
 import dateutil
 import dateutil.parser
@@ -72,7 +72,6 @@ class CompileStateListener:
         flight at any given time, out-of-order delivery is possible but highly unlikely)
         3- Notification are cancelled upon shutdown
         """
-        pass
 
 
 class CompileRun:

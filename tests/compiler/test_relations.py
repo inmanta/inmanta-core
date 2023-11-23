@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import pytest
 

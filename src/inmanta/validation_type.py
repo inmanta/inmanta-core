@@ -18,7 +18,7 @@
 import importlib
 import inspect
 from collections import abc
-from typing import Annotated, Optional, Type
+from typing import Annotated, Optional
 
 import pydantic
 

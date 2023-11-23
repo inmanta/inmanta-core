@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import inspect
-from typing import Callable, Dict, List, Optional, TypeVar, Union
+from typing import Callable, Optional, TypeVar, Union
 
 from inmanta import const
 from inmanta.types import Apireturn, HandlerType, MethodType

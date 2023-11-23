@@ -23,7 +23,7 @@ import shutil
 import sys
 from collections import abc
 from collections.abc import Sequence
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 import py
 import pytest

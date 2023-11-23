@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 from pathlib import Path
-from typing import List
 
 
 def test_migration_check():

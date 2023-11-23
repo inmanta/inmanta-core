@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from inmanta.types import JsonType
 

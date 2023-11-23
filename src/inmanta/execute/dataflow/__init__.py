@@ -19,7 +19,7 @@
 from collections.abc import Iterable, Iterator
 from functools import reduce
 from itertools import chain, filterfalse
-from typing import TYPE_CHECKING, Callable, Dict, FrozenSet, Generic, List, Optional, Set, Tuple, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, Optional, TypeVar
 
 if TYPE_CHECKING:
     from inmanta.ast import Locatable

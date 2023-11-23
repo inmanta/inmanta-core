@@ -45,7 +45,7 @@ from itertools import chain
 from subprocess import CalledProcessError
 from tarfile import TarFile
 from time import time
-from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, Set, TextIO, Tuple, Type, TypeVar, Union, cast
+from typing import Annotated, ClassVar, Dict, Generic, List, NewType, Optional, TextIO, TypeVar, Union, cast
 
 import more_itertools
 import pkg_resources

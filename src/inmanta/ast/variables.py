@@ -18,7 +18,7 @@
 
 import logging
 from collections import abc
-from typing import Dict, Generic, List, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException

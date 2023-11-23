@@ -19,7 +19,7 @@ import datetime
 import logging
 import uuid
 from collections.abc import Sequence
-from typing import Dict, List, Optional, cast
+from typing import Optional, cast
 
 from asyncpg import Connection
 
