@@ -133,8 +133,6 @@ class DefineEntity(TypeDefinitionStatement):
         if "-" in name:
             raise HyphenException(lname)
 
-        self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
-
         self.name = name
         self.attributes = attributes
         if comment is not None:
@@ -213,6 +211,7 @@ class DefineEntity(TypeDefinitionStatement):
                 raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
                 parent_type = self.namespace.get_type(parent)
+                self.anchors.append(TypeReferenceAnchor(self.namespace, parent))
                 if parent_type is self.type:
                     raise TypingException(self, "Entity can not be its own parent (%s) " % parent)
                 if not isinstance(parent_type, Entity):
@@ -275,8 +274,6 @@ class DefineImplementation(TypeDefinitionStatement):
 
         self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), self.comment)
         self.type.location = name.get_location()
-        self.anchors = [TypeReferenceAnchor(namespace, target_type)]
-        self.anchors.extend(statements.get_anchors())
 
     def __repr__(self) -> str:
         """
@@ -290,12 +287,15 @@ class DefineImplementation(TypeDefinitionStatement):
         """
         try:
             cls = self.namespace.get_type(self.entity)
+            self.anchors = [TypeReferenceAnchor(self.namespace, self.entity)]
             if not isinstance(cls, Entity):
                 raise TypingException(
                     self, "Implementation can only be define for an Entity, but %s is a %s" % (self.entity, cls)
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
+            self.block.normalize()
+            self.anchors.extend(self.block.get_anchors())
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
@@ -412,8 +412,6 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.set_location(name.get_location())
         self.basetype = basetype
-        self.anchors.append(TypeReferenceAnchor(namespace, basetype))
-        self.anchors.extend(expression.get_anchors())
         self.set_expression(expression)
         self.type = ConstraintType(self.namespace, str(name))
         self.type.location = name.get_location()
@@ -458,6 +456,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
+        self.anchors.append(TypeReferenceAnchor(self.namespace, self.basetype))
 
         constraint_type = self.type
 
@@ -465,6 +464,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
         self.expression.normalize()
+        self.anchors.extend(self.expression.get_anchors())
 
 
 Relationside = Tuple[LocatableString, Optional[LocatableString], Optional[Tuple[int, Optional[int]]]]
@@ -574,11 +574,7 @@ class DefineIndex(DefinitionStatement):
     def __init__(self, entity_type: LocatableString, attributes: List[LocatableString]):
         DefinitionStatement.__init__(self)
         self.type = entity_type
-        self.attributes = [str(a) for a in attributes]
-        self.anchors.append(TypeReferenceAnchor(entity_type.namespace, entity_type))
-        self.anchors.extend(
-            [AttributeReferenceAnchor(x.get_location(), entity_type.namespace, entity_type, str(x)) for x in attributes]
-        )
+        self.attributes = attributes
 
     def types(self, recursive: bool = False) -> List[Tuple[str, LocatableString]]:
         """
@@ -587,7 +583,7 @@ class DefineIndex(DefinitionStatement):
         return [("type", self.type)]
 
     def __repr__(self) -> str:
-        return "index %s(%s)" % (self.type, ", ".join(self.attributes))
+        return "index %s(%s)" % (self.type, ", ".join([str(a) for a in self.attributes]))
 
     def evaluate(self) -> None:
         """
@@ -595,27 +591,34 @@ class DefineIndex(DefinitionStatement):
         """
         entity_type = self.namespace.get_type(self.type)
         assert isinstance(entity_type, Entity), "%s is not an entity" % entity_type
+        self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.type))
 
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:
-            if attribute not in allattributes:
+            str_attribute = str(attribute)
+            if str_attribute not in allattributes:
                 raise NotFoundException(
-                    self, attribute, "Attribute '%s' referenced in index is not defined in entity %s" % (attribute, entity_type)
+                    self,
+                    str_attribute,
+                    "Attribute '%s' referenced in index is not defined in entity %s" % (str_attribute, entity_type),
                 )
             else:
-                rattribute = entity_type.get_attribute(attribute)
+                rattribute = entity_type.get_attribute(str_attribute)
+                self.anchors.append(TypeReferenceAnchor(attribute.namespace, attribute))
                 assert rattribute is not None  # Make mypy happy
                 if rattribute.is_optional():
                     raise IndexException(
                         self,
-                        "Index can not contain optional attributes, Attribute ' %s.%s' is optional" % (attribute, entity_type),
+                        "Index can not contain optional attributes, Attribute ' %s.%s' is optional"
+                        % (str_attribute, entity_type),
                     )
                 if rattribute.is_multi():
                     raise IndexException(
-                        self, "Index can not contain list attributes, Attribute ' %s.%s' is a list" % (attribute, entity_type)
+                        self,
+                        "Index can not contain list attributes, Attribute ' %s.%s' is a list" % (str_attribute, entity_type),
                     )
 
-        entity_type.add_index(self.attributes)
+        entity_type.add_index([str(a) for a in self.attributes])
 
 
 class PluginStatement(TypeDefinitionStatement):
