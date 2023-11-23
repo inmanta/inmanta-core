@@ -848,7 +848,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
                   and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
                   and a list of requirements.
 
-    The method validates that all provided file references are valid and checks for conflicts with existing code entries.
+    The endpoint validates that all provided file references are valid and checks for conflicts with existing code entries.
     """
 
 
