@@ -383,17 +383,6 @@ Child()
     )
 
 
-def test_print_number(snippetcompiler, capsys):
-    snippetcompiler.setup_for_snippet(
-        """
-std::print(number(1.234))
-        """,
-    )
-    compiler.do_compile()
-    out, err = capsys.readouterr()
-    assert "1.234" in out
-
-
 def test_deprecate_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """

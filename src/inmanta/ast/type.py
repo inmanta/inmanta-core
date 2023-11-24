@@ -229,21 +229,12 @@ class Primitive(Type):
 @stable_api
 class Number(Primitive):
     """
-    This class represents a integer or a float in the configuration model.
+    This class represents an integer or a float in the configuration model.
     """
 
     def __init__(self) -> None:
         Primitive.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
-
-    def cast(self, value: Optional[object]) -> object:
-        """
-        Attempts to cast a given value to an int or a float.
-        """
-        # Keep precision: cast to an int only if it already is an int
-        if isinstance(value, int):
-            return int(value)
-        return super().cast(value)
 
     def validate(self, value: Optional[object]) -> bool:
         """
