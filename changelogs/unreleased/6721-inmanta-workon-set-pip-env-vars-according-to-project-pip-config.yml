@@ -6,4 +6,4 @@ issue-nr: 6721
 change-type: minor
 destination-branches: [master]
 sections:
-  feature: "{{description}}"
+  minor-improvement: "{{description}}"
