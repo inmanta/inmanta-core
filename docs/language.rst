@@ -125,18 +125,14 @@ Literal values can be assigned to variables
 Primitive types
 ==============================
 
-The basic primitive types are ``string``, ``number``, ``float``, ``int`` or ``bool``. These basic types also support type casts:
-
-.. note::
-    ``number`` will be deprecated in the future
-
+The basic primitive types are ``string``, ``float``, ``int`` or ``bool``. These basic types also support type casts:
 
 .. code-block:: inmanta
 
     assert = true
     assert = int("1") == 1
     assert = float("1.2") == 1.2
-    assert = float(true) == 1
+    assert = int(true) == 1
     assert = bool(1.2) == true
     assert = bool(0) == false
     assert = bool(null) == false

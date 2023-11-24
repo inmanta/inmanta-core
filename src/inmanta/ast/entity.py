@@ -33,7 +33,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast.type import NamedType, Type
+from inmanta.ast.type import Float, NamedType, Number, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType
 
@@ -381,15 +381,7 @@ class Entity(NamedType, WithComment):
         Update indexes based on the instance and the attribute that has
         been set
         """
-        attributes = {}
-        for k, v in instance.slots.items():
-            if v.is_ready():
-                value = v.get_value()
-                # Check if the value is an integer,
-                # and convert to float if necessary
-                if isinstance(value, int):
-                    value = float(value)
-                attributes[k] = repr(value)
+        attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
 
         # check if an index entry can be added
         for index_attributes in self.get_indices():
@@ -436,11 +428,16 @@ class Entity(NamedType, WithComment):
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
-        # Convert integers to floats in the key, similar to add_to_index
         key = ", ".join(
-            ["%s=%s" % (k, repr(float(v) if isinstance(v, int) else v)) for (k, v) in sorted(params, key=lambda x: x[0])]
+            [
+                "%s=%s"
+                % (
+                    k,
+                    repr(self.get_attribute(k).type.cast(v) if isinstance(self.get_attribute(k).type, (Float, Number)) else v),
+                )
+                for k, v in sorted(params, key=lambda x: x[0])
+            ]
         )
-
         if target is None:
             if key in self._index:
                 return self._index[key]
