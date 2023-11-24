@@ -441,7 +441,7 @@ def test_compiler_exception_output(snippetcompiler, cache_cf_files):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number attr
+    int attr
 end
 
 implement Test using std::none
@@ -455,7 +455,7 @@ o = Test(attr="1234")
         f"""Could not set attribute `attr` on instance `__config__::Test (instantiated at {cwd}/main.cf:8)` """
         f"""(reported in Construct(Test) ({cwd}/main.cf:8))
 caused by:
-  Invalid value '1234', expected Number (reported in Construct(Test) ({cwd}/main.cf:8))
+  Invalid value '1234', expected Integer (reported in Construct(Test) ({cwd}/main.cf:8))
 """
     )
 
@@ -511,7 +511,7 @@ def test_warning_min_c_option_file_doesnt_exist(snippetcompiler, tmpdir):
     snippetcompiler.setup_for_snippet(
         """
 entity Test:
-    number attr
+    int attr
 end
 """
     )

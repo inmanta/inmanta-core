@@ -273,6 +273,19 @@ class Float(Number):
         Number.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [float]
 
+    def validate(self, value: Optional[object]) -> bool:
+        """
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
+        """
+        if isinstance(value, AnyType):
+            return True
+
+        if not isinstance(value, float):
+            raise RuntimeException(None, "Invalid value '%s', expected Float" % value)
+
+        return True  # allow this function to be called from a lambda function
+
     def type_string(self) -> str:
         return "float"
 
@@ -288,11 +301,17 @@ class Integer(Number):
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
 
     def validate(self, value: Optional[object]) -> bool:
-        if not super().validate(value):
-            return False
-        if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
-        return True
+        """
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
+        """
+        if isinstance(value, AnyType):
+            return True
+
+        if not isinstance(value, int):
+            raise RuntimeException(None, "Invalid value '%s', expected Integer" % value)
+
+        return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
         return "int"

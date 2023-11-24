@@ -118,7 +118,7 @@ def test_exception_nullable(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
-    number? n
+    int? n
 end
 
 implement A using std::none

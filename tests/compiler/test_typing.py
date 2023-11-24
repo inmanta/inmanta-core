@@ -268,9 +268,9 @@ number(null)
 def test_cast_exception_value_error(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-number("Hello World!")
+int("Hello World!")
         """,
-        "Failed to cast 'Hello World!' to number (reported in number('Hello World!') ({dir}/main.cf:2))",
+        "Failed to cast 'Hello World!' to int (reported in int('Hello World!') ({dir}/main.cf:2))",
     )
 
 
@@ -392,6 +392,6 @@ end
     )
     with pytest.warns(
         TypeDeprecationWarning,
-        match=re.escape("Type 'number' id deprecated, use 'float' instead"),
+        match=re.escape("Type 'number' is deprecated, use 'float' instead"),
     ):
         (_, scopes) = compiler.do_compile()

@@ -143,7 +143,7 @@ def test_dataflow_multi_exception(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
-    number n
+    int n
 end
 
 implement A using std::none
@@ -247,8 +247,8 @@ def test_exception_default_constructors(snippetcompiler):
 typedef MyType as A(n = 42)
 
 entity A:
-    number n
-    number m
+    int n
+    int m
 end
 
 implement A using std::none

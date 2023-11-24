@@ -32,7 +32,7 @@ from inmanta.ast import (
     OptionalValueException,
     RuntimeException,
 )
-from inmanta.ast.type import Type
+from inmanta.ast.type import Float, Type
 from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
@@ -267,6 +267,8 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
                 return
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
+        if isinstance(self.type, (Float)):
+            value = self.type.cast(value)
         self.value = value
         self.location = location
         self.hasValue = True

@@ -388,7 +388,7 @@ class Namespace(Namespaced):
                 raise TypeNotFoundException(typ, self)
         elif name in self.primitives:
             if name == "number":
-                msg = "Type 'number' id deprecated, use 'float' instead (%s)" % str(typ.location)
+                msg = "Type 'number' is deprecated, use 'float' or 'int' instead (%s)" % str(typ.location)
                 warnings.warn(TypeDeprecationWarning(msg))
             return self.primitives[name]
         else:
