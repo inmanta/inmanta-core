@@ -5,5 +5,5 @@ change-type: minor
 destination-branches: [master]
 sections:
   feature: "Introduce the 'float' type which is like a float in python"
-  deprecation-note: "Deprecate the 'number' type. Instead the 'int' or 'float' type should be used"
+  deprecation-note: "Deprecate the 'number' type. Use the 'int' or 'float' type instead"
 
