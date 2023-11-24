@@ -79,6 +79,7 @@ from inmanta.ast import CompilerException, LocatableString, Location, Namespace,
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
+from inmanta.env import assert_pip_has_source
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -724,7 +725,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
 
-        project.metadata.pip.assert_has_source(f"a v2 module {module_name}")
+        assert_pip_has_source(project.metadata.pip, "a v2 module {module_name}")
 
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)

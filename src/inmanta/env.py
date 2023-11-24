@@ -302,6 +302,20 @@ class PipUpgradeStrategy(enum.Enum):
     ONLY_IF_NEEDED = "only-if-needed"
 
 
+def assert_pip_has_source(pip_config: PipConfig, reason: str) -> None:
+    """Ensure this index has a valid package source, otherwise raise exception"""
+    # placed here and not in pip_config to avoid import loop
+    if not pip_config.has_source():
+        raise PackageNotFound(
+            f"Attempting to install {reason} but pip is not configured. Add the relevant pip "
+            f"indexes to the project config file. e.g. to set PyPi as pip index, add the following "
+            "to `project.yml`:"
+            "\npip:"
+            "\n  index_url: https://pypi.org/simple"
+            "\nAnother option is to set `pip.use_system_config = true` to use the system's pip config."
+        )
+
+
 class PipCommandBuilder:
     """
     Class used to compose pip commands.
@@ -395,7 +409,7 @@ class Pip(PipCommandBuilder):
             pass
         else:
             # All others need an index
-            config.assert_has_source(" ".join(install_args))
+            assert_pip_has_source(config, " ".join(install_args))
 
         index_args: list[str] = []
         if config.index_url:
