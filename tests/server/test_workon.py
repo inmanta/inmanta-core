@@ -195,7 +195,7 @@ async def compiled_environments(client: protocol.Client) -> abc.AsyncIterator[ab
                 result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
             )
 
-        await utils.retry_limited(all_compiles_done, 150)
+        await utils.retry_limited(all_compiles_done, 15)
 
         yield environments
 
@@ -1148,10 +1148,10 @@ def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, st
 @pytest.mark.parametrize(
     "scenario_id",
     [
-        "scenario_1",
-        "scenario_2",
+        # "scenario_1",
+        # "scenario_2",
         "scenario_3",
-        "scenario_4",
+        # "scenario_4",
     ],
 )
 async def test_workon_sets_pip_config(

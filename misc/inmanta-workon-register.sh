@@ -183,16 +183,32 @@ function __get_pip_config_setting {
     return 1
 }
 
+
+function __get_pip_config_setting_all_at_once {
+    # make sure extra index url are formatted correctly (space-separated) e.g. "idx0 idx1 idx2"
+    result=$(
+        "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip; [(print(k), print(pip_cfg.model_dump()[k]) if k != 'extra_index_url' else print(' '.join(pip_cfg.model_dump()[k]))) for k in ['pre','index_url','extra_index_url','use_system_config']]; print('EOF');" #2> /dev/null TODO add error suppression back in ?
+    )
+    echo "$result"
+    return 0
+}
 function __set_pip_config {
     declare pre
     declare index_url
     declare extra_index_url
     declare use_system_config
 
-    pre=$(__get_pip_config_setting "pre")
-    index_url=$(__get_pip_config_setting 'index_url')
-    extra_index_url=$(__get_pip_config_setting 'extra_index_url')
-    use_system_config=$(__get_pip_config_setting "use_system_config")
+#    pre=$(__get_pip_config_setting "pre")
+#    index_url=$(__get_pip_config_setting 'index_url')
+#    extra_index_url=$(__get_pip_config_setting 'extra_index_url')
+#    use_system_config=$(__get_pip_config_setting "use_system_config")
+
+    all_in_one="$(__get_pip_config_setting_all_at_once)" || return
+
+    # TODO grab these one by one
+    'pre','index_url','extra_index_url','use_system_config'
+    echo "ALLINONE: $all_in_one" >&2
+    return 1
 
 #    echo "dbug $use_system_config $index_url" >&2
 
