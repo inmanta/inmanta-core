@@ -1,0 +1,7 @@
+description: number type should no longer differentiate between integer and decimal notation when used in indexes.
+issue-nr: 6526
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "Introduce an alias 'float' for the 'number' type in the inmanta language"

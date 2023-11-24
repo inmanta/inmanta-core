@@ -15,14 +15,14 @@
 
     Contact: code@inmanta.com
 """
-
+import re
 import typing
 
 import pytest
 
 import inmanta.ast.type as inmanta_type
 import inmanta.compiler as compiler
-from inmanta.ast import AttributeException, Namespace, TypingException
+from inmanta.ast import AttributeException, Namespace, TypeDeprecationWarning, TypingException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
 from inmanta.ast.type import Bool, Integer, Number, String
@@ -380,3 +380,18 @@ implement Child using std::none
 Child()
         """,
     )
+
+
+def test_deprecate_number(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    number val
+end
+        """,
+    )
+    with pytest.warns(
+        TypeDeprecationWarning,
+        match=re.escape("Type 'number' id deprecated, use 'float' instead"),
+    ):
+        (_, scopes) = compiler.do_compile()

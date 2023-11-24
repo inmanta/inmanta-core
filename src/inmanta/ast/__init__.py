@@ -21,6 +21,7 @@ from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
 
+from inmanta import warnings
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
@@ -39,6 +40,10 @@ if TYPE_CHECKING:
     from inmanta.compiler import Compiler
     from inmanta.execute.runtime import DelayedResultVariable, ExecutionContext, Instance, ResultVariable  # noqa: F401
     from inmanta.plugins import PluginException
+
+
+class TypeDeprecationWarning(InmantaWarning):
+    pass
 
 
 class Location(export.Exportable):
@@ -382,6 +387,9 @@ class Namespace(Namespaced):
             else:
                 raise TypeNotFoundException(typ, self)
         elif name in self.primitives:
+            if name == "number":
+                msg = "Type 'number' id deprecated, use 'float' instead (%s)" % str(typ.location)
+                warnings.warn(TypeDeprecationWarning(msg))
             return self.primitives[name]
         else:
             cns = self  # type: Optional[Namespace]
