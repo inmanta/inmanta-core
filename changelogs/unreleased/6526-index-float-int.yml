@@ -4,4 +4,6 @@ issue-repo: inmanta-core
 change-type: minor
 destination-branches: [master]
 sections:
-  feature: "Introduce an alias 'float' for the 'number' type in the inmanta language"
+  feature: "Introduce the 'float' type which is like a float in python"
+  deprecation-note: "Deprecate the 'number' type. Instead the 'int' or 'float' type should be used"
+
