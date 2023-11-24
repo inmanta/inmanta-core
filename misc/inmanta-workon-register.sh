@@ -80,7 +80,7 @@ EOF
 }
 
 function __store_old_config {
-    #  Store config before activation to be later restored in __restore_old_pip_config during deactivation
+    #  Store config before activation to be later restored in __restore_old_config during deactivation
 
     # Store INMANTA_CONFIG_ENVIRONMENT
     if [ -n "${INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
@@ -107,7 +107,7 @@ function __store_old_config {
 }
 
 function __restore_old_config {
-    # Reset the config in the state it was before activation
+    # Reset the config in the state it was before activation (saved in __store_old_pip_config)
     if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
         # Another env was active prior to inmanta-workon call: restore INMANTA_CONFIG_ENVIRONMENT to its old value
         INMANTA_CONFIG_ENVIRONMENT="${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}"
@@ -117,7 +117,7 @@ function __restore_old_config {
         unset INMANTA_CONFIG_ENVIRONMENT
     fi
 
-    # Restore pip configuration from values saved in __store_old_pip_config
+    # Restore pip configuration
     if [ -n "${_OLD_INMANTA_CONFIG_PIP_PRE:-}" ] ; then
         PIP_PRE="${_OLD_INMANTA_CONFIG_PIP_PRE:-}"
         export PIP_PRE
@@ -158,12 +158,19 @@ function __get_pip_config_setting {
     if [ "$1" == "extra_index_url" ] ; then
         # make sure extra index url are formatted correctly (space-separated) e.g. "idx0 idx1 idx2"
         result=$(
-            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(' '.join(pip_cfg.$1));" #2> /dev/null
+            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(' '.join(pip_cfg.$1));" #2> /dev/null TODO add error suppression back in ?
         )
         echo "$result"
         return 0
     fi
-    if [ "$1" == "index_url" ] || [ "$1" == "pre" ] || [ "$1" == "use_system_config" ] ; then
+    if [ "$1" == "index_url" ] ; then
+        result=$(
+            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(pip_cfg.$1) if pip_cfg.$1 else ...;" #2> /dev/null
+        )
+        echo "$result"
+        return 0
+    fi
+    if  [ "$1" == "pre" ] || [ "$1" == "use_system_config" ] ; then
         result=$(
             "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(pip_cfg.$1);" #2> /dev/null
         )
@@ -194,29 +201,32 @@ function __set_pip_config {
             return 0
         fi
         # Override values set in the config
-        if [ -n "${index_url:-}" ] ; then
-            PIP_INDEX_URL="${index_url:-}"
-        fi
-        if [ -n "${extra_index_url:-}" ] ; then
-            PIP_EXTRA_INDEX_URL="${extra_index_url:-}"
-        fi
-        if [ -n "${pre:-}" ] ; then
-            PIP_PRE="${pre:-}"
-        fi
+        PIP_INDEX_URL="${index_url:-}"
+        export PIP_INDEX_URL
+
+        PIP_EXTRA_INDEX_URL="${extra_index_url:-}"
+        export PIP_EXTRA_INDEX_URL
+
+        PIP_PRE="${pre:-}"
+        export PIP_PRE
+
         # Make sure we disable the config
         PIP_CONFIG_FILE="/dev/null"
+        export PIP_CONFIG_FILE
     else
         if [ -n "${index_url:-}" ] ; then
             PIP_INDEX_URL="${index_url:-}"
+            export PIP_INDEX_URL
         fi
         if [ -n "${pre:-}" ] ; then
             PIP_PRE="${pre:-}"
+            export PIP_PRE
         fi
         # Append to existing extra indexes
         if [ -n "${extra_index_url:-}" ] ; then
-            PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL:+${PIP_EXTRA_INDEX_URL}} ${extra_index_url}"
+            PIP_EXTRA_INDEX_URL="${PIP_EXTRA_INDEX_URL:+${PIP_EXTRA_INDEX_URL} }${extra_index_url}"
+            export PIP_EXTRA_INDEX_URL
         fi
-
     fi
 
     return 0
