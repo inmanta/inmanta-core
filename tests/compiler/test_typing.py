@@ -151,6 +151,7 @@ w = int(tests::unknown())
     assert Integer().validate(y)
     assert Integer().validate(z)
     assert isinstance(w, Unknown)
+    assert not any(isinstance(v, (bool, float)) for v in (x, y, z))
 
 
 def test_cast_to_string(snippetcompiler):
@@ -382,6 +383,17 @@ Child()
     )
 
 
+def test_print_number(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+std::print(number(1.234))
+        """,
+    )
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert "1.234" in out
+
+
 def test_deprecate_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
@@ -397,23 +409,6 @@ end
         (_, scopes) = compiler.do_compile()
 
 
-def test_number_type(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity Test:
-    number i = 0
-end
-implement Test using std::none
-Test(i = 42)
-Test(i = -42)
-Test()
-Test(i = 42.0)
-Test(i = false)
-        """,
-    )
-    compiler.do_compile()
-
-
 def test_same_value_float_int(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
@@ -421,6 +416,8 @@ def test_same_value_float_int(snippetcompiler):
     j = 42
     i = j
     j = i
+    a = (42 == 42.0)
+    a = true
     """,
     )
     (_, scopes) = compiler.do_compile()
