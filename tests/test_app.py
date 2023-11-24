@@ -455,7 +455,7 @@ o = Test(attr="1234")
         f"""Could not set attribute `attr` on instance `__config__::Test (instantiated at {cwd}/main.cf:8)` """
         f"""(reported in Construct(Test) ({cwd}/main.cf:8))
 caused by:
-  Invalid value '1234', expected Integer (reported in Construct(Test) ({cwd}/main.cf:8))
+  Invalid value '1234', expected int (reported in Construct(Test) ({cwd}/main.cf:8))
 """
     )
 
