@@ -281,7 +281,7 @@ class Float(Number):
         if isinstance(value, AnyType):
             return True
 
-        if not isinstance(value, float):
+        if not isinstance(value, numbers.Number):
             raise RuntimeException(None, "Invalid value '%s', expected Float" % value)
 
         return True  # allow this function to be called from a lambda function
@@ -309,7 +309,7 @@ class Integer(Number):
             return True
 
         if not isinstance(value, int):
-            raise RuntimeException(None, "Invalid value '%s', expected Integer" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
 
         return True  # allow this function to be called from a lambda function
 

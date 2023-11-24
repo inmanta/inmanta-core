@@ -223,7 +223,7 @@ implement Test using std::none
 
 Test(t = 12)
         """,
-        "Invalid value '[1, 2]', expected Number (reported in int? t = List() ({dir}/main.cf:3:13))",
+        "Invalid value '[1, 2]', expected int (reported in int? t = List() ({dir}/main.cf:3:10))",
     )
 
 
@@ -252,7 +252,7 @@ entity Test:
     int t = "str"
 end
         """,
-        "Invalid value 'str', expected Number (reported in int t = 'str' ({dir}/main.cf:3:12))",
+        "Invalid value 'str', expected int (reported in int t = 'str' ({dir}/main.cf:3:9))",
     )
 
 

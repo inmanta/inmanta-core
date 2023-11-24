@@ -392,6 +392,229 @@ end
     )
     with pytest.warns(
         TypeDeprecationWarning,
-        match=re.escape("Type 'number' is deprecated, use 'float' instead"),
+        match=re.escape("Type 'number' is deprecated, use 'float' or 'int' instead"),
     ):
         (_, scopes) = compiler.do_compile()
+
+
+def test_number_type(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Test:
+    number i = 0
+end
+implement Test using std::none
+Test(i = 42)
+Test(i = -42)
+Test()
+Test(i = 42.0)
+Test(i = false)
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_same_value_float_int(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+    i = 42.0
+    j = 42
+    i = j
+    j = i
+    """,
+    )
+    (_, scopes) = compiler.do_compile()
+
+
+def test_different_value_float_int(snippetcompiler, capsys):
+    snippetcompiler.setup_for_error(
+        """
+    i = 42.1
+    j = 42
+    i = j
+    """,
+        "value set twice:\n"
+        "\told value: 42.1\n"
+        "\t\tset at {dir}/main.cf:2\n"
+        "\tnew value: 42\n"
+        "\t\tset at {dir}/main.cf:4:9\n"
+        " (reported in i = j ({dir}/main.cf:4))",
+    )
+
+
+@pytest.mark.parametrize("float_val", ["42.0", "42.1"])
+def test_float_attribute(snippetcompiler, float_val):
+    snippet = f"""
+    entity Float:
+        float i
+    end
+    implement Float using std::none
+    f = Float(i={float_val})
+    """
+    snippetcompiler.setup_for_snippet(snippet)
+
+
+@pytest.mark.parametrize("float_val", ["42.0", "42.1"])
+def test_int_attribute_with_float(snippetcompiler, float_val):
+    snippet = f"""
+    entity Int:
+        int i
+    end
+    implement Int using std::none
+    i = Int(i={float_val}) # => not an int
+    """
+    snippetcompiler.setup_for_error(
+        snippet,
+        "Could not set attribute `i` on instance `__config__::Int (instantiated at "
+        "{dir}/main.cf:6)` (reported in Construct(Int) "
+        "({dir}/main.cf:6))\n"
+        "caused by:\n"
+        f"  Invalid value '{float_val}', expected int (reported in Construct(Int) "
+        "({dir}/main.cf:6))",
+    )
+
+
+def test_float_int_attribute_2(snippetcompiler):
+    snippet = """
+    entity Int:
+        int i
+    end
+    entity Float:
+        float i
+    end
+    implement Int using std::none
+    implement Float using std::none
+    f = Int(i=42)
+    i = Float(i=f.i)
+    """
+    snippetcompiler.setup_for_snippet(snippet)
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    x = root.lookup("i").get_value()
+    i = x.get_attribute("i").get_value()
+    assert not isinstance(i, int)
+    assert isinstance(i, float)
+
+
+def test_assign_float_to_int(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+    entity Test:
+        int i = 0
+    end
+    implement Test using std::none
+    Test(i = 42.1)
+        """,
+        "Could not set attribute `i` on instance `__config__::Test (instantiated at {dir}/main.cf:6)` "
+        "(reported in Construct(Test) ({dir}/main.cf:6))\n"
+        "caused by:\n"
+        "  Invalid value '42.1', expected int (reported in Construct(Test) ({dir}/main.cf:6))",
+    )
+
+
+def test_assign_int_to_float(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        float i = 0
+    end
+    implement Test using std::none
+    x = Test(i = 42)
+    """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    x = root.lookup("x").get_value()
+    i = x.get_attribute("i").get_value()
+    assert not isinstance(i, int)
+    assert isinstance(i, float)
+
+
+def test_float_type(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+    entity Test:
+        float i = 0
+    end
+    implement Test using std::none
+    Test(i = 42)
+    Test(i = -42)
+    Test()
+    Test(i = false)
+    val1 = Test(i = 42.0)
+    a = float(21)
+    a = 21.0
+    b = float(25.0)
+    b = 25.0
+    x = float("31")
+    x = 31.0
+    y = float("22.0")
+    y = 22.0
+    z = float(true)
+    z = 1.0
+    u = float(false)
+    u = 0.0
+    """,
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+    x = root.lookup("x").get_value()
+    y = root.lookup("y").get_value()
+    z = root.lookup("z").get_value()
+    u = root.lookup("u").get_value()
+    assert Number().validate(a)
+    assert Number().validate(b)
+    assert Number().validate(x)
+    assert Number().validate(y)
+    assert Number().validate(z)
+    assert Number().validate(u)
+
+
+@pytest.mark.parametrize_any("type", ["number", "float"])
+def test_int_as_index_for_number(snippetcompiler, type):
+    snippetcompiler.setup_for_snippet(
+        f"""
+entity A:
+    {type} x
+end
+implement A using std::none
+index A(x)
+test = (A(x=0) == A(x=0.0))
+test = true
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_lookup_on_float_with_int(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    float x
+end
+implement A using std::none
+index A(x)
+a = A(x=1.0)
+y = A[x=1]
+a = y
+        """,
+    )
+    compiler.do_compile()
+
+
+def test_lookup_on_int_with_float(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    float x
+end
+implement A using std::none
+index A(x)
+a = A(x=1)
+y = A[x=1.0]
+a = y
+        """,
+    )
+    compiler.do_compile()
