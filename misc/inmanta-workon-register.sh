@@ -194,8 +194,10 @@ function __set_pip_config {
     extra_index_url=$(__get_pip_config_setting 'extra_index_url')
     use_system_config=$(__get_pip_config_setting "use_system_config")
 
+#    echo "dbug $use_system_config $index_url" >&2
+
     if [ "$use_system_config" == "False" ] ; then
-        if [ "$index_url" == "None" ] ; then
+        if [ -z "$index_url" ] ; then
             # Do not override any config because unsetting the config and the index urls might lead to PyPi being used, which is worse than keeping the config
             echo "WARNING: Cannot use project.yml pip configuration: pip.use-system-config is False, but no index is defined in the pip.index-url section of the project.yml" >&2
             return 0

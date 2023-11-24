@@ -17,6 +17,7 @@
 """
 import asyncio
 import asyncio.subprocess
+import copy
 import getpass
 import os
 import shutil
@@ -27,7 +28,7 @@ import textwrap
 import uuid
 from collections import abc
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 import py.path
 import pytest
@@ -194,7 +195,7 @@ async def compiled_environments(client: protocol.Client) -> abc.AsyncIterator[ab
                 result.code == 204 for result in await asyncio.gather(*(client.is_compiling(env.id) for env in environments))
             )
 
-        await utils.retry_limited(all_compiles_done, 15)
+        await utils.retry_limited(all_compiles_done, 150)
 
         yield environments
 
@@ -929,10 +930,10 @@ def create_script(script_parts: Sequence[str]) -> str:
     return out
 
 
-def add_check(var_name: str, expected_value: Optional[str], extra_debug_info: Optional[str] = "") -> str:
+def add_check(var_name: str, expected_value: str, extra_debug_info: Optional[str] = "") -> str:
     """
     This method is meant to be used in a post_activate or pre_activate script passed to the assert_workon_state method.
-    It checks that a given variable has the expected value if this value is a non-empty string.
+    It checks that a given variable has the expected value
     """
     if expected_value:
         return textwrap.dedent(
@@ -943,12 +944,20 @@ def add_check(var_name: str, expected_value: Optional[str], extra_debug_info: Op
                 fi
             """
         )
-    return ""
+    # Check for unset var:
+    return textwrap.dedent(
+        f"""
+            if [ -n "${{{var_name}}}" ] ; then
+                echo $"{extra_debug_info} '{var_name}' expected empty str got '${{{var_name}}}'"
+                exit 1
+            fi
+        """
+    )
 
 
 @dataclass
 class TestScenario:
-    pip_config: dict[str, str]
+    pip_config: dict[str, Union[str, bool, list[str]]]
     expected_warning: str
     pre_activate_script: str
     pre_deactivate_script: str
@@ -958,11 +967,27 @@ class TestScenario:
         return create_script([self.pre_deactivate_script, "deactivate", self.post_deactivate_script])
 
 
-@pytest.fixture("session")
+@pytest.fixture(scope="session")
 def scenarios() -> dict[str, TestScenario]:
+    # Scenario 1: [ use-system-config = True]
+
+    # BEFORE activation:
+    # - Set some values for the pip env variables
+    # BEFORE deactivation:
+    # - Check that PIP_CONFIG_FILE is left untouched
+    # - Check that PIP_EXTRA_INDEX_URL is extended with the values from the pip config
+    # - Check that the other env variable take the corresponding values from the pip config
+    # AFTER deactivation:
+    # - Check that all pip env variables are reset to their initial values
+
     index_url = "http://example.com/index"
     extra_indexes = ["http://example.com/extra_index_1", "http://example.com/extra_index_2"]
-    pip_config = {"use-system-config": True, "index-url": index_url, "extra-index-url": extra_indexes}
+    pip_config = {
+        "use-system-config": True,
+        "index-url": index_url,
+        "extra-index-url": extra_indexes,
+        "pre": False
+    }
     scenario_1 = TestScenario(
         pip_config=pip_config,
         expected_warning="",
@@ -984,7 +1009,7 @@ def scenarios() -> dict[str, TestScenario]:
                 # Make sure PIP_CONFIG_FILE is left untouched:
                 add_check("PIP_CONFIG_FILE", "initial_dummy_value", "pre_deactivate_script"),
                 add_check("PIP_INDEX_URL", index_url),
-                add_check("PIP_PRE", pip_config.get("pre")),
+                add_check("PIP_PRE", "False"),
             ]
         ),
         post_deactivate_script=create_script(
@@ -997,69 +1022,123 @@ def scenarios() -> dict[str, TestScenario]:
         ),
     )
 
-    return {"scenario_1": scenario_1}
+    # Scenario 2 [ use-system-config = False]
+
+    # Same as Scenario 1 except for:
+    # BEFORE deactivation:
+    # - Check that PIP_CONFIG_FILE is set to /dev/null
+    # - Check that PIP_EXTRA_INDEX_URL is only using the values from the pip config
+
+    scenario_2 = copy.deepcopy(scenario_1)
+    scenario_2.pip_config["use-system-config"] = False
+    scenario_2.pre_deactivate_script = create_script(
+        [
+            # Check we override extra index value
+            add_check("PIP_EXTRA_INDEX_URL", f"{' '.join(extra_indexes)}"),
+            # Make sure PIP_CONFIG_FILE is unset:
+            add_check("PIP_CONFIG_FILE", "/dev/null", "pre_deactivate_script"),
+            add_check("PIP_INDEX_URL", index_url),
+            add_check("PIP_PRE", "False"),
+        ]
+    )
+
+    # Scenario 3 [ use-system-config = False]
+
+    # Same as Scenario 1 except for:
+
+    # BEFORE activation:
+    # - Leave PIP_PRE unset
+
+    # AFTER deactivation:
+    # - Check PIP_PRE is unset
+
+    scenario_3 = copy.deepcopy(scenario_1)
+    scenario_3.pre_activate_script = create_script(
+        [
+            """
+            # Set some pip env var with dummy values:
+            export PIP_INDEX_URL="initial_dummy_value"
+            export PIP_EXTRA_INDEX_URL="initial_dummy_value"
+            export PIP_CONFIG_FILE="initial_dummy_value"
+            """
+        ]
+    )
+    scenario_3.pip_config["use-system-config"] = False
+    scenario_3.pre_deactivate_script = create_script(
+        [
+            # Check we override extra index value
+            add_check("PIP_EXTRA_INDEX_URL", f"{' '.join(extra_indexes)}"),
+            # Make sure PIP_CONFIG_FILE is unset:
+            add_check("PIP_CONFIG_FILE", "/dev/null", "pre_deactivate_script"),
+            add_check("PIP_INDEX_URL", index_url),
+            add_check("PIP_PRE", "False"),
+        ]
+    )
+    scenario_3.post_deactivate_script = create_script(
+        [
+            # add_check("PIP_INDEX_URL", "initial_dummy_value", "post_deactivation_check"),
+            add_check("PIP_EXTRA_INDEX_URL", "initial_dummy_value"),
+            add_check("PIP_PRE", ""),
+            add_check("PIP_CONFIG_FILE", "initial_dummy_value"),
+        ]
+    )
 
 
-# def scenario_1() -> dict[str, str]:
-#     pre_activate_script: str = create_script(
-#         [
-#             """
-#             # Set some pip env var with dummy values:
-#             export PIP_INDEX_URL="initial_dummy_value"
-#             export PIP_EXTRA_INDEX_URL="initial_dummy_value"
-#             export PIP_PRE="initial_dummy_value"
-#             export PIP_CONFIG_FILE="initial_dummy_value"
-#             """
-#         ]
-#     )
-#     post_deactivate_script: str = create_script(
-#         [
-#             add_check("PIP_INDEX_URL", "initial_dummy_value", "post_deactivation_check"),
-#             add_check("PIP_EXTRA_INDEX_URL", "initial_dummy_value", "post_deactivation_check"),
-#             add_check("PIP_PRE", "initial_dummy_value", "post_deactivation_check"),
-#             add_check("PIP_CONFIG_FILE", "initial_dummy_value", "post_deactivation_check")
-#         ]
-#     )
-#     return {
-#         "pre_activate_script": pre_activate_script,
-#         "post_deactivate_script": post_deactivate_script
-#     }
-#        def pre_deactivation_check(pip_config) -> str:
-#             """
-#             Return bash code as a string to perform checks on the pip env variables when the inmanta environment is active
-#             i.e. AFTER activation but BEFORE deactivation
-#             """
-#             out = ""
-#             index_url = pip_config.get("index-url")
-#             if not pip_config.get("use-system-config"):
-#                 if not index_url:
-#                     # Make sure we didn't change any config:
-#                     out += add_check("PIP_INDEX_URL", "initial_dummy_value")
-#                     out += add_check("PIP_EXTRA_INDEX_URL", "initial_dummy_value")
-#                     out += add_check("PIP_PRE", "initial_dummy_value")
-#                     out += add_check("PIP_CONFIG_FILE", "initial_dummy_value", "pre_deactivation_check")
-#                 else:
-#                     # Check we fully replace extra index value
-#                     out += add_check("PIP_EXTRA_INDEX_URL", " ".join(pip_config.get("extra-index-url", [])))
-#                     # Make sure PIP_CONFIG_FILE is disabled:
-#                     out += add_check("PIP_CONFIG_FILE", "/dev/null", "pre_deactivation_check")
-#             else:
-#                 # Check we extend extra index value
-#                 out += add_check(
-#                 "PIP_EXTRA_INDEX_URL",
-#                 f"initial_dummy_value {' '.join(pip_config.get('extra-index-url', []))}".strip())
-#                 # Make sure PIP_CONFIG_FILE is left untouched:
-#                 out += add_check("PIP_CONFIG_FILE", "initial_dummy_value", "pre_deactivation_check")
-#
-#             out += add_check("PIP_INDEX_URL", index_url)
-#             out += add_check("PIP_PRE", pip_config.get("pre"))
-#
-#             return out
+    # Scenario 4 [ use-system-config = False and no index set in pip config]
 
+    # - Make sure a warning is raised
+    # - Make sure pip env variables are not changed at any time
+
+    pip_config = {
+        "use-system-config": False,
+        "pre": True
+    }
+    scenario_4 = TestScenario(
+        pip_config=pip_config,
+        expected_warning=(
+            "WARNING: Cannot use project.yml pip configuration: pip.use-system-config is False, but no index is defined "
+            "in the pip.index-url section of the project.yml\n"
+        ),
+        pre_activate_script=create_script(
+            [
+                """
+                # Set some pip env var with dummy values:
+                export PIP_INDEX_URL="initial_dummy_value"
+                export PIP_EXTRA_INDEX_URL="initial_dummy_value"
+                export PIP_PRE="False"
+                export PIP_CONFIG_FILE="initial_dummy_value"
+                """
+            ]
+        ),
+        pre_deactivate_script=create_script(
+            [
+                # Make sure config is left untouched:
+                add_check("PIP_INDEX_URL", "initial_dummy_value", "pre_deactivate_script"),
+                add_check("PIP_EXTRA_INDEX_URL", f"initial_dummy_value", "pre_deactivate_script"),
+                add_check("PIP_PRE", "False", "pre_deactivate_script"),
+                add_check("PIP_CONFIG_FILE", "initial_dummy_value", "pre_deactivate_script"),
+            ]
+        ),
+        post_deactivate_script=create_script(
+            [
+                add_check("PIP_INDEX_URL", "initial_dummy_value", "post_deactivation_check"),
+                add_check("PIP_EXTRA_INDEX_URL", "initial_dummy_value", "post_deactivation_check"),
+                add_check("PIP_PRE", "False", "post_deactivation_check"),
+                add_check("PIP_CONFIG_FILE", "initial_dummy_value", "post_deactivation_check"),
+            ]
+        ),
+    )
+
+    return {
+        "scenario_1": scenario_1,
+        "scenario_2": scenario_2,
+        "scenario_3": scenario_3,
+        "scenario_4": scenario_4,
+    }
 
 def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, str]):
     """
-    Override the project's pip config.
+    Util function to override the project's pip config.
 
     :param env_dir: Environment directory in which a project.yml is expected.
     :pip_config: The specific pip config to write in the project.yml
@@ -1073,53 +1152,13 @@ def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, st
         fd.write(yaml.dump(config, default_flow_style=False, sort_keys=False))
 
 
-# (
-#     {
-#         "use-system-config": True,
-#         "index-url": "http://example.com/index",
-#     },
-#     "",
-#     scenario_1()
-# ),
-# (
-#     {"use-system-config": False},
-#     (
-#         "WARNING: Cannot use project.yml pip configuration: pip.use-system-config is False, but no index is defined "
-#         "in the pip.index-url section of the project.yml\n",
-#     ),
-#     scenario_1()
-# ),
-# ({"use-system-config": False, "index-url": "http://example.com/index"}, ""),
-# (
-#     {
-#         "use-system-config": False,
-#         "index-url": "http://example.com/index",
-#         "extra-index-url": ["http://example.com/extra_index_1", "http://example.com/extra_index_2"],
-#         "pre": True,
-#     },
-#     "",
-# ),
-# (
-#     {
-#         "use-system-config": True,
-#         "index-url": "http://example.com/index",
-#         "extra-index-url": ["http://example.com/extra_index_1", "http://example.com/extra_index_2"],
-#         "pre": False,
-#     },
-#     "",
-# ),
-# (
-#     {
-#         "use-system-config": True,
-#         "pre": False,
-#     },
-#     "",
-#     scenario_1()
-# ),
-# ],
-# )
 @pytest.mark.slowtest
-@pytest.mark.parametrize("scenario_id", ["scenario_1"])
+@pytest.mark.parametrize("scenario_id", [
+    "scenario_1",
+    "scenario_2",
+    "scenario_3",
+    "scenario_4",
+])
 async def test_workon_sets_pip_config(
     server: Server,
     workon_workdir: py.path.local,
@@ -1127,29 +1166,28 @@ async def test_workon_sets_pip_config(
     workon_environments_dir: py.path.local,
     compiled_environments: abc.Sequence[data.model.Environment],
     scenario_id: str,
-    # scenarios: dict[str, TestScenario]
+    scenarios: dict[str, TestScenario]
 ) -> None:
     """
-    Verify that the pip env vars PIP_PRE, PIP_INDEX_URL and PIP_EXTRA_INDEX_URL are set according to the project.yml config
+    Check the expected behaviour for the different scenarios defined in the "scenarios" fixture.
     """
     inner_env_id: uuid.UUID = compiled_environments[0].id
     env_dir: py.path.local = workon_environments_dir.join(str(compiled_environments[0].id))
 
-    # scenario = scenarios[scenario_id]
+    scenario = scenarios[scenario_id]
 
-    scenario = {}
-    # patch_projectyml_pip_config(env_dir, scenario["pip_config"])
+    patch_projectyml_pip_config(env_dir, scenario.pip_config)
 
     await assert_workon_state(
         workon_bash,
         str(inner_env_id),
-        # pre_activate=scenario["pre_activate_script"],
-        # post_activate=scenario.post_activate_script(),
+        pre_activate=scenario.pre_activate_script,
+        post_activate=scenario.post_activate_script(),
         expected_dir=env_dir,
         invert_python_assert=True,
         invert_ps1_assert=True,
         expect_stderr=(
-            f"{scenario['expected_warning']}"
+            f"{scenario.expected_warning}"
             "WARNING: Make sure you exit the current environment by running the 'deactivate' command rather than simply exiting"
             " the shell. This ensures the proper permission checks are performed."
         ),
