@@ -168,7 +168,7 @@ For example
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
 
 
-Lists of primitive types are also primitive types: ``string[]``, ``float[]``, ``number[]``, ``bool[]`` or ``mac_addr[]``
+Lists of primitive types are also primitive types: ``string[]``, ``float[]``, ``bool[]`` or ``mac_addr[]``
 
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
