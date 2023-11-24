@@ -982,12 +982,7 @@ def scenarios() -> dict[str, TestScenario]:
 
     index_url = "http://example.com/index"
     extra_indexes = ["http://example.com/extra_index_1", "http://example.com/extra_index_2"]
-    pip_config = {
-        "use-system-config": True,
-        "index-url": index_url,
-        "extra-index-url": extra_indexes,
-        "pre": False
-    }
+    pip_config = {"use-system-config": True, "index-url": index_url, "extra-index-url": extra_indexes, "pre": False}
     scenario_1 = TestScenario(
         pip_config=pip_config,
         expected_warning="",
@@ -1083,16 +1078,12 @@ def scenarios() -> dict[str, TestScenario]:
         ]
     )
 
-
     # Scenario 4 [ use-system-config = False and no index set in pip config]
 
     # - Make sure a warning is raised
     # - Make sure pip env variables are not changed at any time
 
-    pip_config = {
-        "use-system-config": False,
-        "pre": True
-    }
+    pip_config = {"use-system-config": False, "pre": True}
     scenario_4 = TestScenario(
         pip_config=pip_config,
         expected_warning=(
@@ -1114,7 +1105,7 @@ def scenarios() -> dict[str, TestScenario]:
             [
                 # Make sure config is left untouched:
                 add_check("PIP_INDEX_URL", "initial_dummy_value", "pre_deactivate_script"),
-                add_check("PIP_EXTRA_INDEX_URL", f"initial_dummy_value", "pre_deactivate_script"),
+                add_check("PIP_EXTRA_INDEX_URL", "initial_dummy_value", "pre_deactivate_script"),
                 add_check("PIP_PRE", "False", "pre_deactivate_script"),
                 add_check("PIP_CONFIG_FILE", "initial_dummy_value", "pre_deactivate_script"),
             ]
@@ -1136,6 +1127,7 @@ def scenarios() -> dict[str, TestScenario]:
         "scenario_4": scenario_4,
     }
 
+
 def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, str]):
     """
     Util function to override the project's pip config.
@@ -1153,12 +1145,15 @@ def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, st
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize("scenario_id", [
-    "scenario_1",
-    "scenario_2",
-    "scenario_3",
-    "scenario_4",
-])
+@pytest.mark.parametrize(
+    "scenario_id",
+    [
+        "scenario_1",
+        "scenario_2",
+        "scenario_3",
+        "scenario_4",
+    ],
+)
 async def test_workon_sets_pip_config(
     server: Server,
     workon_workdir: py.path.local,
@@ -1166,7 +1161,7 @@ async def test_workon_sets_pip_config(
     workon_environments_dir: py.path.local,
     compiled_environments: abc.Sequence[data.model.Environment],
     scenario_id: str,
-    scenarios: dict[str, TestScenario]
+    scenarios: dict[str, TestScenario],
 ) -> None:
     """
     Check the expected behaviour for the different scenarios defined in the "scenarios" fixture.
