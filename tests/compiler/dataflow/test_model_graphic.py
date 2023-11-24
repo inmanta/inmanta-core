@@ -393,8 +393,8 @@ def test_dataflow_graphic_index(graphic_asserter: GraphicAsserter) -> None:
     graphic_asserter(
         """
 entity A:
-    number m
-    number n
+    int m
+    int n
 end
 
 index A(n)

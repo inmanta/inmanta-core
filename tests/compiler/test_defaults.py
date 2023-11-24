@@ -193,7 +193,7 @@ end
 
 Test(t=5)
         """,
-        "Invalid value 'str', expected Integer (reported in int t = 'str' ({dir}/main.cf:3:9))",
+        "Invalid value 'str', expected int (reported in int t = 'str' ({dir}/main.cf:3:9))",
     )
 
 
