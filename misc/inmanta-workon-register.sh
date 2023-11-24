@@ -79,8 +79,14 @@ EOF
     __inmanta_workon_activate "$inmanta_env" "$env_id" "$envs_dir"
 }
 
-function __store_old_pip_config {
-    # Store pip configuration to be later restored in __restore_old_pip_config during deactivation
+function __store_old_config {
+    #  Store config before activation to be later restored in __restore_old_pip_config during deactivation
+
+    # Store INMANTA_CONFIG_ENVIRONMENT
+    if [ -n "${INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
+        _OLD_INMANTA_CONFIG_ENVIRONMENT="${INMANTA_CONFIG_ENVIRONMENT:-}"
+    fi
+    # Store pip configuration
     if [ -n "${PIP_PRE:-}" ] ; then
         _OLD_INMANTA_CONFIG_PIP_PRE="${PIP_PRE:-}"
     fi
@@ -100,30 +106,48 @@ function __store_old_pip_config {
     return 0
 }
 
-function __restore_old_pip_config {
+function __restore_old_config {
+    # Reset the config in the state it was before activation
+    if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
+        # Another env was active prior to inmanta-workon call: restore INMANTA_CONFIG_ENVIRONMENT to its old value
+        INMANTA_CONFIG_ENVIRONMENT="${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}"
+        export INMANTA_CONFIG_ENVIRONMENT
+        unset _OLD_INMANTA_CONFIG_ENVIRONMENT
+    else
+        unset INMANTA_CONFIG_ENVIRONMENT
+    fi
+
     # Restore pip configuration from values saved in __store_old_pip_config
     if [ -n "${_OLD_INMANTA_CONFIG_PIP_PRE:-}" ] ; then
         PIP_PRE="${_OLD_INMANTA_CONFIG_PIP_PRE:-}"
         export PIP_PRE
         unset _OLD_INMANTA_CONFIG_PIP_PRE
+    else
+        unset PIP_PRE
     fi
 
     if [ -n "${_OLD_INMANTA_CONFIG_PIP_INDEX_URL:-}" ] ; then
         PIP_INDEX_URL="${_OLD_INMANTA_CONFIG_PIP_INDEX_URL:-}"
         export PIP_INDEX_URL
         unset _OLD_INMANTA_CONFIG_PIP_INDEX_URL
+    else
+        unset PIP_INDEX_URL
     fi
 
     if [ -n "${_OLD_INMANTA_CONFIG_PIP_EXTRA_INDEX_URL:-}" ] ; then
         PIP_EXTRA_INDEX_URL="${_OLD_INMANTA_CONFIG_PIP_EXTRA_INDEX_URL:-}"
         export PIP_EXTRA_INDEX_URL
         unset _OLD_INMANTA_CONFIG_PIP_EXTRA_INDEX_URL
+    else
+        unset PIP_EXTRA_INDEX_URL
     fi
 
     if [ -n "${_OLD_INMANTA_CONFIG_PIP_CONFIG_FILE:-}" ] ; then
         PIP_CONFIG_FILE="${_OLD_INMANTA_CONFIG_PIP_CONFIG_FILE:-}"
         export PIP_CONFIG_FILE
         unset _OLD_INMANTA_CONFIG_PIP_CONFIG_FILE
+    else
+        unset PIP_CONFIG_FILE
     fi
 
     return 0
@@ -293,15 +317,11 @@ function __inmanta_workon_activate {
     # store PS1 before sourcing activate because we don't care about virtualenv's modifications
     declare OLD_PS1="$PS1"
 
-    # store INMANTA_CONFIG_ENVIRONMENT before activation
-    if [ -n "${INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
-        _OLD_INMANTA_CONFIG_ENVIRONMENT="${INMANTA_CONFIG_ENVIRONMENT:-}"
-    fi
-    export INMANTA_CONFIG_ENVIRONMENT=$env_id
-
-    # store pip config before activation
-    __store_old_pip_config
+    # store config before activation
+    __store_old_config
     __set_pip_config
+
+    export INMANTA_CONFIG_ENVIRONMENT=$env_id
 
     source "$activate"
     export PS1="($env_name) $OLD_PS1"
@@ -333,15 +353,8 @@ function __inmanta_workon_register_deactivate {
         unset -f inmanta >/dev/null 2>&1
         # no need to restore PS1 because virtualenv_deactivate already does that
 
-        if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
-            # Another env was active prior to inmanta-workon call: restore INMANTA_CONFIG_ENVIRONMENT to its old value
-            INMANTA_CONFIG_ENVIRONMENT="${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}"
-            export INMANTA_CONFIG_ENVIRONMENT
-            unset _OLD_INMANTA_CONFIG_ENVIRONMENT
-        else
-            unset INMANTA_CONFIG_ENVIRONMENT
-        fi
-        __restore_old_pip_config
+
+        __restore_old_config
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
