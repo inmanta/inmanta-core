@@ -557,8 +557,8 @@ class DefineRelation(BiStatement):
     def normalize(self) -> None:
         for _, exp in self.annotation_expression:
             exp.normalize()
+            self.anchors.extend(exp.get_anchors())
 
-        self.anchors.extend((anchor for _, exp in self.annotation_expression for anchor in exp.get_anchors()))
         self.anchors.append(TypeReferenceAnchor(self.left[0].namespace, self.left[0]))
         self.anchors.append(TypeReferenceAnchor(self.right[0].namespace, self.right[0]))
 
