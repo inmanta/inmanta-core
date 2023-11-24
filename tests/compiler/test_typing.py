@@ -604,3 +604,14 @@ a = y
         """,
     )
     compiler.do_compile()
+
+
+def test_print_float(snippetcompiler, capsys):
+    snippetcompiler.setup_for_snippet(
+        """
+std::print(float(1.234))
+        """,
+    )
+    compiler.do_compile()
+    out, err = capsys.readouterr()
+    assert "1.234" in out
