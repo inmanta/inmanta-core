@@ -17,6 +17,7 @@
 """
 
 import traceback
+import warnings as std_warnings
 from abc import abstractmethod
 from functools import lru_cache
 from typing import Dict, List, Optional, Union
@@ -315,6 +316,7 @@ class Namespace(Namespaced):
     This class models a namespace that contains defined types, modules, ...
     """
 
+    _number_type_warning_shown = False
     __slots__ = ("__name", "__parent", "__children", "defines_types", "visible_namespaces", "primitives", "scope")
 
     def __init__(self, name: str, parent: "Optional[Namespace]" = None) -> None:
@@ -387,9 +389,9 @@ class Namespace(Namespaced):
             else:
                 raise TypeNotFoundException(typ, self)
         elif name in self.primitives:
-            if name == "number":
-                msg = "Type 'number' is deprecated, use 'float' or 'int' instead (%s)" % str(typ.location)
-                warnings.warn(TypeDeprecationWarning(msg))
+            if name == "number" and not Namespace._number_type_warning_shown:
+                warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
+                Namespace._number_type_warning_shown = True
             return self.primitives[name]
         else:
             cns = self  # type: Optional[Namespace]
