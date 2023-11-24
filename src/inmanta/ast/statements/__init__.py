@@ -78,7 +78,7 @@ class Statement(Namespaced):
         return self.location
 
     def get_anchors(self) -> List[Anchor]:
-        """Should only be called after normalization."""
+        """Should only be called after normalization (DynamicStatement) or evaluation (DefinitionStatement)."""
         return self.anchors
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
