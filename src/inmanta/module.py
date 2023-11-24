@@ -725,7 +725,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def install(self, project: "Project", module_spec: List[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
 
-        assert_pip_has_source(project.metadata.pip, "a v2 module {module_name}")
+        assert_pip_has_source(project.metadata.pip, f"a v2 module {module_name}")
 
         requirements: List[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
