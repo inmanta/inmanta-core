@@ -1,0 +1,5 @@
+description: Document all api arguments
+change-type: patch
+destination-branches: [master, iso6]
+issue-nr: 6473
+
