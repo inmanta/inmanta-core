@@ -133,6 +133,8 @@ class DefineEntity(TypeDefinitionStatement):
         if "-" in name:
             raise HyphenException(lname)
 
+        # self.anchors = [TypeReferenceAnchor(self.namespace, x) for x in self.parents]
+
         self.name = name
         self.attributes = attributes
         if comment is not None:
