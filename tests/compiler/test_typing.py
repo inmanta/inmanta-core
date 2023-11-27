@@ -560,7 +560,7 @@ def test_float_type(snippetcompiler):
 
 def test_int_as_index_for_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
-        f"""
+        """
 entity A:
     float x
 end
