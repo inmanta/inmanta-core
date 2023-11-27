@@ -460,28 +460,6 @@ def test_int_attribute_with_float(snippetcompiler, float_val):
     )
 
 
-def test_float_int_attribute_2(snippetcompiler):
-    snippet = """
-    entity Int:
-        int i
-    end
-    entity Float:
-        float i
-    end
-    implement Int using std::none
-    implement Float using std::none
-    f = Int(i=42)
-    i = Float(i=f.i)
-    """
-    snippetcompiler.setup_for_snippet(snippet)
-    (_, scopes) = compiler.do_compile()
-    root: Namespace = scopes.get_child("__config__")
-    x = root.lookup("i").get_value()
-    i = x.get_attribute("i").get_value()
-    assert not isinstance(i, int)
-    assert isinstance(i, float)
-
-
 def test_assign_float_to_int(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
@@ -502,10 +480,10 @@ def test_assign_int_to_float(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
     entity Test:
-        float i = 0
+        float i = 0.0
     end
     implement Test using std::none
-    x = Test(i = 42)
+    x = Test(i = 42.0)
     """,
     )
     (_, scopes) = compiler.do_compile()
@@ -520,14 +498,12 @@ def test_float_type(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
     entity Test:
-        float i = 0
+        float i = 0.0
     end
     implement Test using std::none
-    Test(i = 42)
-    Test(i = -42)
+    Test(i = 42.0)
+    Test(i = -42.0)
     Test()
-    Test(i = false)
-    val1 = Test(i = 42.0)
     a = float(21)
     a = 21.0
     b = float(25.0)
@@ -558,21 +534,6 @@ def test_float_type(snippetcompiler):
     assert Number().validate(u)
 
 
-def test_int_as_index_for_float(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    float x
-end
-implement A using std::none
-index A(x)
-test = (A(x=0) == A(x=0.0))
-test = true
-        """,
-    )
-    compiler.do_compile()
-
-
 def test_lookup_on_float_with_int(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
@@ -583,22 +544,6 @@ implement A using std::none
 index A(x)
 a = A(x=1.0)
 y = A[x=1]
-a = y
-        """,
-    )
-    compiler.do_compile()
-
-
-def test_lookup_on_int_with_float(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-entity A:
-    float x
-end
-implement A using std::none
-index A(x)
-a = A(x=1)
-y = A[x=1.0]
 a = y
         """,
     )

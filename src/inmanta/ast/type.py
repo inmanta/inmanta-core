@@ -290,7 +290,7 @@ class Float(Primitive):
         if isinstance(value, AnyType):
             return True
 
-        if not isinstance(value, numbers.Number):
+        if not isinstance(value, float):
             raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
         return True  # allow this function to be called from a lambda function
 
