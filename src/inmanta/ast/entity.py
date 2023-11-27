@@ -433,7 +433,7 @@ class Entity(NamedType, WithComment):
                 "%s=%s"
                 % (
                     k,
-                    repr(self.get_attribute(k).type.cast(v) if isinstance(self.get_attribute(k).type, (Float, Number)) else v),
+                    repr(self.get_attribute(k).type.cast(v) if isinstance(self.get_attribute(k).type, Float) else v),
                 )
                 for k, v in sorted(params, key=lambda x: x[0])
             ]

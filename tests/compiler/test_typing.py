@@ -558,7 +558,7 @@ def test_float_type(snippetcompiler):
     assert Number().validate(u)
 
 
-def test_int_as_index_for_number(snippetcompiler):
+def test_int_as_index_for_float(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
