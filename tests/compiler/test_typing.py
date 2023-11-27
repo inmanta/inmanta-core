@@ -558,7 +558,6 @@ def test_float_type(snippetcompiler):
     assert Number().validate(u)
 
 
-@pytest.mark.parametrize_any("type", "float")
 def test_int_as_index_for_number(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         f"""
