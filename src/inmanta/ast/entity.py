@@ -33,7 +33,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast.type import Float, NamedType, Number, Type
+from inmanta.ast.type import Float, NamedType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType
 
