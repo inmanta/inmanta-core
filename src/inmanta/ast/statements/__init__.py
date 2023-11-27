@@ -609,6 +609,9 @@ class TypeDefinitionStatement(DefinitionStatement, Named, WithComment):
     def evaluate(self) -> None:
         pass
 
+    def normalize(self) -> None:
+        pass
+
     def get_full_name(self) -> str:
         return self.fullName
 

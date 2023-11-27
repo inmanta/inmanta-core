@@ -366,6 +366,7 @@ class DefineImplement(DefinitionStatement):
             implement.constraint = self.select
             implement.location = self.entity_location
             self.anchors.extend(implement.constraint.get_anchors())
+            # change this
 
             i = 0
             for _impl in self.implementations:
