@@ -267,8 +267,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
                 return
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
-        if isinstance(self.type, Float):
-            value = self.type.cast(value)
         self.value = value
         self.location = location
         self.hasValue = True

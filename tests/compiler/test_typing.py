@@ -588,18 +588,23 @@ test = test_674::test_float_to_int(1.234)
     assert Integer().validate(x)
 
 
-def test_float_type_argument_plugin_error(snippetcompiler, caplog):
-    snippetcompiler.setup_for_error(
-        """
+@pytest.mark.parametrize("val", [42, "test"])
+def test_float_type_argument_plugin_error(snippetcompiler, val):
+    snippet = f"""
 import test_674
 
-test = test_674::test_float_to_int("test")
-        """,
-        ("Invalid value 'test', expected float (reported in " "test_674::test_float_to_int('test') ({dir}/main.cf:4))"),
+test = test_674::test_float_to_int({val if val == 42 else '"'+val+'"'})
+        """
+    arg = val if val == 42 else "'" + val + "'"
+    msg = f"Invalid value '{val}', expected float (reported in " f"test_674::test_float_to_int({arg}) " "({dir}/main.cf:4))"
+
+    snippetcompiler.setup_for_error(
+        snippet,
+        msg,
     )
 
 
-def test_float_type_areturn_type_plugin(snippetcompiler, caplog):
+def test_float_type_return_type_plugin(snippetcompiler, caplog):
     snippetcompiler.setup_for_snippet(
         """
 import test_674
@@ -624,7 +629,7 @@ test = test_674::test_error_float()
             "Exception in plugin test_674::test_error_float (reported in "
             "test_674::test_error_float() ({dir}/main.cf:4))\n"
             "caused by:\n"
-            "  Invalid value 'hello', expected float (reported in "
+            "  Invalid value '1', expected float (reported in "
             "test_674::test_error_float() ({dir}/main.cf:4))"
         ),
     )

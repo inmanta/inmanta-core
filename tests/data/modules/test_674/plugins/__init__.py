@@ -38,4 +38,4 @@ def test_int_to_float(val1: "int") -> "float":
 
 @plugin
 def test_error_float() -> "float":
-    return "hello"
+    return 1
