@@ -186,11 +186,8 @@ function __get_pip_config_setting {
 
 function __get_pip_config_setting_all_at_once {
     # make sure extra index url are formatted correctly (space-separated) e.g. "idx0 idx1 idx2"
-#    result=$(
-#        "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip; [(print(k), print(pip_cfg.model_dump()[k]) if k != 'extra_index_url' else print(' '.join(pip_cfg.model_dump()[k]))) for k in ['pre','index_url','extra_index_url','use_system_config']]; print('EOF');" #2> /dev/null TODO add error suppression back in ?
-        "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip.model_dump(); [(print(k), print(pip_cfg[k]) if pip_cfg[k] is not None else print('')) for k in ['pre','index_url','use_system_config']]; print('extra_index_url'), print(' '.join(pip_cfg['extra_index_url']));" #2> /dev/null TODO add error suppression back in ?
-#    )
     result=$(
+        "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip.model_dump(); [(print(k), print(pip_cfg[k]) if pip_cfg[k] is not None else print('')) for k in ['pre','index_url','use_system_config']]; print('extra_index_url'), print(' '.join(pip_cfg['extra_index_url']));" 2> /dev/null
     )
     echo "$result"
     return 0
@@ -201,32 +198,12 @@ function __set_pip_config {
     declare extra_index_url
     declare use_system_config
 
-#    pre=$(__get_pip_config_setting "pre")
-#    index_url=$(__get_pip_config_setting 'index_url')
-#    extra_index_url=$(__get_pip_config_setting 'extra_index_url')
-#    use_system_config=$(__get_pip_config_setting "use_system_config")
-
     all_in_one="$(__get_pip_config_setting_all_at_once)" || return
-#    echo "ALLINONE: $all_in_one" >&2
-
-#    IFS=$'\n'; arrIN=($all_in_one); unset IFS;
-#    arrIN=($all_in_one)
     mapfile -t arrIN <<< "$all_in_one"
-#    echo "arrIN: $arrIN" >&2
     pre=${arrIN[1]}
-#    echo "pre: $pre" >&2
     index_url=${arrIN[3]}
-#    echo "index_url: $index_url" >&2
     use_system_config=${arrIN[5]}
-#    echo "use_system_config: $use_system_config" >&2
     extra_index_url=${arrIN[7]}
-#    echo "extra_index_url: $extra_index_url" >&2
-
-    # TODO grab these one by one
-#    'pre','index_url','extra_index_url','use_system_config'
-#    return 1
-
-#    echo "dbug $use_system_config $index_url" >&2
 
     if [ "$use_system_config" == "False" ] ; then
         if [ -z "$index_url" ] ; then
