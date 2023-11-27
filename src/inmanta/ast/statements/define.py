@@ -573,7 +573,7 @@ class DefineIndex(DefinitionStatement):
     def __init__(self, entity_type: LocatableString, attributes: List[LocatableString]):
         DefinitionStatement.__init__(self)
         self.type = entity_type
-        self.attributes = attributes
+        self.attributes: Sequence[LocatableString] = attributes
 
     def types(self, recursive: bool = False) -> List[Tuple[str, LocatableString]]:
         """
