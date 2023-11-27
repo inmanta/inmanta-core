@@ -32,7 +32,7 @@ from inmanta.ast import (
     OptionalValueException,
     RuntimeException,
 )
-from inmanta.ast.type import Float, Type
+from inmanta.ast.type import Type
 from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.tracking import Tracker
