@@ -272,14 +272,14 @@ class Number(Primitive):
 
 
 @stable_api
-class Float(Number):
+class Float(Primitive):
     """
     This class is an alias for the Number class and represents a float in
     the configuration model.
     """
 
     def __init__(self) -> None:
-        Number.__init__(self)
+        Primitive.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [float]
 
     def validate(self, value: Optional[object]) -> bool:
@@ -294,8 +294,17 @@ class Float(Number):
             raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
         return True  # allow this function to be called from a lambda function
 
+    def is_primitive(self) -> bool:
+        return True
+
+    def get_location(self) -> None:
+        return None
+
     def type_string(self) -> str:
         return "float"
+
+    def type_string_internal(self) -> str:
+        return self.type_string()
 
 
 @stable_api
