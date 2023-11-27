@@ -107,7 +107,9 @@ function __store_old_config {
 }
 
 function __restore_old_config {
+    echo "Restoring old config..." >&2
     # Reset the config in the state it was before activation (saved in __store_old_pip_config)
+
     if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
         # Another env was active prior to inmanta-workon call: restore INMANTA_CONFIG_ENVIRONMENT to its old value
         INMANTA_CONFIG_ENVIRONMENT="${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}"
@@ -150,6 +152,7 @@ function __restore_old_config {
         unset PIP_CONFIG_FILE
     fi
 
+    echo "Done restoring old config..." >&2
     return 0
 }
 
@@ -361,21 +364,31 @@ function __inmanta_workon_register_deactivate {
     # Save the deactivate function from virtualenv under a different name
     declare virtualenv_deactivate
     virtualenv_deactivate=$(declare -f deactivate | sed 's/deactivate/virtualenv_deactivate/g')
+
     eval "$virtualenv_deactivate"
     unset -f deactivate > /dev/null 2>&1
 
+
     # Replace the deactivate() function with a wrapper.
     eval 'deactivate () {
+        echo "register_deactivate[0]" >&2
+
         declare inmanta_env_dir=$(dirname "$VIRTUAL_ENV")
         declare user=${INMANTA_USER:-inmanta}
 
         # Call the original function.
         virtualenv_deactivate "$1"
+        echo "register_deactivate[1]" >&2
+
         unset -f inmanta >/dev/null 2>&1
         # no need to restore PS1 because virtualenv_deactivate already does that
 
 
+        echo "register_deactivate[2]" >&2
+
         __restore_old_config
+
+        echo "register_deactivate[3]" >&2
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
