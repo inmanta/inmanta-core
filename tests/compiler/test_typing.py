@@ -668,7 +668,7 @@ test = test_674::test_int_to_float(1)
     assert Float().validate(x)
 
 
-def test_float_type_argument_plugin_error(snippetcompiler, caplog):
+def test_float_type_return_type_plugin_error(snippetcompiler, caplog):
     snippetcompiler.setup_for_error(
         """
 import test_674
