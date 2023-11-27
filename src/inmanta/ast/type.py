@@ -236,6 +236,15 @@ class Number(Primitive):
         Primitive.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
 
+    def cast(self, value: Optional[object]) -> object:
+        """
+        Attempts to cast a given value to an int or a float.
+        """
+        # Keep precision: cast to an int only if it already is an int
+        if isinstance(value, int):
+            return int(value)
+        return super().cast(value)
+
     def validate(self, value: Optional[object]) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
