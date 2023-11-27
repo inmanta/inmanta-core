@@ -107,7 +107,6 @@ function __store_old_config {
 }
 
 function __restore_old_config {
-    echo "Restoring old config..." >&2
     # Reset the config in the state it was before activation (saved in __store_old_pip_config)
 
     if [ -n "${_OLD_INMANTA_CONFIG_ENVIRONMENT:-}" ] ; then
@@ -152,61 +151,48 @@ function __restore_old_config {
         unset PIP_CONFIG_FILE
     fi
 
-    echo "Done restoring old config..." >&2
     return 0
 }
 
-function __get_pip_config_setting {
-    declare result
-    if [ "$1" == "extra_index_url" ] ; then
-        # make sure extra index url are formatted correctly (space-separated) e.g. "idx0 idx1 idx2"
-        result=$(
-            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(' '.join(pip_cfg.$1));" #2> /dev/null TODO add error suppression back in ?
-        )
-        echo "$result"
-        return 0
-    fi
-    if [ "$1" == "index_url" ] ; then
-        result=$(
-            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(pip_cfg.$1) if pip_cfg.$1 else ...;" #2> /dev/null
-        )
-        echo "$result"
-        return 0
-    fi
-    if  [ "$1" == "pre" ] || [ "$1" == "use_system_config" ] ; then
-        result=$(
-            "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip;print(pip_cfg.$1);" #2> /dev/null
-        )
-        echo "$result"
-        return 0
+
+function __get_pip_config {
+    python_script=$(cat << END
+from inmanta.module import Project, ProjectConfigurationWarning
+try:
+    project=Project('.', autostd=False)
+except ProjectConfigurationWarning:
+    exit(1)
+pip_cfg=project.metadata.pip.model_dump()
+for k in ['pre','index_url','use_system_config']:
+    print(pip_cfg[k]) if pip_cfg[k] is not None else print('')
+print(' '.join(pip_cfg['extra_index_url']))
+END
+)
+
+    result=$("$INMANTA_WORKON_PYTHON" -W error -W ignore::DeprecationWarning -c "${python_script}") >&2
+
+    if [ ! "$?" -eq 0 ]; then
+        echo "WARNING: Invalid project.yml pip configuration" >&2
+        return 1
     fi
 
-    echo "ERROR: invalid pip config setting $1" >&2
-
-    return 1
-}
-
-
-function __get_pip_config_setting_all_at_once {
-    # make sure extra index url are formatted correctly (space-separated) e.g. "idx0 idx1 idx2"
-    result=$(
-        "$INMANTA_WORKON_PYTHON" -c "from inmanta.module import Project; project=Project('.', autostd=False); pip_cfg=project.metadata.pip.model_dump(); [(print(k), print(pip_cfg[k]) if pip_cfg[k] is not None else print('')) for k in ['pre','index_url','use_system_config']]; print('extra_index_url'), print(' '.join(pip_cfg['extra_index_url']));" 2> /dev/null
-    )
     echo "$result"
     return 0
 }
+
 function __set_pip_config {
     declare pre
     declare index_url
     declare extra_index_url
     declare use_system_config
 
-    all_in_one="$(__get_pip_config_setting_all_at_once)" || return
-    mapfile -t arrIN <<< "$all_in_one"
-    pre=${arrIN[1]}
-    index_url=${arrIN[3]}
-    use_system_config=${arrIN[5]}
-    extra_index_url=${arrIN[7]}
+    pip_config="$(__get_pip_config)" || return 0
+
+    mapfile -t arrIN <<< "$pip_config"
+    pre=${arrIN[0]}
+    index_url=${arrIN[1]}
+    use_system_config=${arrIN[2]}
+    extra_index_url=${arrIN[3]}
 
     if [ "$use_system_config" == "False" ] ; then
         if [ -z "$index_url" ] ; then

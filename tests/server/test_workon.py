@@ -1119,12 +1119,17 @@ def scenarios() -> dict[str, TestScenario]:
             ]
         ),
     )
+    scenario_5 = copy.deepcopy(scenario_4)
+    scenario_5.pip_config["index_ur"] = "https://invalid/key"
+    scenario_5.pip_config["use_system_config"] = True
+    scenario_5.expected_warning = "WARNING: Invalid project.yml pip configuration\n"
 
     return {
         "scenario_1": scenario_1,
         "scenario_2": scenario_2,
         "scenario_3": scenario_3,
         "scenario_4": scenario_4,
+        "scenario_5": scenario_5,
     }
 
 
@@ -1152,6 +1157,7 @@ def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, st
         "scenario_2",
         "scenario_3",
         "scenario_4",
+        "scenario_5",
     ],
 )
 async def test_workon_sets_pip_config(
