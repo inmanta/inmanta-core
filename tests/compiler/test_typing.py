@@ -25,7 +25,7 @@ import inmanta.compiler as compiler
 from inmanta.ast import AttributeException, Namespace, TypeDeprecationWarning, TypingException
 from inmanta.ast.attribute import Attribute
 from inmanta.ast.entity import Entity
-from inmanta.ast.type import Bool, Integer, Number, String
+from inmanta.ast.type import Bool, Float, Integer, Number, String
 from inmanta.execute.util import Unknown
 
 
@@ -627,3 +627,59 @@ std::print(number(1.234))
     compiler.do_compile()
     out, err = capsys.readouterr()
     assert "1.234" in out
+
+
+def test_float_type_argument_plugin(snippetcompiler, caplog):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test = test_674::test_float_to_int(1.234)
+        """
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    x = root.lookup("test").get_value()
+    assert Integer().validate(x)
+
+
+def test_float_type_argument_plugin_error(snippetcompiler, caplog):
+    snippetcompiler.setup_for_error(
+        """
+import test_674
+
+test = test_674::test_float_to_int("test")
+        """,
+        ("Invalid value 'test', expected float (reported in " "test_674::test_float_to_int('test') ({dir}/main.cf:4))"),
+    )
+
+
+def test_float_type_areturn_type_plugin(snippetcompiler, caplog):
+    snippetcompiler.setup_for_snippet(
+        """
+import test_674
+
+test = test_674::test_int_to_float(1)
+        """
+    )
+    (_, scopes) = compiler.do_compile()
+    root: Namespace = scopes.get_child("__config__")
+    x = root.lookup("test").get_value()
+    assert Float().validate(x)
+
+
+def test_float_type_argument_plugin_error(snippetcompiler, caplog):
+    snippetcompiler.setup_for_error(
+        """
+import test_674
+
+test = test_674::test_error_float()
+        """,
+        (
+            "Exception in plugin test_674::test_error_float (reported in "
+            "test_674::test_error_float() ({dir}/main.cf:4))\n"
+            "caused by:\n"
+            "  Invalid value 'hello', expected float (reported in "
+            "test_674::test_error_float() ({dir}/main.cf:4))"
+        ),
+    )
