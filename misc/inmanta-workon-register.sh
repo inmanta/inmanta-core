@@ -371,24 +371,17 @@ function __inmanta_workon_register_deactivate {
 
     # Replace the deactivate() function with a wrapper.
     eval 'deactivate () {
-        echo "register_deactivate[0]" >&2
 
         declare inmanta_env_dir=$(dirname "$VIRTUAL_ENV")
         declare user=${INMANTA_USER:-inmanta}
 
         # Call the original function.
         virtualenv_deactivate "$1"
-        echo "register_deactivate[1]" >&2
 
         unset -f inmanta >/dev/null 2>&1
         # no need to restore PS1 because virtualenv_deactivate already does that
 
-
-        echo "register_deactivate[2]" >&2
-
         __restore_old_config
-
-        echo "register_deactivate[3]" >&2
 
         ownership_issues=$(find "$inmanta_env_dir" \! -user "$user" -print -quit)
         if [ -n "$ownership_issues" ]; then
