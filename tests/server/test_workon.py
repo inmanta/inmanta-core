@@ -1120,11 +1120,26 @@ def scenarios() -> dict[str, TestScenario]:
         ),
     )
 
+    # index_url = "http://EXAMPLE.com/index"
+    # extra_indexes = ["http://EXAMPLE.com/extra_index_1", "http://EXAMPLE.com/extra_index_2"]
+    # pre = False
+    # use_syst_config = True
+    # pip_config = {
+    #     # "use-system-config": use_syst_config,
+    #     # "index-url": index_url,
+    #     # "extra-index-url": extra_indexes,
+    #     # "pre": pre
+    # }
+    #
+    # scenario_5 = copy.deepcopy(scenario_1)
+    # scenario_5.pip_config = pip_config
+
     return {
         "scenario_1": scenario_1,
         "scenario_2": scenario_2,
         "scenario_3": scenario_3,
         "scenario_4": scenario_4,
+        # "scenario_5": scenario_5,
     }
 
 
@@ -1148,10 +1163,11 @@ def patch_projectyml_pip_config(env_dir: py.path.local, pip_config: dict[str, st
 @pytest.mark.parametrize(
     "scenario_id",
     [
-        # "scenario_1",
-        # "scenario_2",
+        "scenario_1",
+        "scenario_2",
         "scenario_3",
-        # "scenario_4",
+        "scenario_4",
+        # "scenario_5",
     ],
 )
 async def test_workon_sets_pip_config(
