@@ -20,7 +20,7 @@
 import logging
 import typing
 import warnings
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
 from inmanta.ast import (
     AttributeReferenceAnchor,
