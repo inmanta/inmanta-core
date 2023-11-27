@@ -33,6 +33,7 @@ from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
+    PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
     ResourceIdStr,
@@ -497,6 +498,18 @@ class OrchestrationService(protocol.ServerSlice):
     async def reserve_version(self, env: data.Environment) -> int:
         return await env.get_next_version()
 
+    @handle(methods_v2.get_pip_config, env="tid")
+    async def get_pip_config(
+        self,
+        env: data.Environment,
+        version: int,
+    ) -> Optional[PipConfig]:
+        version_object = await data.ConfigurationModel.get_version(env.id, version)
+        if version_object is None:
+            raise NotFound(f"No configuration model with version {version} exists.")
+        out = version_object.pip_config
+        return out
+
     def _create_dao_resources_from_api_resources(
         self,
         env_id: uuid.UUID,
@@ -625,6 +638,7 @@ class OrchestrationService(protocol.ServerSlice):
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         partial_base_version: Optional[int] = None,
         removed_resource_sets: Optional[List[str]] = None,
+        pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
@@ -714,6 +728,7 @@ class OrchestrationService(protocol.ServerSlice):
                         ),
                         partial_base=partial_base_version,
                         rids_in_partial_compile=set(rid_to_resource.keys()),
+                        pip_config=pip_config,
                         connection=connection,
                     )
                 else:
@@ -727,6 +742,7 @@ class OrchestrationService(protocol.ServerSlice):
                         skipped_for_undeployable=sorted(
                             self._get_skipped_for_undeployable(list(rid_to_resource.values()), undeployable_ids)
                         ),
+                        pip_config=pip_config,
                         is_suitable_for_partial_compiles=not resource_set_validator.has_cross_resource_set_dependency(),
                     )
                     await cm.insert(connection=connection)
@@ -851,6 +867,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: JsonType,
         compiler_version: Optional[str] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
+        pip_config: Optional[PipConfig] = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -879,7 +896,14 @@ class OrchestrationService(protocol.ServerSlice):
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
                 await env.put_version_lock(shared=True, connection=con)
                 await self._put_version(
-                    env, version, rid_to_resource, unknowns_objs, version_info, resource_sets, connection=con
+                    env,
+                    version,
+                    rid_to_resource,
+                    unknowns_objs,
+                    version_info,
+                    resource_sets,
+                    pip_config=pip_config,
+                    connection=con,
                 )
             try:
                 await self._trigger_auto_deploy(env, version, connection=con)
@@ -901,6 +925,7 @@ class OrchestrationService(protocol.ServerSlice):
         version_info: Optional[JsonType] = None,
         resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
         removed_resource_sets: Optional[List[str]] = None,
+        pip_config: Optional[PipConfig] = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1013,6 +1038,7 @@ class OrchestrationService(protocol.ServerSlice):
                     resource_sets,
                     partial_base_version=base_version,
                     removed_resource_sets=removed_resource_sets,
+                    pip_config=pip_config,
                     connection=con,
                 )
 
