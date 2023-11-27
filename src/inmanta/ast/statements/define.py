@@ -133,14 +133,13 @@ class DefineEntity(TypeDefinitionStatement):
         if "-" in name:
             raise HyphenException(lname)
 
-        # self.anchors = [TypeReferenceAnchor(self.namespace, x) for x in self.parents]
-
         self.name = name
         self.attributes = attributes
         if comment is not None:
             self.comment = str(comment)
 
         self.parents = parents
+        self.anchors = [TypeReferenceAnchor(self.namespace, x) for x in self.parents]
 
         if len(self.parents) == 0 and not (self.name == "Entity" and self.namespace.name == "std"):
             dummy_location: Range = Range("__internal__", 1, 1, 1, 1)
@@ -180,7 +179,6 @@ class DefineEntity(TypeDefinitionStatement):
         Evaluate this statement.
         """
         try:
-            self.anchors = [TypeReferenceAnchor(self.namespace, x) for x in self.parents]
             entity_type = self.type
             entity_type.comment = self.comment
 
@@ -296,6 +294,7 @@ class DefineImplementation(TypeDefinitionStatement):
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
+            self.block.normalize()
             self.anchors.extend(self.block.get_anchors())
         except TypeNotFoundException as e:
             e.set_statement(self)
@@ -365,8 +364,8 @@ class DefineImplement(DefinitionStatement):
             implement.comment = self.comment
             implement.constraint = self.select
             implement.location = self.entity_location
+            implement.constraint.normalize()
             self.anchors.extend(implement.constraint.get_anchors())
-            # change this
 
             i = 0
             for _impl in self.implementations:
