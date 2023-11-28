@@ -53,7 +53,14 @@ from crontab import CronTab
 from inmanta.const import DATETIME_MIN_UTC, DONE_STATES, UNDEPLOYABLE_NAMES, AgentStatus, LogLevel, ResourceState
 from inmanta.data import model as m
 from inmanta.data import schema
-from inmanta.data.model import AuthMethod, PagingBoundaries, ResourceIdStr, api_boundary_datetime_normalizer
+from inmanta.data.model import (
+    AuthMethod,
+    BaseModel,
+    PagingBoundaries,
+    PipConfig,
+    ResourceIdStr,
+    api_boundary_datetime_normalizer,
+)
 from inmanta.protocol.common import custom_json_encoder
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import config
@@ -1979,7 +1986,7 @@ class BaseDocument(metaclass=DocumentMeta):
         if isinstance(value, dict):
             return json_encode(value)
 
-        if isinstance(value, DataDocument) or issubclass(value.__class__, DataDocument):
+        if isinstance(value, DataDocument) or issubclass(value.__class__, DataDocument) or isinstance(value, BaseModel):
             return json_encode(value)
 
         if isinstance(value, list):
@@ -5141,6 +5148,8 @@ class ConfigurationModel(BaseDocument):
     date: Optional[datetime.datetime] = None
     partial_base: Optional[int] = None
 
+    pip_config: Optional[PipConfig] = None
+
     released: bool = False
     deployed: bool = False
     result: const.VersionState = const.VersionState.pending
@@ -5181,6 +5190,7 @@ class ConfigurationModel(BaseDocument):
         skipped_for_undeployable: abc.Sequence[ResourceIdStr],
         partial_base: int,
         rids_in_partial_compile: abc.Set[ResourceIdStr],
+        pip_config: Optional[PipConfig],
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
         """
@@ -5215,7 +5225,8 @@ class ConfigurationModel(BaseDocument):
                 undeployable,
                 skipped_for_undeployable,
                 partial_base,
-                is_suitable_for_partial_compiles
+                is_suitable_for_partial_compiles,
+                pip_config
             ) VALUES(
                 $1,
                 $2,
@@ -5256,7 +5267,8 @@ class ConfigurationModel(BaseDocument):
                     ) AS all_skipped
                 ),
                 $8,
-                True
+                True,
+                $10::jsonb
             )
             RETURNING
                 (SELECT base_version_found FROM base_version_exists LIMIT 1) AS base_version_found,
@@ -5271,7 +5283,8 @@ class ConfigurationModel(BaseDocument):
                 released,
                 deployed,
                 result,
-                is_suitable_for_partial_compiles
+                is_suitable_for_partial_compiles,
+                pip_config
         """
         async with cls.get_connection(connection) as con:
             result = await con.fetchrow(
@@ -5285,6 +5298,7 @@ class ConfigurationModel(BaseDocument):
                 skipped_for_undeployable,
                 partial_base,
                 list(rids_in_partial_compile),
+                cls._get_value(pip_config),
             )
             # Make mypy happy
             assert result is not None

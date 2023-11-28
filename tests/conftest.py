@@ -1370,6 +1370,7 @@ class SnippetCompilationTest(KeepOnFail):
         partial_compile: bool = False,
         resource_sets_to_remove: Optional[list[str]] = None,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
+        """Export to an actual server"""
         return await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: self._do_export(

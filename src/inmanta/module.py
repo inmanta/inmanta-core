@@ -54,12 +54,14 @@ import yaml
 from pkg_resources import Distribution, DistributionNotFound, Requirement, parse_requirements, parse_version
 from pydantic import BaseModel, Field, NameEmail, StringConstraints, ValidationError, field_validator
 
+import inmanta.data.model
 import packaging.version
 from inmanta import RUNNING_TESTS, const, env, loader, plugins
 from inmanta.ast import CompilerException, LocatableString, Location, Namespace, Range, WrappingRuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import BiStatement, DefinitionStatement, DynamicStatement, Statement
 from inmanta.ast.statements.define import DefineImport
+from inmanta.env import assert_pip_has_source
 from inmanta.file_parser import PreservativeYamlParser, RequirementsTxtParser
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import cache_manager
@@ -705,7 +707,7 @@ class ModuleV2Source(ModuleSource["ModuleV2"]):
     def install(self, project: "Project", module_spec: list[InmantaModuleRequirement]) -> Optional["ModuleV2"]:
         module_name: str = self._get_module_name(module_spec)
 
-        project.metadata.pip.assert_has_source(f"a v2 module {module_name}")
+        assert_pip_has_source(project.metadata.pip, f"a v2 module {module_name}")
 
         requirements: list[Requirement] = [req.get_python_package_requirement() for req in module_spec]
         preinstalled: Optional[ModuleV2] = self.get_installed_module(project, module_name)
@@ -1525,13 +1527,8 @@ class RelationPrecedenceRule:
         return f"{self.first_type}.{self.first_relation_name} before {self.then_type}.{self.then_relation_name}"
 
 
-def hyphenize(field: str) -> str:
-    """Alias generator to convert python names (with `_`) to config file name (with `-`)"""
-    return field.replace("_", "-")
-
-
 @stable_api
-class ProjectPipConfig(env.PipConfig):
+class ProjectPipConfig(inmanta.data.model.PipConfig):
     """
     :param index_url: one pip index url for this project.
     :param extra_index_url:  additional pip index urls for this project. This is generally only
@@ -1554,14 +1551,6 @@ class ProjectPipConfig(env.PipConfig):
 
         See the :ref:`section<specify_location_pip>` about setting up pip index for more information.
     """
-
-    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
-        # use alias generator have `-` in names
-        alias_generator=hyphenize,
-        # allow use of aliases
-        populate_by_name=True,
-        extra="ignore",
-    )
 
     @pydantic.model_validator(mode="before")
     @classmethod

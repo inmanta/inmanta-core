@@ -33,10 +33,12 @@ from inmanta.ast import CompilerException, Namespace
 from inmanta.ast.entity import Entity
 from inmanta.config import Option, is_list, is_str, is_uuid_opt
 from inmanta.const import ResourceState
-from inmanta.data.model import ResourceVersionIdStr
+from inmanta.data.model import PipConfig, ResourceVersionIdStr
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.execute.runtime import Instance
 from inmanta.execute.util import Unknown
+from inmanta.module import Project
+from inmanta.protocol import Result
 from inmanta.resources import Id, IgnoreResourceException, Resource, resource, to_id
 from inmanta.stable_api import stable_api
 from inmanta.util import get_compiler_version, hash_file
@@ -409,7 +411,7 @@ class Exporter:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
         elif (not self.failed or len(self._resources) > 0 or len(unknown_parameters) > 0) and not no_commit:
             self._version = self.commit_resources(
-                self._version, resources, metadata, partial_compile, resource_sets_to_remove_all
+                self._version, resources, metadata, partial_compile, resource_sets_to_remove_all, Project.get().metadata.pip
             )
             LOGGER.info("Committed resources with version %d" % self._version)
 
@@ -489,6 +491,7 @@ class Exporter:
         metadata: dict[str, str],
         partial_compile: bool,
         resource_sets_to_remove: list[str],
+        pip_config: PipConfig,
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.
@@ -536,7 +539,6 @@ class Exporter:
         # Collecting version information
         version_info = {const.EXPORT_META_DATA: metadata}
 
-        # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
         if LOGGER.isEnabledFor(logging.DEBUG):
             for res in resources:
@@ -547,27 +549,44 @@ class Exporter:
                 else:
                     LOGGER.debug("  %s not in any resource set", rid)
 
-        if partial_compile:
-            result = conn.put_partial(
-                tid=tid,
-                resources=resources,
-                resource_sets=self._resource_sets,
-                unknowns=unknown_parameters,
-                resource_state=self._resource_state,
-                version_info=version_info,
-                removed_resource_sets=resource_sets_to_remove,
+        def do_put(**kwargs: object) -> Result:
+            if partial_compile:
+                result = conn.put_partial(
+                    tid=tid,
+                    resources=resources,
+                    resource_sets=self._resource_sets,
+                    unknowns=unknown_parameters,
+                    resource_state=self._resource_state,
+                    version_info=version_info,
+                    removed_resource_sets=resource_sets_to_remove,
+                    **kwargs,
+                )
+            else:
+                result = conn.put_version(
+                    tid=tid,
+                    version=version,
+                    resources=resources,
+                    resource_sets=self._resource_sets,
+                    unknowns=unknown_parameters,
+                    resource_state=self._resource_state,
+                    version_info=version_info,
+                    compiler_version=get_compiler_version(),
+                    **kwargs,
+                )
+            return result
+
+        # Backward compatibility with ISO6 servers
+        result = do_put(pip_config=pip_config)
+        if (
+            result.code == 400
+            and isinstance(result.result, dict)
+            and "Invalid request: request contains fields {'pip_config'}" in result.result.get("message", "")
+        ):
+            LOGGER.warning(
+                "Pip config will not be correctly picked up by the agent: "
+                "the orchestrator we are exporting to does not support this!"
             )
-        else:
-            result = conn.put_version(
-                tid=tid,
-                version=version,
-                resources=resources,
-                resource_sets=self._resource_sets,
-                unknowns=unknown_parameters,
-                resource_state=self._resource_state,
-                version_info=version_info,
-                compiler_version=get_compiler_version(),
-            )
+            result = do_put()
 
         if result.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", result.result["message"])

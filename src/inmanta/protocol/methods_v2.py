@@ -23,13 +23,12 @@ from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
+from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
+from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
+from inmanta.protocol.decorators import typedmethod
+from inmanta.protocol.openapi.model import OpenAPI
 from inmanta.types import PrimitiveTypes
-
-from ..data.model import DiscoveredResource, ResourceIdStr
-from . import methods
-from .decorators import typedmethod
-from .openapi.model import OpenAPI
 
 
 @typedmethod(
@@ -46,6 +45,7 @@ def put_partial(
     unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
     resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
     removed_resource_sets: Optional[list[str]] = None,
+    pip_config: Optional[PipConfig] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -69,6 +69,7 @@ def put_partial(
     :param **kwargs: The following arguments are supported:
               * resources: a list of resource objects. Since the version is not known yet resource versions should be set to 0.
               * version_info: Model version information
+    :param pip_config: Pip config used by this version
     :return: The newly stored version number.
     """
 
@@ -87,7 +88,10 @@ def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.P
 @typedmethod(path="/project/<id>", operation="POST", client_types=[ClientType.api], api_version=2)
 def project_modify(id: uuid.UUID, name: str) -> model.Project:
     """
-    Modify the given project
+    Rename the given project
+
+    :param id: The id of the project to be modified.
+    :param name: The new name for the project. This string value will replace the current name of the project.
     """
 
 
@@ -95,6 +99,8 @@ def project_modify(id: uuid.UUID, name: str) -> model.Project:
 def project_delete(id: uuid.UUID) -> None:
     """
     Delete the given project and all related data
+
+    :param id: The id of the project to be deleted.
     """
 
 
@@ -102,6 +108,7 @@ def project_delete(id: uuid.UUID) -> None:
 def project_list(environment_details: bool = False) -> list[model.Project]:
     """
     Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
+
     :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
@@ -110,6 +117,8 @@ def project_list(environment_details: bool = False) -> list[model.Project]:
 def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Project:
     """
     Get a project and a list of the environments under this project
+
+    :param id: The id for which the project's details are being requested.
     :param environment_details: Whether to include the icon and description of the environments in the results
     """
 
@@ -190,6 +199,7 @@ def environment_delete(id: uuid.UUID) -> None:
 def environment_list(details: bool = False) -> list[model.Environment]:
     """
     Returns a list of environments
+
     :param details: Whether to include the icon and description of the environments in the results
     """
 
@@ -299,6 +309,8 @@ def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent
 def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsReponse:
     """
     List the settings in the current environment ordered by name alphabetically.
+
+    :param tid: The id of the environment for which the list of settings is being requested.
     """
 
 
@@ -313,7 +325,12 @@ def environment_settings_list(tid: uuid.UUID) -> model.EnvironmentSettingsRepons
 )
 def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingType) -> ReturnValue[None]:
     """
-    Set a value
+    Set a specific setting in an environment's configuration.
+
+    :param tid: The id of the environment where the setting is to be set or updated.
+    :param id: The id of the setting to be set or updated.
+    :param value: The new value for the setting.
+
     """
 
 
@@ -328,7 +345,11 @@ def environment_settings_set(tid: uuid.UUID, id: str, value: model.EnvSettingTyp
 )
 def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSettingsReponse:
     """
-    Get a value
+    Retrieve a specific setting from an environment's configuration.
+
+    :param tid: The id of the environment from which the setting is being retrieved.
+    :param id: The id of the setting to be retrieved.
+
     """
 
 
@@ -343,7 +364,10 @@ def environment_setting_get(tid: uuid.UUID, id: str) -> model.EnvironmentSetting
 )
 def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
     """
-    Delete a value
+    Reset the given setting to its default value.
+
+    :param tid: The id of the environment from which the setting is to be deleted.
+    :param id: The identifier of the setting to be deleted.
     """
 
 
@@ -353,6 +377,8 @@ def environment_setting_delete(tid: uuid.UUID, id: str) -> ReturnValue[None]:
 def reserve_version(tid: uuid.UUID) -> int:
     """
     Reserve a version number in this environment.
+
+    :param tid: The id of the environment in which the version number is to be reserved.
     """
 
 
@@ -360,6 +386,7 @@ def reserve_version(tid: uuid.UUID) -> int:
 def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
     """
     Get the OpenAPI definition of the API
+
     :param format: Use 'openapi' to get the schema in json format, leave empty or use 'swagger' to get the Swagger-UI view
     """
 
@@ -691,6 +718,10 @@ def resource_list(
 )
 def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.ReleasedResourceDetails:
     """
+    :param tid: The id of the environment from which the resource's details are being requested.
+    :param rid: The unique identifier (ResourceIdStr) of the resource. This value specifies the particular resource
+                for which detailed information is being requested.
+
     :return: The details of the latest released version of a resource
     :raise NotFound: This exception is raised when the referenced environment or resource is not found
     """
@@ -885,6 +916,9 @@ def get_compile_reports(
 )
 def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
     """
+    :param tid: The id of the environment in which the compilation process occurred.
+    :param id: The id of the compile for which the details are being requested.
+
     :return: The details of a compile
     :raise NotFound: This exception is raised when the referenced environment or compile is not found
     """
@@ -1282,6 +1316,25 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[mo
     :param version: The id of the model version
     :param resource_type: The type name of the resource
     :raises NotFound: Raised when the version or type is not found
+    """
+
+
+@typedmethod(
+    path="/pip/config/<version>",
+    operation="GET",
+    api=True,
+    agent_server=True,
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.agent, ClientType.api],
+    api_version=2,
+)
+def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
+    """
+    Get the pip config for the given version
+
+    :param tid: The id of the environment
+    :param version: The id of the model version
+    :raises NotFound: Raised when the version or environment is not found
     """
 
 

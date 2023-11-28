@@ -38,7 +38,8 @@ import utils
 from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
-from inmanta.env import PipConfig, PythonEnvironment
+from inmanta.data.model import PipConfig
+from inmanta.env import PythonEnvironment
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
