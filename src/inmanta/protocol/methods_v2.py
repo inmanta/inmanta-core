@@ -617,7 +617,7 @@ def resource_deploy_start(
 def get_resource_events(
     tid: uuid.UUID,
     rvid: model.ResourceVersionIdStr,
-    exclude_change: Optional[Change],
+    exclude_change: Optional[Change] = None,
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
