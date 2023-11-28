@@ -591,12 +591,11 @@ test = test_674::test_float_to_int(1.234)
 @pytest.mark.parametrize("val", [42, "test"])
 def test_float_type_argument_plugin_error(snippetcompiler, val):
     snippet = f"""
-import test_674
+    import test_674
 
-test = test_674::test_float_to_int({val if val == 42 else '"'+val+'"'})
-        """
-    arg = val if val == 42 else "'" + val + "'"
-    msg = f"Invalid value '{val}', expected float (reported in " f"test_674::test_float_to_int({arg}) " "({dir}/main.cf:4))"
+    test = test_674::test_float_to_int({repr(val)})
+            """
+    msg = f"Invalid value '{val}', expected float (reported in test_674::test_float_to_int({repr(val)}) ({{dir}}/main.cf:4))"
 
     snippetcompiler.setup_for_error(
         snippet,
