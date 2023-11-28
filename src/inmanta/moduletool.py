@@ -33,10 +33,11 @@ import time
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
+from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional
 
 import click
 import more_itertools
