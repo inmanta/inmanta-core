@@ -19,10 +19,10 @@ import datetime
 import typing
 import uuid
 from collections import abc
+from collections.abc import Sequence
 from enum import Enum
 from itertools import chain
 from typing import ClassVar, NewType, Optional, Self, Union
-from collections.abc import Sequence
 
 import pydantic
 import pydantic.schema
