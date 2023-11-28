@@ -696,7 +696,7 @@ class AmbiguousTypeException(TypeNotFoundException):
 def stringify_exception(exn: Exception) -> str:
     if isinstance(exn, CompilerException):
         return str(exn)
-    return f"{exn.__class__.__name__}: {str(exn)}"
+    return f"{exn.__class__.__name__}: {exn}"
 
 
 @stable_api
@@ -780,7 +780,7 @@ class AttributeException(WrappingRuntimeException):
 
     def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: RuntimeException) -> None:
         WrappingRuntimeException.__init__(
-            self, stmt=stmt, msg=f"Could not set attribute `{attribute}` on instance `{str(instance)}`", cause=cause
+            self, stmt=stmt, msg=f"Could not set attribute `{attribute}` on instance `{instance}`", cause=cause
         )
         self.attribute = attribute
         self.instance = instance

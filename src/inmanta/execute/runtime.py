@@ -1273,7 +1273,7 @@ class Instance(ExecutionContext):
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:
-            raise NotFoundException(None, name, f"cannot set attribute with name {name} on type {str(self.type)}")
+            raise NotFoundException(None, name, f"cannot set attribute with name {name} on type {self.type}")
         try:
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:

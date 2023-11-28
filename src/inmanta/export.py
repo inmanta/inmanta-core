@@ -326,7 +326,7 @@ class Exporter:
                 dot += '\t"%s";\n' % res_id
 
                 for req in res.resource_requires:
-                    dot += f'\t"{res_id}" -> "{str(req)}";\n'
+                    dot += f'\t"{res_id}" -> "{req}";\n'
 
             dot += "}\n"
 

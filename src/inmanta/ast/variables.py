@@ -331,4 +331,4 @@ class AttributeReference(Reference):
         return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
 
     def __repr__(self) -> str:
-        return f"{repr(self.instance)}.{str(self.attribute)}"
+        return f"{repr(self.instance)}.{self.attribute}"

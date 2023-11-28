@@ -138,7 +138,7 @@ class FunctionCall(ReferenceStatement):
                 chain(
                     (repr(a) for a in self.arguments),
                     (f"{k}={repr(v)}" for k, v in self.kwargs.items()),
-                    ("%s" % repr(kwargs) for kwargs in self.wrapped_kwargs),
+                    (repr(kwargs) for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
@@ -150,7 +150,7 @@ class FunctionCall(ReferenceStatement):
                 chain(
                     (a.pretty_print() for a in self.arguments),
                     (f"{k}={v.pretty_print()}" for k, v in self.kwargs.items()),
-                    ("%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                    (kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
                 )
             ),
         )
