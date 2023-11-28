@@ -155,7 +155,6 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
     assert len(result.result["data"][rid_r3_v1]) == 1
     assert result.result["data"][rid_r3_v1][0]["action"] == const.ResourceAction.deploy
     assert result.result["data"][rid_r3_v1][0]["status"] == const.ResourceState.deployed
-
     result = await agent._client.resource_did_dependency_change(tid=environment, rvid=rvid_r1_v1)
     assert result.code == 200
     assert not result.result["data"]
