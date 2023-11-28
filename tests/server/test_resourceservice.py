@@ -167,7 +167,7 @@ async def test_events_api_endpoints_basic_case(server, client, environment, clie
 async def test_events_api_endpoints_increment(server, client, environment, clienthelper, agent, resource_deployer):
     """
     Test whether the `get_resource_events` and the `resource_did_dependency_change`
-    endpoints behave as expected
+    endpoints behave as expected. Also test the exclude_change parameter for get_resource_events
     """
     rid = r"""exec::Run[agent1,command=sh -c "git _%\/ clone \"https://codis.git\"  && chown -R centos:centos "]"""
     rid_r1 = ResourceIdStr(rid)
