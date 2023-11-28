@@ -158,6 +158,8 @@ function __restore_old_config {
 function __get_pip_config {
     python_script=$(cat << END
 from inmanta.module import Project, ProjectConfigurationWarning
+import warnings
+warnings.filterwarnings("error", category=ProjectConfigurationWarning)
 try:
     project=Project('.', autostd=False)
 except ProjectConfigurationWarning:
@@ -169,7 +171,7 @@ print(' '.join(pip_cfg['extra_index_url']))
 END
 )
 
-    result=$("$INMANTA_WORKON_PYTHON" -W error -W ignore::DeprecationWarning -c "${python_script}") >&2
+    result=$("$INMANTA_WORKON_PYTHON" -c "${python_script}") >&2
 
     if [ ! "$?" -eq 0 ]; then
         echo "WARNING: Invalid project.yml pip configuration" >&2
