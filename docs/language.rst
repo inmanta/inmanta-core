@@ -127,6 +127,10 @@ Primitive types
 
 The basic primitive types are ``string``, ``float``, ``int`` or ``bool``. These basic types also support type casts:
 
+.. note::
+    To initialize a variable as a float, the value should either include a decimal point or be explicitly converted to a float type.
+
+
 .. code-block:: inmanta
 
     assert = true
