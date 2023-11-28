@@ -23,6 +23,7 @@ import warnings
 from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
 from inmanta.ast import (
+    Anchor,
     AttributeReferenceAnchor,
     CompilerException,
     CompilerRuntimeWarning,
@@ -294,11 +295,20 @@ class DefineImplementation(TypeDefinitionStatement):
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
-            self.block.normalize()  # todo flo
-            self.anchors.extend(self.block.get_anchors())
+
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
+
+    def get_anchors(self) -> List[Anchor]:
+        """
+        This method overrides the default get_anchors() to accommodate the two-stage normalization process.
+        DefineImplementations register anchors for their blocks. However, these anchors only come into existence
+        after the type normalization phase.
+        This implementation ensures that anchors are correctly gathered from both the type statements and
+        the block itself.
+        """
+        return [*self.type.statements.get_anchors(), *self.anchors]
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
         """
@@ -345,6 +355,9 @@ class DefineImplement(DefinitionStatement):
         """
         return "Implement(%s)" % (self.entity)
 
+    def get_anchors(self) -> List[Anchor]:
+        return [*self.anchors, *self.select.get_anchors()]
+
     def evaluate(self) -> None:
         """
         Evaluate this statement.
@@ -364,8 +377,6 @@ class DefineImplement(DefinitionStatement):
             implement.comment = self.comment
             implement.constraint = self.select
             implement.location = self.entity_location
-            implement.constraint.normalize()
-            self.anchors.extend(implement.constraint.get_anchors())
 
             i = 0
             for _impl in self.implementations:
