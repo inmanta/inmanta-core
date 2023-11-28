@@ -36,7 +36,7 @@ from collections import abc
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
 import click
 import more_itertools
@@ -104,7 +104,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
             "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-            r"\--strict-deps-check option."  # noqa: W605
+            r"\--strict-deps-check option."
         ),
     )
     parser.add_argument(
@@ -114,7 +114,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help=(
             "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-            r"This option is mutually exclusive with the \--no-strict-deps-check option."  # noqa: W605
+            r"This option is mutually exclusive with the \--no-strict-deps-check option."
         ),
     )
 
@@ -468,7 +468,7 @@ compatible with the dependencies specified by the updated modules.
         else:
             my_project = project
 
-        def do_update(specs: "Dict[str, List[InmantaModuleRequirement]]", modules: list[str]) -> None:
+        def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
             v2_python_specs: list[Requirement] = [
@@ -567,7 +567,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            rf"Either \--v1 or \--v2 has to be set.",  # noqa: W605
+            r"Either \--v1 or \--v2 has to be set.",
             parents=parent_parsers,
         )
         add.add_argument(
@@ -745,7 +745,7 @@ When a development release is done using the \--dev option, this command:
   \--major argument (\--patch is the default). When a CHANGELOG.md file is present in the root of the module
   directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
   the associated stable version and not a development version.
-            """.strip(),  # noqa: W605
+            """.strip(),
             formatter_class=RawTextHelpFormatter,
         )
         release.add_argument(

@@ -180,7 +180,7 @@ class Config:
             # raise Exception("Config section %s not defined" % (section))
             return None
         if name not in cls.__config_definition[section]:
-            LOGGER.warning(f"Config name {name} not defined in section {section}")
+            LOGGER.warning("Config name %s not defined in section %s", name, section)
             # raise Exception("Config name %s not defined in section %s" % (name, section))
             return None
         opt = cls.__config_definition[section][name]

@@ -840,7 +840,7 @@ class Constructor(ExpressionStatement):
             ",".join(
                 chain(
                     (f"{k}={v.pretty_print()}" for k, v in self.attributes.items()),
-                    ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
+                    (f"**{kwargs.pretty_print()}" for kwargs in self.wrapped_kwargs),
                 )
             ),
         )

@@ -239,7 +239,7 @@ lexer = lex.lex()
 
 def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: int = -1) -> str:
     r"""
-    Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.  # noqa: W605
+    Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.
     This function assumes to be called from within a t_STRING or a t_MLS rule.
 
     - Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence

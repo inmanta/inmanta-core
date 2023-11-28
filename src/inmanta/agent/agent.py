@@ -220,7 +220,7 @@ class ResourceAction(ResourceActionBase):
                 try:
                     if self.is_done():
                         # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, f"{self.gid} {self.resource} is no longer active")
+                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
                         return
                     result = sum(results, ResourceActionResult(cancel=False))
                     if result.cancel:
@@ -250,7 +250,7 @@ class ResourceAction(ResourceActionBase):
                 try:
                     if self.is_done():
                         # Action is cancelled
-                        self.logger.log(const.LogLevel.TRACE.to_int, f"{self.gid} {self.resource} is no longer active")
+                        self.logger.log(const.LogLevel.TRACE.to_int, "%s %s is no longer active", self.gid, self.resource)
                         return
 
                     result = sum(results, ResourceActionResult(cancel=False))
@@ -554,7 +554,7 @@ class ResourceScheduler:
         self.running = new_request
         self.version = resources[0].id.get_version()
         gid = uuid.uuid4()
-        self.logger.info(f"Running {gid} for reason: {self.running.reason}")
+        self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
         self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, self.running.reason) for r in resources}

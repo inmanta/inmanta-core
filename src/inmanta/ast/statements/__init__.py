@@ -373,12 +373,9 @@ class VariableReferenceHook(RawResumer):
         return f"{self.instance}.{self.name}"
 
     def __repr__(self) -> str:
-        return "{}({!r}, {}, {!r}, propagate_unset={!r})".format(
-            self.__class__.__name__,
-            self.instance,
-            self.name,
-            self.variable_resumer,
-            self.propagate_unset,
+        return (
+            f"{self.__class__.__name__}({self.instance!r}, "
+            f"{self.name}, {self.variable_resumer!r}, propagate_unset={self.propagate_unset!r})"
         )
 
 
