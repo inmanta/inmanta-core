@@ -295,7 +295,6 @@ class DefineImplementation(TypeDefinitionStatement):
                 )
             self.type.set_type(cls)
             self.copy_location(self.type)
-
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
@@ -356,6 +355,12 @@ class DefineImplement(DefinitionStatement):
         return "Implement(%s)" % (self.entity)
 
     def get_anchors(self) -> List[Anchor]:
+        """
+        This method overrides the default get_anchors() to accommodate the two-stage normalization process.
+        DefineImplement should register anchors for an ExpressionStatement. This one is not yet normalized during
+        evaluation and so its anchors come into existence only after the type normalization phase.
+        This implementation ensures that anchors are also correctly gathered from the type statement.
+        """
         return [*self.anchors, *self.select.get_anchors()]
 
     def evaluate(self) -> None:

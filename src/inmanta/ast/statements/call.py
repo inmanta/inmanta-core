@@ -73,7 +73,6 @@ class FunctionCall(ReferenceStatement):
         self.wrapped_kwargs: List[WrappedKwargs] = wrapped_kwargs
         self.location: Location = location
         self.namespace: Namespace = namespace
-
         self.kwargs: Dict[str, ExpressionStatement] = {}
         for loc_name, expr in kwargs:
             arg_name: str = str(loc_name)
