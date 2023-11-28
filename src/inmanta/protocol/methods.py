@@ -20,15 +20,16 @@
 
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from inmanta import const, data, resources
+from inmanta.const import ResourceState
 from inmanta.data import model
+from inmanta.data.model import PipConfig
+from inmanta.protocol import exceptions
+from inmanta.protocol.common import ArgOption
+from inmanta.protocol.decorators import method, typedmethod
 from inmanta.types import JsonType, PrimitiveTypes
-
-from . import exceptions
-from .common import ArgOption
-from .decorators import method, typedmethod
 
 
 async def convert_environment(env: uuid.UUID, metadata: dict) -> "data.Environment":
@@ -540,11 +541,12 @@ def put_version(
     tid: uuid.UUID,
     version: int,
     resources: list,
-    resource_state: dict = {},
-    unknowns: Optional[list] = None,
+    resource_state: Dict[model.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
+    unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
     version_info: Optional[dict] = None,
     compiler_version: Optional[str] = None,
     resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
+    pip_config: Optional[PipConfig] = None,
 ):
     """
     Store a new version of the configuration model
@@ -560,6 +562,7 @@ def put_version(
     :param version_info: Optional. Module version information
     :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
     :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
+    :param pip_config: Optional. Pip config used by this version
     """
 
 

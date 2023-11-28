@@ -27,9 +27,10 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
+from collections.abc import Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union, cast
 
 import pkg_resources
 
@@ -41,8 +42,7 @@ from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data.model import AttributeStateChange, ResourceIdStr, ResourceVersionIdStr
-from inmanta.env import PipConfig
+from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
@@ -1337,6 +1337,9 @@ class Agent(SessionEndpoint):
         if self._loader is None:
             return failed_to_load
 
+        # store it outside the loop, but only load when required
+        pip_config: Optional[PipConfig] = None
+
         for rt in set(resource_types):
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(rt):
@@ -1366,7 +1369,9 @@ class Agent(SessionEndpoint):
                             )
                             requirements.update(source["requirements"])
 
-                        await self._install(sources, list(requirements))
+                        if pip_config is None:
+                            pip_config = await self._get_pip_config(environment, version)
+                        await self._install(sources, list(requirements), pip_config=pip_config)
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
                         self._last_loaded[rt] = version
                     except Exception:
@@ -1375,7 +1380,7 @@ class Agent(SessionEndpoint):
 
         return failed_to_load
 
-    async def _install(self, sources: list[ModuleSource], requirements: Sequence[str]) -> None:
+    async def _install(self, sources: list[ModuleSource], requirements: Sequence[str], pip_config: PipConfig) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
@@ -1385,9 +1390,19 @@ class Agent(SessionEndpoint):
                 self.thread_pool,
                 self._env.install_for_config,
                 list(pkg_resources.parse_requirements(requirements)),
-                PipConfig(use_system_config=True),
+                pip_config,
             )
             await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, sources)
+
+    async def _get_pip_config(self, environment: uuid.UUID, version: int) -> PipConfig:
+        response = await self._client.get_pip_config(tid=environment, version=version)
+        if response.code != 200:
+            raise Exception("Could not get pip config from server " + str(response.result))
+        assert response.result is not None  # mypy
+        pip_config = response.result["data"]
+        if pip_config is None:
+            return LEGACY_PIP_DEFAULT
+        return PipConfig(**pip_config)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     async def trigger_update(self, env: uuid.UUID, agent: str, incremental_deploy: bool) -> Apireturn:

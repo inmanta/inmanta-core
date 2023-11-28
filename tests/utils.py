@@ -38,7 +38,7 @@ import build.env
 from _pytest.mark import MarkDecorator
 from inmanta import const, data, env, module, util
 from inmanta.data import ResourceIdStr
-from inmanta.env import PipConfig
+from inmanta.data.model import PipConfig
 from inmanta.moduletool import ModuleTool
 from inmanta.protocol import Client
 from inmanta.server.bootloader import InmantaBootloader
