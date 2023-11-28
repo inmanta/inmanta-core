@@ -1117,7 +1117,7 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.get_resource_events, env="tid", resource_id="rvid")
     async def get_resource_events(
-        self, env: data.Environment, resource_id: Id, exclude_change: Optional[const.Change]
+        self, env: data.Environment, resource_id: Id, exclude_change: Optional[const.Change] = None
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         return {
             k: [ra.to_dto() for ra in v]
