@@ -1,0 +1,7 @@
+description: Add 'exclude_change' argument to 'get_resource_events' to be able to exclude some types of changes from the results.
+issue-nr: 6375
+change-type: minor
+destination-branches: [master, iso6]
+sections:
+  feature: "{{description}}"
+
