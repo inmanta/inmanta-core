@@ -229,7 +229,7 @@ class Primitive(Type):
 @stable_api
 class Number(Primitive):
     """
-    This class represents an integer or float in the configuration model.
+    This class represents an integer or a float in the configuration model.
     """
 
     def __init__(self) -> None:
@@ -254,7 +254,7 @@ class Number(Primitive):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
 
         return True  # allow this function to be called from a lambda function
 
@@ -272,6 +272,42 @@ class Number(Primitive):
 
 
 @stable_api
+class Float(Primitive):
+    """
+    This class is an alias for the Number class and represents a float in
+    the configuration model.
+    """
+
+    def __init__(self) -> None:
+        Primitive.__init__(self)
+        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [float]
+
+    def validate(self, value: Optional[object]) -> bool:
+        """
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
+        """
+        if isinstance(value, AnyType):
+            return True
+
+        if not isinstance(value, float):
+            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+        return True  # allow this function to be called from a lambda function
+
+    def is_primitive(self) -> bool:
+        return True
+
+    def get_location(self) -> None:
+        return None
+
+    def type_string(self) -> str:
+        return "float"
+
+    def type_string_internal(self) -> str:
+        return self.type_string()
+
+
+@stable_api
 class Integer(Number):
     """
     An instance of this class represents the int type in the configuration model.
@@ -282,11 +318,17 @@ class Integer(Number):
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
 
     def validate(self, value: Optional[object]) -> bool:
-        if not super().validate(value):
-            return False
+        """
+        Validate the given value to check if it satisfies the constraints
+        associated with this type
+        """
+        if isinstance(value, AnyType):
+            return True
+
         if not isinstance(value, numbers.Integral):
             raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
-        return True
+
+        return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
         return "int"
@@ -590,7 +632,7 @@ class Literal(Union):
     """
 
     def __init__(self) -> None:
-        Union.__init__(self, [NullableType(Number()), Bool(), String(), TypedList(self), TypedDict(self)])
+        Union.__init__(self, [NullableType(Float()), Number(), Bool(), String(), TypedList(self), TypedDict(self)])
 
     def type_string_internal(self) -> str:
         return "Literal"
@@ -694,6 +736,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
 
 TYPES: typing.Dict[str, Type] = {  # Part of the stable API
     "string": String(),
+    "float": Float(),
     "number": Number(),
     "int": Integer(),
     "bool": Bool(),
