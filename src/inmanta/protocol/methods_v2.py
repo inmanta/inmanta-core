@@ -623,7 +623,7 @@ def get_resource_events(
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
     successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
     descending order according to their started timestamp. If exclude_change is set, exclude all resource actions with this
-    specific type of change
+    specific type of change.
 
     This method searches through all versions of this resource.
     This method should only be called when a deploy is in progress.
