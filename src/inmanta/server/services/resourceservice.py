@@ -1117,12 +1117,11 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.get_resource_events, env="tid", resource_id="rvid")
     async def get_resource_events(
-        self,
-        env: data.Environment,
-        resource_id: Id,
+        self, env: data.Environment, resource_id: Id, exclude_change: Optional[const.Change] = None
     ) -> Dict[ResourceIdStr, List[ResourceAction]]:
         return {
-            k: [ra.to_dto() for ra in v] for k, v in (await data.ResourceAction.get_resource_events(env, resource_id)).items()
+            k: [ra.to_dto() for ra in v]
+            for k, v in (await data.ResourceAction.get_resource_events(env, resource_id, exclude_change)).items()
         }
 
     @handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="rvid")
