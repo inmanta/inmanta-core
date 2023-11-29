@@ -636,17 +636,20 @@ def resource_deploy_start(
 def get_resource_events(
     tid: uuid.UUID,
     rvid: model.ResourceVersionIdStr,
+    exclude_change: Optional[Change] = None,
 ) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
     successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
-    descending order according to their started timestamp.
+    descending order according to their started timestamp. If exclude_change is set, exclude all resource actions with this
+    specific type of change.
 
     This method searches through all versions of this resource.
     This method should only be called when a deploy is in progress.
 
     :param tid: The id of the environment this resource belongs to
     :param rvid: The id of the resource to get events for.
+    :param exclude_change: Exclude all resource actions with this specific type of change.
     :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
                         in the deploying state.
     """
