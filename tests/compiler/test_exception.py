@@ -143,7 +143,7 @@ def test_dataflow_multi_exception(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
-    number n
+    int n
 end
 
 implement A using std::none
@@ -166,7 +166,7 @@ mm = nn
             """
 Reported 1 errors
 error 0:
-  The object __config__::A (instantiated at {dir}/main.cf:9) is not complete: attribute n ({dir}/main.cf:3:12) is not set
+  The object __config__::A (instantiated at {dir}/main.cf:9) is not complete: attribute n ({dir}/main.cf:3:9) is not set
 data trace:
 attribute n on __config__::A instance
 SUBTREE for __config__::A instance:
@@ -247,8 +247,8 @@ def test_exception_default_constructors(snippetcompiler):
 typedef MyType as A(n = 42)
 
 entity A:
-    number n
-    number m
+    int n
+    int m
 end
 
 implement A using std::none

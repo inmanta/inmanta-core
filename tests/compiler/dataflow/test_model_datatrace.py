@@ -142,7 +142,7 @@ EQUIVALENT TO {{x, y, z}} DUE TO STATEMENTS:
             "equivalence with attribute",
             """
 entity A:
-    number n
+    int n
 end
 implement A using std::none
 
@@ -192,11 +192,11 @@ x
             "implementation",
             """
 entity A:
-    number n
+    int n
 end
 
 entity B:
-    number n
+    int n
 end
 
 implementation ia for A:
@@ -260,8 +260,8 @@ x_n
             "index match double assignment",
             """
 entity A:
-    number n
-    number m
+    int n
+    int m
 end
 
 index A(n)

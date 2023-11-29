@@ -113,7 +113,7 @@ def test_is_defined_attribute(snippetcompiler, capsys, condition_block):
         f"""
 
 entity A:
-    number? a
+    int? a
 end
 
 implement A using std::none
@@ -133,7 +133,7 @@ def test_is_defined_attribute_not(snippetcompiler, capsys, condition_block_with_
         f"""
 
 entity A:
-    number? a = null
+    int? a = null
 end
 
 implement A using std::none
@@ -151,8 +151,8 @@ x = A()
 @pytest.mark.parametrize(
     "relation, attr_type",
     [
-        (False, "number?"),
-        (False, "number[]?"),
+        (False, "int?"),
+        (False, "int[]?"),
         (True, "[0:1]"),
         (True, "[0:]"),
     ],
@@ -188,7 +188,7 @@ def test_is_defined_attribute_not_3(snippetcompiler, capsys, condition_block):
         f"""
 
     entity A:
-        number[]? a = null
+        int[]? a = null
     end
 
     implement A using std::none
@@ -208,7 +208,7 @@ def test_is_defined_attribute_2(snippetcompiler, capsys):
         """
 
     entity A:
-        number[]? a
+        int[]? a
     end
 
     implement A using std::none
