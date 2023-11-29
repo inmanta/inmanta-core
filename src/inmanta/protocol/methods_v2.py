@@ -630,7 +630,7 @@ def get_resource_events(
 
     :param tid: The id of the environment this resource belongs to
     :param rvid: The id of the resource to get events for.
-    :param exclude_change: exclude all resource actions with this specific type of change
+    :param exclude_change: Exclude all resource actions with this specific type of change.
     :raises BadRequest: When this endpoint in called while the resource with the given resource version is not
                         in the deploying state.
     """
