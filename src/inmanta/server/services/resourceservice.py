@@ -327,13 +327,6 @@ class ResourceService(protocol.ServerSlice):
 
         now = datetime.datetime.now().astimezone()
 
-        def on_agent(res: ResourceIdStr) -> bool:
-            idr = Id.parse_id(res)
-            return idr.get_agent_name() == agent
-
-        # set already done to deployed
-        await self.mark_deployed(env, neg_increment, now, version, filter=on_agent)
-
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
         deploy_model: List[Dict[str, Any]] = []
