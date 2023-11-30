@@ -171,7 +171,7 @@ print(' '.join(pip_cfg['extra_index_url']))
 END
 )
 
-    result=$("$INMANTA_WORKON_PYTHON" -c "${python_script}") >&2
+    result=$("$INMANTA_WORKON_PYTHON" -c "${python_script}")
 
     if [ ! "$?" -eq 0 ]; then
         echo "WARNING: Invalid project.yml pip configuration" >&2
