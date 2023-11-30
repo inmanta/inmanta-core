@@ -61,7 +61,7 @@ class Attribute(Locatable):
             self.__type = NullableType(self.__type)
 
         self.comment = None  # type: Optional[str]
-        self.end: Optional[RelationAttribute] = None
+        self.end: RelationAttribute | None = None
 
     def get_type(self) -> "Type":
         """
@@ -148,7 +148,7 @@ class RelationAttribute(Attribute):
                                  once this attribute is frozen.
         """
         Attribute.__init__(self, entity, value_type, name, location)
-        self.end: Optional[RelationAttribute] = None
+        self.end: RelationAttribute | None = None
         self.low = 1
         self.high = 1
         self.depends = False

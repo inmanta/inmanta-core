@@ -18,7 +18,6 @@
 
 import logging
 import warnings
-from typing import Optional, Union
 
 import pytest
 
@@ -33,7 +32,7 @@ from utils import log_doesnt_contain
     "option,expected_error,expected_warning",
     [(None, False, True), ("warn", False, True), ("ignore", False, False), ("error", True, False)],
 )
-def test_warnings(option: Optional[str], expected_error: bool, expected_warning: bool) -> None:
+def test_warnings(option: str | None, expected_error: bool, expected_warning: bool) -> None:
     """
     Verify whether the setting to configure warnings works correctly.
     """
@@ -84,7 +83,7 @@ def test_filter_external_warnings(caplog) -> None:
         (CompilerRuntimeWarning(None, "my inmanta warning"), CompilerRuntimeWarning, "/path/to/filename", 42),
     ],
 )
-def test_warning_format(caplog, warning: Union[str, Warning], category: type[Warning], filename: str, lineno: int):
+def test_warning_format(caplog, warning: str | Warning, category: type[Warning], filename: str, lineno: int):
     caplog.set_level(logging.WARNING)
     WarningsManager.apply_config({})
     warnings.resetwarnings()

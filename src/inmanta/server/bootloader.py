@@ -22,7 +22,6 @@ import pkgutil
 from collections.abc import Generator
 from pkgutil import ModuleInfo
 from types import ModuleType
-from typing import Optional
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
@@ -72,12 +71,12 @@ class InmantaBootloader:
     """
 
     # Cache field for available extensions
-    AVAILABLE_EXTENSIONS: Optional[dict[str, str]] = None
+    AVAILABLE_EXTENSIONS: dict[str, str] | None = None
 
     def __init__(self) -> None:
         self.restserver = Server()
         self.started = False
-        self.feature_manager: Optional[FeatureManager] = None
+        self.feature_manager: FeatureManager | None = None
 
     async def start(self) -> None:
         ctx = self.load_slices()
@@ -87,7 +86,7 @@ class InmantaBootloader:
         await self.restserver.start()
         self.started = True
 
-    async def stop(self, timeout: Optional[int] = None) -> None:
+    async def stop(self, timeout: int | None = None) -> None:
         """
         :param timeout: Raises TimeoutError when the server hasn't finished stopping after
                         this amount of seconds. This argument should only be used by test

@@ -22,7 +22,6 @@ import string
 from collections import abc
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -64,7 +63,7 @@ from inmanta.parser.plyInmantaLex import reserved, tokens  # NOQA
 LOGGER = logging.getLogger()
 
 file = "NOFILE"
-namespace: Optional[Namespace] = None
+namespace: Namespace | None = None
 
 precedence = (
     # precedence rule for productions that should eagerly shift new tokens as long as they remain feasible
@@ -721,7 +720,7 @@ def p_list_def(p: YaccProduction) -> None:
 class ForSpecifier:
     variable: LocatableString
     iterable: ExpressionStatement
-    guard: Optional[ExpressionStatement] = None
+    guard: ExpressionStatement | None = None
 
 
 def p_list_comprehension(p: YaccProduction) -> None:
@@ -885,16 +884,14 @@ def p_constant_fstring(p: YaccProduction) -> None:
     formatter = string.Formatter()
 
     # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
-    parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(str(p[1]))
+    parsed: Iterable[tuple[str, str | None, str | None, str | None]] = formatter.parse(str(p[1]))
 
     start_lnr = p[1].location.lnr
     start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
 
     locatable_matches: list[tuple[str, LocatableString]] = []
 
-    def locate_match(
-        match: tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int
-    ) -> None:
+    def locate_match(match: tuple[str, str | None, str | None, str | None], start_char_pos: int, end_char: int) -> None:
         """
         Associates a parsed field name with a locatable string
         """
@@ -919,7 +916,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
         if match[2]:
             # A format specifier was provided
             start_char_pos += 1  # Account for the ":" character
-            sub_parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(match[2])
+            sub_parsed: Iterable[tuple[str, str | None, str | None, str | None]] = formatter.parse(match[2])
             for submatch in sub_parsed:
                 if not submatch[1]:
                     # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
@@ -955,7 +952,7 @@ format_regex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
-def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
+def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Literal | StringFormat:
     matches: list[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
         return Literal(str(string_ast))
@@ -1211,7 +1208,7 @@ def p_class_ref(p: YaccProduction) -> None:
 
 def p_class_ref_err_dot(p: YaccProduction) -> None:
     "class_ref : var_ref '.' CID"
-    var: Union[LocatableString, Reference] = p[1]
+    var: LocatableString | Reference = p[1]
     var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
     cid: LocatableString = p[3]
     assert namespace
@@ -1298,7 +1295,7 @@ lexer = plyInmantaLex.lexer
 parser = yacc.yacc()
 
 
-def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statement]:
+def base_parse(ns: Namespace, tfile: str, content: str | None) -> list[Statement]:
     """Actual parsing code"""
     global file
     file = tfile
@@ -1332,7 +1329,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
 cache_manager = CacheManager()
 
 
-def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
+def parse(namespace: Namespace, filename: str, content: str | None = None) -> list[Statement]:
     statements = cache_manager.un_cache(namespace, filename)
     if statements is not None:
         return statements

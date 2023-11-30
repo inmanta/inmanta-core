@@ -20,7 +20,6 @@ import shutil
 import subprocess
 import uuid
 from collections import abc
-from typing import Optional
 
 import pytest
 
@@ -61,7 +60,7 @@ class EnvironmentFactory:
 
         self._ready = True
 
-    async def create_environment(self, main: str = "", *, name: Optional[str] = None) -> data.Environment:
+    async def create_environment(self, main: str = "", *, name: str | None = None) -> data.Environment:
         """
         A new environment is created on the server each time this method is invoked, but all these environments
         use the same source directory on disk. It's the responsibility of the user to make sure that no concurrent
@@ -77,10 +76,10 @@ class EnvironmentFactory:
         await environment.insert()
         return environment
 
-    def write_main(self, main: str, environment: Optional[data.Environment] = None) -> None:
+    def write_main(self, main: str, environment: data.Environment | None = None) -> None:
         self.write_file(path="main.cf", content=main, environment=environment)
 
-    def write_file(self, path: str, content: str, environment: Optional[data.Environment] = None) -> None:
+    def write_file(self, path: str, content: str, environment: data.Environment | None = None) -> None:
         if environment is not None:
             subprocess.check_output(["git", "checkout", environment.repo_branch], cwd=self.src_dir)
         with open(os.path.join(self.src_dir, path), "w", encoding="utf-8") as fd:

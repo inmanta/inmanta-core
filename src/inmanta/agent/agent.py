@@ -30,7 +30,7 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any, Dict, cast
 
 import pkg_resources
 
@@ -95,9 +95,9 @@ class ResourceActionBase(abc.ABC):
         # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False
         self.gid: uuid.UUID = gid
-        self.status: Optional[const.ResourceState] = None
-        self.change: Optional[const.Change] = const.Change.nochange
-        self.undeployable: Optional[const.ResourceState] = None
+        self.status: const.ResourceState | None = None
+        self.change: const.Change | None = const.Change.nochange
+        self.undeployable: const.ResourceState | None = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
 
@@ -163,7 +163,7 @@ class ResourceAction(ResourceActionBase):
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
 
         # setup provider
-        provider: Optional[HandlerAPI[Any]] = None
+        provider: HandlerAPI[Any] | None = None
         try:
             provider = await self.scheduler.agent.get_provider(self.resource)
         except ChannelClosedException as e:
@@ -484,8 +484,8 @@ class ResourceScheduler:
         self.ratelimiter = agent.ratelimiter
         self.version: int = 0
 
-        self.running: Optional[DeployRequest] = None
-        self.deferred: Optional[DeployRequest] = None
+        self.running: DeployRequest | None = None
+        self.deferred: DeployRequest | None = None
 
         self.logger: Logger = agent.logger
 
@@ -661,7 +661,7 @@ class AgentInstance:
         self._deploy_splay_value = random.randint(0, deploy_splay_time)
 
         # do regular repair runs
-        self._repair_interval: Union[int, str] = cfg.agent_repair_interval.get()
+        self._repair_interval: int | str = cfg.agent_repair_interval.get()
         repair_splay_time = cfg.agent_repair_splay_time.get()
         self._repair_splay_value = random.randint(0, repair_splay_time)
 
@@ -755,7 +755,7 @@ class AgentInstance:
         def periodic_schedule(
             kind: str,
             action: Callable[[], Awaitable[object]],
-            interval: Union[int, str],
+            interval: int | str,
             splay_value: int,
             initial_time: datetime.datetime,
         ) -> None:
@@ -1102,10 +1102,10 @@ class Agent(SessionEndpoint):
 
     def __init__(
         self,
-        hostname: Optional[str] = None,
-        agent_map: Optional[dict[str, str]] = None,
+        hostname: str | None = None,
+        agent_map: dict[str, str] | None = None,
         code_loader: bool = True,
-        environment: Optional[uuid.UUID] = None,
+        environment: uuid.UUID | None = None,
         poolsize: int = 1,
     ):
         """
@@ -1137,8 +1137,8 @@ class Agent(SessionEndpoint):
         self._instances: dict[str, AgentInstance] = {}
         self._instances_lock = asyncio.Lock()
 
-        self._loader: Optional[CodeLoader] = None
-        self._env: Optional[env.VirtualEnv] = None
+        self._loader: CodeLoader | None = None
+        self._env: env.VirtualEnv | None = None
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
@@ -1150,7 +1150,7 @@ class Agent(SessionEndpoint):
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock = NamedLock()
 
-        self.agent_map: Optional[dict[str, str]] = agent_map
+        self.agent_map: dict[str, str] | None = agent_map
 
     async def _init_agent_map(self) -> None:
         if cfg.use_autostart_agent_map.get():
@@ -1338,7 +1338,7 @@ class Agent(SessionEndpoint):
             return failed_to_load
 
         # store it outside the loop, but only load when required
-        pip_config: Optional[PipConfig] = None
+        pip_config: PipConfig | None = None
 
         for rt in set(resource_types):
             # only one logical thread can load a particular resource type at any time

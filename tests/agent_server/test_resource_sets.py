@@ -18,7 +18,6 @@
 import asyncio
 import uuid
 from collections import abc
-from typing import Optional
 
 import utils
 from inmanta import const, data
@@ -155,7 +154,7 @@ async def test_put_partial_version_allocation(server, client, environment, clien
     )
     assert result.code == 200
 
-    async def put_partial_simple(version: int = 0, expected_error: Optional[tuple[int, str]] = None) -> Optional[int]:
+    async def put_partial_simple(version: int = 0, expected_error: tuple[int, str] | None = None) -> int | None:
         result: Result = await client.put_partial(
             tid=environment,
             resources=resources(version),
@@ -179,7 +178,7 @@ async def test_put_partial_version_allocation(server, client, environment, clien
     # allocate new version without storing a new model
     await clienthelper.get_version()
     assert await put_partial_simple() == full_version + 4
-    model: Optional[data.ConfigurationModel] = await data.ConfigurationModel.get_version(environment, full_version + 4)
+    model: data.ConfigurationModel | None = await data.ConfigurationModel.get_version(environment, full_version + 4)
     assert model is not None
     assert model.partial_base == full_version + 2
 
@@ -1820,7 +1819,7 @@ async def test_is_suitable_for_partial_compiles(server, client, environment, cli
         assert result.code == 200
         return version
 
-    async def do_partial_compile(base_version: int, should_fail: bool) -> Optional[int]:
+    async def do_partial_compile(base_version: int, should_fail: bool) -> int | None:
         """
         Create a new version of the model using the put_partial endpoint.
 

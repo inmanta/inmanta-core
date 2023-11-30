@@ -33,19 +33,19 @@ from inmanta.data.model import BaseModel
 
 class License(BaseModel):
     name: str
-    url: Optional[AnyUrl] = None
+    url: AnyUrl | None = None
 
 
 class Info(BaseModel):
     title: str
-    description: Optional[str] = None
-    license: Optional[License] = None
+    description: str | None = None
+    license: License | None = None
     version: str
 
 
 class Server(BaseModel):
     url: AnyUrl
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class Reference(BaseModel):
@@ -53,24 +53,24 @@ class Reference(BaseModel):
 
 
 class Schema(BaseModel):
-    ref: Optional[str] = Field(None, alias="$ref")
-    title: Optional[str] = None
-    required: Optional[list[str]] = None
-    type: Optional[str] = None
+    ref: str | None = Field(None, alias="$ref")
+    title: str | None = None
+    required: list[str] | None = None
+    type: str | None = None
     items: Optional["Schema"] = None
-    properties: Optional[dict[str, "Schema"]] = None
-    additionalProperties: Optional[Union["Schema", bool]] = None
-    description: Optional[str] = None
-    format: Optional[str] = None
-    default: Optional[Any] = None
-    nullable: Optional[bool] = None
-    readOnly: Optional[bool] = None
-    example: Optional[Any] = None
-    deprecated: Optional[bool] = None
-    anyOf: Optional[abc.Sequence["Schema"]] = None
-    allOf: Optional[abc.Sequence["Schema"]] = None
-    oneOf: Optional[abc.Sequence["Schema"]] = None
-    enum: Optional[list[str]] = None
+    properties: dict[str, "Schema"] | None = None
+    additionalProperties: Union["Schema", bool] | None = None
+    description: str | None = None
+    format: str | None = None
+    default: Any | None = None
+    nullable: bool | None = None
+    readOnly: bool | None = None
+    example: Any | None = None
+    deprecated: bool | None = None
+    anyOf: abc.Sequence["Schema"] | None = None
+    allOf: abc.Sequence["Schema"] | None = None
+    oneOf: abc.Sequence["Schema"] | None = None
+    enum: list[str] | None = None
 
     @pydantic.model_validator(mode="after")
     def convert_null_any_of(self) -> Self:
@@ -177,10 +177,10 @@ Schema.model_rebuild()
 
 
 class Example(BaseModel):
-    summary: Optional[str] = None
-    description: Optional[str] = None
-    value: Optional[Any] = None
-    externalValue: Optional[AnyUrl] = None
+    summary: str | None = None
+    description: str | None = None
+    value: Any | None = None
+    externalValue: AnyUrl | None = None
 
 
 class ParameterType(Enum):
@@ -191,27 +191,27 @@ class ParameterType(Enum):
 
 
 class Encoding(BaseModel):
-    contentType: Optional[str] = None
-    headers: Optional[dict[str, Union[Any, Reference]]] = None
-    allowReserved: Optional[bool] = None
+    contentType: str | None = None
+    headers: dict[str, Any | Reference] | None = None
+    allowReserved: bool | None = None
 
 
 class MediaType(BaseModel):
-    schema_: Optional[Union[Schema, Reference]] = Field(None, alias="schema")
-    example: Optional[Any] = None
-    examples: Optional[dict[str, Union[Example, Reference]]] = None
-    encoding: Optional[dict[str, Encoding]] = None
+    schema_: Schema | Reference | None = Field(None, alias="schema")
+    example: Any | None = None
+    examples: dict[str, Example | Reference] | None = None
+    encoding: dict[str, Encoding] | None = None
 
 
 class ParameterBase(BaseModel):
-    description: Optional[str] = None
-    required: Optional[bool] = None
-    deprecated: Optional[bool] = None
-    allowReserved: Optional[bool] = None
-    schema_: Optional[Union[Schema, Reference]] = Field(None, alias="schema")
-    example: Optional[Any] = None
-    examples: Optional[dict[str, Union[Example, Reference]]] = None
-    content: Optional[dict[str, MediaType]] = None
+    description: str | None = None
+    required: bool | None = None
+    deprecated: bool | None = None
+    allowReserved: bool | None = None
+    schema_: Schema | Reference | None = Field(None, alias="schema")
+    example: Any | None = None
+    examples: dict[str, Example | Reference] | None = None
+    content: dict[str, MediaType] | None = None
 
 
 class Parameter(ParameterBase):
@@ -225,58 +225,58 @@ class Header(ParameterBase):
 
 
 class RequestBody(BaseModel):
-    description: Optional[str] = None
+    description: str | None = None
     content: dict[str, MediaType]
-    required: Optional[bool] = None
+    required: bool | None = None
 
 
 class Response(BaseModel):
     description: str
-    headers: Optional[dict[str, Union[Header, Reference]]] = None
-    content: Optional[dict[str, MediaType]] = None
+    headers: dict[str, Header | Reference] | None = None
+    content: dict[str, MediaType] | None = None
 
 
 class Operation(BaseModel):
     operationId: str
-    summary: Optional[str] = None
-    description: Optional[str] = None
-    parameters: Optional[list[Union[Parameter, Reference]]] = None
-    requestBody: Optional[Union[RequestBody, Reference]] = None
+    summary: str | None = None
+    description: str | None = None
+    parameters: list[Parameter | Reference] | None = None
+    requestBody: RequestBody | Reference | None = None
     responses: dict[str, Response]
-    deprecated: Optional[bool] = None
-    tags: Optional[list[str]] = None
+    deprecated: bool | None = None
+    tags: list[str] | None = None
 
 
 class PathItem(BaseModel):
-    ref: Optional[str] = Field(None, alias="$ref")
-    summary: Optional[str] = None
-    description: Optional[str] = None
-    get: Optional[Operation] = None
-    put: Optional[Operation] = None
-    post: Optional[Operation] = None
-    delete: Optional[Operation] = None
-    options: Optional[Operation] = None
-    head: Optional[Operation] = None
-    patch: Optional[Operation] = None
-    trace: Optional[Operation] = None
-    parameters: Optional[list[Union[Parameter, Reference]]] = None
+    ref: str | None = Field(None, alias="$ref")
+    summary: str | None = None
+    description: str | None = None
+    get: Operation | None = None
+    put: Operation | None = None
+    post: Operation | None = None
+    delete: Operation | None = None
+    options: Operation | None = None
+    head: Operation | None = None
+    patch: Operation | None = None
+    trace: Operation | None = None
+    parameters: list[Parameter | Reference] | None = None
 
 
 class Components(BaseModel):
-    schemas: Optional[dict[str, Schema]] = None
-    responses: Optional[dict[str, Union[Response, Reference]]] = None
-    parameters: Optional[dict[str, Union[Parameter, Reference]]] = None
-    examples: Optional[dict[str, Union[Example, Reference]]] = None
-    requestBodies: Optional[dict[str, Union[RequestBody, Reference]]] = None
-    headers: Optional[dict[str, Union[Header, Reference]]] = None
+    schemas: dict[str, Schema] | None = None
+    responses: dict[str, Response | Reference] | None = None
+    parameters: dict[str, Parameter | Reference] | None = None
+    examples: dict[str, Example | Reference] | None = None
+    requestBodies: dict[str, RequestBody | Reference] | None = None
+    headers: dict[str, Header | Reference] | None = None
 
 
 class OpenAPI(BaseModel):
     openapi: str
     info: Info
-    servers: Optional[list[Server]] = None
+    servers: list[Server] | None = None
     paths: dict[str, PathItem]
-    components: Optional[Components] = None
+    components: Components | None = None
 
 
 class OpenApiDataTypes(Enum):

@@ -24,7 +24,7 @@ import uuid
 from collections import abc
 from collections.abc import Iterator
 from itertools import chain
-from typing import Optional, Union
+from typing import Optional
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
@@ -104,7 +104,7 @@ class SubConstructor(ExpressionStatement):
         self.implements = implements
         self.location = self.implements.get_location()
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         # Only track promises for implementations when they get emitted, because of limitation of current static normalization
         # order: implementation blocks have not normalized at this point, so with the current mechanism we can't fetch eager
         # promises yet. Normalization order can not just be reversed because implementation bodies might contain constructor
@@ -280,15 +280,15 @@ class ListComprehension(RawResumer, ExpressionStatement):
         value_expression: ExpressionStatement,
         loop_var: LocatableString,
         iterable: ExpressionStatement,
-        guard: Optional[ExpressionStatement] = None,
+        guard: ExpressionStatement | None = None,
     ) -> None:
         super().__init__()
         self.value_expression: ExpressionStatement = value_expression
         self.loop_var: LocatableString = loop_var
         self.iterable: ExpressionStatement = iterable
-        self.guard: Optional[ExpressionStatement] = guard
+        self.guard: ExpressionStatement | None = guard
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         self.value_expression.normalize(lhs_attribute=lhs_attribute)
         self.iterable.normalize()
         if self.guard is not None:
@@ -306,7 +306,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         return list(set(self.value_expression.requires()) - {str(self.loop_var)} | set(self.iterable.requires()))
 
     def requires_emit(
-        self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
+        self, resolver: Resolver, queue: QueueScheduler, *, lhs: ResultCollector[object] | None = None
     ) -> dict[object, VariableABC[object]]:
         """
         Sets up gradual or non-gradual execution (depending on the lhs) of the list comprehension. Additionally sets up a
@@ -380,7 +380,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         # => just fetch the result
         return requires[self]
 
-    def execute_direct(self, requires: abc.Mapping[str, object]) -> Union[list[object], Unknown]:
+    def execute_direct(self, requires: abc.Mapping[str, object]) -> list[object] | Unknown:
         iterable: object = self.iterable.execute_direct(requires)
         if isinstance(iterable, Unknown):
             return Unknown(self)
@@ -390,7 +390,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
                 f"A list comprehension in a direct execute context can only be applied to lists, got {type(iterable).__name__}",
             )
 
-        def process(element: object) -> Optional[object]:
+        def process(element: object) -> object | None:
             """
             Execute the list comprehension for a single element of the iterable. Evaluates the guard expression if there is
             any and executes the value expression if the guard passes. Returns the result of the value expression if the
@@ -469,12 +469,12 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         statement: ListComprehension,
         resolver: Resolver,
         queue: QueueScheduler,
-        lhs: Optional[ResultCollector[object]] = None,
+        lhs: ResultCollector[object] | None = None,
     ) -> None:
         self.statement: ListComprehension = statement
         self.resolver: Resolver = resolver
         self.queue: QueueScheduler = queue
-        self.lhs: Optional[ResultCollector[object]] = lhs
+        self.lhs: ResultCollector[object] | None = lhs
         # separately collect results for the value expression for each element of the iterable so we can wait for
         # each element's value expression to complete.
         self._results: list[VariableABC[object]] = []
@@ -560,7 +560,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         RawUnit(queue, resolver, dict(enumerate(self._results)), resumer=self)
 
     def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
-        def get(variable: VariableABC[object]) -> Optional[abc.Sequence[object]]:
+        def get(variable: VariableABC[object]) -> abc.Sequence[object] | None:
             value: object = variable.get_value()
             return None if value is LIST_COMPREHENSION_GUARDED else value if isinstance(value, list) else [value]
 
@@ -646,7 +646,7 @@ class ConditionalExpression(ExpressionStatement):
         self.if_expression: ExpressionStatement = if_expression
         self.else_expression: ExpressionStatement = else_expression
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         self.condition.normalize()
         # pass on lhs_attribute to branches
         self.if_expression.normalize(lhs_attribute=lhs_attribute)
@@ -666,7 +666,7 @@ class ConditionalExpression(ExpressionStatement):
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
     def requires_emit(
-        self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
+        self, resolver: Resolver, queue: QueueScheduler, *, lhs: ResultCollector[object] | None = None
     ) -> dict[object, VariableABC[object]]:
         requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
 
@@ -716,13 +716,13 @@ class ConditionalExpressionResumer(RawResumer):
     __slots__ = ("expression", "condition_value", "result", "lhs")
 
     def __init__(
-        self, expression: ConditionalExpression, result: ResultVariable, *, lhs: Optional[ResultCollector[object]] = None
+        self, expression: ConditionalExpression, result: ResultVariable, *, lhs: ResultCollector[object] | None = None
     ) -> None:
         super().__init__()
         self.expression: ConditionalExpression = expression
-        self.condition_value: Optional[bool] = None
+        self.condition_value: bool | None = None
         self.result: ResultVariable = result
-        self.lhs: Optional[ResultCollector[object]] = lhs
+        self.lhs: ResultCollector[object] | None = lhs
 
     def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
         if self.condition_value is None:
@@ -765,7 +765,7 @@ class IndexAttributeMissingInConstructorException(TypingException):
     Raised when an index attribute was not set in the constructor call for an entity.
     """
 
-    def __init__(self, stmt: Optional[Locatable], entity: "Entity", unset_attributes: abc.Sequence[str]):
+    def __init__(self, stmt: Locatable | None, entity: "Entity", unset_attributes: abc.Sequence[str]):
         if not unset_attributes:
             raise Exception("Argument `unset_attributes` should contain at least one element")
         error_message = self._get_error_message(entity, unset_attributes)
@@ -774,7 +774,7 @@ class IndexAttributeMissingInConstructorException(TypingException):
     def _get_error_message(self, entity: "Entity", unset_attributes: abc.Sequence[str]) -> str:
         exc_message = "Invalid Constructor call:"
         for attribute_name in unset_attributes:
-            attribute: Optional[Attribute] = entity.get_attribute(attribute_name)
+            attribute: Attribute | None = entity.get_attribute(attribute_name)
             assert attribute is not None  # Make mypy happy
             attribute_kind = "relation" if isinstance(attribute, RelationAttribute) else "attribute"
             exc_message += (
@@ -827,7 +827,7 @@ class Constructor(ExpressionStatement):
         self._self_ref: "Reference" = Reference(
             LocatableString(str(uuid.uuid4()), Range("__internal__", 1, 1, 1, 1), -1, self.namespace)
         )
-        self._lhs_attribute: Optional[AttributeAssignmentLHS] = None
+        self._lhs_attribute: AttributeAssignmentLHS | None = None
         self._required_dynamic_args: list[str] = []  # index attributes required from kwargs or lhs_attribute
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
@@ -860,7 +860,7 @@ class Constructor(ExpressionStatement):
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         self.type = self._resolve_type(lhs_attribute)
         self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.class_type))
         inindex: abc.MutableSet[str] = set()
@@ -902,11 +902,11 @@ class Constructor(ExpressionStatement):
             chain.from_iterable(subconstructor.get_all_eager_promises() for subconstructor in self.type.get_sub_constructor())
         )
 
-    def _resolve_type(self, lhs_attribute: Optional[AttributeAssignmentLHS]) -> "Entity":
+    def _resolve_type(self, lhs_attribute: AttributeAssignmentLHS | None) -> "Entity":
         """Type hint handling"""
 
         # First normal resolution
-        resolver_failure: Optional[TypeNotFoundException] = None
+        resolver_failure: TypeNotFoundException | None = None
         local_type: "Optional[Entity]" = None
         try:
             tp = self.namespace.get_type(self.class_type)
@@ -991,7 +991,7 @@ class Constructor(ExpressionStatement):
         )
         requires.update(direct_requires)
 
-        graph: Optional[DataflowGraph] = resolver.dataflow_graph
+        graph: DataflowGraph | None = resolver.dataflow_graph
         if graph is not None:
             node: dataflow.InstanceNodeReference = self._register_dataflow_node(graph)
             # TODO: also add wrapped_kwargs
@@ -1023,14 +1023,14 @@ class Constructor(ExpressionStatement):
                     raise TypingException(self, f"no attribute {k} on type {type_class.get_full_name()}")
                 kwarg_attrs[k] = v
 
-        lhs_inverse_assignment: Optional[tuple[str, object]] = None
+        lhs_inverse_assignment: tuple[str, object] | None = None
         # add inverse relation if it is part of an index
         if self._lhs_attribute is not None:
             lhs_instance: object = self._lhs_attribute.instance.execute(requires, resolver, queue)
             if not isinstance(lhs_instance, Instance):
                 # bug in internal implementation
                 raise Exception("Invalid state: received lhs_attribute that is not an instance")
-            lhs_attribute: Optional[Attribute] = lhs_instance.get_type().get_attribute(self._lhs_attribute.attribute)
+            lhs_attribute: Attribute | None = lhs_instance.get_type().get_attribute(self._lhs_attribute.attribute)
             if not isinstance(lhs_attribute, RelationAttribute):
                 # bug in the model
                 raise RuntimeException(
@@ -1040,7 +1040,7 @@ class Constructor(ExpressionStatement):
                         f" {lhs_attribute} on {lhs_instance}"
                     ),
                 )
-            inverse: Optional[RelationAttribute] = lhs_attribute.end
+            inverse: RelationAttribute | None = lhs_attribute.end
             if (
                 inverse is not None
                 and inverse.name not in self._direct_attributes
@@ -1094,7 +1094,7 @@ class Constructor(ExpressionStatement):
             for attr in index:
                 params.append((attr, direct_attributes[attr]))
 
-            obj: Optional[Instance] = type_class.lookup_index(params, self)
+            obj: Instance | None = type_class.lookup_index(params, self)
 
             if obj is not None:
                 if obj.get_type() != type_class:
@@ -1103,7 +1103,7 @@ class Constructor(ExpressionStatement):
                 collisions[tuple(index)] = obj
 
         object_instance: Instance
-        graph: Optional[DataflowGraph] = resolver.dataflow_graph
+        graph: DataflowGraph | None = resolver.dataflow_graph
         if len(instances) > 0:
             if graph is not None:
                 graph.add_index_match(
@@ -1225,7 +1225,7 @@ class WrappedKwargs(ExpressionStatement):
     def __repr__(self) -> str:
         return "**%s" % repr(self.dictionary)
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         self.dictionary.normalize()
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:

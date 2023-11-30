@@ -18,7 +18,7 @@
 
 from collections.abc import Iterable, Iterator
 from functools import reduce
-from typing import Optional, cast
+from typing import cast
 
 from inmanta.ast import RuntimeException
 from inmanta.execute.dataflow import (
@@ -164,7 +164,7 @@ class GraphicGraph:
                 continue
             self._assignments.add(assignment)
             rhs: Node
-            label: Optional[str] = None
+            label: str | None = None
 
             if isinstance(assignment.rhs, InstanceNodeReference):
                 rhs = assignment.rhs.top_node()

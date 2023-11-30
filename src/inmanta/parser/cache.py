@@ -17,7 +17,6 @@
 """
 import logging
 import os
-from typing import Optional
 
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
@@ -46,7 +45,7 @@ class CacheManager:
         from inmanta.compiler.config import feature_compiler_cache
 
         self.cache_enabled = feature_compiler_cache
-        self.root_cache_dir: Optional[str] = None
+        self.root_cache_dir: str | None = None
 
     def _get_file_name(self, namespace: Namespace, filename: str) -> str:
         """
@@ -84,7 +83,7 @@ class CacheManager:
     def detach_from_project(self) -> None:
         self.root_cache_dir = None
 
-    def un_cache(self, namespace: Namespace, filename: str) -> Optional[list[Statement]]:
+    def un_cache(self, namespace: Namespace, filename: str) -> list[Statement] | None:
         if not self.cache_enabled.get():
             # cache not enabled
             return None

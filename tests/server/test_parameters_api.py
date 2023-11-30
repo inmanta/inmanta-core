@@ -19,7 +19,6 @@ import datetime
 import json
 import uuid
 from operator import itemgetter
-from typing import Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -46,7 +45,7 @@ async def env_with_parameters(server, client, environment: str):
     id_counter = [0x1000]
 
     async def insert_param(
-        name: str, source: str, updated: Optional[datetime.datetime] = None, metadata: Optional[dict[str, str]] = None
+        name: str, source: str, updated: datetime.datetime | None = None, metadata: dict[str, str] | None = None
     ) -> uuid.UUID:
         id_counter[0] += 1
         param_id = uuid.UUID(int=id_counter[0])
@@ -128,7 +127,7 @@ async def test_parameters_paging(server, client, order_by_column, order, env_wit
     all_parameters = result.result["data"]
     for parameter in all_parameters:
         if not parameter["updated"]:
-            parameter["updated"] = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            parameter["updated"] = datetime.datetime.min.replace(tzinfo=datetime.UTC)
         else:
             parameter["updated"] = parse_timestamp(parameter["updated"])
     all_parameters_in_expected_order = sorted(all_parameters, key=itemgetter(order_by_column, "id"), reverse=order == "DESC")

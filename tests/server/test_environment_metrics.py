@@ -19,9 +19,9 @@ import functools
 import operator
 import uuid
 from collections import abc, defaultdict
-from collections.abc import AsyncIterator, Awaitable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional, cast
+from typing import cast
 
 import asyncpg
 import pytest
@@ -87,7 +87,7 @@ class DummyGaugeMetric(MetricsCollector):
         return MetricType.GAUGE
 
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection | None
     ) -> abc.Sequence[MetricValue]:
         a = MetricValue("dummy_gauge", 1, env_uuid)
         return [a]
@@ -101,7 +101,7 @@ class DummyGaugeMetricMulti(MetricsCollector):
         return MetricType.GAUGE
 
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection | None
     ) -> abc.Sequence[MetricValue]:
         a = MetricValue("dummy_gauge_multi", 1, env_uuid, "up")
         b = MetricValue("dummy_gauge_multi", 2, env_uuid, "down")
@@ -117,7 +117,7 @@ class DummyTimerMetric(MetricsCollector):
         return MetricType.TIMER
 
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection | None
     ) -> abc.Sequence[MetricValueTimer]:
         a = MetricValueTimer("dummy_timer", 3, 50.50, env_uuid)
         return [a]
@@ -131,7 +131,7 @@ class DummyTimerMetricMulti(MetricsCollector):
         return MetricType.TIMER
 
     async def get_metric_value(
-        self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+        self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection | None
     ) -> abc.Sequence[MetricValueTimer]:
         a = MetricValueTimer("dummy_timer_multi", 3, 50.50 * 1, env_uuid, "up")
         b = MetricValueTimer("dummy_timer_multi", 13, 50.50 * 2, env_uuid, "down")
@@ -166,7 +166,7 @@ async def test_bad_type_metric(env_metrics_service):
             return MetricType.TIMER
 
         async def get_metric_value(
-            self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+            self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection | None
         ) -> abc.Sequence[MetricValue]:
             a = MetricValue(self.get_metric_name(), env_uuid, 10)
             return [a]
@@ -324,7 +324,7 @@ async def test_flush_metrics_for_different_envs(env_metrics_service):
             return MetricType.GAUGE
 
         async def get_metric_value(
-            self, start_interval: datetime, end_interval: datetime, connection: Optional[asyncpg.connection.Connection]
+            self, start_interval: datetime, end_interval: datetime, connection: asyncpg.connection.Connection | None
         ) -> abc.Sequence[MetricValue]:
             a = MetricValue("dummy_gauge_2", 2, env_uuid2)
             return [a]

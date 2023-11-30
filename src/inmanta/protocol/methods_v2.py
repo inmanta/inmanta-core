@@ -19,7 +19,7 @@
 """
 import datetime
 import uuid
-from typing import Literal, Optional, Union
+from typing import Literal
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
@@ -41,11 +41,11 @@ from inmanta.types import PrimitiveTypes
 )
 def put_partial(
     tid: uuid.UUID,
-    resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
-    unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
-    resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-    removed_resource_sets: Optional[list[str]] = None,
-    pip_config: Optional[PipConfig] = None,
+    resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] | None = None,
+    unknowns: list[dict[str, PrimitiveTypes]] | None = None,
+    resource_sets: dict[ResourceIdStr, str | None] | None = None,
+    removed_resource_sets: list[str] | None = None,
+    pip_config: PipConfig | None = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -76,7 +76,7 @@ def put_partial(
 
 # Method for working with projects
 @typedmethod(path="/project", operation="PUT", client_types=[ClientType.api], api_version=2)
-def project_create(name: str, project_id: Optional[uuid.UUID] = None) -> model.Project:
+def project_create(name: str, project_id: uuid.UUID | None = None) -> model.Project:
     """
     Create a new project
 
@@ -128,9 +128,9 @@ def project_get(id: uuid.UUID, environment_details: bool = False) -> model.Proje
 def environment_create(
     project_id: uuid.UUID,
     name: str,
-    repository: Optional[str] = None,
-    branch: Optional[str] = None,
-    environment_id: Optional[uuid.UUID] = None,
+    repository: str | None = None,
+    branch: str | None = None,
+    environment_id: uuid.UUID | None = None,
     description: str = "",
     icon: str = "",
 ) -> model.Environment:
@@ -156,11 +156,11 @@ def environment_create(
 def environment_modify(
     id: uuid.UUID,
     name: str,
-    repository: Optional[str] = None,
-    branch: Optional[str] = None,
-    project_id: Optional[uuid.UUID] = None,
-    description: Optional[str] = None,
-    icon: Optional[str] = None,
+    repository: str | None = None,
+    branch: str | None = None,
+    project_id: uuid.UUID | None = None,
+    description: str | None = None,
+    icon: str | None = None,
 ) -> model.Environment:
     """
     Modify the given environment
@@ -383,7 +383,7 @@ def reserve_version(tid: uuid.UUID) -> int:
 
 
 @typedmethod(path="/docs", operation="GET", client_types=[ClientType.api], api_version=2)
-def get_api_docs(format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+def get_api_docs(format: ApiDocsFormat | None = ApiDocsFormat.swagger) -> ReturnValue[OpenAPI | str]:
     """
     Get the OpenAPI definition of the API
 
@@ -437,12 +437,12 @@ def all_agents_action(tid: uuid.UUID, action: AgentAction) -> None:
 @typedmethod(path="/agents", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_agents(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    start: Optional[Union[datetime.datetime, bool, str]] = None,
-    end: Optional[Union[datetime.datetime, bool, str]] = None,
-    first_id: Optional[str] = None,
-    last_id: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    start: datetime.datetime | bool | str | None = None,
+    end: datetime.datetime | bool | str | None = None,
+    first_id: str | None = None,
+    last_id: str | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "name.asc",
 ) -> list[model.Agent]:
     """
@@ -499,7 +499,7 @@ def update_agent_map(agent_map: dict[str, str]) -> None:
     client_types=[ClientType.api],
     api_version=2,
 )
-def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
+def get_compile_data(id: uuid.UUID) -> model.CompileData | None:
     """
     Get the compile data for the given compile request.
 
@@ -512,15 +512,15 @@ def get_compile_data(id: uuid.UUID) -> Optional[model.CompileData]:
 )
 def get_resource_actions(
     tid: uuid.UUID,
-    resource_type: Optional[str] = None,
-    agent: Optional[str] = None,
-    attribute: Optional[str] = None,
-    attribute_value: Optional[str] = None,
-    log_severity: Optional[str] = None,
-    limit: Optional[int] = 0,
-    action_id: Optional[uuid.UUID] = None,
-    first_timestamp: Optional[datetime.datetime] = None,
-    last_timestamp: Optional[datetime.datetime] = None,
+    resource_type: str | None = None,
+    agent: str | None = None,
+    attribute: str | None = None,
+    attribute_value: str | None = None,
+    log_severity: str | None = None,
+    limit: int | None = 0,
+    action_id: uuid.UUID | None = None,
+    first_timestamp: datetime.datetime | None = None,
+    last_timestamp: datetime.datetime | None = None,
 ) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
@@ -564,7 +564,7 @@ def resource_deploy_done(
     status: ResourceState,
     messages: list[model.LogLine] = [],
     changes: dict[str, model.AttributeStateChange] = {},
-    change: Optional[Change] = None,
+    change: Change | None = None,
 ) -> None:
     """
     Report to the server that an agent has finished the deployment of a certain resource.
@@ -617,7 +617,7 @@ def resource_deploy_start(
 def get_resource_events(
     tid: uuid.UUID,
     rvid: model.ResourceVersionIdStr,
-    exclude_change: Optional[Change] = None,
+    exclude_change: Change | None = None,
 ) -> dict[model.ResourceIdStr, list[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
@@ -664,12 +664,12 @@ def resource_did_dependency_change(
 @typedmethod(path="/resource", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def resource_list(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    first_id: Optional[model.ResourceVersionIdStr] = None,
-    last_id: Optional[model.ResourceVersionIdStr] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    first_id: model.ResourceVersionIdStr | None = None,
+    last_id: model.ResourceVersionIdStr | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "resource_type.desc",
     deploy_summary: bool = False,
 ) -> list[model.LatestReleasedResource]:
@@ -736,11 +736,11 @@ def resource_details(tid: uuid.UUID, rid: model.ResourceIdStr) -> model.Released
 def resource_history(
     tid: uuid.UUID,
     rid: model.ResourceIdStr,
-    limit: Optional[int] = None,
-    first_id: Optional[str] = None,
-    last_id: Optional[str] = None,
-    start: Optional[datetime.datetime] = None,
-    end: Optional[datetime.datetime] = None,
+    limit: int | None = None,
+    first_id: str | None = None,
+    last_id: str | None = None,
+    start: datetime.datetime | None = None,
+    end: datetime.datetime | None = None,
     sort: str = "date.desc",
 ) -> list[model.ResourceHistory]:
     """
@@ -772,10 +772,10 @@ def resource_history(
 def resource_logs(
     tid: uuid.UUID,
     rid: model.ResourceIdStr,
-    limit: Optional[int] = None,
-    start: Optional[datetime.datetime] = None,
-    end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    start: datetime.datetime | None = None,
+    end: datetime.datetime | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "timestamp.desc",
 ) -> list[model.ResourceLog]:
     """
@@ -861,12 +861,12 @@ def get_fact(tid: uuid.UUID, rid: model.ResourceIdStr, id: uuid.UUID) -> model.F
 @typedmethod(path="/compilereport", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def get_compile_reports(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    first_id: Optional[uuid.UUID] = None,
-    last_id: Optional[uuid.UUID] = None,
-    start: Optional[datetime.datetime] = None,
-    end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    first_id: uuid.UUID | None = None,
+    last_id: uuid.UUID | None = None,
+    start: datetime.datetime | None = None,
+    end: datetime.datetime | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "requested.desc",
 ) -> list[model.CompileReport]:
     """
@@ -930,10 +930,10 @@ def compile_details(tid: uuid.UUID, id: uuid.UUID) -> model.CompileDetails:
 @typedmethod(path="/desiredstate", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2)
 def list_desired_state_versions(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    start: Optional[int] = None,
-    end: Optional[int] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    start: int | None = None,
+    end: int | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "version.desc",
 ) -> list[model.DesiredStateVersion]:
     """
@@ -964,7 +964,7 @@ def list_desired_state_versions(
     api_version=2,
 )
 def promote_desired_state_version(
-    tid: uuid.UUID, version: int, trigger_method: Optional[model.PromoteTriggerMethod] = None
+    tid: uuid.UUID, version: int, trigger_method: model.PromoteTriggerMethod | None = None
 ) -> None:
     """
     Promote a desired state version, making it the active version in the environment.
@@ -989,12 +989,12 @@ def promote_desired_state_version(
 def get_resources_in_version(
     tid: uuid.UUID,
     version: int,
-    limit: Optional[int] = None,
-    first_id: Optional[model.ResourceVersionIdStr] = None,
-    last_id: Optional[model.ResourceVersionIdStr] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    first_id: model.ResourceVersionIdStr | None = None,
+    last_id: model.ResourceVersionIdStr | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "resource_type.desc",
 ) -> list[model.VersionedResource]:
     """
@@ -1082,12 +1082,12 @@ def versioned_resource_details(tid: uuid.UUID, version: int, rid: model.Resource
 )
 def get_parameters(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    first_id: Optional[uuid.UUID] = None,
-    last_id: Optional[uuid.UUID] = None,
-    start: Optional[Union[datetime.datetime, str]] = None,
-    end: Optional[Union[datetime.datetime, str]] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    first_id: uuid.UUID | None = None,
+    last_id: uuid.UUID | None = None,
+    start: datetime.datetime | str | None = None,
+    end: datetime.datetime | str | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "name.asc",
 ) -> list[model.Parameter]:
     """
@@ -1127,12 +1127,12 @@ def get_parameters(
 )
 def get_all_facts(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    first_id: Optional[uuid.UUID] = None,
-    last_id: Optional[uuid.UUID] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    first_id: uuid.UUID | None = None,
+    last_id: uuid.UUID | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "name.asc",
 ) -> list[model.Fact]:
     """
@@ -1221,12 +1221,12 @@ def get_dryrun_diff(tid: uuid.UUID, version: int, report_id: uuid.UUID) -> model
 )
 def list_notifications(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    first_id: Optional[uuid.UUID] = None,
-    last_id: Optional[uuid.UUID] = None,
-    start: Optional[datetime.datetime] = None,
-    end: Optional[datetime.datetime] = None,
-    filter: Optional[dict[str, list[str]]] = None,
+    limit: int | None = None,
+    first_id: uuid.UUID | None = None,
+    last_id: uuid.UUID | None = None,
+    start: datetime.datetime | None = None,
+    end: datetime.datetime | None = None,
+    filter: dict[str, list[str]] | None = None,
     sort: str = "created.desc",
 ) -> list[model.Notification]:
     """
@@ -1289,8 +1289,8 @@ def get_notification(
 def update_notification(
     tid: uuid.UUID,
     notification_id: uuid.UUID,
-    read: Optional[bool] = None,
-    cleared: Optional[bool] = None,
+    read: bool | None = None,
+    cleared: bool | None = None,
 ) -> model.Notification:
     """
     Update a notification by setting its flags
@@ -1331,7 +1331,7 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[mo
     client_types=[ClientType.agent, ClientType.api],
     api_version=2,
 )
-def get_pip_config(tid: uuid.UUID, version: int) -> Optional[model.PipConfig]:
+def get_pip_config(tid: uuid.UUID, version: int) -> model.PipConfig | None:
     """
     Get the pip config for the given version
 
@@ -1494,9 +1494,9 @@ def discovered_resources_get(tid: uuid.UUID, discovered_resource_id: ResourceIdS
 )
 def discovered_resources_get_batch(
     tid: uuid.UUID,
-    limit: Optional[int] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    limit: int | None = None,
+    start: str | None = None,
+    end: str | None = None,
     sort: str = "discovered_resource_id.asc",
 ) -> list[model.DiscoveredResource]:
     """

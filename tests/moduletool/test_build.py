@@ -25,7 +25,6 @@ import sys
 import zipfile
 from importlib.machinery import ModuleSpec
 from types import ModuleType
-from typing import Optional
 
 import pytest
 from pytest import MonkeyPatch
@@ -41,7 +40,7 @@ from utils import v1_module_from_template
 def run_module_build_soft(
     module_path: str,
     set_path_argument: bool,
-    output_dir: Optional[str] = None,
+    output_dir: str | None = None,
     dev_build: bool = False,
     byte_code: bool = False,
 ) -> str:
@@ -50,7 +49,7 @@ def run_module_build_soft(
     return moduletool.ModuleTool().build(module_path, output_dir, dev_build=dev_build, byte_code=byte_code)
 
 
-def run_module_build(module_path: str, set_path_argument: bool, output_dir: Optional[str] = None) -> None:
+def run_module_build(module_path: str, set_path_argument: bool, output_dir: str | None = None) -> None:
     """
     Build the Inmanta module using the `inmanta module build` command.
 

@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from inmanta.protocol.common import JSON_CONTENT, ReturnValue, T
 from inmanta.types import ArgumentTypes, ReturnTypes
@@ -27,10 +27,10 @@ class ReturnValueWithMeta(ReturnValue[T]):
         self,
         status_code: int = 200,
         headers: MutableMapping[str, str] = {},
-        response: Optional[T] = None,
+        response: T | None = None,
         content_type: str = JSON_CONTENT,
-        links: Optional[dict[str, str]] = None,
-        metadata: Optional[Mapping[str, ArgumentTypes]] = None,
+        links: dict[str, str] | None = None,
+        metadata: Mapping[str, ArgumentTypes] | None = None,
     ) -> None:
         super().__init__(status_code, headers, response, content_type, links)
         self.metadata = metadata

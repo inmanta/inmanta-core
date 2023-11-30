@@ -22,7 +22,6 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Optional
 
 from inmanta import config, const, module, postgresproc, protocol
 from inmanta.config import Config
@@ -184,7 +183,7 @@ host=localhost
 
         return True
 
-    def _create_project(self, project_name: str) -> Optional[str]:
+    def _create_project(self, project_name: str) -> str | None:
         LOGGER.debug("Creating project %s", project_name)
         result = self._client.create_project(project_name)
         if result.code != 200:
@@ -193,7 +192,7 @@ host=localhost
 
         return result.result["project"]["id"]
 
-    def _create_environment(self, project_id: str, environment_name: str) -> Optional[str]:
+    def _create_environment(self, project_id: str, environment_name: str) -> str | None:
         LOGGER.debug("Creating environment %s in project %s", environment_name, project_id)
         result = self._client.create_environment(project_id=project_id, name=environment_name)
         if result.code != 200:
@@ -209,7 +208,7 @@ host=localhost
 
         return env_id
 
-    def _latest_version_instance(self, environment_id: str) -> Optional[JsonType]:
+    def _latest_version_instance(self, environment_id: str) -> JsonType | None:
         result: Result = self._client.list_versions(tid=environment_id)
         if result.code != 200:
             LOGGER.error("Unable to get all version of environment %s", environment_id)

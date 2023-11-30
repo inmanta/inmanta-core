@@ -22,9 +22,9 @@ import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any
 from urllib import parse
 
 from inmanta import config as inmanta_config
@@ -174,7 +174,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         self._transport = client.RESTClient
         self._sched = util.Scheduler("session endpoint")
 
-        self._env_id: Optional[uuid.UUID] = None
+        self._env_id: uuid.UUID | None = None
 
         self.sessionid: uuid.UUID = uuid.uuid1()
         self.running: bool = True
@@ -182,11 +182,11 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.reconnect_delay = reconnect_delay
         self.add_call_target(self)
 
-    def get_environment(self) -> Optional[uuid.UUID]:
+    def get_environment(self) -> uuid.UUID | None:
         return self._env_id
 
     @property
-    def environment(self) -> Optional[uuid.UUID]:
+    def environment(self) -> uuid.UUID | None:
         return self._env_id
 
     def set_environment(self, environment_id: uuid.UUID) -> None:
@@ -379,7 +379,7 @@ class Client(Endpoint):
         result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
 
-    def _select_method(self, name) -> Optional[common.MethodProperties]:
+    def _select_method(self, name) -> common.MethodProperties | None:
         if name not in common.MethodProperties.methods:
             return None
 
@@ -418,10 +418,10 @@ class SyncClient:
 
     def __init__(
         self,
-        name: Optional[str] = None,
+        name: str | None = None,
         timeout: int = 120,
-        client: Optional[Client] = None,
-        ioloop: Optional[asyncio.AbstractEventLoop] = None,
+        client: Client | None = None,
+        ioloop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """
         either name or client is required.
@@ -440,7 +440,7 @@ class SyncClient:
             raise Exception("Either name or client needs to be provided.")
 
         self.timeout = timeout
-        self._ioloop: Optional[asyncio.AbstractEventLoop] = ioloop
+        self._ioloop: asyncio.AbstractEventLoop | None = ioloop
         if client is None:
             assert name is not None  # Make mypy happy
             self.name = name

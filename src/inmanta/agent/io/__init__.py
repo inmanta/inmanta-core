@@ -19,7 +19,6 @@ import logging
 import re
 import typing
 import urllib
-from typing import Optional
 
 from inmanta.agent.cache import AgentCache
 
@@ -32,7 +31,7 @@ if typing.TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_agent_uri(uri: str) -> tuple[str, dict[str, Optional[str]]]:
+def parse_agent_uri(uri: str) -> tuple[str, dict[str, str | None]]:
     """
     Parse an agent uri and return the settings
 
@@ -40,7 +39,7 @@ def parse_agent_uri(uri: str) -> tuple[str, dict[str, Optional[str]]]:
     :return: (scheme, config)
     """
     parts = urllib.parse.urlparse(uri)
-    config: dict[str, Optional[str]] = {}
+    config: dict[str, str | None] = {}
     scheme = "local"
 
     if parts.query != "":

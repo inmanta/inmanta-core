@@ -25,7 +25,6 @@ import subprocess
 import sys
 import warnings
 from collections.abc import Iterator
-from typing import Optional
 
 import py
 import pytest
@@ -376,7 +375,7 @@ async def test_version_argument(modules_repo):
     )
     try:
         await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e
@@ -649,7 +648,7 @@ import minimalv2module
         autostd=False,
     )
 
-    def verify_v2_message(command: str, args: Optional[argparse.Namespace] = None) -> None:
+    def verify_v2_message(command: str, args: argparse.Namespace | None = None) -> None:
         caplog.clear()
         with caplog.at_level(logging.WARNING):
             ModuleTool().execute(command, args if args is not None else argparse.Namespace())

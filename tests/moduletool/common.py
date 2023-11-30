@@ -18,7 +18,6 @@
 import os
 import subprocess
 from subprocess import CalledProcessError
-from typing import Optional
 
 import yaml
 
@@ -28,11 +27,11 @@ from inmanta.module import InstallMode, Project
 from inmanta.moduletool import ModuleTool
 
 
-def makeproject(reporoot, name, deps=[], imports=None, install_mode: Optional[InstallMode] = None):
+def makeproject(reporoot, name, deps=[], imports=None, install_mode: InstallMode | None = None):
     return makemodule(reporoot, name, deps, project=True, imports=imports, install_mode=install_mode)
 
 
-def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode: Optional[InstallMode] = None):
+def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode: InstallMode | None = None):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -199,7 +198,7 @@ def make_module_simple_deps(reporoot, name, depends=[], project=False, version="
     return make_module_simple(reporoot, prefix + name, [("mod" + x, None) for x in depends], project=project, version=version)
 
 
-def install_project(modules_dir: str, name: str, working_dir: str, config=True, config_content: Optional[str] = None):
+def install_project(modules_dir: str, name: str, working_dir: str, config=True, config_content: str | None = None):
     """
     Copy the project with `name` in `modules_dir` to the given `working_dir` and install it without verifying it.
     This method changes the current working directory to the root of the project copied into the working_dir,
@@ -225,7 +224,7 @@ def install_project(modules_dir: str, name: str, working_dir: str, config=True, 
     return coroot
 
 
-def clone_repo(source_dir: str, repo_name: str, destination_dir: str, tag: Optional[str] = None) -> str:
+def clone_repo(source_dir: str, repo_name: str, destination_dir: str, tag: str | None = None) -> str:
     """
     :param tag: Clone commit with the given tag.
     """

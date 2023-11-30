@@ -67,7 +67,7 @@ async def env_with_resources(server, client):
     cm = data.ConfigurationModel(
         environment=env2.id,
         version=4,
-        date=datetime.datetime.now(tz=datetime.timezone.utc),
+        date=datetime.datetime.now(tz=datetime.UTC),
         total=1,
         released=True,
         version_info={},
@@ -79,7 +79,7 @@ async def env_with_resources(server, client):
     cm = data.ConfigurationModel(
         environment=env3.id,
         version=6,
-        date=datetime.datetime.now(tz=datetime.timezone.utc),
+        date=datetime.datetime.now(tz=datetime.UTC),
         total=1,
         released=True,
         version_info={},
@@ -409,9 +409,9 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 2
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
+    assert generated_time == cm_times[1].astimezone(datetime.UTC)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
-    assert deploy_time == resources[env.id][multiple_requires][3].last_deploy.astimezone(datetime.timezone.utc)
+    assert deploy_time == resources[env.id][multiple_requires][3].last_deploy.astimezone(datetime.UTC)
     await assert_matching_attributes(result.result["data"], resources[env.id][multiple_requires][3])
     assert result.result["data"]["requires_status"] == {
         "std::Directory[internal,path=/tmp/dir1]": "deployed",
@@ -424,9 +424,9 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 2
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
+    assert generated_time == cm_times[1].astimezone(datetime.UTC)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
-    assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.timezone.utc)
+    assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.UTC)
     await assert_matching_attributes(result.result["data"], resources[env.id][no_requires][3])
     assert result.result["data"]["requires_status"] == {}
     assert result.result["data"]["status"] == "deployed"
@@ -436,9 +436,9 @@ async def test_resource_details(server, client, env_with_resources):
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 4
     generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
-    assert generated_time == cm_times[3].astimezone(datetime.timezone.utc)
+    assert generated_time == cm_times[3].astimezone(datetime.UTC)
     deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
-    assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.timezone.utc)
+    assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.UTC)
     await assert_matching_attributes(result.result["data"], resources[env.id][single_requires][3])
     assert result.result["data"]["requires_status"] == {"std::Directory[internal,path=/tmp/dir1]": "deployed"}
     assert result.result["data"]["status"] == "deploying"

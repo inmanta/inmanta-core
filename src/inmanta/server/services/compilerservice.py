@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequenc
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Optional, cast
+from typing import cast
 
 import dateutil
 import dateutil.parser
@@ -79,11 +79,11 @@ class CompileRun:
 
     def __init__(self, request: data.Compile, project_dir: str) -> None:
         self.request = request
-        self.stage: Optional[data.Report] = None
+        self.stage: data.Report | None = None
         self._project_dir = os.path.abspath(project_dir)
         # When set, used to collect tail of std out
-        self.tail_stdout: Optional[str] = None
-        self.version: Optional[int] = None
+        self.tail_stdout: str | None = None
+        self.version: int | None = None
 
     async def _error(self, message: str) -> None:
         assert self.stage is not None
@@ -145,7 +145,7 @@ class CompileRun:
         ret, _, _ = await asyncio.gather(sub_process.wait(), self.drain_out(out), self.drain_err(err))
         return ret
 
-    async def get_branch(self) -> Optional[str]:
+    async def get_branch(self) -> str | None:
         try:
             sub_process = await asyncio.create_subprocess_exec(
                 "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self._project_dir
@@ -166,7 +166,7 @@ class CompileRun:
         else:
             return None
 
-    async def get_upstream_branch(self) -> Optional[str]:
+    async def get_upstream_branch(self) -> str | None:
         """
         Returns the fully qualified branch name of the upstream branch associated with the currently checked out branch.
         """
@@ -194,7 +194,7 @@ class CompileRun:
     async def _run_compile_stage(self, name: str, cmd: list[str], cwd: str, env: dict[str, str] = {}) -> data.Report:
         await self._start_stage(name, " ".join(cmd))
 
-        sub_process: Optional[Process] = None
+        sub_process: Process | None = None
         try:
             env_all = os.environ.copy()
             if env is not None:
@@ -217,7 +217,7 @@ class CompileRun:
                 # The process is still running, kill it
                 sub_process.kill()
 
-    async def run(self, force_update: Optional[bool] = False) -> tuple[bool, Optional[model.CompileData]]:
+    async def run(self, force_update: bool | None = False) -> tuple[bool, model.CompileData | None]:
         """
         Runs this compile run.
 
@@ -251,7 +251,7 @@ class CompileRun:
             # venv of the Inmanta server.
             venv_dir = os.path.join(project_dir, ".env")
 
-            async def ensure_venv() -> Optional[data.Report]:
+            async def ensure_venv() -> data.Report | None:
                 """
                 Ensure a venv is present at `venv_dir`.
                 """
@@ -306,7 +306,7 @@ class CompileRun:
                 full_cmd = [python_path, "-m", "inmanta.app"] + inmanta_args
                 return await self._run_compile_stage(stage_name, full_cmd, cwd, env)
 
-            async def setup() -> AsyncIterator[Awaitable[Optional[data.Report]]]:
+            async def setup() -> AsyncIterator[Awaitable[data.Report | None]]:
                 """
                 Returns an iterator over all setup stages. Inspecting stage success state is the responsibility of the caller.
                 """
@@ -363,7 +363,7 @@ class CompileRun:
                     yield install_modules()
 
             async for stage in setup():
-                stage_result: Optional[data.Report] = await stage
+                stage_result: data.Report | None = await stage
                 if stage_result and (stage_result.returncode is None or stage_result.returncode > 0):
                     return False, None
 
@@ -562,7 +562,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
                 "message": "Full recompile triggered by AUTO_FULL_COMPILE cron schedule",
             }
 
-            async def _request_recompile_task() -> tuple[Optional[uuid.UUID], Warnings]:
+            async def _request_recompile_task() -> tuple[uuid.UUID | None, Warnings]:
                 """
                 Creates a new task for the full compile schedule.
                 If the environment is halted, the task does nothing.
@@ -589,16 +589,16 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         force_update: bool,
         do_export: bool,
         remote_id: uuid.UUID,
-        metadata: Optional[JsonType] = None,
-        env_vars: Optional[Mapping[str, str]] = None,
+        metadata: JsonType | None = None,
+        env_vars: Mapping[str, str] | None = None,
         partial: bool = False,
-        removed_resource_sets: Optional[list[str]] = None,
-        exporter_plugin: Optional[str] = None,
-        notify_failed_compile: Optional[bool] = None,
-        failed_compile_message: Optional[str] = None,
+        removed_resource_sets: list[str] | None = None,
+        exporter_plugin: str | None = None,
+        notify_failed_compile: bool | None = None,
+        failed_compile_message: str | None = None,
         in_db_transaction: bool = False,
-        connection: Optional[Connection] = None,
-    ) -> tuple[Optional[uuid.UUID], Warnings]:
+        connection: Connection | None = None,
+    ) -> tuple[uuid.UUID | None, Warnings]:
         """
         Recompile an environment in a different thread and taking wait time into account.
 
@@ -667,7 +667,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         but before this method was invoked, the server will automatically recover from this and run the requested compile
         without any need to call this method.
         """
-        compile_obj: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+        compile_obj: data.Compile | None = await data.Compile.get_by_id(compile_id)
         if not compile_obj:
             raise Exception(f"Compile with id {compile_id} not found.")
         async with self._queue_count_cache_lock:
@@ -690,7 +690,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         async with self._global_lock:
             if self.is_stopping():
                 return
-            env: Optional[data.Environment] = await data.Environment.get_by_id(compile.environment)
+            env: data.Environment | None = await data.Environment.get_by_id(compile.environment)
             if env is None:
                 raise Exception("Can't queue compile: environment %s does not exist" % compile.environment)
             assert env is not None
@@ -708,7 +708,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def process_next_compile_in_queue(self, environment: uuid.UUID) -> None:
         if self.is_stopping():
             return
-        env: Optional[data.Environment] = await data.Environment.get_by_id(environment)
+        env: data.Environment | None = await data.Environment.get_by_id(environment)
         if env is None:
             raise Exception("Can't dequeue compile: environment %s does not exist" % environment)
         nextrun = await data.Compile.get_next_run(environment)
@@ -748,7 +748,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         """
         Resume compiler service after halt.
         """
-        compile: Optional[data.Compile] = await data.Compile.get_next_run(environment)
+        compile: data.Compile | None = await data.Compile.get_next_run(environment)
         if compile is not None:
             await self._queue(compile)
 
@@ -829,13 +829,13 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             self._queue_count_cache -= 1
 
         # set force_update == True iff any compile request has force_update == True
-        compile_data: Optional[model.CompileData]
+        compile_data: model.CompileData | None
         success, compile_data = await runner.run(force_update=any(c.force_update for c in chain([compile], merge_candidates)))
 
         version = runner.version
 
         end = datetime.datetime.now().astimezone()
-        compile_data_json: Optional[dict] = None if compile_data is None else compile_data.model_dump()
+        compile_data_json: dict | None = None if compile_data is None else compile_data.model_dump()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
             merge_candidate.update_fields(
@@ -864,7 +864,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     @protocol.handle(methods.get_reports, env="tid")
     async def get_reports(
-        self, env: data.Environment, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None
+        self, env: data.Environment, start: str | None = None, end: str | None = None, limit: int | None = None
     ) -> Apireturn:
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
@@ -905,8 +905,8 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         return 200, {"report": report}
 
     @protocol.handle(methods_v2.get_compile_data, compile_id="id")
-    async def get_compile_data(self, compile_id: uuid.UUID) -> Optional[model.CompileData]:
-        compile: Optional[data.Compile] = await data.Compile.get_by_id(compile_id)
+    async def get_compile_data(self, compile_id: uuid.UUID) -> model.CompileData | None:
+        compile: data.Compile | None = await data.Compile.get_by_id(compile_id)
         if compile is None:
             raise NotFound("The given compile id does not exist")
         return compile.to_dto().compile_data
@@ -923,12 +923,12 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
     async def get_compile_reports(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: uuid.UUID | None = None,
+        last_id: uuid.UUID | None = None,
+        start: datetime.datetime | None = None,
+        end: datetime.datetime | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "requested.desc",
     ) -> ReturnValue[Sequence[model.CompileReport]]:
         try:

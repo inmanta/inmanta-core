@@ -19,7 +19,7 @@ import datetime
 import logging
 import uuid
 from collections.abc import Sequence
-from typing import Optional, cast
+from typing import cast
 
 from asyncpg import Connection
 
@@ -114,7 +114,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         message: str,
         uri: str,
         severity: const.NotificationSeverity = const.NotificationSeverity.message,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> None:
         """Internal API to create a new notification
         :param environment: The environment this notification belongs to
@@ -138,12 +138,12 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
     async def list_notifications(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[datetime.datetime] = None,
-        end: Optional[datetime.datetime] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: uuid.UUID | None = None,
+        last_id: uuid.UUID | None = None,
+        start: datetime.datetime | None = None,
+        end: datetime.datetime | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "created.desc",
     ) -> ReturnValue[Sequence[Notification]]:
         try:
@@ -178,8 +178,8 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         self,
         env: data.Environment,
         notification_id: uuid.UUID,
-        read: Optional[bool] = None,
-        cleared: Optional[bool] = None,
+        read: bool | None = None,
+        cleared: bool | None = None,
     ) -> Notification:
         notification = await data.Notification.get_one(environment=env.id, id=notification_id)
         if not notification:

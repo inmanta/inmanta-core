@@ -174,7 +174,7 @@ def api_methods_fixture(clean_reset):
         operation="GET",
     )
     def dummy_get_with_default_values(
-        no_def: int, id: int = 5, param: str = "test", fl: float = 0.1, opt: Optional[str] = None
+        no_def: int, id: int = 5, param: str = "test", fl: float = 0.1, opt: str | None = None
     ) -> str:
         return ""
 

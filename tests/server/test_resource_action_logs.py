@@ -54,7 +54,7 @@ async def env_with_logs(client, server, environment: str):
         msg_timings.append(
             datetime.datetime.strptime("2021-07-07T10:10:00.0", "%Y-%m-%dT%H:%M:%S.%f")
             .replace(minute=i)
-            .astimezone(datetime.timezone.utc)
+            .astimezone(datetime.UTC)
         )
     msg_timings_idx = 0
     for i in range(1, 10):

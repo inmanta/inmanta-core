@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from functools import reduce
 from itertools import chain, filterfalse
-from typing import TYPE_CHECKING, Callable, Generic, Optional, TypeVar
+from typing import TYPE_CHECKING, Generic, Optional, TypeVar
 
 if TYPE_CHECKING:
     from inmanta.ast import Locatable
@@ -166,7 +166,7 @@ class DataflowGraph:
 
     def __init__(self, resolver: "Resolver", parent: Optional["DataflowGraph"] = None) -> None:
         self.resolver: "Resolver" = resolver
-        self.parent: Optional[DataflowGraph] = parent if parent is not None else None
+        self.parent: DataflowGraph | None = parent if parent is not None else None
         # keeps track of variables that have not been declared in the resolver's scope. This should only be populated
         # if the model refers to a variable in the rhs that has no declaration in the left hand side.
         # For example `n = y.n` in a scope that does not contain a `y = ...` statement.
@@ -606,7 +606,7 @@ class AssignableNode(Node):
         self.value_assignments: list[Assignment[ValueNodeReference]] = []
         self.instance_assignments: list[Assignment[InstanceNodeReference]] = []
         self.equivalence: Equivalence = Equivalence(frozenset([self]))
-        self.result_variable: Optional[ResultVariable] = None
+        self.result_variable: ResultVariable | None = None
 
     def reference(self) -> AssignableNodeReference:
         return VariableNodeReference(self)
@@ -688,13 +688,13 @@ class Equivalence:
         self, nodes: frozenset[AssignableNode] = frozenset(), tentative_instance: Optional["InstanceNode"] = None
     ) -> None:
         self.nodes: frozenset[AssignableNode] = nodes
-        self.tentative_instance: Optional[InstanceNode] = tentative_instance
+        self.tentative_instance: InstanceNode | None = tentative_instance
 
     def merge(self, other: "Equivalence") -> "Equivalence":
         """
         Returns the equivalence that is the union of this one and the one passed as an argument.
         """
-        tentative_instance: Optional[InstanceNode] = self.tentative_instance
+        tentative_instance: InstanceNode | None = self.tentative_instance
         if tentative_instance is not None:
             self.tentative_instance = None
             if other.tentative_instance is not None:
@@ -800,7 +800,7 @@ class Equivalence:
     def tentative_attribute(self, attr: str) -> "AttributeNode":
         if self.tentative_instance is None:
             self.tentative_instance = InstanceNode([])
-        attr_node: Optional[AttributeNode] = self.tentative_instance.get_attribute(attr)
+        attr_node: AttributeNode | None = self.tentative_instance.get_attribute(attr)
         if attr_node is None:
             attr_node = self.tentative_instance.register_attribute(attr)
         return attr_node
@@ -862,7 +862,7 @@ class InstanceNode(Node):
         self.entity: Optional["Entity"] = None
         self.responsible: Optional["Constructor"] = None
         self.context: Optional["DataflowGraph"] = None
-        self._index_node: Optional[InstanceNode] = None
+        self._index_node: InstanceNode | None = None
         self._all_index_nodes: set["InstanceNode"] = {self}
 
     def reference(self) -> InstanceNodeReference:
@@ -943,7 +943,7 @@ class InstanceNode(Node):
             self.attributes[attribute] = AttributeNode(self, attribute)
         return self.attributes[attribute]
 
-    def get_attribute(self, attribute: str) -> Optional[AttributeNode]:
+    def get_attribute(self, attribute: str) -> AttributeNode | None:
         """
         Returns one of this instance's attributes by name, if it exists.
         """

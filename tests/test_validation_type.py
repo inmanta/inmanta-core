@@ -17,7 +17,6 @@
 """
 import contextlib
 import uuid
-from typing import Optional
 
 import pydantic
 import pytest
@@ -49,7 +48,7 @@ def test_type_validation(attr_type: str, value: str, validation_parameters: dict
     """
     Test the behavior of the inmanta.validation_type.validate_type method.
     """
-    validation_error: Optional[pydantic.ValidationError] = None
+    validation_error: pydantic.ValidationError | None = None
     try:
         validate_type(attr_type, value, validation_parameters)
     except (pydantic.ValidationError, ValueError) as e:

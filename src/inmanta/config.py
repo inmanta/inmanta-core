@@ -26,8 +26,9 @@ import sys
 import uuid
 import warnings
 from collections import abc, defaultdict
+from collections.abc import Callable
 from configparser import ConfigParser, Interpolation, SectionProxy
-from typing import Callable, Generic, Optional, TypeVar, Union, overload
+from typing import Generic, Optional, TypeVar, overload
 from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend
@@ -44,7 +45,7 @@ def _normalize_name(name: str) -> str:
     return name.replace("_", "-")
 
 
-def _get_from_env(section: str, name: str) -> Optional[str]:
+def _get_from_env(section: str, name: str) -> str | None:
     return os.environ.get(f"INMANTA_{section}_{name}".replace("-", "_").upper(), default=None)
 
 
@@ -55,8 +56,8 @@ class LenientConfigParser(ConfigParser):
 
 
 class Config:
-    __instance: Optional[ConfigParser] = None
-    _config_dir: Optional[str] = None  # The directory this config was loaded from
+    __instance: ConfigParser | None = None
+    _config_dir: str | None = None  # The directory this config was loaded from
     __config_definition: dict[str, dict[str, "Option"]] = defaultdict(dict)
 
     @classmethod
@@ -66,8 +67,8 @@ class Config:
     @classmethod
     def load_config(
         cls,
-        min_c_config_file: Optional[str] = None,
-        config_dir: Optional[str] = None,
+        min_c_config_file: str | None = None,
+        config_dir: str | None = None,
         main_cfg_file: str = "/etc/inmanta/inmanta.cfg",
     ) -> None:
         """
@@ -115,14 +116,12 @@ class Config:
 
     @overload
     @classmethod
-    def get(cls, section: str, name: str, default_value: Optional[str] = None) -> Optional[str]:
+    def get(cls, section: str, name: str, default_value: str | None = None) -> str | None:
         ...
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
-    def get(
-        cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[str] = None
-    ) -> Union[str, ConfigParser]:
+    def get(cls, section: str | None = None, name: str | None = None, default_value: str | None = None) -> str | ConfigParser:
         """
         Get the entire config or get a value directly
         """
@@ -151,7 +150,7 @@ class Config:
         return section in cls._get_instance() and name in cls._get_instance()[section]
 
     @classmethod
-    def getboolean(cls, section: str, name: str, default_value: Optional[bool] = None) -> bool:
+    def getboolean(cls, section: str, name: str, default_value: bool | None = None) -> bool:
         """
         Return a boolean from the configuration
         """
@@ -174,7 +173,7 @@ class Config:
         cls.__config_definition[option.section][option.name] = option
 
     @classmethod
-    def validate_option_request(cls, section: str, name: str, default_value: Optional[str]) -> Optional["Option"]:
+    def validate_option_request(cls, section: str, name: str, default_value: str | None) -> Optional["Option"]:
         if section not in cls.__config_definition:
             LOGGER.warning("Config section %s not defined" % (section))
             # raise Exception("Config section %s not defined" % (section))
@@ -208,7 +207,7 @@ def is_time(value: str) -> int:
     return int(value)
 
 
-def is_time_or_cron(value: str) -> Union[int, str]:
+def is_time_or_cron(value: str) -> int | str:
     """Time, the number of seconds represented as an integer value or a cron-like expression"""
     try:
         return is_time(value)
@@ -220,7 +219,7 @@ def is_time_or_cron(value: str) -> Union[int, str]:
         return value
 
 
-def is_bool(value: Union[bool, str]) -> bool:
+def is_bool(value: bool | str) -> bool:
     """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
     if isinstance(value, bool):
         return value
@@ -257,21 +256,21 @@ def is_str(value: str) -> str:
     return str(value)
 
 
-def is_str_opt(value: str) -> Optional[str]:
+def is_str_opt(value: str) -> str | None:
     """optional str"""
     if value is None:
         return None
     return str(value)
 
 
-def is_uuid_opt(value: str) -> Optional[uuid.UUID]:
+def is_uuid_opt(value: str) -> uuid.UUID | None:
     """optional uuid"""
     if value is None:
         return None
     return uuid.UUID(value)
 
 
-def is_int_opt(value: str) -> Optional[int]:
+def is_int_opt(value: str) -> int | None:
     """optional int"""
     if value is None:
         return None
@@ -305,7 +304,7 @@ class Option(Generic[T]):
         self,
         section: str,
         name: str,
-        default: Union[T, None, Callable[[], T]],
+        default: T | None | Callable[[], T],
         documentation: str,
         validator: Callable[[str], T] = is_str,
         predecessor_option: Optional["Option"] = None,
@@ -332,7 +331,7 @@ class Option(Generic[T]):
         out = cfg.get(self.section, self.name, fallback=self.get_default_value())
         return self.validate(out)
 
-    def get_type(self) -> Optional[str]:
+    def get_type(self) -> str | None:
         if callable(self.validator):
             return self.validator.__doc__
         return None
@@ -347,7 +346,7 @@ class Option(Generic[T]):
     def validate(self, value: str) -> T:
         return self.validator(value)
 
-    def get_default_value(self) -> Optional[T]:
+    def get_default_value(self) -> T | None:
         defa = self.default
         if callable(defa):
             return defa()
@@ -388,7 +387,7 @@ log_dir = Option(
 )
 
 
-def get_executable() -> Optional[str]:
+def get_executable() -> str | None:
     """``os.path.abspath(sys.argv[0])``"""
     try:
         return os.path.abspath(sys.argv[0])

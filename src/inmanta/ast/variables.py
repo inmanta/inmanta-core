@@ -18,7 +18,7 @@
 
 import logging
 from collections import abc
-from typing import Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
@@ -68,7 +68,7 @@ class Reference(ExpressionStatement):
         self.name = str(name)
         self.full_name = str(name)
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         split: abc.Sequence[str] = self.name.rsplit("::", maxsplit=1)
         if len(split) > 1:
             # fail-fast if namespace does not exist
@@ -166,11 +166,11 @@ class VariableReader(VariableResumer, Generic[T]):
 
     __slots__ = ("owner", "target", "resultcollector")
 
-    def __init__(self, owner: Statement, target: ResultVariableProxy[T], resultcollector: Optional[ResultCollector[T]]) -> None:
+    def __init__(self, owner: Statement, target: ResultVariableProxy[T], resultcollector: ResultCollector[T] | None) -> None:
         super().__init__()
         self.owner: Statement = owner
         self.target: ResultVariableProxy[T] = target
-        self.resultcollector: Optional[ResultCollector[T]] = resultcollector
+        self.resultcollector: ResultCollector[T] | None = resultcollector
 
     def variable_resume(
         self,
@@ -282,7 +282,7 @@ class AttributeReference(Reference):
         self,
         resolver: Resolver,
         queue: QueueScheduler,
-        resultcollector: Optional[ResultCollector],
+        resultcollector: ResultCollector | None,
         *,
         propagate_unset: bool = False,
     ) -> dict[object, VariableABC]:

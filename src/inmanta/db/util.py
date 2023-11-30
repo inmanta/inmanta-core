@@ -20,7 +20,7 @@ import logging
 import re
 from collections import abc
 from dataclasses import dataclass
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 from asyncpg import Connection
 
@@ -36,7 +36,7 @@ class AsyncSingleton(collections.abc.AsyncIterable[bytes]):
     """AsyncPG wants an async iterable"""
 
     def __init__(self, item: bytes):
-        self.item: Optional[bytes] = item
+        self.item: bytes | None = item
 
     def __aiter__(self) -> "AsyncSingleton":
         return self
@@ -100,7 +100,7 @@ class PGRestore:
         await self.client.execute(self.commandbuffer)
         self.commandbuffer = ""
 
-    async def _parse_fq_table_name(self, fq_table_name: str) -> tuple[Optional[str], str]:
+    async def _parse_fq_table_name(self, fq_table_name: str) -> tuple[str | None, str]:
         """
         Parse a fully qualified PostgreSQL table name into its schema and table components.
 
@@ -121,7 +121,7 @@ class PGRestore:
 
         return schema, table_name
 
-    async def _parse_copy_command_in_ext_buffer(self) -> tuple[Optional[str], str, list[str]]:
+    async def _parse_copy_command_in_ext_buffer(self) -> tuple[str | None, str, list[str]]:
         assert self.extbuffer
         match = self.PARSE_EXT_BUFFER_REGEX.match(self.extbuffer)
         if match is None:
@@ -218,7 +218,7 @@ class ColumnDefinition(NamedTuple):
 
     name: str
     is_list: bool = False
-    default: Optional[str] = None
+    default: str | None = None
 
 
 @dataclass(frozen=True)
@@ -238,7 +238,7 @@ class EnumUpdateDefinition:
 
     name: str
     values: abc.Sequence[str]
-    deleted_values: abc.Mapping[str, Optional[str]]
+    deleted_values: abc.Mapping[str, str | None]
     columns: abc.Mapping[str, abc.Sequence[ColumnDefinition]]
 
 

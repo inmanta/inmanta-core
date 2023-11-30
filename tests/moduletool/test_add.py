@@ -18,7 +18,6 @@
 import logging
 import os
 import shutil
-from typing import Optional
 
 import py
 import pytest
@@ -102,7 +101,7 @@ def test_module_add_v2_module_to_project(
         pkg_name: str,
         expected_version: Version,
         project_requires_constraint: str,
-        expected_pkg_from_extra: Optional[str] = None,
+        expected_pkg_from_extra: str | None = None,
     ) -> None:
         installed_packages = process_env.get_installed_packages()
         assert pkg_name in installed_packages

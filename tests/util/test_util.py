@@ -25,7 +25,6 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from queue import Queue
 from threading import Event
-from typing import Optional
 
 import pytest
 
@@ -82,11 +81,11 @@ def test_cron_schedule(monkeypatch) -> None:
 
         class frozendatetime(datetime.datetime):
             @classmethod
-            def now(cls, tz: Optional[datetime.tzinfo] = None) -> datetime.datetime:
+            def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
                 if tz is None:
-                    return time if time.tzinfo is None else time.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+                    return time if time.tzinfo is None else time.astimezone(datetime.UTC).replace(tzinfo=None)
                 else:
-                    aware: datetime.datetime = time if time.tzinfo is not None else time.replace(tzinfo=datetime.timezone.utc)
+                    aware: datetime.datetime = time if time.tzinfo is not None else time.replace(tzinfo=datetime.UTC)
                     return aware.astimezone(tz)
 
         monkeypatch.setattr(datetime, "datetime", frozendatetime)

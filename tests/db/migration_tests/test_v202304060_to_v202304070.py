@@ -18,8 +18,7 @@
 import datetime
 import os
 from collections import abc
-from collections.abc import Awaitable
-from typing import Callable
+from collections.abc import Awaitable, Callable
 
 import pytest
 

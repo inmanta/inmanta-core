@@ -18,7 +18,6 @@
 import json
 import logging
 import os
-from typing import Optional
 
 import pytest
 
@@ -33,7 +32,7 @@ from inmanta.server.server import Server
 from utils import LogSequence
 
 
-async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
+async def assert_resource_set_assignment(environment, assignment: dict[str, str | None]) -> None:
     """
     Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
 
@@ -465,7 +464,7 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
     async def export_model(
         model: str,
         partial_compile: bool,
-        resource_sets_to_remove: Optional[list[str]] = None,
+        resource_sets_to_remove: list[str] | None = None,
     ) -> None:
         snippetcompiler.setup_for_snippet(
             model,
@@ -614,7 +613,7 @@ async def test_empty_resource_set_removal(snippetcompiler, environment) -> None:
     async def export_model(
         model: str,
         partial_compile: bool,
-        resource_sets_to_remove: Optional[list[str]] = None,
+        resource_sets_to_remove: list[str] | None = None,
     ) -> None:
         snippetcompiler.setup_for_snippet(
             model,

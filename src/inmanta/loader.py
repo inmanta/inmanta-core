@@ -60,9 +60,9 @@ class SourceInfo:
         :param module_name: The fully qualified name of the Python module. Should be a module in the inmanta_plugins namespace.
         """
         self.path = path
-        self._hash: Optional[str] = None
-        self._content: Optional[bytes] = None
-        self._requires: Optional[list[str]] = None
+        self._hash: str | None = None
+        self._content: bytes | None = None
+        self._requires: list[str] | None = None
         self.module_name = module_name
 
     @property
@@ -149,7 +149,7 @@ class CodeManager:
         for file_info in all_plugin_files:
             self.__file_info[file_info.path] = file_info
 
-    def get_object_source(self, instance: object) -> Optional[str]:
+    def get_object_source(self, instance: object) -> str | None:
         """Get the path of the source file in which type_object is defined"""
         try:
             return inspect.getsourcefile(instance)
@@ -186,7 +186,7 @@ class ModuleSource:
     name: str
     hash_value: str
     is_byte_code: bool
-    source: Optional[bytes] = None
+    source: bytes | None = None
     _client: Optional["protocol.SyncClient"] = None
 
     def get_source_code(self) -> bytes:
@@ -509,8 +509,8 @@ class PluginModuleFinder(MetaPathFinder):
         cls.MODULE_FINDER = module_finder
 
     def find_spec(
-        self, fullname: str, path: Optional[abc.Sequence[str]], target: Optional[types.ModuleType] = None
-    ) -> Optional[ModuleSpec]:
+        self, fullname: str, path: abc.Sequence[str] | None, target: types.ModuleType | None = None
+    ) -> ModuleSpec | None:
         """
         :param fullname: A fully qualified import path to the module or package to be imported.
         """
@@ -531,7 +531,7 @@ class PluginModuleFinder(MetaPathFinder):
             return False
         return fq_import_path.startswith(f"{const.PLUGINS_PACKAGE}.")
 
-    def _get_path_to_module(self, fullname: str) -> Optional[str]:
+    def _get_path_to_module(self, fullname: str) -> str | None:
         """
         Return the path to the file in the module path that belongs to the module given by `fullname`.
         None is returned when the given module is not present in the module path.
@@ -539,7 +539,7 @@ class PluginModuleFinder(MetaPathFinder):
         :param fullname: A fully-qualified import path to a module.
         """
 
-        def find_module(module_path: str, extension: str = "py") -> Optional[str]:
+        def find_module(module_path: str, extension: str = "py") -> str | None:
             path_to_module = os.path.join(module_path, relative_path)
             if os.path.exists(f"{path_to_module}.{extension}"):
                 return f"{path_to_module}.{extension}"
@@ -570,7 +570,7 @@ class PluginModuleFinder(MetaPathFinder):
 
 
 @stable_api
-def unload_inmanta_plugins(inmanta_module: Optional[str] = None) -> None:
+def unload_inmanta_plugins(inmanta_module: str | None = None) -> None:
     """
     Unloads Python modules associated with inmanta modules (`inmanta_plugins` submodules).
 
@@ -604,7 +604,7 @@ def unload_modules_for_path(path: str) -> None:
     """
 
     def module_in_prefix(module: types.ModuleType, prefix: str) -> bool:
-        file: Optional[str] = getattr(module, "__file__", None)
+        file: str | None = getattr(module, "__file__", None)
         return file.startswith(prefix) if file is not None else False
 
     loaded_modules: list[str] = [mod_name for mod_name, mod in sys.modules.items() if module_in_prefix(mod, path)]

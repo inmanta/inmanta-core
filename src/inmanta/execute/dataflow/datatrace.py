@@ -18,7 +18,6 @@
 
 from collections.abc import Iterable
 from itertools import chain
-from typing import Optional
 
 from inmanta.ast import Locatable, NotFoundException
 from inmanta.ast.statements import Statement
@@ -122,7 +121,7 @@ class DataTraceRenderer:
         return [cls._prefix_line(prefix, line) for line in lines]
 
     @classmethod
-    def _branch(cls, lines: list[str], last: Optional[bool] = False) -> list[str]:
+    def _branch(cls, lines: list[str], last: bool | None = False) -> list[str]:
         """
         Renders a branch in the tree.
 

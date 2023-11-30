@@ -23,7 +23,6 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional, Union
 
 import asyncpg
 
@@ -74,7 +73,7 @@ class MetricValue:
     the Metric values as they should be returned by a MetricsCollector of type gauge
     """
 
-    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, category: Optional[str] = None) -> None:
+    def __init__(self, metric_name: str, count: int, environment: uuid.UUID, category: str | None = None) -> None:
         self.metric_name = metric_name
         self.category = category
         self.count = count
@@ -86,9 +85,7 @@ class MetricValueTimer(MetricValue):
     the Metric values as they should be returned by a MetricsCollector of type timer
     """
 
-    def __init__(
-        self, metric_name: str, count: int, value: float, environment: uuid.UUID, category: Optional[str] = None
-    ) -> None:
+    def __init__(self, metric_name: str, count: int, value: float, environment: uuid.UUID, category: str | None = None) -> None:
         super().__init__(metric_name, count, environment, category)
         self.value = value
 
@@ -435,7 +432,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """.strip()
 
         # Initialize everything with default values
-        result_metrics: dict[str, list[Union[float, dict[str, float], None]]] = {
+        result_metrics: dict[str, list[float | dict[str, float] | None]] = {
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:

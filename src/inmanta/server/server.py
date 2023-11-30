@@ -20,7 +20,7 @@ import json
 import logging
 import os
 import uuid
-from typing import TYPE_CHECKING, Optional, Union, cast
+from typing import TYPE_CHECKING, cast
 
 from tornado import routing, web
 
@@ -137,7 +137,7 @@ class Server(protocol.ServerSlice):
                     name=slice_name,
                     status=await asyncio.wait_for(slice.get_status(), self.GET_SERVER_STATUS_TIMEOUT),
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return SliceStatus(
                     name=slice_name,
                     status={
@@ -172,7 +172,7 @@ class Server(protocol.ServerSlice):
         return response
 
     @handle(methods_v2.get_api_docs)
-    async def get_api_docs(self, format: Optional[ApiDocsFormat] = ApiDocsFormat.swagger) -> ReturnValue[Union[OpenAPI, str]]:
+    async def get_api_docs(self, format: ApiDocsFormat | None = ApiDocsFormat.swagger) -> ReturnValue[OpenAPI | str]:
         url_map = self._server._transport.get_global_url_map(self._server.get_slices().values())
         feature_manager = self.feature_manager
         openapi = OpenApiConverter(url_map, feature_manager)

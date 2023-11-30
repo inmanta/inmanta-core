@@ -19,7 +19,7 @@ import datetime
 import logging
 import uuid
 from collections.abc import Sequence
-from typing import Any, Optional, Union, cast
+from typing import Any, cast
 
 from inmanta import data
 from inmanta.const import ParameterSource
@@ -115,7 +115,7 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")
-    async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
+    async def get_param(self, env: data.Environment, param_id: str, resource_id: str | None = None) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=param_id)
         else:
@@ -304,12 +304,12 @@ class ParameterService(protocol.ServerSlice):
     async def get_parameters(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[Union[datetime.datetime, str]] = None,
-        end: Optional[Union[datetime.datetime, str]] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: uuid.UUID | None = None,
+        last_id: uuid.UUID | None = None,
+        start: datetime.datetime | str | None = None,
+        end: datetime.datetime | str | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "name.asc",
     ) -> ReturnValue[Sequence[Parameter]]:
         try:
@@ -332,12 +332,12 @@ class ParameterService(protocol.ServerSlice):
     async def get_all_facts(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        first_id: Optional[uuid.UUID] = None,
-        last_id: Optional[uuid.UUID] = None,
-        start: Optional[str] = None,
-        end: Optional[str] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        first_id: uuid.UUID | None = None,
+        last_id: uuid.UUID | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "name.asc",
     ) -> ReturnValue[Sequence[Fact]]:
         try:

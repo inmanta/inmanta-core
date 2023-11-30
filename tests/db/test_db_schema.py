@@ -21,7 +21,6 @@ import logging
 import pkgutil
 import types
 from asyncio import Semaphore
-from typing import Optional
 
 import asyncpg
 import pytest
@@ -37,7 +36,7 @@ from utils import log_contains
 
 
 async def run_updates_and_verify(
-    get_columns_in_db_table, schema_manager: schema.DBSchema, current: Optional[set[int]] = None, prefix: str = ""
+    get_columns_in_db_table, schema_manager: schema.DBSchema, current: set[int] | None = None, prefix: str = ""
 ):
     async def update_function1(connection):
         await connection.execute(f"CREATE TABLE public.{prefix}tab(id integer primary key, val varchar NOT NULL);")
@@ -74,7 +73,7 @@ async def get_core_versions(postgresql_client) -> set[int]:
         return set()
 
 
-async def assert_core_untouched(postgresql_client, corev: Optional[set[int]] = None):
+async def assert_core_untouched(postgresql_client, corev: set[int] | None = None):
     """
     Verify abscence of side-effect leaks to other cases
     """

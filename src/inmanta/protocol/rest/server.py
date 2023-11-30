@@ -23,7 +23,6 @@ from asyncio import CancelledError
 from collections import defaultdict
 from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import Optional, Union
 
 import tornado
 from pyformance import timer
@@ -60,7 +59,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return self._config[http_method]
 
-    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[MutableMapping[str, str]]:
+    def get_auth_token(self, headers: MutableMapping[str, str]) -> MutableMapping[str, str] | None:
         """
         Get the auth token provided by the caller. The token is provided as a bearer token.
         """
@@ -97,7 +96,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         self.set_status(status)
 
-    def _encode_body(self, body: ReturnTypes, content_type: str) -> Union[str, bytes]:
+    def _encode_body(self, body: ReturnTypes, content_type: str) -> str | bytes:
         if content_type == common.JSON_CONTENT:
             return common.json_encode(body, tz_aware=server_tz_aware_timestamps.get())
         if content_type == common.HTML_CONTENT:
@@ -250,7 +249,7 @@ class RESTServer(RESTBase):
     A tornado based rest server
     """
 
-    _http_server: Optional[httpserver.HTTPServer]
+    _http_server: httpserver.HTTPServer | None
 
     def __init__(self, session_manager: common.SessionManagerInterface, id: str) -> None:
         super().__init__()

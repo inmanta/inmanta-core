@@ -22,8 +22,9 @@ import os
 import shutil
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from time import sleep
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Optional, cast
 
 import click
 import texttable
@@ -42,7 +43,7 @@ from inmanta.util import parse_timestamp
 class Client:
     log = logging.getLogger(__name__)
 
-    def __init__(self, host: Optional[str], port: Optional[int]) -> None:
+    def __init__(self, host: str | None, port: int | None) -> None:
         if host is None:
             self.host = cmdline_rest_transport.host.get()
         else:
@@ -58,8 +59,8 @@ class Client:
         self._client = protocol.SyncClient("cmdline")
 
     def do_request(
-        self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}, allow_none: bool = False
-    ) -> Optional[JsonType]:
+        self, method_name: str, key_name: str | None = None, arguments: JsonType = {}, allow_none: bool = False
+    ) -> JsonType | None:
         """
         Do a request and return the response
         """
@@ -96,13 +97,13 @@ class Client:
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def get_list(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> list[dict[str, Any]]:
+    def get_list(self, method_name: str, key_name: str | None = None, arguments: JsonType = {}) -> list[dict[str, Any]]:
         """
         Same as do request, but return type is a list of dicts
         """
         return cast(list[dict[str, Any]], self.do_request(method_name, key_name, arguments, False))
 
-    def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> dict[str, str]:
+    def get_dict(self, method_name: str, key_name: str | None = None, arguments: JsonType = {}) -> dict[str, str]:
         """
         Same as do request, but return type is a list of dicts
         """
@@ -134,7 +135,7 @@ class Client:
 
         return project_id
 
-    def to_environment_id(self, ref: str, project_id: Optional[uuid.UUID] = None) -> uuid.UUID:
+    def to_environment_id(self, ref: str, project_id: uuid.UUID | None = None) -> uuid.UUID:
         """
         Convert ref to an env uuid, optionally scoped to a project
         """
@@ -162,11 +163,11 @@ class Client:
         return env_id
 
 
-def print_table(header: list[str], rows: list[list[str]], data_type: Optional[list[str]] = None) -> None:
+def print_table(header: list[str], rows: list[list[str]], data_type: list[str] | None = None) -> None:
     click.echo(get_table(header, rows, data_type))
 
 
-def get_table(header: list[str], rows: list[list[str]], data_type: Optional[list[str]] = None) -> str:
+def get_table(header: list[str], rows: list[list[str]], data_type: list[str] | None = None) -> str:
     """
     Returns a table that would fit in the current terminal.
     """
@@ -362,7 +363,7 @@ def environment_list(client: Client) -> None:
     required=False,
 )
 @click.pass_obj
-def environment_show(client: Client, environment: str, format_string: Optional[str]) -> None:
+def environment_show(client: Client, environment: str, format_string: str | None) -> None:
     """
     Show details of an environment
 
@@ -558,7 +559,7 @@ def agent_list(client: Client, environment: str) -> None:
 )
 @click.option("--all", help="Pause all agents in the given environment", is_flag=True)
 @click.pass_obj
-def pause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
+def pause_agent(client: Client, environment: str, agent: str | None, all: bool) -> None:
     """
     Pause a specific agent or all agents in a given environment. A paused agent cannot execute deploy operations.
     """
@@ -585,7 +586,7 @@ def pause_agent(client: Client, environment: str, agent: Optional[str], all: boo
 )
 @click.option("--all", help="Unpause all agents in the given environment", is_flag=True)
 @click.pass_obj
-def unpause_agent(client: Client, environment: str, agent: Optional[str], all: bool) -> None:
+def unpause_agent(client: Client, environment: str, agent: str | None, all: bool) -> None:
     """
     Unpause a specific agent or all agents in a given environment. A unpaused agent will be able to execute
     deploy operations.
@@ -718,7 +719,7 @@ def param_set(client: Client, environment: str, name: str, value: str) -> None:
 @click.option("--name", help="The name of the parameter", required=True)
 @click.option("--resource", help="The resource id of the parameter")
 @click.pass_obj
-def param_get(client: Client, environment: str, name: str, resource: Optional[str]) -> None:
+def param_get(client: Client, environment: str, name: str, resource: str | None) -> None:
     tid = client.to_environment_id(environment)
 
     if resource is None:
@@ -875,7 +876,7 @@ def resource_action_log(ctx: click.Context) -> None:
 
 
 def validate_resource_version_id(
-    ctx: click.Context, option: Union[click.Option, click.Parameter], value: str
+    ctx: click.Context, option: click.Option | click.Parameter, value: str
 ) -> ResourceVersionIdStr:
     if not Id.is_resource_version_id(value):
         raise click.BadParameter(value)
@@ -892,7 +893,7 @@ def validate_resource_version_id(
 )
 @click.option("--action", help="Only list this resource action", type=click.Choice([ra.value for ra in ResourceAction]))
 @click.pass_obj
-def resource_action_log_list(client: Client, environment: str, rvid: ResourceVersionIdStr, action: Optional[str]) -> None:
+def resource_action_log_list(client: Client, environment: str, rvid: ResourceVersionIdStr, action: str | None) -> None:
     """
     List the resource action log for a specific Resource.
     """

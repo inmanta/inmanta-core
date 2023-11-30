@@ -19,7 +19,7 @@
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from execnet import gateway_bootstrap, multi
 
@@ -35,7 +35,7 @@ class CannotLoginException(Exception):
 
 
 class RemoteException(Exception):
-    def __init__(self, exception_type: str, msg: str, traceback: Optional[str] = None):
+    def __init__(self, exception_type: str, msg: str, traceback: str | None = None):
         super().__init__(exception_type, msg, traceback)
 
 
@@ -56,7 +56,7 @@ class SshIO(local.IOBase):
     def is_remote(self) -> bool:
         return True
 
-    def __init__(self, uri: str, config: dict[str, Optional[str]]) -> None:
+    def __init__(self, uri: str, config: dict[str, str | None]) -> None:
         super().__init__(uri, config)
         self._host = config["host"]
         if "port" in config and config["port"] is not None:

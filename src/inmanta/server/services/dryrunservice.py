@@ -18,7 +18,7 @@
 import asyncio
 import logging
 import uuid
-from typing import Optional, cast
+from typing import cast
 
 from inmanta import data
 from inmanta.data.model import DryRun, DryRunReport, ResourceDiff, ResourceDiffStatus, ResourceVersionIdStr
@@ -122,7 +122,7 @@ class DyrunService(protocol.ServerSlice):
         return dryrun
 
     async def _save_resources_without_changes_to_dryrun(
-        self, dryrun_id: uuid.UUID, resources: list[data.Resource], diff_status: Optional[ResourceDiffStatus] = None
+        self, dryrun_id: uuid.UUID, resources: list[data.Resource], diff_status: ResourceDiffStatus | None = None
     ):
         for res in resources:
             parsed_id = Id.parse_id(res.resource_id)
@@ -152,7 +152,7 @@ class DyrunService(protocol.ServerSlice):
         return dryrun.id
 
     @handle(methods.dryrun_list, env="tid")
-    async def dryrun_list(self, env: data.Environment, version: Optional[int] = None) -> Apireturn:
+    async def dryrun_list(self, env: data.Environment, version: int | None = None) -> Apireturn:
         query_args = {}
         query_args["environment"] = env.id
         if version is not None:

@@ -156,7 +156,7 @@ class AnchorTarget:
     def __init__(
         self,
         location: Location,
-        docstring: Optional[str] = None,
+        docstring: str | None = None,
     ) -> None:
         """
         Create a new AnchorTarget instance.
@@ -172,20 +172,20 @@ class WithComment:
     Mixin class for AST nodes that can have a comment attached to them.
     """
 
-    comment: Optional[str] = None
+    comment: str | None = None
 
 
 class Locatable:
     __slots__ = ("_location",)
 
     def __init__(self) -> None:
-        self._location: Optional[Location] = None
+        self._location: Location | None = None
 
     def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
         self._location = location
 
-    def get_location(self) -> Optional[Location]:
+    def get_location(self) -> Location | None:
         assert self._location is not None
         return self._location
 
@@ -245,7 +245,7 @@ class Anchor:
         return self.range
 
     @abstractmethod
-    def resolve(self) -> Optional[AnchorTarget]:
+    def resolve(self) -> AnchorTarget | None:
         raise NotImplementedError()
 
 
@@ -255,7 +255,7 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
-    def resolve(self) -> Optional[AnchorTarget]:
+    def resolve(self) -> AnchorTarget | None:
         t = self.namespace.get_type(self.type)
         location = t.get_location()
         docstring = t.comment if isinstance(t, WithComment) else None
@@ -271,11 +271,11 @@ class AttributeReferenceAnchor(Anchor):
         self.type = type
         self.attribute = attribute
 
-    def resolve(self) -> Optional[AnchorTarget]:
+    def resolve(self) -> AnchorTarget | None:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
         # assert isinstance(instancetype, Entity)
-        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
+        entity_attribute: Attribute | None = instancetype.get_attribute(self.attribute)
         assert entity_attribute is not None
         location = entity_attribute.get_location()
         docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
@@ -552,7 +552,7 @@ class CompilerException(Exception, export.Exportable):
         self.location = None  # type: Optional[Location]
         self.msg = msg
         # store root namespace so error reporters can inspect the compiler state
-        self.root_ns: Optional[Namespace] = None
+        self.root_ns: Namespace | None = None
 
     def set_location(self, location: Location) -> None:
         if self.location is None:
@@ -561,7 +561,7 @@ class CompilerException(Exception, export.Exportable):
     def get_message(self) -> str:
         return self.msg
 
-    def get_location(self) -> Optional[Location]:
+    def get_location(self) -> Location | None:
         return self.location
 
     def get_causes(self) -> "List[CompilerException]":
@@ -599,8 +599,8 @@ class CompilerException(Exception, export.Exportable):
         self.root_ns = compiler.get_ns()
 
     def export(self) -> export.Error:
-        location: Optional[Location] = self.get_location()
-        module: Optional[str] = self.__class__.__module__
+        location: Location | None = self.get_location()
+        module: str | None = self.__class__.__module__
         name: str = self.__class__.__qualname__
         return export.Error(
             type=name if module is None else f"{module}.{name}",
@@ -713,7 +713,7 @@ class ExternalException(RuntimeException):
     it is wrapped in an ExternalException to make it conform to the expected interface
     """
 
-    def __init__(self, stmt: Optional[Locatable], msg: str, cause: Exception) -> None:
+    def __init__(self, stmt: Locatable | None, msg: str, cause: Exception) -> None:
         RuntimeException.__init__(self, stmt=stmt, msg=msg)
 
         self.__cause__ = cause
@@ -748,8 +748,8 @@ class ExplicitPluginException(ExternalException):
         self.__cause__: PluginException
 
     def export(self) -> export.Error:
-        location: Optional[Location] = self.get_location()
-        module: Optional[str] = self.__cause__.__class__.__module__
+        location: Location | None = self.get_location()
+        module: str | None = self.__cause__.__class__.__module__
         name: str = self.__cause__.__class__.__qualname__
         return export.Error(
             type=name if module is None else f"{module}.{name}",

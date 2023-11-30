@@ -18,7 +18,8 @@
 import logging
 import os
 import platform
-from typing import TYPE_CHECKING, Callable, Union
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from inmanta.agent.agent import Agent
@@ -70,7 +71,7 @@ def report_hostname(agent: "Agent") -> str:
 reports["hostname"] = report_hostname
 
 
-def report_ips(agent: "Agent") -> Union[str, dict[str, list[str]]]:
+def report_ips(agent: "Agent") -> str | dict[str, list[str]]:
     try:
         import netifaces
 

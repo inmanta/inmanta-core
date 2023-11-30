@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import Optional
 
 import pytest
 
@@ -310,7 +309,7 @@ def test_dataflow_trace(
     model: str,
     trace: str,
     trace_root: str,
-    exception: Optional[type[CompilerException]],
+    exception: type[CompilerException] | None,
 ) -> None:
     """
     Tests the data trace output.

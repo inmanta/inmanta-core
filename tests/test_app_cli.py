@@ -70,7 +70,7 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
     )
     try:
         (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         (stdout, stderr) = await process.communicate()
         print(stdout.decode())
@@ -213,7 +213,7 @@ std::ConfigFile(host=vm1, path="/test", content="")
     process = await subprocess.create_subprocess_exec(*args, stdout=sys.stdout, stderr=sys.stderr)
     try:
         await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e
@@ -328,7 +328,7 @@ def other_exporter(exporter: Exporter) -> None:
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e
@@ -353,7 +353,7 @@ vm1.name = "other"
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e
@@ -415,7 +415,7 @@ std::ConfigFile(host=vm1, path="/test", content="")
     process = await subprocess.create_subprocess_exec(*args, stdout=sys.stdout, stderr=sys.stderr)
     try:
         await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e
@@ -439,7 +439,7 @@ async def test_export_invalid_argument_combination() -> None:
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=5)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e
@@ -525,7 +525,7 @@ async def test_logger_name_in_compiler_exporter_output(
     )
     try:
         (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e
@@ -559,7 +559,7 @@ async def test_logger_name_in_compiler_exporter_output(
     )
     try:
         (stdout, _) = await asyncio.wait_for(process.communicate(), timeout=30)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         process.kill()
         await process.communicate()
         raise e

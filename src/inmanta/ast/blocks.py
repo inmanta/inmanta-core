@@ -18,7 +18,7 @@
 import warnings
 from collections.abc import Iterable, Iterator, Sequence, Set
 from itertools import chain
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from inmanta.ast import Anchor, Locatable, Namespace, RuntimeException, TypeNotFoundException, VariableShadowWarning
 from inmanta.ast.statements import DefinitionStatement, DynamicStatement, Statement, StaticEagerPromise
@@ -127,7 +127,7 @@ class BasicBlock:
 
     def shadowed_variables(
         self,
-        surrounding_vars: Optional[dict[str, frozenset[Locatable]]] = None,
+        surrounding_vars: dict[str, frozenset[Locatable]] | None = None,
     ) -> Iterator[tuple[str, frozenset[Locatable], frozenset[Locatable]]]:
         """
         Returns an iterator over variables shadowed in this block or its nested blocks.

@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import Optional
 
 import inmanta.ast.type as inmanta_type
 from compiler.dataflow.conftest import DataflowTestHelper
@@ -46,7 +45,7 @@ A(n = 0, m = 0)
     assert isinstance(entity, Entity)
     assert len(entity.get_all_instances()) == 1
     instance: Instance = entity.get_all_instances()[0]
-    node: Optional[InstanceNodeReference] = instance.instance_node
+    node: InstanceNodeReference | None = instance.instance_node
     assert node is not None
     for attr in ["n", "m"]:
         resultvariable: Typeorvalue = instance.lookup(attr)

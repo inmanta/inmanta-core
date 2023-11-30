@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from inmanta import const, data, resources
 from inmanta.const import ResourceState
@@ -69,7 +69,7 @@ RVID_OPTS = {"rvid": ArgOption(getter=convert_resource_version_id)}
 
 # Method for working with projects
 @method(path="/project", operation="PUT", client_types=[const.ClientType.api])
-def create_project(name: str, project_id: Optional[uuid.UUID] = None):
+def create_project(name: str, project_id: uuid.UUID | None = None):
     """
     Create a new project
 
@@ -118,9 +118,9 @@ def get_project(id: uuid.UUID):
 def create_environment(
     project_id: uuid.UUID,
     name: str,
-    repository: Optional[str] = None,
-    branch: Optional[str] = None,
-    environment_id: Optional[uuid.UUID] = None,
+    repository: str | None = None,
+    branch: str | None = None,
+    environment_id: uuid.UUID | None = None,
 ):
     """
     Create a new environment
@@ -134,7 +134,7 @@ def create_environment(
 
 
 @method(path="/environment/<id>", operation="POST", client_types=[const.ClientType.api])
-def modify_environment(id: uuid.UUID, name: str, repository: Optional[str] = None, branch: Optional[str] = None):
+def modify_environment(id: uuid.UUID, name: str, repository: str | None = None, branch: str | None = None):
     """
     Modify the given environment.
 
@@ -172,7 +172,7 @@ def list_environments():
     client_types=[const.ClientType.api],
     arg_options={"id": ArgOption(getter=add_env)},
 )
-def get_environment(id: uuid.UUID, versions: Optional[int] = None, resources: Optional[int] = None):
+def get_environment(id: uuid.UUID, versions: int | None = None, resources: int | None = None):
     """
     Get an environment and all versions associated.
 
@@ -212,7 +212,7 @@ def list_settings(tid: uuid.UUID):
     agent_server=True,
     client_types=[const.ClientType.api, const.ClientType.agent, const.ClientType.compiler],
 )
-def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType]):
+def set_setting(tid: uuid.UUID, id: str, value: PrimitiveTypes | JsonType):
     """
     Set a value for a setting.
 
@@ -420,9 +420,9 @@ def stat_files(files: list):
 def get_resource(
     tid: uuid.UUID,
     id: str,
-    logs: Optional[bool] = None,
-    status: Optional[bool] = None,
-    log_action: Optional[const.ResourceAction] = None,
+    logs: bool | None = None,
+    status: bool | None = None,
+    log_action: const.ResourceAction | None = None,
     log_limit: int = 0,
 ):
     """
@@ -443,7 +443,7 @@ def get_resource(
 
 @method(path="/resource", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_resources_for_agent(
-    tid: uuid.UUID, agent: str, sid: Optional[uuid.UUID] = None, version: Optional[int] = None, incremental_deploy: bool = False
+    tid: uuid.UUID, agent: str, sid: uuid.UUID | None = None, version: int | None = None, incremental_deploy: bool = False
 ):
     """
     Return the most recent state for the resources associated with agent, or the version requested
@@ -464,12 +464,12 @@ def resource_action_update(
     resource_ids: list,
     action_id: uuid.UUID,
     action: const.ResourceAction,
-    started: Optional[datetime.datetime] = None,
-    finished: Optional[datetime.datetime] = None,
-    status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]] = None,
+    started: datetime.datetime | None = None,
+    finished: datetime.datetime | None = None,
+    status: const.ResourceState | const.DeprecatedResourceState | None = None,
     messages: list = [],
     changes: dict = {},
-    change: Optional[const.Change] = None,
+    change: const.Change | None = None,
     send_events: bool = False,
 ):
     """
@@ -496,7 +496,7 @@ def resource_action_update(
 
 
 @method(path="/version", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[int] = None):
+def list_versions(tid: uuid.UUID, start: int | None = None, limit: int | None = None):
     """
     Returns a list of all available versions, ordered by version number, descending
 
@@ -509,7 +509,7 @@ def list_versions(tid: uuid.UUID, start: Optional[int] = None, limit: Optional[i
 
 @method(path="/version/<id>", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
 def get_version(
-    tid: uuid.UUID, id: int, include_logs: Optional[bool] = None, log_filter: Optional[str] = None, limit: Optional[int] = None
+    tid: uuid.UUID, id: int, include_logs: bool | None = None, log_filter: str | None = None, limit: int | None = None
 ):
     """
     Get a particular version and a list of all resources in this version
@@ -542,11 +542,11 @@ def put_version(
     version: int,
     resources: list,
     resource_state: dict[model.ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] = {},
-    unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
-    version_info: Optional[dict] = None,
-    compiler_version: Optional[str] = None,
-    resource_sets: dict[model.ResourceIdStr, Optional[str]] = {},
-    pip_config: Optional[PipConfig] = None,
+    unknowns: list[dict[str, PrimitiveTypes]] | None = None,
+    version_info: dict | None = None,
+    compiler_version: str | None = None,
+    resource_sets: dict[model.ResourceIdStr, str | None] = {},
+    pip_config: PipConfig | None = None,
 ):
     """
     Store a new version of the configuration model
@@ -569,9 +569,7 @@ def put_version(
 @method(
     path="/version/<id>", operation="POST", arg_options=ENV_OPTS, client_types=[const.ClientType.api, const.ClientType.compiler]
 )
-def release_version(
-    tid: uuid.UUID, id: int, push: bool = False, agent_trigger_method: Optional[const.AgentTriggerMethod] = None
-):
+def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_method: const.AgentTriggerMethod | None = None):
     """
     Release version of the configuration model for deployment.
 
@@ -592,7 +590,7 @@ def release_version(
 def deploy(
     tid: uuid.UUID,
     agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-    agents: Optional[list] = None,
+    agents: list | None = None,
 ):
     """
     Notify agents to perform a deploy now.
@@ -617,7 +615,7 @@ def dryrun_request(tid: uuid.UUID, id: int):
 
 
 @method(path="/dryrun", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def dryrun_list(tid: uuid.UUID, version: Optional[int] = None):
+def dryrun_list(tid: uuid.UUID, version: int | None = None):
     """
     Get the list of dry runs for an environment. The results are sorted by dry run id.
 
@@ -715,7 +713,7 @@ def is_compiling(id: uuid.UUID):
     arg_options=ENV_OPTS,
     client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
 )
-def get_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
+def get_param(tid: uuid.UUID, id: str, resource_id: str | None = None):
     """
     Get a parameter from the server.
 
@@ -742,7 +740,7 @@ def set_param(
     id: str,
     source: const.ParameterSource,
     value: str,
-    resource_id: Optional[str] = None,
+    resource_id: str | None = None,
     metadata: dict = {},
     recompile: bool = False,
 ):
@@ -766,7 +764,7 @@ def set_param(
     arg_options=ENV_OPTS,
     client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
 )
-def delete_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
+def delete_param(tid: uuid.UUID, id: str, resource_id: str | None = None):
     """
     Delete a parameter on the server
 
@@ -872,7 +870,7 @@ def diff(file_id_1: str, file_id_2: str):
 
 
 @method(path="/compilereport", operation="GET", arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def get_reports(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
+def get_reports(tid: uuid.UUID, start: str | None = None, end: str | None = None, limit: int | None = None):
     """
     Return compile reports newer then start
 
@@ -898,11 +896,11 @@ def get_report(id: uuid.UUID):
 
 @method(path="/agentproc", operation="GET", client_types=[const.ClientType.api])
 def list_agent_processes(
-    environment: Optional[uuid.UUID] = None,
+    environment: uuid.UUID | None = None,
     expired: bool = True,
-    start: Optional[uuid.UUID] = None,
-    end: Optional[uuid.UUID] = None,
-    limit: Optional[int] = None,
+    start: uuid.UUID | None = None,
+    end: uuid.UUID | None = None,
+    limit: int | None = None,
 ):
     """
     Return a list of all nodes and the agents for these nodes
@@ -944,7 +942,7 @@ def trigger_agent(tid: uuid.UUID, id: str):
 
 
 @method(path="/agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=[const.ClientType.api])
-def list_agents(tid: uuid.UUID, start: Optional[str] = None, end: Optional[str] = None, limit: Optional[int] = None):
+def list_agents(tid: uuid.UUID, start: str | None = None, end: str | None = None, limit: int | None = None):
     """
     List all agent for an environment
 

@@ -18,9 +18,9 @@
 
 import re
 import shutil
+from collections.abc import Callable
 from functools import total_ordering
 from itertools import chain
-from typing import Callable, Optional
 
 import pytest
 
@@ -126,7 +126,7 @@ class DotSource:
 
 @pytest.fixture(scope="function")
 def graphic_asserter(dataflow_test_helper: DataflowTestHelper) -> Callable[[str, str], None]:
-    def asserter(model: str, expected: str, view: Optional[bool] = False) -> None:
+    def asserter(model: str, expected: str, view: bool | None = False) -> None:
         dataflow_test_helper.compile(model)
         namespace: Namespace = dataflow_test_helper.get_namespace()
         entities: list[Entity] = [

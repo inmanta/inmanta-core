@@ -21,8 +21,9 @@ import os
 import subprocess
 import warnings
 from collections import abc
+from collections.abc import Callable
 from functools import reduce
-from typing import TYPE_CHECKING, Any, Callable, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
@@ -173,7 +174,7 @@ class PluginMeta(type):
         return dict(cls.__functions)
 
     @classmethod
-    def clear(cls, inmanta_module: Optional[str] = None) -> None:
+    def clear(cls, inmanta_module: str | None = None) -> None:
         """
         Clears registered plugin functions.
 
@@ -208,7 +209,7 @@ class PluginArgument:
         self._default_value = default_value
 
     @property
-    def default_value(self) -> Optional[object]:
+    def default_value(self) -> object | None:
         if not self.has_default_value():
             raise Exception("PluginArgument doesn't have a default value")
         return self._default_value
@@ -226,7 +227,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     """
 
     deprecated: bool = False
-    replaced_by: Optional[str] = None
+    replaced_by: str | None = None
 
     def __init__(self, namespace: Namespace) -> None:
         self.ns = namespace
@@ -244,7 +245,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         self.new_statement = None
 
-        filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
+        filename: str | None = inspect.getsourcefile(self.__class__.__function__)
         assert filename is not None
         try:
             line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
@@ -269,7 +270,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         arg_spec = inspect.getfullargspec(function)
 
         # Calculate at which index the default values start (for the non-keyword-only attributes)
-        default_start_for_args: Optional[int]
+        default_start_for_args: int | None
         if arg_spec.defaults is not None:
             default_start_for_args = len(arg_spec.args) - len(arg_spec.defaults)
         else:
@@ -333,7 +334,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             return f"{self.__class__.__function_name__}({args})"
         return f"{self.__class__.__function_name__}({args}) -> {self._return}"
 
-    def to_type(self, arg_type: Optional[object], resolver: Namespace) -> Optional[inmanta_type.Type]:
+    def to_type(self, arg_type: object | None, resolver: Namespace) -> inmanta_type.Type | None:
         """
         Convert a string representation of a type to a type
         """
@@ -431,7 +432,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         for i in range(len(args)):
             if not is_valid(self.arguments[i], self.argtypes[i], args[i]):
                 return False
-        arg_types: dict[str, tuple[PluginArgument, Optional[inmanta_type.Type]]] = {
+        arg_types: dict[str, tuple[PluginArgument, inmanta_type.Type | None]] = {
             arg.arg_name: (arg, self.argtypes[i]) for i, arg in enumerate(self.arguments)
         }
         for k, v in kwargs.items():
@@ -466,7 +467,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     raise Exception(f"{self.__function_name__} requires {_bin} to be available in $PATH")
 
     @classmethod
-    def deprecate_function(cls, replaced_by: Optional[str] = None) -> None:
+    def deprecate_function(cls, replaced_by: str | None = None) -> None:
         cls.deprecated = True
         cls.replaced_by = replaced_by
 
@@ -538,8 +539,8 @@ class PluginException(Exception):
 
 @stable_api
 def plugin(
-    function: Optional[Callable] = None,
-    commands: Optional[list[str]] = None,
+    function: Callable | None = None,
+    commands: list[str] | None = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
 ) -> Callable:
@@ -555,8 +556,8 @@ def plugin(
     """
 
     def curry_name(
-        name: Optional[str] = None,
-        commands: Optional[list[str]] = None,
+        name: str | None = None,
+        commands: list[str] | None = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
     ) -> Callable:
@@ -616,7 +617,7 @@ def plugin(
 
 @stable_api
 def deprecated(
-    function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: abc.Mapping[str, object]
+    function: Callable | None = None, *, replaced_by: str | None = None, **kwargs: abc.Mapping[str, object]
 ) -> Callable:
     """
     the kwargs are currently ignored but where added in case we want to add something later on.

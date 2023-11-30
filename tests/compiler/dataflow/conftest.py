@@ -16,10 +16,9 @@
     Contact: code@inmanta.com
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import reduce
 from itertools import chain
-from typing import Callable, Optional
 
 import pytest
 
@@ -45,7 +44,7 @@ from inmanta.execute.runtime import ExecutionContext, Resolver
 
 
 def create_instance(
-    graph: Optional[DataflowGraph] = None, entity: Optional[Entity] = None, statement: Optional[Statement] = None
+    graph: DataflowGraph | None = None, entity: Entity | None = None, statement: Statement | None = None
 ) -> InstanceNode:
     responsible: Statement = statement if statement is not None else Statement()
     instance: InstanceNode = InstanceNode([])
@@ -81,7 +80,7 @@ class DataflowTestHelper:
     def __init__(self, snippetcompiler) -> None:
         self.snippetcompiler = snippetcompiler
         self._types: dict[str, inmanta_type.Type] = {}
-        self._namespace: Optional[Namespace] = None
+        self._namespace: Namespace | None = None
         self._instances: dict[str, InstanceNode] = {}
         self._tokens: list[str] = []
 
@@ -93,11 +92,11 @@ class DataflowTestHelper:
         return self._namespace
 
     def get_graph(self) -> DataflowGraph:
-        graph: Optional[DataflowGraph] = self.get_namespace().get_scope().dataflow_graph
+        graph: DataflowGraph | None = self.get_namespace().get_scope().dataflow_graph
         assert graph is not None
         return graph
 
-    def compile(self, snippet: str, expected_error_type: Optional[type[RuntimeException]] = None) -> None:
+    def compile(self, snippet: str, expected_error_type: type[RuntimeException] | None = None) -> None:
         def compile():
             self.snippetcompiler.setup_for_snippet(snippet)
             Config.set("compiler", "datatrace_enable", "true")
@@ -120,7 +119,7 @@ class DataflowTestHelper:
                     raise e
                 assert False, f"Expected {expected_error_type}, got {e}"
 
-    def _consume_token_instance(self) -> Optional[str]:
+    def _consume_token_instance(self) -> str | None:
         if self._tokens[0] != "<instance>":
             return None
         self._tokens.pop(0)
@@ -129,7 +128,7 @@ class DataflowTestHelper:
             raise Exception("Invalid syntax: expected instance identifier, got `%s`" % instance_id)
         return instance_id
 
-    def _consume_token_attribute(self) -> Optional[str]:
+    def _consume_token_attribute(self) -> str | None:
         if len(self._tokens) == 0 or self._tokens[0] != ".":
             return None
         self._tokens.pop(0)
@@ -138,17 +137,17 @@ class DataflowTestHelper:
             raise Exception("Invalid syntax: expected attribute name, got `%s`" % attribute)
         return attribute
 
-    def _consume_token_lhs(self) -> Callable[[list[NodeReference], Optional[str]], None]:
+    def _consume_token_lhs(self) -> Callable[[list[NodeReference], str | None], None]:
         node: AssignableNode
-        instance_id: Optional[str] = self._consume_token_instance()
+        instance_id: str | None = self._consume_token_instance()
         if instance_id is not None:
             if instance_id not in self._instances:
                 raise Exception("Parse error: bind instance_id `%s` to a n instance first by using it as a rhs." % instance_id)
             instance: InstanceNode = self._instances[instance_id]
-            attribute_name: Optional[str] = self._consume_token_attribute()
+            attribute_name: str | None = self._consume_token_attribute()
             if attribute_name is None:
                 raise Exception("Parse error: expected `. attribute_name`, got %s." % attribute_name)
-            attribute: Optional[AttributeNode] = instance.get_attribute(attribute_name)
+            attribute: AttributeNode | None = instance.get_attribute(attribute_name)
             assert attribute is not None
             node = attribute
         else:
@@ -161,7 +160,7 @@ class DataflowTestHelper:
         if self._consume_token_attribute() is not None:
             raise Exception("Syntax error: this simple language only supports attributes directly on instances in the lhs.")
 
-        def continuation(rhs: list[NodeReference], instance_bind: Optional[str] = None) -> None:
+        def continuation(rhs: list[NodeReference], instance_bind: str | None = None) -> None:
             if instance_bind is not None:
                 assert (
                     len(node.instance_assignments) == 1
@@ -183,8 +182,8 @@ class DataflowTestHelper:
         if token != "->":
             raise Exception("Invalid syntax: expected `->`, got `%s`" % token)
 
-    def _consume_token_rhs_element(self) -> tuple[Optional[NodeReference], Optional[str]]:
-        instance_id: Optional[str] = self._consume_token_instance()
+    def _consume_token_rhs_element(self) -> tuple[NodeReference | None, str | None]:
+        instance_id: str | None = self._consume_token_instance()
         if instance_id is not None:
             if self._consume_token_attribute() is not None:
                 raise Exception("Syntax error: this simple language only supports attributes directly on instances in the lhs.")
@@ -202,17 +201,17 @@ class DataflowTestHelper:
             except ValueError:
                 node_ref: AssignableNodeReference = get_dataflow_node(self.get_graph(), token)
                 assert isinstance(node_ref, VariableNodeReference)
-                attribute_name: Optional[str] = self._consume_token_attribute()
+                attribute_name: str | None = self._consume_token_attribute()
                 while attribute_name is not None:
                     node_ref = AttributeNodeReference(node_ref, attribute_name)
                     attribute_name = self._consume_token_attribute()
                 return (node_ref, None)
 
-    def _consume_token_rhs(self, continuation: Callable[[list[NodeReference], Optional[str]], None]) -> None:
+    def _consume_token_rhs(self, continuation: Callable[[list[NodeReference], str | None], None]) -> None:
         nodes: list[NodeReference] = []
-        instance_bind: Optional[str] = None
+        instance_bind: str | None = None
 
-        def consume_node(instance_bind: Optional[str] = None) -> Optional[str]:
+        def consume_node(instance_bind: str | None = None) -> str | None:
             (node, instance_id) = self._consume_token_rhs_element()
             if instance_id is not None:
                 if instance_bind is not None:
@@ -262,7 +261,7 @@ class DataflowTestHelper:
         """
         self._tokens = graphstring.split()
         while len(self._tokens) > 0:
-            continuation: Callable[[list[NodeReference], Optional[str]], None] = self._consume_token_lhs()
+            continuation: Callable[[list[NodeReference], str | None], None] = self._consume_token_lhs()
             self._consume_token_edge()
             self._consume_token_rhs(continuation)
 

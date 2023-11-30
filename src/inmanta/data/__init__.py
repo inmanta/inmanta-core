@@ -278,7 +278,7 @@ class ColumnType:
         """
         return [(name, self, order)]
 
-    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+    def get_value(self, value: object) -> PRIMITIVE_SQL_TYPES | None:
         """
         Prepare the actual value for use as an argument in a prepared statement for this type
         """
@@ -300,7 +300,7 @@ class ColumnType:
             return self.base_type(value)
         raise ValueError(f"{value} is not a valid value")
 
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+    def get_accessor(self, column_name: str, table_prefix: str | None = None) -> str:
         """
         return the sql statement to get this column, as used in filter and other statements
         """
@@ -339,10 +339,10 @@ class TablePrefixWrapper(ColumnType):
     def nullable(self) -> bool:
         return self.child.nullable
 
-    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+    def get_value(self, value: object) -> PRIMITIVE_SQL_TYPES | None:
         return self.child.get_value(value)
 
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+    def get_accessor(self, column_name: str, table_prefix: str | None = None) -> str:
         if not table_prefix:
             table_prefix = self.table_name
         return self.child.get_accessor(column_name, table_prefix)
@@ -358,7 +358,7 @@ class ForcedStringColumn(ColumnType):
         super().__init__(base_type=str, nullable=False)
         self.forced_type = forced_type
 
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+    def get_accessor(self, column_name: str, table_prefix: str | None = None) -> str:
         """
         return the sql statement to get this column, as used in filter and other statements
         """
@@ -393,13 +393,13 @@ class ResourceVersionIdColumnType(ColumnType):
         """
         return [("resource_id", StringColumn, order), ("model", PositiveIntColumn, order)]
 
-    def get_value(self, value: object) -> Optional[PRIMITIVE_SQL_TYPES]:
+    def get_value(self, value: object) -> PRIMITIVE_SQL_TYPES | None:
         """
         Prepare the actual value for use as an argument in a prepared statement for this type
         """
         raise NotImplementedError()
 
-    def get_accessor(self, column_name: str, table_prefix: Optional[str] = None) -> str:
+    def get_accessor(self, column_name: str, table_prefix: str | None = None) -> str:
         """
         return the sql statement to get this column, as used in filter and other statements
         """
@@ -442,8 +442,8 @@ class DatabaseOrderV2(ABC):
     def as_filter(
         self,
         offset: int,
-        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
-        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        column_value: PRIMITIVE_SQL_TYPES | None = None,
+        id_value: PRIMITIVE_SQL_TYPES | None = None,
         start: bool = True,
     ) -> tuple[list[str], list[object]]:
         """
@@ -475,7 +475,7 @@ class DatabaseOrderV2(ABC):
         """
 
     @abstractmethod
-    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+    def get_order_by_statement(self, invert: bool = False, table: str | None = None) -> str:
         """Get this order as an order_by statement"""
 
     @abstractmethod
@@ -546,8 +546,8 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
     def as_filter(
         self,
         offset: int,
-        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
-        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        column_value: PRIMITIVE_SQL_TYPES | None = None,
+        id_value: PRIMITIVE_SQL_TYPES | None = None,
         start: bool = True,
     ) -> tuple[list[str], list[object]]:
         """
@@ -582,7 +582,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
             (self.order_by_column, self.get_order_by_column_type(), order),
         ]
 
-    def get_order_by_statement(self, invert: bool = False, table: Optional[str] = None) -> str:
+    def get_order_by_statement(self, invert: bool = False, table: str | None = None) -> str:
         """Return the actual order by statement, as derived from get_order_elements"""
         order_by_part = ", ".join(
             (f"{type.get_accessor(col, table)} {order.db_form}" for col, type, order in self.get_order_elements(invert))
@@ -597,7 +597,7 @@ class SingleDatabaseOrder(DatabaseOrderV2, ABC):
         order_column_name = self.order_by_column
         order_type: ColumnType = self.get_order_by_column_type()
 
-        def assert_not_null(in_value: Optional[PRIMITIVE_SQL_TYPES]) -> PRIMITIVE_SQL_TYPES:
+        def assert_not_null(in_value: PRIMITIVE_SQL_TYPES | None) -> PRIMITIVE_SQL_TYPES:
             # Make mypy happy
             assert in_value is not None
             return in_value
@@ -630,8 +630,8 @@ class AbstractDatabaseOrderV2(SingleDatabaseOrder, ABC):
     def as_filter(
         self,
         offset: int,
-        column_value: Optional[PRIMITIVE_SQL_TYPES] = None,
-        id_value: Optional[PRIMITIVE_SQL_TYPES] = None,
+        column_value: PRIMITIVE_SQL_TYPES | None = None,
+        id_value: PRIMITIVE_SQL_TYPES | None = None,
         start: bool = True,
     ) -> tuple[list[str], list[object]]:
         """
@@ -908,10 +908,10 @@ class BaseQueryBuilder(ABC):
 
     def __init__(
         self,
-        select_clause: Optional[str] = None,
-        from_clause: Optional[str] = None,
-        filter_statements: Optional[list[str]] = None,
-        values: Optional[list[object]] = None,
+        select_clause: str | None = None,
+        from_clause: str | None = None,
+        filter_statements: list[str] | None = None,
+        values: list[object] | None = None,
     ) -> None:
         """
         The parameters are the parts of an sql query,
@@ -959,14 +959,14 @@ class SimpleQueryBuilder(BaseQueryBuilder):
 
     def __init__(
         self,
-        select_clause: Optional[str] = None,
-        from_clause: Optional[str] = None,
-        filter_statements: Optional[list[str]] = None,
-        values: Optional[list[object]] = None,
-        db_order: Optional[DatabaseOrderV2] = None,
-        limit: Optional[int] = None,
+        select_clause: str | None = None,
+        from_clause: str | None = None,
+        filter_statements: list[str] | None = None,
+        values: list[object] | None = None,
+        db_order: DatabaseOrderV2 | None = None,
+        limit: int | None = None,
         backward_paging: bool = False,
-        prelude: Optional[str] = None,
+        prelude: str | None = None,
     ) -> None:
         """
         :param select_clause: The select clause of the query
@@ -1012,7 +1012,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         )
 
     def order_and_limit(
-        self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
+        self, db_order: DatabaseOrderV2, limit: int | None = None, backward_paging: bool = False
     ) -> "SimpleQueryBuilder":
         """Set the order and limit of the query"""
         return SimpleQueryBuilder(
@@ -1258,7 +1258,7 @@ class BaseDocument(metaclass=DocumentMeta):
       strings.
     """
 
-    _connection_pool: Optional[asyncpg.pool.Pool] = None
+    _connection_pool: asyncpg.pool.Pool | None = None
     _fields_metadata: dict[str, Field]
     __primary_key__: tuple[str, ...]
     __ignore_fields__: tuple[str, ...]
@@ -1272,7 +1272,7 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     def get_connection(
-        cls, connection: Optional[asyncpg.connection.Connection] = None
+        cls, connection: asyncpg.connection.Connection | None = None
     ) -> AbstractAsyncContextManager[asyncpg.connection.Connection]:
         """
         Returns a context manager to acquire a connection. If an existing connection is passed, returns a dummy context manager
@@ -1301,7 +1301,7 @@ class BaseDocument(metaclass=DocumentMeta):
         attribute: str,
         annotation: type[object],
         has_value: bool = True,
-        value: Optional[object] = None,
+        value: object | None = None,
         part_of_primary_key: bool = False,
         ignore_field: bool = False,
     ) -> Field:
@@ -1485,7 +1485,7 @@ class BaseDocument(metaclass=DocumentMeta):
             return
         try:
             await asyncio.wait_for(cls._connection_pool.close(), config.db_connection_timeout.get())
-        except asyncio.TimeoutError:
+        except TimeoutError:
             cls._connection_pool.terminate()
             # Don't propagate this exception but just write a log message. This way:
             #   * A timeout here still makes sure that the other server slices get stopped
@@ -1519,7 +1519,7 @@ class BaseDocument(metaclass=DocumentMeta):
     def _convert_field_names_to_db_column_names(cls, field_dict: dict[str, object]) -> dict[str, object]:
         return field_dict
 
-    def get_value(self, name: str, default_value: Optional[object] = None) -> object:
+    def get_value(self, name: str, default_value: object | None = None) -> object:
         """Check if a value is set for a field. Fields that are declared but that do not have a value are only present
         in annotations but not as attribute (in __dict__)"""
         if hasattr(self, name):
@@ -1544,7 +1544,7 @@ class BaseDocument(metaclass=DocumentMeta):
 
         return column_names, values
 
-    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def insert(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -1558,19 +1558,19 @@ class BaseDocument(metaclass=DocumentMeta):
         )
         await self._execute_query(query, *values, connection=connection)
 
-    async def insert_with_overwrite(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def insert_with_overwrite(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Insert a new document based on the instance passed. If the document already exists, overwrite it.
         """
         return await self.insert_many_with_overwrite([self], connection=connection)
 
     @classmethod
-    async def _fetchval(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> object:
+    async def _fetchval(cls, query: str, *values: object, connection: asyncpg.connection.Connection | None = None) -> object:
         async with cls.get_connection(connection) as con:
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetch_int(cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None) -> int:
+    async def _fetch_int(cls, query: str, *values: object, connection: asyncpg.connection.Connection | None = None) -> int:
         """Fetch a single integer value"""
         value = await cls._fetchval(query, *values, connection=connection)
         assert isinstance(value, int)
@@ -1578,22 +1578,20 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     async def _fetchrow(
-        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[Record]:
+        cls, query: str, *values: object, connection: asyncpg.connection.Connection | None = None
+    ) -> Record | None:
         async with cls.get_connection(connection) as con:
             return await con.fetchrow(query, *values)
 
     @classmethod
     async def _fetch_query(
-        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
+        cls, query: str, *values: object, connection: asyncpg.connection.Connection | None = None
     ) -> Sequence[Record]:
         async with cls.get_connection(connection) as con:
             return await con.fetch(query, *values)
 
     @classmethod
-    async def _execute_query(
-        cls, query: str, *values: object, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> str:
+    async def _execute_query(cls, query: str, *values: object, connection: asyncpg.connection.Connection | None = None) -> str:
         async with cls.get_connection(connection) as con:
             return await con.execute(query, *values)
 
@@ -1632,7 +1630,7 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     async def insert_many(
-        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+        cls, documents: Sequence["BaseDocument"], *, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         """
         Insert multiple objects at once
@@ -1653,7 +1651,7 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     async def insert_many_with_overwrite(
-        cls, documents: Sequence["BaseDocument"], *, connection: Optional[asyncpg.connection.Connection] = None
+        cls, documents: Sequence["BaseDocument"], *, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         """
         Insert new documents. If the document already exists, overwrite it.
@@ -1696,7 +1694,7 @@ class BaseDocument(metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
+    async def update(self, connection: asyncpg.connection.Connection | None = None, **kwargs: object) -> None:
         """
         Update this document in the database. It will update the fields in this object and send a full update to database.
         Use update_fields to only update specific fields.
@@ -1723,7 +1721,7 @@ class BaseDocument(metaclass=DocumentMeta):
         set_statement = ",".join(parts_of_set_statement)
         return (set_statement, values)
 
-    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
+    async def update_fields(self, connection: asyncpg.connection.Connection | None = None, **kwargs: object) -> None:
         """
         Update the given fields of this document in the database. It will update the fields in this object and do a specific
         $set in the database on this document.
@@ -1741,8 +1739,8 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     async def get_by_id(
-        cls: type[TBaseDocument], doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
-    ) -> Optional[TBaseDocument]:
+        cls: type[TBaseDocument], doc_id: uuid.UUID, connection: asyncpg.connection.Connection | None = None
+    ) -> TBaseDocument | None:
         """
         Get a specific document based on its ID
 
@@ -1756,10 +1754,10 @@ class BaseDocument(metaclass=DocumentMeta):
     @classmethod
     async def get_one(
         cls: type[TBaseDocument],
-        connection: Optional[asyncpg.connection.Connection] = None,
-        lock: Optional[RowLockMode] = None,
+        connection: asyncpg.connection.Connection | None = None,
+        lock: RowLockMode | None = None,
         **query: object,
-    ) -> Optional[TBaseDocument]:
+    ) -> TBaseDocument | None:
         results = await cls.get_list(
             connection=connection,
             order_by_column=None,
@@ -1813,13 +1811,13 @@ class BaseDocument(metaclass=DocumentMeta):
         cls: type[TBaseDocument],
         *,
         # All defaults None rather actual values to allow explicitly requesting defaults to improve type safety with **query
-        order_by_column: Optional[str] = None,
-        order: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        no_obj: Optional[bool] = None,
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        order_by_column: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        no_obj: bool | None = None,
+        lock: RowLockMode | None = None,
+        connection: asyncpg.connection.Connection | None = None,
         **query: object,
     ) -> list[TBaseDocument]:
         """
@@ -1841,14 +1839,14 @@ class BaseDocument(metaclass=DocumentMeta):
     async def get_list_with_columns(
         cls: type[TBaseDocument],
         *,
-        order_by_column: Optional[str] = None,
-        order: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        no_obj: Optional[bool] = None,
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        columns: Optional[list[str]] = None,
+        order_by_column: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        no_obj: bool | None = None,
+        lock: RowLockMode | None = None,
+        connection: asyncpg.connection.Connection | None = None,
+        columns: list[str] | None = None,
         **query: object,
     ) -> list[TBaseDocument]:
         """
@@ -1888,14 +1886,14 @@ class BaseDocument(metaclass=DocumentMeta):
         cls: type[TBaseDocument],
         *,
         page_by_column: str,
-        order_by_column: Optional[str] = None,
-        order: Optional[str] = None,
-        limit: Optional[int] = None,
-        start: Optional[object] = None,
-        end: Optional[object] = None,
-        no_obj: Optional[bool] = None,
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        order_by_column: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        start: object | None = None,
+        end: object | None = None,
+        no_obj: bool | None = None,
+        lock: RowLockMode | None = None,
+        connection: asyncpg.connection.Connection | None = None,
         **query: object,
     ) -> list[TBaseDocument]:
         """
@@ -1943,7 +1941,7 @@ class BaseDocument(metaclass=DocumentMeta):
         return result
 
     @classmethod
-    async def delete_all(cls, connection: Optional[asyncpg.connection.Connection] = None, **query: object) -> int:
+    async def delete_all(cls, connection: asyncpg.connection.Connection | None = None, **query: object) -> int:
         """
         Delete all documents that match the given query
         """
@@ -1958,7 +1956,7 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     def _get_composed_filter(
-        cls, offset: int = 1, col_name_prefix: Optional[str] = None, **query: object
+        cls, offset: int = 1, col_name_prefix: str | None = None, **query: object
     ) -> tuple[str, list[object]]:
         filter_statements = []
         values = []
@@ -2002,7 +2000,7 @@ class BaseDocument(metaclass=DocumentMeta):
 
     @classmethod
     def get_composed_filter_with_query_types(
-        cls, offset: int = 1, col_name_prefix: Optional[str] = None, **query: QueryFilter
+        cls, offset: int = 1, col_name_prefix: str | None = None, **query: QueryFilter
     ) -> tuple[list[str], list[object]]:
         filter_statements = []
         values: list[object] = []
@@ -2051,7 +2049,7 @@ class BaseDocument(metaclass=DocumentMeta):
         return ColumnNameStr(name)
 
     @classmethod
-    def _add_column_name_prefix_if_needed(cls, filter_statement: str, col_name_prefix: Optional[str] = None) -> str:
+    def _add_column_name_prefix_if_needed(cls, filter_statement: str, col_name_prefix: str | None = None) -> str:
         if col_name_prefix is not None:
             filter_statement = f"{col_name_prefix}.{filter_statement}"
         return filter_statement
@@ -2114,9 +2112,7 @@ class BaseDocument(metaclass=DocumentMeta):
         return (filter_statement, [value])
 
     @classmethod
-    def get_range_filter(
-        cls, name: str, value: Union[DateRangeConstraint, RangeConstraint], index: int
-    ) -> tuple[str, list[object]]:
+    def get_range_filter(cls, name: str, value: DateRangeConstraint | RangeConstraint, index: int) -> tuple[str, list[object]]:
         """
         Returns a tuple of a PostgresQL statement and any query arguments to filter on values that match a given range
         constraint.
@@ -2148,8 +2144,8 @@ class BaseDocument(metaclass=DocumentMeta):
         offset: int,
         order_by_column: ColumnNameStr,
         id_column: ColumnNameStr,
-        start: Optional[object] = None,
-        first_id: Optional[Union[uuid.UUID, str]] = None,
+        start: object | None = None,
+        first_id: uuid.UUID | str | None = None,
     ) -> tuple[list[str], list[object]]:
         filter_statements = []
         values: list[object] = []
@@ -2168,8 +2164,8 @@ class BaseDocument(metaclass=DocumentMeta):
         offset: int,
         order_by_column: ColumnNameStr,
         id_column: ColumnNameStr,
-        end: Optional[object] = None,
-        last_id: Optional[Union[uuid.UUID, str]] = None,
+        end: object | None = None,
+        last_id: uuid.UUID | str | None = None,
     ) -> tuple[list[str], list[object]]:
         filter_statements = []
         values: list[object] = []
@@ -2188,7 +2184,7 @@ class BaseDocument(metaclass=DocumentMeta):
             return "WHERE " + " AND ".join(filter_statements)
         return ""
 
-    async def delete(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Delete this document
         """
@@ -2196,13 +2192,13 @@ class BaseDocument(metaclass=DocumentMeta):
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values, connection=connection)
 
-    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete_cascade(self, connection: asyncpg.connection.Connection | None = None) -> None:
         await self.delete(connection=connection)
 
     @classmethod
     @overload
     async def select_query(
-        cls: type[TBaseDocument], query: str, values: list[object], connection: Optional[asyncpg.connection.Connection] = None
+        cls: type[TBaseDocument], query: str, values: list[object], connection: asyncpg.connection.Connection | None = None
     ) -> Sequence[TBaseDocument]:
         """Return a sequence of objects of cls type."""
         ...
@@ -2214,7 +2210,7 @@ class BaseDocument(metaclass=DocumentMeta):
         query: str,
         values: list[object],
         no_obj: bool,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> Sequence[Record]:
         """Return a sequence of records instances"""
         ...
@@ -2225,11 +2221,11 @@ class BaseDocument(metaclass=DocumentMeta):
         query: str,
         values: list[object],
         no_obj: bool = False,
-        connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> Sequence[Union[Record, TBaseDocument]]:
+        connection: asyncpg.connection.Connection | None = None,
+    ) -> Sequence[Record | TBaseDocument]:
         async with cls.get_connection(connection) as con:
             async with con.transaction():
-                result: list[Union[Record, TBaseDocument]] = []
+                result: list[Record | TBaseDocument] = []
                 async for record in con.cursor(query, *values):
                     if no_obj:
                         result.append(record)
@@ -2261,7 +2257,7 @@ class BaseDocument(metaclass=DocumentMeta):
     async def execute_in_retryable_transaction(
         cls,
         fnc: Callable[[Connection], Awaitable[TransactionResult]],
-        tx_isolation_level: Optional[str] = None,
+        tx_isolation_level: str | None = None,
     ) -> TransactionResult:
         """
         Execute the queries in fnc using the transaction isolation level `tx_isolation_level` and return the
@@ -2298,7 +2294,7 @@ class Project(BaseDocument):
     def to_dto(self) -> m.Project:
         return m.Project(id=self.id, name=self.name, environments=[])
 
-    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete_cascade(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         As such, we perform the deletes on each table in a separate transaction.
@@ -2310,7 +2306,7 @@ class Project(BaseDocument):
             await self.delete(connection=con)
 
 
-def convert_boolean(value: Union[bool, str]) -> bool:
+def convert_boolean(value: bool | str) -> bool:
     if isinstance(value, bool):
         return value
 
@@ -2319,7 +2315,7 @@ def convert_boolean(value: Union[bool, str]) -> bool:
     return RawConfigParser.BOOLEAN_STATES[value.lower()]
 
 
-def convert_int(value: Union[float, int, str]) -> Union[int, float]:
+def convert_int(value: float | int | str) -> int | float:
     if isinstance(value, (int, float)):
         return value
 
@@ -2331,7 +2327,7 @@ def convert_int(value: Union[float, int, str]) -> Union[int, float]:
     return f_value
 
 
-def convert_positive_float(value: Union[float, int, str]) -> float:
+def convert_positive_float(value: float | int | str) -> float:
     if isinstance(value, float):
         float_value = value
     else:
@@ -2374,7 +2370,7 @@ def convert_agent_trigger_method(value: object) -> str:
     return value
 
 
-def validate_cron_or_int(value: Union[int, str]) -> str:
+def validate_cron_or_int(value: int | str) -> str:
     try:
         return str(int(value))
     except ValueError:
@@ -2436,13 +2432,13 @@ class Setting:
         self,
         name: str,
         typ: str,
-        default: Optional[m.EnvSettingType] = None,
-        doc: Optional[str] = None,
-        validator: Optional[Callable[[m.EnvSettingType], m.EnvSettingType]] = None,
+        default: m.EnvSettingType | None = None,
+        doc: str | None = None,
+        validator: Callable[[m.EnvSettingType], m.EnvSettingType] | None = None,
         recompile: bool = False,
         update_model: bool = False,
         agent_restart: bool = False,
-        allowed_values: Optional[list[m.EnvSettingType]] = None,
+        allowed_values: list[m.EnvSettingType] | None = None,
     ) -> None:
         """
         :param name: The name of the setting.
@@ -2468,7 +2464,7 @@ class Setting:
         self.allowed_values = allowed_values
 
     @property
-    def default(self) -> Optional[m.EnvSettingType]:
+    def default(self) -> m.EnvSettingType | None:
         if self._default and isinstance(self._default, dict):
             # Dicts are mutable objects. Return a copy.
             return dict(self._default)
@@ -2717,7 +2713,7 @@ class Environment(BaseDocument):
             raise KeyError()
         return cls._settings[setting_name]
 
-    async def get(self, key: str, connection: Optional[asyncpg.connection.Connection] = None) -> m.EnvSettingType:
+    async def get(self, key: str, connection: asyncpg.connection.Connection | None = None) -> m.EnvSettingType:
         """
         Get a setting in this environment.
 
@@ -2740,7 +2736,7 @@ class Environment(BaseDocument):
         self,
         key: str,
         value: m.EnvSettingType,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
         allow_override: bool = True,
     ) -> None:
         """
@@ -2795,7 +2791,7 @@ class Environment(BaseDocument):
         else:
             await self.set(key, self._settings[key].default)
 
-    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete_cascade(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Completely remove this environment from the db
         """
@@ -2803,7 +2799,7 @@ class Environment(BaseDocument):
             await self.clear(connection=con)
             await self.delete(connection=con)
 
-    async def clear(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def clear(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Delete everything related to this environment from the db, except the entry in the Environment table.
 
@@ -2830,7 +2826,7 @@ class Environment(BaseDocument):
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
 
-    async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
+    async def get_next_version(self, connection: asyncpg.connection.Connection | None = None) -> int:
         """
         Reserves the next available version and returns it. Increments the last_version counter.
         """
@@ -2863,13 +2859,13 @@ RETURNING last_version;
     async def get_list(
         cls: type[TBaseDocument],
         *,
-        order_by_column: Optional[str] = None,
-        order: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        no_obj: Optional[bool] = None,
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        order_by_column: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        no_obj: bool | None = None,
+        lock: RowLockMode | None = None,
+        connection: asyncpg.connection.Connection | None = None,
         details: bool = True,
         **query: object,
     ) -> list[TBaseDocument]:
@@ -2903,13 +2899,13 @@ RETURNING last_version;
     async def get_list_without_details(
         cls: type[TBaseDocument],
         *,
-        order_by_column: Optional[str] = None,
-        order: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        no_obj: Optional[bool] = None,
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        order_by_column: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        no_obj: bool | None = None,
+        lock: RowLockMode | None = None,
+        connection: asyncpg.connection.Connection | None = None,
         **query: object,
     ) -> list[TBaseDocument]:
         """
@@ -2933,9 +2929,9 @@ RETURNING last_version;
     async def get_by_id(
         cls: type[TBaseDocument],
         doc_id: uuid.UUID,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
         details: bool = True,
-    ) -> Optional[TBaseDocument]:
+    ) -> TBaseDocument | None:
         """
         Get a specific environment based on its ID
 
@@ -2990,8 +2986,8 @@ class Parameter(BaseDocument):
     environment: uuid.UUID
     source: str
     resource_id: m.ResourceIdStr = ""
-    updated: Optional[datetime.datetime] = None
-    metadata: Optional[JsonType] = None
+    updated: datetime.datetime | None = None
+    metadata: JsonType | None = None
 
     @classmethod
     async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
@@ -3058,7 +3054,7 @@ class UnknownParameter(BaseDocument):
     source: str
     resource_id: m.ResourceIdStr = ""
     version: int
-    metadata: Optional[dict[str, object]]
+    metadata: dict[str, object] | None
     resolved: bool = False
 
     def copy(self, new_version: int) -> "UnknownParameter":
@@ -3085,7 +3081,7 @@ class UnknownParameter(BaseDocument):
         deleted_resource_sets: abc.Set[str],
         rids_in_partial_compile: abc.Set[ResourceIdStr],
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> list["UnknownParameter"]:
         """
         Returns a subset of the unknowns in source_version of environment. It returns the unknowns that:
@@ -3131,12 +3127,12 @@ class AgentProcess(BaseDocument):
     sid: uuid.UUID
     hostname: str
     environment: uuid.UUID
-    first_seen: Optional[datetime.datetime] = None
-    last_seen: Optional[datetime.datetime] = None
-    expired: Optional[datetime.datetime] = None
+    first_seen: datetime.datetime | None = None
+    last_seen: datetime.datetime | None = None
+    expired: datetime.datetime | None = None
 
     @classmethod
-    async def get_live(cls, environment: Optional[uuid.UUID] = None) -> list["AgentProcess"]:
+    async def get_live(cls, environment: uuid.UUID | None = None) -> list["AgentProcess"]:
         if environment is not None:
             result = await cls.get_list(
                 limit=DBLIMIT, environment=environment, expired=None, order_by_column="last_seen", order="ASC NULLS LAST"
@@ -3147,7 +3143,7 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def get_by_sid(
-        cls, sid: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None
+        cls, sid: uuid.UUID, connection: asyncpg.connection.Connection | None = None
     ) -> Optional["AgentProcess"]:
         objects = await cls.get_list(limit=DBLIMIT, connection=connection, expired=None, sid=sid)
         if len(objects) == 0:
@@ -3165,7 +3161,7 @@ class AgentProcess(BaseDocument):
         nodename: str,
         sid: uuid.UUID,
         now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> None:
         """
         Update the last_seen parameter of the process and mark as not expired.
@@ -3179,7 +3175,7 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def update_last_seen(
-        cls, sid: uuid.UUID, last_seen: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
+        cls, sid: uuid.UUID, last_seen: datetime.datetime, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps:
@@ -3187,14 +3183,14 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def expire_process(
-        cls, sid: uuid.UUID, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None
+        cls, sid: uuid.UUID, now: datetime.datetime, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         aps = await cls.get_by_sid(sid=sid, connection=connection)
         if aps is not None:
             await aps.update_fields(connection=connection, expired=now)
 
     @classmethod
-    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def expire_all(cls, now: datetime.datetime, connection: asyncpg.connection.Connection | None = None) -> None:
         query = f"""
                 UPDATE {cls.table_name()}
                 SET expired=$1
@@ -3266,7 +3262,7 @@ class AgentInstance(BaseDocument):
     id: uuid.UUID
     process: uuid.UUID
     name: str
-    expired: Optional[datetime.datetime] = None
+    expired: datetime.datetime | None = None
     tid: uuid.UUID
 
     @classmethod
@@ -3274,8 +3270,8 @@ class AgentInstance(BaseDocument):
         cls: type[TAgentInstance],
         tid: uuid.UUID,
         endpoint: str,
-        process: Optional[uuid.UUID] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        process: uuid.UUID | None = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> list[TAgentInstance]:
         if process is not None:
             objects = await cls.get_list(expired=None, tid=tid, name=endpoint, process=process, connection=connection)
@@ -3294,7 +3290,7 @@ class AgentInstance(BaseDocument):
         tid: uuid.UUID,
         process: uuid.UUID,
         endpoints: set[str],
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> None:
         """
         Create new agent instances for a given session.
@@ -3321,7 +3317,7 @@ class AgentInstance(BaseDocument):
         sid: uuid.UUID,
         endpoints: set[str],
         now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> None:
         """
         Expire specific instances for a given session id.
@@ -3334,7 +3330,7 @@ class AgentInstance(BaseDocument):
                 await ai.update_fields(connection=connection, expired=now)
 
     @classmethod
-    async def expire_all(cls, now: datetime.datetime, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def expire_all(cls, now: datetime.datetime, connection: asyncpg.connection.Connection | None = None) -> None:
         query = f"""
                 UPDATE {cls.table_name()}
                 SET expired=$1
@@ -3360,13 +3356,13 @@ class Agent(BaseDocument):
 
     environment: uuid.UUID
     name: str
-    last_failover: Optional[datetime.datetime] = None
+    last_failover: datetime.datetime | None = None
     paused: bool = False
-    id_primary: Optional[uuid.UUID] = None
-    unpause_on_resume: Optional[bool] = None
+    id_primary: uuid.UUID | None = None
+    unpause_on_resume: bool | None = None
 
     @property
-    def primary(self) -> Optional[uuid.UUID]:
+    def primary(self) -> uuid.UUID | None:
         return self.id_primary
 
     @classmethod
@@ -3375,8 +3371,8 @@ class Agent(BaseDocument):
         return super().get_valid_field_names() + ["process_name", "status"]
 
     @classmethod
-    async def get_statuses(cls, env_id: uuid.UUID, agent_names: set[str]) -> dict[str, Optional[AgentStatus]]:
-        result: dict[str, Optional[AgentStatus]] = {}
+    async def get_statuses(cls, env_id: uuid.UUID, agent_names: set[str]) -> dict[str, AgentStatus | None]:
+        result: dict[str, AgentStatus | None] = {}
         for agent_name in agent_names:
             agent = await cls.get_one(environment=env_id, name=agent_name)
             if agent:
@@ -3419,14 +3415,14 @@ class Agent(BaseDocument):
         cls,
         env: uuid.UUID,
         endpoint: str,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        lock: Optional[RowLockMode] = None,
+        connection: asyncpg.connection.Connection | None = None,
+        lock: RowLockMode | None = None,
     ) -> "Agent":
         obj = await cls.get_one(environment=env, name=endpoint, connection=connection, lock=lock)
         return obj
 
     @classmethod
-    async def persist_on_halt(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def persist_on_halt(cls, env: uuid.UUID, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Persists paused state when halting all agents.
         """
@@ -3437,7 +3433,7 @@ class Agent(BaseDocument):
         )
 
     @classmethod
-    async def persist_on_resume(cls, env: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> list[str]:
+    async def persist_on_resume(cls, env: uuid.UUID, connection: asyncpg.connection.Connection | None = None) -> list[str]:
         """
         Restores default halted state. Returns a list of agents that should be unpaused.
         """
@@ -3459,7 +3455,7 @@ class Agent(BaseDocument):
 
     @classmethod
     async def pause(
-        cls, env: uuid.UUID, endpoint: Optional[str], paused: bool, connection: Optional[asyncpg.connection.Connection] = None
+        cls, env: uuid.UUID, endpoint: str | None, paused: bool, connection: asyncpg.connection.Connection | None = None
     ) -> list[str]:
         """
         Pause a specific agent or all agents in an environment when endpoint is set to None.
@@ -3479,9 +3475,9 @@ class Agent(BaseDocument):
     async def set_unpause_on_resume(
         cls,
         env: uuid.UUID,
-        endpoint: Optional[str],
+        endpoint: str | None,
         should_be_unpaused_on_resume: bool,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> None:
         """
         Set the unpause_on_resume field of a specific agent or all agents in an environment when endpoint is set to None.
@@ -3498,9 +3494,9 @@ class Agent(BaseDocument):
     async def update_primary(
         cls,
         env: uuid.UUID,
-        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
+        endpoints_with_new_primary: Sequence[tuple[str, uuid.UUID | None]],
         now: datetime.datetime,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> None:
         """
         Update the primary agent instance for agents present in the database.
@@ -3528,7 +3524,7 @@ class Agent(BaseDocument):
                     await agent.update_fields(last_failover=now, id_primary=None, connection=connection)
 
     @classmethod
-    async def mark_all_as_non_primary(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def mark_all_as_non_primary(cls, connection: asyncpg.connection.Connection | None = None) -> None:
         query = f"""
                 UPDATE {cls.table_name()}
                 SET id_primary=NULL
@@ -3537,7 +3533,7 @@ class Agent(BaseDocument):
         await cls._execute_query(query, connection=connection)
 
     @classmethod
-    async def clean_up(cls, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def clean_up(cls, connection: asyncpg.connection.Connection | None = None) -> None:
         query = """
 DELETE FROM public.agent AS a
 WHERE (environment, name) NOT IN (
@@ -3584,12 +3580,12 @@ class Report(BaseDocument):
 
     id: uuid.UUID
     started: datetime.datetime
-    completed: Optional[datetime.datetime]
+    completed: datetime.datetime | None
     command: str
     name: str
     errstream: str = ""
     outstream: str = ""
-    returncode: Optional[int]
+    returncode: int | None
     compile: uuid.UUID
 
     async def update_streams(self, out: str = "", err: str = "") -> None:
@@ -3634,37 +3630,37 @@ class Compile(BaseDocument):
     __primary_key__ = ("id",)
 
     id: uuid.UUID
-    remote_id: Optional[uuid.UUID] = None
+    remote_id: uuid.UUID | None = None
     environment: uuid.UUID
-    requested: Optional[datetime.datetime] = None
-    started: Optional[datetime.datetime] = None
-    completed: Optional[datetime.datetime] = None
+    requested: datetime.datetime | None = None
+    started: datetime.datetime | None = None
+    completed: datetime.datetime | None = None
 
     do_export: bool = False
     force_update: bool = False
     metadata: JsonType = {}
-    environment_variables: Optional[dict[str, str]] = {}
+    environment_variables: dict[str, str] | None = {}
 
-    success: Optional[bool]
+    success: bool | None
     handled: bool = False
-    version: Optional[int] = None
+    version: int | None = None
 
     # Compile queue might be collapsed if it contains similar compile requests.
     # In that case, substitute_compile_id will reference the actually compiled request.
-    substitute_compile_id: Optional[uuid.UUID] = None
+    substitute_compile_id: uuid.UUID | None = None
 
-    compile_data: Optional[JsonType] = None
+    compile_data: JsonType | None = None
 
     partial: bool = False
     removed_resource_sets: list[str] = []
 
-    exporter_plugin: Optional[str] = None
+    exporter_plugin: str | None = None
 
-    notify_failed_compile: Optional[bool] = None
-    failed_compile_message: Optional[str] = None
+    notify_failed_compile: bool | None = None
+    failed_compile_message: str | None = None
 
     @classmethod
-    async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
+    async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Connection | None = None) -> Optional["Compile"]:
         """
         Get a compile's substitute compile if it exists, otherwise get the compile by id.
 
@@ -3673,7 +3669,7 @@ class Compile(BaseDocument):
             a substitute, returns c1 itself.
         """
         async with Compile.get_connection(connection=connection) as con:
-            result: Optional[Compile] = await cls.get_by_id(compile_id, connection=con)
+            result: Compile | None = await cls.get_by_id(compile_id, connection=con)
             if result is None:
                 return None
             if result.substitute_compile_id is None:
@@ -3682,11 +3678,11 @@ class Compile(BaseDocument):
 
     @classmethod
     # TODO: Use join
-    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict]:
+    async def get_report(cls, compile_id: uuid.UUID) -> dict | None:
         """
         Get the compile and the associated reports from the database
         """
-        result: Optional[Compile] = await cls.get_substitute_by_id(compile_id)
+        result: Compile | None = await cls.get_substitute_by_id(compile_id)
         if result is None:
             return None
 
@@ -3768,7 +3764,7 @@ class Compile(BaseDocument):
 
     @classmethod
     async def delete_older_than(
-        cls, oldest_retained_date: datetime.datetime, connection: Optional[asyncpg.Connection] = None
+        cls, oldest_retained_date: datetime.datetime, connection: asyncpg.Connection | None = None
     ) -> None:
         query = f"""
         WITH non_halted_envs AS (
@@ -3782,7 +3778,7 @@ class Compile(BaseDocument):
         await cls._execute_query(query, oldest_retained_date, connection=connection)
 
     @classmethod
-    async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> Optional[m.CompileDetails]:
+    async def get_compile_details(cls, environment: uuid.UUID, id: uuid.UUID) -> m.CompileDetails | None:
         """Find all of the details of a compile, with reports from a substituted compile, if there was one"""
 
         # Recursively join the requested compile with the substituted compiles (if there was one), and the corresponding reports
@@ -3964,9 +3960,9 @@ class LogLine(DataDocument):
     @classmethod
     def log(
         cls,
-        level: Union[int, const.LogLevel],
+        level: int | const.LogLevel,
         msg: str,
-        timestamp: Optional[datetime.datetime] = None,
+        timestamp: datetime.datetime | None = None,
         **kwargs: object,
     ) -> "LogLine":
         if timestamp is None:
@@ -4006,12 +4002,12 @@ class ResourceAction(BaseDocument):
     action: const.ResourceAction
 
     started: datetime.datetime
-    finished: Optional[datetime.datetime] = None
+    finished: datetime.datetime | None = None
 
-    messages: Optional[list[dict[str, object]]] = None
-    status: Optional[const.ResourceState] = None
-    changes: Optional[dict[m.ResourceIdStr, dict[str, object]]] = None
-    change: Optional[const.Change] = None
+    messages: list[dict[str, object]] | None = None
+    status: const.ResourceState | None = None
+    changes: dict[m.ResourceIdStr, dict[str, object]] | None = None
+    change: const.Change | None = None
 
     def __init__(self, from_postgres: bool = False, **kwargs: object) -> None:
         super().__init__(from_postgres, **kwargs)
@@ -4037,12 +4033,12 @@ class ResourceAction(BaseDocument):
             self.messages = new_messages
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
+    async def get_by_id(cls, doc_id: uuid.UUID, connection: asyncpg.connection.Connection | None = None) -> "ResourceAction":
         return await cls.get_one(action_id=doc_id, connection=connection)
 
     @classmethod
     async def get_log(
-        cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
+        cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: str | None = None, limit: int = 0
     ) -> list["ResourceAction"]:
         query = """
         SELECT ra.* FROM public.resourceaction as ra
@@ -4068,9 +4064,9 @@ class ResourceAction(BaseDocument):
         cls,
         environment: uuid.UUID,
         version: int,
-        action: Optional[str] = None,
+        action: str | None = None,
         limit: int = 0,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> list["ResourceAction"]:
         query = f"""SELECT *
                         FROM {cls.table_name()}
@@ -4093,10 +4089,10 @@ class ResourceAction(BaseDocument):
         return super().get_valid_field_names() + ["timestamp", "level", "msg"]
 
     @classmethod
-    async def get(cls, action_id: uuid.UUID, connection: Optional[asyncpg.connection.Connection] = None) -> "ResourceAction":
+    async def get(cls, action_id: uuid.UUID, connection: asyncpg.connection.Connection | None = None) -> "ResourceAction":
         return await cls.get_one(action_id=action_id, connection=connection)
 
-    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def insert(self, connection: asyncpg.connection.Connection | None = None) -> None:
         async with self.get_connection(connection) as con:
             async with con.transaction():
                 await super().insert(con)
@@ -4119,7 +4115,7 @@ class ResourceAction(BaseDocument):
     def set_field(self, name: str, value: object) -> None:
         self._updates[name] = value
 
-    def add_logs(self, messages: Optional[str]) -> None:
+    def add_logs(self, messages: str | None) -> None:
         if not messages:
             return
         if "messages" not in self._updates:
@@ -4139,10 +4135,10 @@ class ResourceAction(BaseDocument):
         self,
         messages: list[dict[str, object]],
         changes: dict[str, object],
-        status: Optional[const.ResourceState],
-        change: Optional[const.Change],
-        finished: Optional[datetime.datetime],
-        connection: Optional[asyncpg.connection.Connection] = None,
+        status: const.ResourceState | None,
+        change: const.Change | None,
+        finished: datetime.datetime | None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> None:
         if len(messages) > 0:
             self.add_logs(messages)
@@ -4161,7 +4157,7 @@ class ResourceAction(BaseDocument):
 
         await self.save(connection=connection)
 
-    async def save(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def save(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Save the changes
         """
@@ -4194,18 +4190,18 @@ class ResourceAction(BaseDocument):
     async def query_resource_actions(
         cls,
         environment: uuid.UUID,
-        resource_type: Optional[str] = None,
-        agent: Optional[str] = None,
-        attribute: Optional[str] = None,
-        attribute_value: Optional[str] = None,
-        resource_id_value: Optional[str] = None,
-        log_severity: Optional[str] = None,
+        resource_type: str | None = None,
+        agent: str | None = None,
+        attribute: str | None = None,
+        attribute_value: str | None = None,
+        resource_id_value: str | None = None,
+        log_severity: str | None = None,
         limit: int = 0,
-        action_id: Optional[uuid.UUID] = None,
-        first_timestamp: Optional[datetime.datetime] = None,
-        last_timestamp: Optional[datetime.datetime] = None,
-        action: Optional[const.ResourceAction] = None,
-        resource_id: Optional[ResourceIdStr] = None,
+        action_id: uuid.UUID | None = None,
+        first_timestamp: datetime.datetime | None = None,
+        last_timestamp: datetime.datetime | None = None,
+        action: const.ResourceAction | None = None,
+        resource_id: ResourceIdStr | None = None,
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
@@ -4288,7 +4284,7 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def get_resource_events(
-        cls, env: Environment, resource_id: "resources.Id", exclude_change: Optional[const.Change] = None
+        cls, env: Environment, resource_id: "resources.Id", exclude_change: const.Change | None = None
     ) -> dict[ResourceIdStr, list["ResourceAction"]]:
         """
         Get all events that should be processed by this specific resource, for the current deployment
@@ -4315,12 +4311,12 @@ class ResourceAction(BaseDocument):
         # These two variables are actually of type datetime.datetime
         # but mypy doesn't know as they come from the DB
         # mypy also doesn't care, because they go back into the DB
-        last_deploy_start: Optional[object]
+        last_deploy_start: object | None
 
         async with cls.get_connection() as connection:
             # Step 1: Get the resource
             # also check we are currently deploying
-            resource: Optional[Resource] = await Resource.get_one(
+            resource: Resource | None = await Resource.get_one(
                 environment=env.id, resource_id=resource_id_str, model=resource_id.version, connection=connection
             )
             if resource is None:
@@ -4420,16 +4416,16 @@ class Resource(BaseDocument):
     agent: str
 
     # Field based on content from the resource actions
-    last_deploy: Optional[datetime.datetime] = None
-    last_success: Optional[datetime.datetime] = None
-    last_produced_events: Optional[datetime.datetime] = None
+    last_deploy: datetime.datetime | None = None
+    last_success: datetime.datetime | None = None
+    last_produced_events: datetime.datetime | None = None
 
     # State related
     attributes: dict[str, object] = {}
-    attribute_hash: Optional[str]
+    attribute_hash: str | None
     status: const.ResourceState = const.ResourceState.available
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
-    resource_set: Optional[str] = None
+    resource_set: str | None = None
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -4466,7 +4462,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_last_non_deploying_state_for_dependencies(
-        cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Optional[Connection] = None
+        cls, environment: uuid.UUID, resource_version_id: "resources.Id", connection: Connection | None = None
     ) -> dict[m.ResourceVersionIdStr, ResourceState]:
         """
         Return the last state of each dependency of the given resource that was not 'deploying'.
@@ -4500,7 +4496,7 @@ class Resource(BaseDocument):
         version: int,
         last_produced_events: datetime.datetime,
         *,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> None:
         query = f"""
                 UPDATE {cls.table_name()} as resource
@@ -4527,8 +4523,8 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         resource_version_ids: list[m.ResourceVersionIdStr],
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        lock: RowLockMode | None = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> list["Resource"]:
         """
         Get all resources listed in resource_version_ids
@@ -4582,10 +4578,10 @@ class Resource(BaseDocument):
     async def get_resources_in_latest_version(
         cls,
         environment: uuid.UUID,
-        resource_type: Optional[m.ResourceType] = None,
+        resource_type: m.ResourceType | None = None,
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> list["Resource"]:
         """
         Returns the resources in the latest version of the configuration model of the given environment, that satisfy the
@@ -4702,10 +4698,10 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         version: int,
-        agent: Optional[str] = None,
+        agent: str | None = None,
         no_obj: bool = False,
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> list["Resource"]:
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
@@ -4713,7 +4709,7 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
         query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
-        resources_list: Union[list[Resource], list[dict[str, object]]] = []
+        resources_list: list[Resource] | list[dict[str, object]] = []
         async with cls.get_connection(connection) as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
@@ -4728,7 +4724,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(
-        cls, environment: uuid.UUID, version: int, projection: Optional[list[str]], *, connection: Optional[Connection] = None
+        cls, environment: uuid.UUID, version: int, projection: list[str] | None, *, connection: Connection | None = None
     ) -> list[dict[str, object]]:
         if not projection:
             projection = "*"
@@ -4767,7 +4763,7 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         resource_version_id: m.ResourceVersionIdStr,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> Optional["Resource"]:
         """
         Get a resource with the given resource version id
@@ -4818,7 +4814,7 @@ class Resource(BaseDocument):
         )
 
     @classmethod
-    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
+    async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> m.ReleasedResourceDetails | None:
         status_subquery = """
         (CASE WHEN
             (SELECT resource.model < MAX(configurationmodel.version)
@@ -4895,7 +4891,7 @@ class Resource(BaseDocument):
     @classmethod
     async def get_versioned_resource_details(
         cls, environment: uuid.UUID, version: int, resource_id: m.ResourceIdStr
-    ) -> Optional[m.VersionedResourceDetails]:
+    ) -> m.VersionedResourceDetails | None:
         resource = await cls.get_one(environment=environment, model=version, resource_id=resource_id)
         if not resource:
             return None
@@ -4937,7 +4933,7 @@ class Resource(BaseDocument):
         updated_resource_sets: abc.Set[str],
         deleted_resource_sets: abc.Set[str],
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> dict[m.ResourceIdStr, str]:
         """
         Copy the resources that belong to an unchanged resource set of a partial compile,
@@ -4997,7 +4993,7 @@ class Resource(BaseDocument):
         resource_sets: abc.Set[str],
         include_shared_resources: bool = False,
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> abc.Mapping[ResourceIdStr, "Resource"]:
         """
         Returns the resource in the given environment and version that belong to any of the given resource sets.
@@ -5024,7 +5020,7 @@ class Resource(BaseDocument):
         from_version: int,
         to_version: int,
         *,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> None:
         query = f"""
         UPDATE {cls.table_name()} as new_resource
@@ -5047,7 +5043,7 @@ class Resource(BaseDocument):
         from_version: int,
         to_version: int,
         *,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> None:
         """
         Copy the value of last_produced events for every resource in the to_version from the from_version
@@ -5067,23 +5063,23 @@ class Resource(BaseDocument):
            AND new_resource.last_produced_events is null"""
         await cls._execute_query(query, to_version, environment, from_version, connection=connection)
 
-    async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def insert(self, connection: asyncpg.connection.Connection | None = None) -> None:
         self.make_hash()
         await super().insert(connection=connection)
 
     @classmethod
     async def insert_many(
-        cls, documents: Sequence["Resource"], *, connection: Optional[asyncpg.connection.Connection] = None
+        cls, documents: Sequence["Resource"], *, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         for doc in documents:
             doc.make_hash()
         await super().insert_many(documents, connection=connection)
 
-    async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
+    async def update(self, connection: asyncpg.connection.Connection | None = None, **kwargs: object) -> None:
         self.make_hash()
         await super().update(connection=connection, **kwargs)
 
-    async def update_fields(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
+    async def update_fields(self, connection: asyncpg.connection.Connection | None = None, **kwargs: object) -> None:
         self.make_hash()
         await super().update_fields(connection=connection, **kwargs)
 
@@ -5151,15 +5147,15 @@ class ConfigurationModel(BaseDocument):
 
     version: int
     environment: uuid.UUID
-    date: Optional[datetime.datetime] = None
-    partial_base: Optional[int] = None
+    date: datetime.datetime | None = None
+    partial_base: int | None = None
 
-    pip_config: Optional[PipConfig] = None
+    pip_config: PipConfig | None = None
 
     released: bool = False
     deployed: bool = False
     result: const.VersionState = const.VersionState.pending
-    version_info: Optional[dict[str, object]] = None
+    version_info: dict[str, object] | None = None
     is_suitable_for_partial_compiles: bool
 
     total: int = 0
@@ -5191,13 +5187,13 @@ class ConfigurationModel(BaseDocument):
         env_id: uuid.UUID,
         version: int,
         total: int,
-        version_info: Optional[JsonType],
+        version_info: JsonType | None,
         undeployable: abc.Sequence[ResourceIdStr],
         skipped_for_undeployable: abc.Sequence[ResourceIdStr],
         partial_base: int,
         rids_in_partial_compile: abc.Set[ResourceIdStr],
-        pip_config: Optional[PipConfig],
-        connection: Optional[Connection] = None,
+        pip_config: PipConfig | None,
+        connection: Connection | None = None,
     ) -> "ConfigurationModel":
         """
         Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigururationModel will
@@ -5329,13 +5325,13 @@ class ConfigurationModel(BaseDocument):
     async def get_list(
         cls,
         *,
-        order_by_column: Optional[str] = None,
-        order: Optional[str] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        no_obj: Optional[bool] = None,
-        lock: Optional[RowLockMode] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        order_by_column: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        no_obj: bool | None = None,
+        lock: RowLockMode | None = None,
+        connection: asyncpg.connection.Connection | None = None,
         **query: object,
     ) -> list["ConfigurationModel"]:
         # sanitize and validate order parameters
@@ -5415,8 +5411,8 @@ class ConfigurationModel(BaseDocument):
         environment: uuid.UUID,
         version: int,
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        lock: Optional[RowLockMode] = None,
+        connection: asyncpg.connection.Connection | None = None,
+        lock: RowLockMode | None = None,
     ) -> Optional["ConfigurationModel"]:
         """
         Get a specific version
@@ -5430,8 +5426,8 @@ class ConfigurationModel(BaseDocument):
         environment: uuid.UUID,
         version: int,
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
-        lock: Optional[RowLockMode] = None,
+        connection: asyncpg.connection.Connection | None = None,
+        lock: RowLockMode | None = None,
     ) -> Optional["ConfigurationModel"]:
         """Return a version, but don't populate the status and done fields, which are expensive to construct"""
         query = f"""SELECT *
@@ -5448,7 +5444,7 @@ class ConfigurationModel(BaseDocument):
         cls,
         environment: uuid.UUID,
         *,
-        connection: Optional[Connection] = None,
+        connection: Connection | None = None,
     ) -> Optional["ConfigurationModel"]:
         """
         Get the latest released (most recent) version for the given environment
@@ -5465,8 +5461,8 @@ class ConfigurationModel(BaseDocument):
     async def get_version_nr_latest_version(
         cls,
         environment: uuid.UUID,
-        connection: Optional[Connection] = None,
-    ) -> Optional[int]:
+        connection: Connection | None = None,
+    ) -> int | None:
         """
         Get the version number of the latest released version in the given environment.
         """
@@ -5483,7 +5479,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     async def get_agents(
-        cls, environment: uuid.UUID, version: int, *, connection: Optional[asyncpg.connection.Connection] = None
+        cls, environment: uuid.UUID, version: int, *, connection: asyncpg.connection.Connection | None = None
     ) -> list[str]:
         """
         Returns a list of all agents that have resources defined in this configuration model
@@ -5499,7 +5495,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     async def get_versions(
-        cls, environment: uuid.UUID, start: int = 0, limit: int = DBLIMIT, connection: Optional[Connection] = None
+        cls, environment: uuid.UUID, start: int = 0, limit: int = DBLIMIT, connection: Connection | None = None
     ) -> list["ConfigurationModel"]:
         """
         Get all versions for an environment ordered descending
@@ -5509,7 +5505,7 @@ class ConfigurationModel(BaseDocument):
         )
         return versions
 
-    async def delete_cascade(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def delete_cascade(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         This method doesn't rely on the DELETE CASCADE functionality of PostgreSQL because it causes deadlocks.
         As such, we perform the deletes on each table in a separate transaction.
@@ -5561,7 +5557,7 @@ class ConfigurationModel(BaseDocument):
         """
         return self.skipped_for_undeployable
 
-    async def mark_done(self, *, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def mark_done(self, *, connection: asyncpg.connection.Connection | None = None) -> None:
         """mark this deploy as done"""
         subquery = f"""(EXISTS(
                     SELECT 1
@@ -5587,7 +5583,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     async def mark_done_if_done(
-        cls, environment: uuid.UUID, version: int, connection: Optional[asyncpg.connection.Connection] = None
+        cls, environment: uuid.UUID, version: int, connection: asyncpg.connection.Connection | None = None
     ) -> None:
         async with cls.get_connection(connection) as con:
             """
@@ -5622,7 +5618,7 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     async def get_increment(
-        cls, environment: uuid.UUID, version: int, *, connection: Optional[Connection] = None
+        cls, environment: uuid.UUID, version: int, *, connection: Connection | None = None
     ) -> tuple[set[m.ResourceIdStr], set[m.ResourceIdStr]]:
         """
         Find resources incremented by this version compared to deployment state transitions per resource
@@ -5808,7 +5804,7 @@ class ConfigurationModel(BaseDocument):
         )
         return query_builder.build()
 
-    async def recalculate_total(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
+    async def recalculate_total(self, connection: asyncpg.connection.Connection | None = None) -> None:
         """
         Make the total field of this ConfigurationModel in-line with the number
         of resources that are associated with it.
@@ -5849,7 +5845,7 @@ class Code(BaseDocument):
     environment: uuid.UUID
     resource: str
     version: int
-    source_refs: Optional[dict[str, tuple[str, str, list[str]]]] = None
+    source_refs: dict[str, tuple[str, str, list[str]]] | None = None
 
     @classmethod
     async def get_version(cls, environment: uuid.UUID, version: int, resource: str) -> Optional["Code"]:
@@ -5871,7 +5867,7 @@ class Code(BaseDocument):
         old_version: int,
         new_version: int,
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> None:
         """
         Copy all code for one model version to another.
@@ -5947,7 +5943,7 @@ class DryRun(BaseDocument):
     @classmethod
     async def list_dryruns(
         cls,
-        order_by_column: Optional[str] = None,
+        order_by_column: str | None = None,
         order: str = "ASC",
         **query: object,
     ) -> list[m.DryRun]:

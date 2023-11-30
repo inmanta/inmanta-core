@@ -18,8 +18,8 @@
 import json
 import logging
 import re
-from collections.abc import Iterable, Iterator, Sequence
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Optional, TypeVar, cast
 
 import inmanta.util
 from inmanta import plugins
@@ -93,7 +93,7 @@ class resource:  # noqa: N801
         return cls._resources.keys()
 
     @classmethod
-    def get_class(cls, name: str) -> tuple[Optional[type["Resource"]], Optional[dict[str, str]]]:
+    def get_class(cls, name: str) -> tuple[type["Resource"] | None, dict[str, str] | None]:
         """
         Get the class definition for the given entity.
         """
@@ -131,7 +131,7 @@ class IgnoreResourceException(Exception):
     """
 
 
-def to_id(entity: "proxy.DynamicProxy") -> Optional[str]:
+def to_id(entity: "proxy.DynamicProxy") -> str | None:
     """
     Convert an entity instance from the model to its resource id
     """
@@ -591,7 +591,7 @@ class Id:
     def __repr__(self) -> str:
         return str(self)
 
-    def get_instance(self) -> Optional[Resource]:
+    def get_instance(self) -> Resource | None:
         """
         Create an instance of this class and set the identifying attribute already
         """
@@ -613,7 +613,7 @@ class Id:
         return id
 
     @classmethod
-    def parse_id(cls, resource_id: Union[ResourceVersionIdStr, ResourceIdStr], version: Optional[int] = None) -> "Id":
+    def parse_id(cls, resource_id: ResourceVersionIdStr | ResourceIdStr, version: int | None = None) -> "Id":
         """
         Parse the resource id and return the type, the hostname and the
         resource identifier.
@@ -658,7 +658,7 @@ class Id:
         return self.version != 0
 
     @classmethod
-    def set_version_in_id(cls, id_str: Union[ResourceVersionIdStr, ResourceIdStr], new_version: int) -> ResourceVersionIdStr:
+    def set_version_in_id(cls, id_str: ResourceVersionIdStr | ResourceIdStr, new_version: int) -> ResourceVersionIdStr:
         """
         Return a copy of the given id_str with the version number set to new_version.
         """

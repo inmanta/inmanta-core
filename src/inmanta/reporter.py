@@ -22,7 +22,6 @@ import base64
 import logging
 import time
 from asyncio import Task
-from typing import Optional
 from urllib.parse import quote
 
 from pyformance import MetricsRegistry, global_registry
@@ -39,11 +38,11 @@ DEFAULT_INFLUX_PROTOCOL = "http"
 
 
 class AsyncReporter:
-    def __init__(self, registry: Optional[MetricsRegistry] = None, reporting_interval: int = 30) -> None:
+    def __init__(self, registry: MetricsRegistry | None = None, reporting_interval: int = 30) -> None:
         self.registry = registry or global_registry()
         self.reporting_interval = reporting_interval
         self._stopped = False
-        self._handle: Optional[Task[None]] = None
+        self._handle: Task[None] | None = None
 
     def start(self) -> bool:
         """
@@ -71,7 +70,7 @@ class AsyncReporter:
             wait = max(0, next_loop_time - loop.time())
             await asyncio.sleep(wait)
 
-    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
+    async def report_now(self, registry: MetricsRegistry | None = None, timestamp: float | None = None) -> None:
         raise NotImplementedError(self.report_now)
 
 
@@ -84,12 +83,12 @@ class InfluxReporter(AsyncReporter):
 
     def __init__(
         self,
-        registry: Optional[MetricsRegistry] = None,
+        registry: MetricsRegistry | None = None,
         reporting_interval: int = 5,
         database: str = DEFAULT_INFLUX_DATABASE,
         server: str = DEFAULT_INFLUX_SERVER,
-        username: Optional[str] = DEFAULT_INFLUX_USERNAME,
-        password: Optional[str] = DEFAULT_INFLUX_PASSWORD,
+        username: str | None = DEFAULT_INFLUX_USERNAME,
+        password: str | None = DEFAULT_INFLUX_PASSWORD,
         port: int = DEFAULT_INFLUX_PORT,
         protocol: str = DEFAULT_INFLUX_PROTOCOL,
         autocreate_database: bool = False,
@@ -129,7 +128,7 @@ class InfluxReporter(AsyncReporter):
         except Exception:
             LOGGER.warning("Cannot create database %s to %s", self.database, self.server, exc_info=True)
 
-    async def report_now(self, registry: Optional[MetricsRegistry] = None, timestamp: Optional[float] = None) -> None:
+    async def report_now(self, registry: MetricsRegistry | None = None, timestamp: float | None = None) -> None:
         http_client = AsyncHTTPClient()
 
         if self.autocreate_database and not self._did_create_database:

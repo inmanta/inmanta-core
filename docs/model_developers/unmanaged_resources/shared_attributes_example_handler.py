@@ -42,7 +42,7 @@ class Interface(InterfaceBase, PurgeableResource):
 class InterfaceDiscovery(InterfaceBase, DiscoveryResource):
     fields = ("name_filter",)
 
-    name_filter: Optional[str]
+    name_filter: str | None
 
 
 class UnmanagedInterface(pydantic.BaseModel):

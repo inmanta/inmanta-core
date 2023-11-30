@@ -18,7 +18,7 @@
 import importlib
 import inspect
 from collections import abc
-from typing import Annotated, Optional
+from typing import Annotated
 
 import pydantic
 
@@ -57,9 +57,9 @@ def regex_string(regex: str) -> object:
 @stable_api
 def parametrize_type(
     base_type: type[object] | abc.Callable[..., type[object]],
-    validation_parameters: Optional[abc.Mapping[str, object]] = None,
+    validation_parameters: abc.Mapping[str, object] | None = None,
     *,
-    type_name: Optional[str] = None,
+    type_name: str | None = None,
 ) -> object:
     """
     Add validation parameters to the given type, if it supports any. Returns the parametrized type as a pydantic compatible
@@ -98,7 +98,7 @@ def parametrize_type(
 
 @stable_api
 def validate_type(
-    fq_type_name: str, value: PrimitiveTypes, validation_parameters: Optional[abc.Mapping[str, object]] = None
+    fq_type_name: str, value: PrimitiveTypes, validation_parameters: abc.Mapping[str, object] | None = None
 ) -> None:
     """
     Check whether `value` satisfies the constraints of type `fq_type_name`. When the given type (fq_type_name)

@@ -17,11 +17,10 @@
 """
 
 # pylint: disable-msg=W0613
-import typing
 from collections import abc
 from itertools import chain
 from string import Formatter
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -86,14 +85,14 @@ class CreateList(ReferenceStatement):
         ReferenceStatement.__init__(self, items)
         self.items = items
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         for item in self.items:
             # pass on lhs_attribute to children
             item.normalize(lhs_attribute=lhs_attribute)
             self.anchors.extend(item.get_anchors())
 
     def requires_emit_gradual(
-        self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector | None
     ) -> dict[object, VariableABC]:
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
@@ -226,7 +225,7 @@ class SetAttribute(AssignStatement, Resumer):
         self.list_only = list_only
         self._assignment_promise: StaticEagerPromise = StaticEagerPromise(self.instance, self.attribute_name, self)
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         # register this assignment as left hand side to the value on the right hand side
         self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
         self.anchors.extend(self.rhs.get_anchors())
@@ -237,7 +236,7 @@ class SetAttribute(AssignStatement, Resumer):
         # propagate this attribute assignment's promise to parent blocks
         return chain(super().get_all_eager_promises(), [self._assignment_promise])
 
-    def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
+    def _add_to_dataflow_graph(self, graph: DataflowGraph | None) -> None:
         if graph is None:
             return
         node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
@@ -360,7 +359,7 @@ class Assign(AssignStatement):
         if "-" in str(self.name):
             raise HyphenException(name)
 
-    def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
+    def _add_to_dataflow_graph(self, graph: DataflowGraph | None) -> None:
         if graph is None:
             return
         node: dataflow.AssignableNodeReference = graph.resolver.get_dataflow_node(str(self.name))
@@ -443,7 +442,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.query = [(str(n), e) for n, e in query]
         self.wrapped_query: list["WrappedKwargs"] = wrapped_query
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
         self.anchors.append(TypeReferenceAnchor(self.index_type.namespace, self.index_type))
@@ -506,7 +505,7 @@ class ShortIndexLookup(IndexLookup):
         self.querypart: list[tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
         self.wrapped_querypart: list["WrappedKwargs"] = wrapped_query
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         ReferenceStatement.normalize(self)
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None

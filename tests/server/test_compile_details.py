@@ -99,9 +99,7 @@ async def test_compile_details(server, client, env_with_compiles):
     assert len(reports) == 2
     assert parse_timestamp(reports[0]["started"]) < parse_timestamp(reports[1]["started"])
     assert uuid.UUID(result.result["data"]["id"]) == ids[0]
-    assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[0].astimezone(
-        datetime.timezone.utc
-    )
+    assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[0].astimezone(datetime.UTC)
 
     # A compile that is 2 levels deep in substitutions: id2 -> id1 -> id0
     result = await client.compile_details(environment, ids[2])
@@ -110,9 +108,7 @@ async def test_compile_details(server, client, env_with_compiles):
     assert len(substituted_reports) == 2
     assert substituted_reports == reports
     assert uuid.UUID(result.result["data"]["id"]) == ids[2]
-    assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[2].astimezone(
-        datetime.timezone.utc
-    )
+    assert parse_timestamp(result.result["data"]["requested"]) == compile_requested_timestamps[2].astimezone(datetime.UTC)
 
     # A compile that has no reports
     result = await client.compile_details(environment, ids[3])

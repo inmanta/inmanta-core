@@ -17,7 +17,6 @@
 """
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -109,7 +108,7 @@ class Error(BaseModel):
         Error message.
     """
 
-    location: Optional[Location] = None
+    location: Location | None = None
     """
         Location where this error occurred.
     """

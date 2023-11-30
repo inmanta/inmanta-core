@@ -19,7 +19,6 @@
 import logging
 from collections import abc
 from itertools import chain
-from typing import Optional
 
 import inmanta.ast.type as InmantaType
 import inmanta.execute.dataflow as dataflow
@@ -79,9 +78,9 @@ class FunctionCall(ReferenceStatement):
             if arg_name in self.kwargs:
                 raise RuntimeException(self, f"Keyword argument {arg_name} repeated in function call {self.name}()")
             self.kwargs[arg_name] = expr
-        self.function: Optional[Function] = None
+        self.function: Function | None = None
 
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+    def normalize(self, *, lhs_attribute: AttributeAssignmentLHS | None = None) -> None:
         ReferenceStatement.normalize(self)
         self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         func = self.namespace.get_type(self.name)

@@ -19,7 +19,6 @@ import datetime
 import json
 import uuid
 from operator import itemgetter
-from typing import Optional
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -38,8 +37,8 @@ async def env_with_agents(client, environment: str) -> None:
     async def create_agent(
         name: str,
         paused: bool = False,
-        last_failover: Optional[datetime.datetime] = None,
-        unpause_on_resume: Optional[bool] = None,
+        last_failover: datetime.datetime | None = None,
+        unpause_on_resume: bool | None = None,
         with_process: bool = False,
     ):
         id_primary = None
@@ -130,7 +129,7 @@ async def test_agents_paging(server, client, env_with_agents: None, environment:
         if not agent["process_name"]:
             agent["process_name"] = ""
         if not agent["last_failover"]:
-            agent["last_failover"] = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+            agent["last_failover"] = datetime.datetime.min.replace(tzinfo=datetime.UTC)
         else:
             agent["last_failover"] = parse_timestamp(agent["last_failover"])
     all_agents_in_expected_order = sorted(all_agents, key=itemgetter(order_by_column, "name"), reverse=order == "DESC")

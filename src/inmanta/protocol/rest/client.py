@@ -19,7 +19,7 @@
 import logging
 import re
 from asyncio import CancelledError
-from typing import TYPE_CHECKING, Any, AnyStr, Optional
+from typing import TYPE_CHECKING, Any, AnyStr
 from urllib.parse import unquote
 
 from tornado.httpclient import AsyncHTTPClient, HTTPError, HTTPRequest, HTTPResponse
@@ -44,7 +44,7 @@ class RESTClient(RESTBase):
         super().__init__()
         self.__end_point: "Endpoint" = endpoint
         self.daemon: bool = True
-        self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
+        self.token: str | None = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout: int = connection_timout
         self.headers: set[str] = set()
         self.request_timeout: int = inmanta_config.Config.get(self.id, "request_timeout", 120)
@@ -62,7 +62,7 @@ class RESTClient(RESTBase):
         """
         return "%s_rest_transport" % self.__end_point.name
 
-    def match_call(self, url: str, method: str) -> tuple[Optional[dict[str, AnyStr]], Optional[common.UrlMethod]]:
+    def match_call(self, url: str, method: str) -> tuple[dict[str, AnyStr] | None, common.UrlMethod | None]:
         """
         Get the method call for the given url and http method. This method is used for return calls over long poll
         """
@@ -94,7 +94,7 @@ class RESTClient(RESTBase):
         return "%s://%s:%d" % (protocol, host, port)
 
     async def call(
-        self, properties: common.MethodProperties, args: list[object], kwargs: Optional[dict[str, Any]] = None
+        self, properties: common.MethodProperties, args: list[object], kwargs: dict[str, Any] | None = None
     ) -> common.Result:
         if kwargs is None:
             kwargs = {}

@@ -19,7 +19,7 @@ import datetime
 import logging
 import uuid
 from collections import abc, defaultdict
-from typing import Literal, Optional, cast
+from typing import Literal, cast
 
 import asyncpg
 import asyncpg.connection
@@ -184,7 +184,7 @@ class PartialUpdateMerger:
         rids_in_partial_compile: abc.Set[ResourceIdStr],
         updated_resource_sets: abc.Set[str],
         deleted_resource_sets: abc.Set[str],
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> "PartialUpdateMerger":
         """
         A replacement constructor method for this class. This method is used to work around the limitation that no async
@@ -415,7 +415,7 @@ class OrchestrationService(protocol.ServerSlice):
         await data.Agent.clean_up()
 
     @handle(methods.list_versions, env="tid")
-    async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
+    async def list_version(self, env: data.Environment, start: int | None = None, limit: int | None = None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
             raise ServerError("Start and limit should always be set together.")
 
@@ -443,9 +443,9 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version_id: int,
-        include_logs: Optional[bool] = None,
-        log_filter: Optional[str] = None,
-        limit: Optional[int] = 0,
+        include_logs: bool | None = None,
+        log_filter: str | None = None,
+        limit: int | None = 0,
     ) -> Apireturn:
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
@@ -503,7 +503,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-    ) -> Optional[PipConfig]:
+    ) -> PipConfig | None:
         version_object = await data.ConfigurationModel.get_version(env.id, version)
         if version_object is None:
             raise NotFound(f"No configuration model with version {version} exists.")
@@ -515,8 +515,8 @@ class OrchestrationService(protocol.ServerSlice):
         env_id: uuid.UUID,
         resources: list[JsonType],
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
-        resource_sets: dict[ResourceIdStr, Optional[str]],
-        set_version: Optional[int] = None,
+        resource_sets: dict[ResourceIdStr, str | None],
+        set_version: int | None = None,
     ) -> dict[ResourceIdStr, data.Resource]:
         """
         This method converts the resources sent to the put_version or put_partial endpoint to dao Resource objects.
@@ -634,11 +634,11 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         rid_to_resource: dict[ResourceIdStr, data.Resource],
         unknowns: abc.Sequence[data.UnknownParameter],
-        version_info: Optional[JsonType] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-        partial_base_version: Optional[int] = None,
-        removed_resource_sets: Optional[list[str]] = None,
-        pip_config: Optional[PipConfig] = None,
+        version_info: JsonType | None = None,
+        resource_sets: dict[ResourceIdStr, str | None] | None = None,
+        partial_base_version: int | None = None,
+        removed_resource_sets: list[str] | None = None,
+        pip_config: PipConfig | None = None,
         *,
         connection: asyncpg.connection.Connection,
     ) -> None:
@@ -813,7 +813,7 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         *,
-        connection: Optional[Connection],
+        connection: Connection | None,
     ) -> None:
         """
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
@@ -831,7 +831,7 @@ class OrchestrationService(protocol.ServerSlice):
             )
 
     def _create_unknown_parameter_daos_from_api_unknowns(
-        self, env_id: uuid.UUID, version: int, unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None
+        self, env_id: uuid.UUID, version: int, unknowns: list[dict[str, PrimitiveTypes]] | None = None
     ) -> list[data.UnknownParameter]:
         """
         Create UnknownParameter dao's from the unknowns dictionaries passed through the put_version() and put_partial API
@@ -865,9 +865,9 @@ class OrchestrationService(protocol.ServerSlice):
         resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]],
         unknowns: list[dict[str, PrimitiveTypes]],
         version_info: JsonType,
-        compiler_version: Optional[str] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-        pip_config: Optional[PipConfig] = None,
+        compiler_version: str | None = None,
+        resource_sets: dict[ResourceIdStr, str | None] | None = None,
+        pip_config: PipConfig | None = None,
     ) -> Apireturn:
         """
         :param unknowns: dict with the following structure
@@ -920,12 +920,12 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         resources: object,
-        resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
-        unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
-        version_info: Optional[JsonType] = None,
-        resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
-        removed_resource_sets: Optional[list[str]] = None,
-        pip_config: Optional[PipConfig] = None,
+        resource_state: dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]] | None = None,
+        unknowns: list[dict[str, PrimitiveTypes]] | None = None,
+        version_info: JsonType | None = None,
+        resource_sets: dict[ResourceIdStr, str | None] | None = None,
+        removed_resource_sets: list[str] | None = None,
+        pip_config: PipConfig | None = None,
     ) -> ReturnValue[int]:
         """
         :param unknowns: dict with the following structure
@@ -1060,9 +1060,9 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version_id: int,
         push: bool,
-        agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
+        agent_trigger_method: const.AgentTriggerMethod | None = None,
         *,
-        connection: Optional[asyncpg.connection.Connection] = None,
+        connection: asyncpg.connection.Connection | None = None,
     ) -> Apireturn:
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
@@ -1187,7 +1187,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-        agents: Optional[list[str]] = None,
+        agents: list[str] | None = None,
     ) -> Apireturn:
         warnings = []
 
@@ -1237,10 +1237,10 @@ class OrchestrationService(protocol.ServerSlice):
     async def desired_state_version_list(
         self,
         env: data.Environment,
-        limit: Optional[int] = None,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        filter: Optional[dict[str, list[str]]] = None,
+        limit: int | None = None,
+        start: int | None = None,
+        end: int | None = None,
+        filter: dict[str, list[str]] | None = None,
         sort: str = "version.desc",
     ) -> ReturnValue[list[DesiredStateVersion]]:
         try:
@@ -1260,7 +1260,7 @@ class OrchestrationService(protocol.ServerSlice):
         self,
         env: data.Environment,
         version: int,
-        trigger_method: Optional[PromoteTriggerMethod] = None,
+        trigger_method: PromoteTriggerMethod | None = None,
     ) -> None:
         if trigger_method == PromoteTriggerMethod.push_incremental_deploy:
             push = True

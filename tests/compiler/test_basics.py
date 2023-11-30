@@ -17,7 +17,6 @@
 """
 import os
 import warnings
-from typing import Optional
 
 import pytest
 
@@ -437,7 +436,7 @@ std::print(hi_world)
     [("", None), ("@deprecated", None), ("@deprecated()", None), ('@deprecated(replaced_by="newplugin")', "newplugin")],
 )
 def test_modules_plugin_deprecated(
-    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: Optional[str]
+    tmpdir: str, snippetcompiler_clean, modules_dir: str, decorator: str, replaced_by: str | None
 ) -> None:
     snippetcompiler_clean.setup_for_snippet("", install_project=True)
 

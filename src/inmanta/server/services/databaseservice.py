@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import logging
-from typing import Optional
 
 import asyncpg
 from pyformance import gauge
@@ -36,8 +35,8 @@ class DatabaseService(protocol.ServerSlice):
 
     def __init__(self) -> None:
         super().__init__(SLICE_DATABASE)
-        self._pool: Optional[asyncpg.pool.Pool] = None
-        self._db_pool_watcher: Optional[util.ExhaustedPoolWatcher] = None
+        self._pool: asyncpg.pool.Pool | None = None
+        self._db_pool_watcher: util.ExhaustedPoolWatcher | None = None
 
     async def start(self) -> None:
         await super().start()

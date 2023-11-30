@@ -17,8 +17,7 @@
 """
 
 import numbers
-from collections.abc import Sequence
-from typing import Callable
+from collections.abc import Callable, Sequence
 from typing import List as PythonList
 from typing import Optional
 
@@ -85,14 +84,14 @@ class Type(Locatable):
     types that are not relations. Instances of subclasses represent a type in the Inmanta language.
     """
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
         validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
         """
         return True
 
-    def type_string(self) -> Optional[str]:
+    def type_string(self) -> str | None:
         """
         Returns the type string as expressed in the Inmanta :term:`DSL`, if this type can be expressed in the :term:`DSL`.
         Otherwise returns None.
@@ -112,7 +111,7 @@ class Type(Locatable):
         Returns the string representation of the type, to be used for informative reporting as in error messages.
         When a structured representation of the inmanta type is required, type_string() should be used instead.
         """
-        type_string: Optional[str] = self.type_string()
+        type_string: str | None = self.type_string()
         return type_string if type_string is not None else self.type_string_internal()
 
     def normalize(self) -> None:
@@ -157,7 +156,7 @@ class NullableType(Type):
         Type.__init__(self)
         self.element_type: Type = element_type
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         if isinstance(value, NoneValue):
             return True
 
@@ -166,8 +165,8 @@ class NullableType(Type):
     def _wrap_type_string(self, string: str) -> str:
         return "%s?" % string
 
-    def type_string(self) -> Optional[str]:
-        base_type_string: Optional[str] = self.element_type.type_string()
+    def type_string(self) -> str | None:
+        base_type_string: str | None = self.element_type.type_string()
         return None if base_type_string is None else self._wrap_type_string(base_type_string)
 
     def type_string_internal(self) -> str:
@@ -196,9 +195,9 @@ class Primitive(Type):
 
     def __init__(self) -> None:
         Type.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = []
+        self.try_cast_functions: Sequence[Callable[[object | None], object]] = []
 
-    def cast(self, value: Optional[object]) -> object:
+    def cast(self, value: object | None) -> object:
         """
         Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
         """
@@ -234,9 +233,9 @@ class Number(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], numbers.Number]] = [float]
+        self.try_cast_functions: Sequence[Callable[[object | None], numbers.Number]] = [float]
 
-    def cast(self, value: Optional[object]) -> object:
+    def cast(self, value: object | None) -> object:
         """
         Attempts to cast a given value to an int or a float.
         """
@@ -245,7 +244,7 @@ class Number(Primitive):
             return int(value)
         return super().cast(value)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -280,9 +279,9 @@ class Float(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [float]
+        self.try_cast_functions: Sequence[Callable[[object | None], object]] = [float]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -315,9 +314,9 @@ class Integer(Number):
 
     def __init__(self) -> None:
         Number.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
+        self.try_cast_functions: Sequence[Callable[[object | None], object]] = [int]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -341,9 +340,9 @@ class Bool(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [bool]
+        self.try_cast_functions: Sequence[Callable[[object | None], object]] = [bool]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -354,7 +353,7 @@ class Bool(Primitive):
             return True
         raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
 
-    def cast(self, value: Optional[object]) -> object:
+    def cast(self, value: object | None) -> object:
         return super().cast(value if not isinstance(value, NoneValue) else None)
 
     def type_string(self) -> str:
@@ -378,9 +377,9 @@ class String(Primitive):
 
     def __init__(self) -> None:
         Primitive.__init__(self)
-        self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [str]
+        self.try_cast_functions: Sequence[Callable[[object | None], object]] = [str]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -392,7 +391,7 @@ class String(Primitive):
 
         return True
 
-    def cast(self, value: Optional[object]) -> object:
+    def cast(self, value: object | None) -> object:
         if value is True:
             return "true"
         if value is False:
@@ -421,7 +420,7 @@ class List(Type):
     def __init__(self):
         Type.__init__(self)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         if value is None:
             return True
 
@@ -454,7 +453,7 @@ class TypedList(List):
     def normalize(self) -> None:
         self.element_type.normalize()
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         if not List.validate(self, value):
             return False
 
@@ -468,7 +467,7 @@ class TypedList(List):
     def _wrap_type_string(self, string: str) -> str:
         return "%s[]" % string
 
-    def type_string(self) -> Optional[str]:
+    def type_string(self) -> str | None:
         element_type_string = self.element_type.type_string()
         return None if element_type_string is None else self._wrap_type_string(element_type_string)
 
@@ -525,7 +524,7 @@ class Dict(Type):
     def __init__(self) -> None:
         Type.__init__(self)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -564,7 +563,7 @@ class TypedDict(Dict):
     def normalize(self) -> None:
         self.element_type.normalize()
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         if not Dict.validate(self, value):
             return False
 
@@ -647,11 +646,11 @@ class ConstraintType(NamedType):
     def __init__(self, namespace: Namespace, name: str) -> None:
         NamedType.__init__(self)
 
-        self.basetype: Optional[Type] = None  # : ConstrainableType
+        self.basetype: Type | None = None  # : ConstrainableType
         self._constraint = None
         self.name: str = name
         self.namespace: Namespace = namespace
-        self.comment: Optional[str] = None
+        self.comment: str | None = None
         self.expression: Optional["ExpressionStatement"] = None
 
     def normalize(self) -> None:
@@ -675,7 +674,7 @@ class ConstraintType(NamedType):
 
     constraint = property(get_constraint, set_constraint)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: object | None) -> bool:
         """
         Validate the given value to check if it satisfies the constraint and
         the basetype.

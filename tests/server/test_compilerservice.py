@@ -25,7 +25,7 @@ import subprocess
 import uuid
 from asyncio import Semaphore
 from collections import abc
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import pkg_resources
 import py.path
@@ -169,7 +169,7 @@ async def test_scheduler(server_config, init_dataclasses_and_load_schema, caplog
             self.version = None
             self.request = compile
 
-        async def run(self, force_update: Optional[bool] = False):
+        async def run(self, force_update: bool | None = False):
             print("Start Run: ", self.request.id, self.request.environment)
 
             self.started = True
@@ -747,7 +747,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
 
     # set a full compile schedule
     async def schedule_soon() -> None:
-        soon: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=2)
+        soon: datetime.datetime = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=2)
         cron_soon: str = "%d %d %d * * * *" % (soon.second, soon.minute, soon.hour)
         result = await client.environment_settings_set(environment, id="auto_full_compile", value=cron_soon)
         assert result.code == 200
@@ -779,7 +779,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.result["count"] == 5
 
     # override with schedule in far future (+- 24h), check that it doesn't trigger an immediate recompile
-    recent: datetime.datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)
+    recent: datetime.datetime = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=2)
     cron_recent: str = "%d %d %d * * * *" % (recent.second, recent.minute, recent.hour)
     result = await client.environment_settings_set(environment, id="auto_full_compile", value=cron_recent)
     assert result.code == 200
@@ -804,7 +804,7 @@ async def run_compile_and_wait_until_compile_is_done(
     compiler_service: CompilerService,
     compiler_queue: queue.Queue["CompileRunnerMock"],
     env_id: uuid.UUID,
-    fail: Optional[bool] = None,
+    fail: bool | None = None,
     fail_on_pull=False,
 ) -> None:
     """
@@ -1355,7 +1355,7 @@ async def test_compileservice_api(client, environment):
     ["a custom message", None],
 )
 async def test_notification_failed_compile_with_message(
-    server, client, environment, mocked_compiler_service_block, message: Optional[str]
+    server, client, environment, mocked_compiler_service_block, message: str | None
 ) -> None:
     compilerservice = server.get_slice(SLICE_COMPILER)
 
@@ -1649,7 +1649,7 @@ async def test_environment_delete_removes_env_directories_on_server(
     """
     Make sure the environment_delete endpoint deletes the environment directory on the server.
     """
-    state_dir: Optional[str] = config.Config.get("config", "state-dir")
+    state_dir: str | None = config.Config.get("config", "state-dir")
     assert state_dir is not None
     env_dir = py.path.local(state_dir).join("server", "environments")
 
