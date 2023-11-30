@@ -619,7 +619,6 @@ def get_resource_events(
     rvid: model.ResourceVersionIdStr,
     exclude_change: Optional[Change] = None,
 ) -> dict[model.ResourceIdStr, list[model.ResourceAction]]:
-
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
     successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in

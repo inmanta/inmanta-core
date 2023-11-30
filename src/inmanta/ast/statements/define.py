@@ -611,7 +611,9 @@ class DefineIndex(DefinitionStatement):
             str_attribute = str(attribute)
             if str_attribute not in allattributes:
                 raise NotFoundException(
-                    self, str_attribute, f"Attribute '{str_attribute}' referenced in index is not defined in entity {entity_type}"
+                    self,
+                    str_attribute,
+                    f"Attribute '{str_attribute}' referenced in index is not defined in entity {entity_type}",
                 )
             else:
                 rattribute = entity_type.get_attribute(str_attribute)
