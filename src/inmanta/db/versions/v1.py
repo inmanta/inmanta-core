@@ -320,7 +320,8 @@ CREATE TABLE public.resource (
     provides character varying[] DEFAULT ARRAY[]::character varying[],
     resource_type character varying NOT NULL,
     resource_id_value character varying NOT NULL,
-    last_non_deploying_status public.non_deploying_resource_state DEFAULT 'available'::public.non_deploying_resource_state NOT NULL,
+    last_non_deploying_status public.non_deploying_resource_state
+    DEFAULT 'available'::public.non_deploying_resource_state NOT NULL,
     resource_set character varying
 );
 
@@ -577,14 +578,16 @@ CREATE INDEX compile_env_started_index ON public.compile USING btree (environmen
 -- Name: configurationmodel_env_released_version_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX configurationmodel_env_released_version_index ON public.configurationmodel USING btree (environment, released, version DESC);
+CREATE UNIQUE INDEX configurationmodel_env_released_version_index
+ON public.configurationmodel USING btree (environment, released, version DESC);
 
 
 --
 -- Name: configurationmodel_env_version_total_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX configurationmodel_env_version_total_index ON public.configurationmodel USING btree (environment, version DESC, total);
+CREATE UNIQUE INDEX configurationmodel_env_version_total_index
+ON public.configurationmodel USING btree (environment, version DESC, total);
 
 
 --
@@ -682,14 +685,16 @@ CREATE INDEX resource_environment_resource_type_index ON public.resource USING b
 -- Name: resourceaction_environment_action_started_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resourceaction_environment_action_started_index ON public.resourceaction USING btree (environment, action, started DESC);
+CREATE INDEX resourceaction_environment_action_started_index
+ON public.resourceaction USING btree (environment, action, started DESC);
 
 
 --
 -- Name: resourceaction_environment_version_started_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resourceaction_environment_version_started_index ON public.resourceaction USING btree (environment, version, started DESC);
+CREATE INDEX resourceaction_environment_version_started_index
+ON public.resourceaction USING btree (environment, version, started DESC);
 
 
 --
@@ -773,7 +778,8 @@ ALTER TABLE ONLY public.compile
 --
 
 ALTER TABLE ONLY public.compile
-    ADD CONSTRAINT compile_substitute_compile_id_fkey FOREIGN KEY (substitute_compile_id) REFERENCES public.compile(id) ON DELETE CASCADE;
+    ADD CONSTRAINT compile_substitute_compile_id_fkey FOREIGN KEY (substitute_compile_id)
+    REFERENCES public.compile(id) ON DELETE CASCADE;
 
 
 --
@@ -781,7 +787,8 @@ ALTER TABLE ONLY public.compile
 --
 
 ALTER TABLE ONLY public.configurationmodel
-    ADD CONSTRAINT configurationmodel_environment_fkey FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE;
+    ADD CONSTRAINT configurationmodel_environment_fkey FOREIGN KEY (environment)
+    REFERENCES public.environment(id) ON DELETE CASCADE;
 
 
 --
@@ -789,7 +796,8 @@ ALTER TABLE ONLY public.configurationmodel
 --
 
 ALTER TABLE ONLY public.dryrun
-    ADD CONSTRAINT dryrun_environment_model_fkey FOREIGN KEY (environment, model) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT dryrun_environment_model_fkey FOREIGN KEY (environment, model)
+    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
 
 --
@@ -829,7 +837,8 @@ ALTER TABLE ONLY public.report
 --
 
 ALTER TABLE ONLY public.resource
-    ADD CONSTRAINT resource_environment_model_fkey FOREIGN KEY (environment, model) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT resource_environment_model_fkey FOREIGN KEY (environment, model)
+    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
 
 --
@@ -837,7 +846,8 @@ ALTER TABLE ONLY public.resource
 --
 
 ALTER TABLE ONLY public.resourceaction
-    ADD CONSTRAINT resourceaction_environment_version_fkey FOREIGN KEY (environment, version) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT resourceaction_environment_version_fkey FOREIGN KEY (environment, version)
+    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
 
 --
@@ -845,7 +855,8 @@ ALTER TABLE ONLY public.resourceaction
 --
 
 ALTER TABLE ONLY public.unknownparameter
-    ADD CONSTRAINT unknownparameter_environment_fkey FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE;
+    ADD CONSTRAINT unknownparameter_environment_fkey FOREIGN KEY (environment)
+    REFERENCES public.environment(id) ON DELETE CASCADE;
 
 
 --
@@ -853,7 +864,8 @@ ALTER TABLE ONLY public.unknownparameter
 --
 
 ALTER TABLE ONLY public.unknownparameter
-    ADD CONSTRAINT unknownparameter_environment_version_fkey FOREIGN KEY (environment, version) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT unknownparameter_environment_version_fkey FOREIGN KEY (environment, version)
+    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
 
 """
