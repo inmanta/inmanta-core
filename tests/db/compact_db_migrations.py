@@ -26,8 +26,8 @@ import re
 import asyncpg
 import pytest
 
-MIGRATIONS_DIR = "../../../src/inmanta/db/versions"
-UP_TO_VERSION = "5"  # Specify the version up to which migrations should be applied
+MIGRATIONS_DIR = "../../src/inmanta/db/versions"
+UP_TO_VERSION = "202206290"  # Specify the version up to which migrations should be applied
 
 # Regular expression to match migration filenames
 MIGRATION_FILE_PATTERN = re.compile(r"^v(\d+)\.py$")
@@ -88,11 +88,12 @@ async def test_apply_migrations_and_dump(postgres_db, database_name, tmp_path):
         postgres_db.host,
         "-p",
         str(postgres_db.port),
-        "-f",
-        str(outfile),
-        "-O",
         "-U",
         postgres_db.user,
+        "-s",  # This option tells pg_dump to dump only the schema, no data
+        "-f",
+        str(outfile),
+        "-O",  # This option skips dumping object ownership to simplify restoration
         database_name,
     )
     await proc.wait()
