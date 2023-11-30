@@ -18,7 +18,6 @@
 import datetime
 import uuid
 from datetime import timezone
-from typing import Tuple
 
 import pytest
 
@@ -173,7 +172,7 @@ async def test_events_api_endpoints_increment(server, client, environment, clien
     rid_r2 = ResourceIdStr("std::File[agent1,path=/etc/file2]")
     rid_r3 = ResourceIdStr("std::File[agent1,path=/etc/file3]")
 
-    async def put_version() -> Tuple[ResourceVersionIdStr, ResourceVersionIdStr, ResourceVersionIdStr]:
+    async def put_version() -> tuple[ResourceVersionIdStr, ResourceVersionIdStr, ResourceVersionIdStr]:
         version = await clienthelper.get_version()
         # a name that is hard to parse
         rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")

@@ -19,7 +19,6 @@ import json
 import uuid
 from datetime import datetime
 from operator import itemgetter
-from typing import List
 from uuid import UUID
 
 import pytest
@@ -52,7 +51,7 @@ async def env_with_resources(server, client):
         )
         await cm.insert()
 
-    async def create_resource(agent: str, path: str, resource_type: str, versions: List[int], environment: UUID = env.id):
+    async def create_resource(agent: str, path: str, resource_type: str, versions: list[int], environment: UUID = env.id):
         for version in versions:
             key = f"{resource_type}[{agent},path={path}]"
             res = data.Resource.new(
@@ -180,7 +179,7 @@ async def test_resources_paging(server, client, order_by_column, order, env_with
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

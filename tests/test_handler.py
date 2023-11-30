@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -114,7 +114,7 @@ def test_3470_CRUD_handler_with_unserializable_changes(running_test: bool, monke
         def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
             resource.value = "b"
 
-        def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TestResource) -> None:
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TestResource) -> None:
             self.updated = True
 
     res = TestResource(Id(entity_type="aa::Aa", agent_name="aa", attribute="aa", attribute_value="aa", version=1))
@@ -167,7 +167,7 @@ def test_3470_CRUD_handler_with_unserializable_items_log_message(running_test: b
             unserializable_set = {"b"}
             ctx.debug(msg="Unserializable kwargs: ", kwargs={"unserializable": unserializable_set})
 
-        def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TestResource) -> None:
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TestResource) -> None:
             self.updated = True
 
     res = TestResource(Id(entity_type="aa::Aa", agent_name="aa", attribute="aa", attribute_value="aa", version=1))

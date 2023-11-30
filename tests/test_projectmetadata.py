@@ -17,7 +17,7 @@
 """
 import logging
 import re
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 
@@ -76,7 +76,7 @@ def test_relation_precedence_policy_parsing(
     if valid:
         assert expected_precedence_rule is not None
         project_metadata = ProjectMetadata(name="test", relation_precedence_policy=[precedence_rule])
-        relation_precedence_rules: List[RelationPrecedenceRule] = project_metadata.get_relation_precedence_rules()
+        relation_precedence_rules: list[RelationPrecedenceRule] = project_metadata.get_relation_precedence_rules()
         assert len(relation_precedence_rules) == 1
         assert relation_precedence_rules[0] == expected_precedence_rule
     else:

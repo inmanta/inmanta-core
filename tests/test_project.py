@@ -21,7 +21,7 @@ import os
 import uuid
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, cast
+from typing import cast
 
 import pytest
 
@@ -87,7 +87,7 @@ async def test_project_api_v2_project_list_ordering(client_v2):
     Check that they are ordered by ascending (project_name, environment_name)
     """
 
-    project_environments_map: Dict[str, List[str]] = defaultdict(lambda: [])
+    project_environments_map: dict[str, list[str]] = defaultdict(list)
 
     for project_n in range(3):
         project_name: str = f"test-project-{project_n}"
@@ -460,7 +460,7 @@ def test_project_load_install(snippetcompiler_clean, install: bool) -> None:
 
 
 @pytest.fixture
-def environment_icons() -> Dict[str, str]:
+def environment_icons() -> dict[str, str]:
     icon_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "icon")
     icon_names = ["logo.jpeg", "logo.png", "logo.svg", "logo.webp"]
     icon_dict = {}
@@ -469,7 +469,7 @@ def environment_icons() -> Dict[str, str]:
     return icon_dict
 
 
-async def test_environment_icon_description(client_v2, environment_icons: Dict[str, str]):
+async def test_environment_icon_description(client_v2, environment_icons: dict[str, str]):
     """Test creating an environment with an icon and description"""
 
     result = await client_v2.project_create("dev-project")
@@ -583,7 +583,7 @@ async def test_environment_icon_description(client_v2, environment_icons: Dict[s
     assert result.code == 400
 
 
-async def test_environment_icon_with_details_only(client_v2, environment_icons: Dict[str, str]):
+async def test_environment_icon_with_details_only(client_v2, environment_icons: dict[str, str]):
     """Test that the icon for an environment is only returned when explicitly requested"""
     result = await client_v2.project_create("dev-project")
     assert result.code == 200

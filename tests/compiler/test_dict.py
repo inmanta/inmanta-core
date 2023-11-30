@@ -392,7 +392,7 @@ dict_4 = {"ə": 4}
 dict_4_bis = {"\\u0259":41}
 
 value = "itp"
-dict_5 = {"\{\{not interpolation\}\}": "interpolation {{value}}"}
+dict_5 = {"\\{\\{not interpolation\\}\\}": "interpolation {{value}}"}
 dict_6 = {r'{{value}}': "not interpolation"}
     """  # NOQA W605
     )

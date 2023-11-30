@@ -17,10 +17,10 @@
 """
 
 import numbers
-import typing
+from collections.abc import Sequence
 from typing import Callable
 from typing import List as PythonList
-from typing import Optional, Sequence
+from typing import Optional
 
 from inmanta.ast import (
     DuplicateException,
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
 
-class BasicResolver(object):
+class BasicResolver:
     def __init__(self, types):
         self.types = types
 
@@ -60,14 +60,14 @@ class BasicResolver(object):
         else:
             cns = namespace
             while cns is not None:
-                full_name = "%s::%s" % (cns.get_full_name(), name)
+                full_name = f"{cns.get_full_name()}::{name}"
                 if full_name in self.types:
                     return self.types[full_name]
                 cns = cns.get_parent()
                 raise TypeNotFoundException(name, namespace)
 
 
-class NameSpacedResolver(object):
+class NameSpacedResolver:
     def __init__(self, ns):
         self.ns = ns
 
@@ -202,7 +202,7 @@ class Primitive(Type):
         """
         Cast a value to this type. If the value can not be cast, raises a :py:class:`inmanta.ast.RuntimeException`.
         """
-        exception: RuntimeException = RuntimeException(None, "Failed to cast '%s' to %s" % (value, self))
+        exception: RuntimeException = RuntimeException(None, f"Failed to cast '{value}' to {self}")
 
         if isinstance(value, Unknown):
             # propagate unknowns
@@ -254,7 +254,7 @@ class Number(Primitive):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True  # allow this function to be called from a lambda function
 
@@ -291,7 +291,7 @@ class Float(Primitive):
             return True
 
         if not isinstance(value, float):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
 
     def is_primitive(self) -> bool:
@@ -326,8 +326,7 @@ class Integer(Number):
             return True
 
         if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
-
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
@@ -430,7 +429,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self.type_string()))
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
@@ -618,10 +617,10 @@ class Union(Type):
                     return True
             except RuntimeException:
                 pass
-        raise RuntimeException(None, "Invalid value '%s', expected %s" % (value, self))
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self}")
 
     def type_string_internal(self) -> str:
-        return "Union[%s]" % ",".join((t.type_string_internal() for t in self.types))
+        return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)
 
 
 @stable_api
@@ -690,13 +689,13 @@ class ConstraintType(NamedType):
         assert self._constraint is not None
         if not self._constraint(value):
             raise RuntimeException(
-                self, "Invalid value %s, does not match constraint `%s`" % (repr(value), self.expression.pretty_print())
+                self, f"Invalid value {repr(value)}, does not match constraint `{self.expression.pretty_print()}`"
             )
 
         return True
 
     def type_string(self) -> str:
-        return "%s::%s" % (self.namespace, self.name)
+        return f"{self.namespace}::{self.name}"
 
     def type_string_internal(self) -> str:
         return self.type_string()
@@ -734,7 +733,7 @@ def create_function(tp: ConstraintType, expression: "ExpressionStatement"):
     return function
 
 
-TYPES: typing.Dict[str, Type] = {  # Part of the stable API
+TYPES: dict[str, Type] = {  # Part of the stable API
     "string": String(),
     "float": Float(),
     "number": Number(),

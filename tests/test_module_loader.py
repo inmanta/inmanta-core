@@ -22,7 +22,8 @@ import re
 import shutil
 import sys
 from collections import abc
-from typing import Dict, List, Optional, Sequence, Set
+from collections.abc import Sequence
+from typing import Optional
 
 import py
 import pytest
@@ -97,7 +98,7 @@ def test_v1_and_v2_module_installed_simultaneously(
     module_name = "v1_print_plugin"
 
     def compile_and_verify(
-        expected_message: str, expect_warning: bool, install_v2_modules: List[LocalPackagePath] = []
+        expected_message: str, expect_warning: bool, install_v2_modules: list[LocalPackagePath] = []
     ) -> None:
         caplog.clear()
         snippetcompiler_clean.setup_for_snippet(f"import {module_name}", install_v2_modules=install_v2_modules, autostd=False)
@@ -376,7 +377,7 @@ def test_load_module_recursive_complex_module_dependencies(local_module_package_
     )
     assert "complex_module_dependencies_mod1" not in project.modules
     assert "complex_module_dependencies_mod2" not in project.modules
-    loaded_namespaces: Set[str] = set(ns for ns, _, _ in project.load_module_recursive(install=True))
+    loaded_namespaces: set[str] = {ns for ns, _, _ in project.load_module_recursive(install=True)}
     assert "complex_module_dependencies_mod1" in project.modules
     assert "complex_module_dependencies_mod2" in project.modules
     expected_namespaces = {
@@ -395,7 +396,7 @@ def test_load_import_based_v2_project(local_module_package_index: str, snippetco
     """
     module_name: str = "minimalv2module"
 
-    def load(requires: Optional[List[Requirement]] = None) -> None:
+    def load(requires: Optional[list[Requirement]] = None) -> None:
         project: Project = snippetcompiler_clean.setup_for_snippet(
             f"import {module_name}",
             autostd=False,
@@ -435,7 +436,7 @@ def test_load_import_based_v2_module(
     os.makedirs(libs_dir)
 
     model: str = f"import {dependency_module_name}"
-    requirements: List[InmantaModuleRequirement] = (
+    requirements: list[InmantaModuleRequirement] = (
         [InmantaModuleRequirement.parse(dependency_module_name)] if explicit_dependency else []
     )
 
@@ -1403,7 +1404,7 @@ def test_cross_module_dependency(local_module_package_index: str, snippetcompile
     that is not loaded, can be used from the plugins of another module. ('cross_module_dependency' in this test case)
     """
 
-    def check_name_space(name_space: Dict[str, object], includes: Sequence[str], excludes: Sequence[str]) -> None:
+    def check_name_space(name_space: dict[str, object], includes: Sequence[str], excludes: Sequence[str]) -> None:
         """
         Check that all the items in `includes` are present in `name_space`
         and that no item in `excludes` is present in `name_space`
@@ -1443,7 +1444,7 @@ cross_module_dependency::call_to_triple_from_another_mod('triple this string')
     out, _ = capsys.readouterr()
     output = out.strip()
 
-    expected_output: List[str] = [
+    expected_output: list[str] = [
         "message from project model",
         "triple this string" * 3,
         "message from cross_module_dependency model",

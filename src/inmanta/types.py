@@ -19,8 +19,9 @@
 
 import builtins
 import uuid
+from collections.abc import Coroutine, Mapping, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import pydantic
 import typing_inspect
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 StrictNonIntBool = pydantic.StrictBool
 
 
-def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
+def issubclass(sub: type, super: Union[type, tuple[type, ...]]) -> bool:
     """
     Alternative issubclass implementation that interpretes instances of NewType for the first argument as their super type.
     """
@@ -47,8 +48,8 @@ def issubclass(sub: Type, super: Union[Type, Tuple[Type, ...]]) -> bool:
 PrimitiveTypes = Union[uuid.UUID, bool, int, float, datetime, str]
 SimpleTypes = Union["BaseModel", PrimitiveTypes]
 
-JsonType = Dict[str, Any]
-ReturnTupple = Tuple[int, Optional[JsonType]]
+JsonType = dict[str, Any]
+ReturnTupple = tuple[int, Optional[JsonType]]
 
 ArgumentTypes = Union[SimpleTypes, Sequence[SimpleTypes], Mapping[str, SimpleTypes]]
 
@@ -57,5 +58,5 @@ MethodReturn = Union[ReturnTypes, "ReturnValue[ReturnTypes]"]
 MethodType = Callable[..., MethodReturn]
 
 Apireturn = Union[int, ReturnTupple, "ReturnValue[ReturnTypes]", "ReturnValue[None]", ReturnTypes]
-Warnings = Optional[List[str]]
+Warnings = Optional[list[str]]
 HandlerType = Callable[..., Coroutine[Any, Any, Apireturn]]

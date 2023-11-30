@@ -29,7 +29,7 @@ from inmanta.user_setup import cmd, get_connection_pool
 logger = logging.getLogger(__name__)
 
 
-class CLI_user_setup(object):
+class CLI_user_setup:
     async def run(self, run_locally, username, password, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
@@ -143,7 +143,7 @@ async def test_user_setup_schema_outdated(
     setup_config(tmpdir, postgres_db, database_name)
 
     dump_path = os.path.join(os.path.dirname(__file__), "db/migration_tests/dumps/v202211230.sql")
-    with open(dump_path, "r") as fh:
+    with open(dump_path) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     cli = CLI_user_setup()

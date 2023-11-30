@@ -19,9 +19,10 @@ import asyncio
 import importlib
 import logging
 import pkgutil
+from collections.abc import Generator
 from pkgutil import ModuleInfo
 from types import ModuleType
-from typing import Dict, Generator, List, Optional
+from typing import Optional
 
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
@@ -62,7 +63,7 @@ class ConstrainedApplicationContext(ApplicationContext):
 
 
 @stable_api
-class InmantaBootloader(object):
+class InmantaBootloader:
     """The inmanta bootloader is responsible for:
     - discovering extensions
     - loading extensions
@@ -71,7 +72,7 @@ class InmantaBootloader(object):
     """
 
     # Cache field for available extensions
-    AVAILABLE_EXTENSIONS: Optional[Dict[str, str]] = None
+    AVAILABLE_EXTENSIONS: Optional[dict[str, str]] = None
 
     def __init__(self) -> None:
         self.restserver = Server()
@@ -103,7 +104,7 @@ class InmantaBootloader(object):
             await self.feature_manager.stop()
 
     @classmethod
-    def get_available_extensions(cls) -> Dict[str, str]:
+    def get_available_extensions(cls) -> dict[str, str]:
         """
         Returns a dictionary of all available inmanta extensions.
         The key contains the name of the extension and the value the fully qualified path to the python package.
@@ -121,7 +122,7 @@ class InmantaBootloader(object):
         return dict(cls.AVAILABLE_EXTENSIONS)
 
     # Extension loading Phase I: from start to setup functions collected
-    def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> List[str]:
+    def _discover_plugin_packages(self, return_all_available_packages: bool = False) -> list[str]:
         """Discover all packages that are defined in the inmanta_ext namespace package. Filter available extensions based on
         enabled_extensions and disabled_extensions config in the server configuration.
 
@@ -132,7 +133,7 @@ class InmantaBootloader(object):
         available = self.get_available_extensions()
         LOGGER.info("Discovered extensions: %s", ", ".join(available.keys()))
 
-        extensions: List[str] = []
+        extensions: list[str] = []
         enabled = [x for x in config.server_enabled_extensions.get() if len(x)]
 
         if return_all_available_packages:
@@ -183,10 +184,10 @@ class InmantaBootloader(object):
         if not hasattr(ext_mod, "setup"):
             raise PluginLoadFailed("extension.py doesn't have a setup method.")
 
-    def _load_extensions(self, load_all_extensions: bool = False) -> Dict[str, ModuleType]:
+    def _load_extensions(self, load_all_extensions: bool = False) -> dict[str, ModuleType]:
         """Discover all extensions, validate correct naming and load its setup function"""
-        plugins: Dict[str, ModuleType] = {}
-        enabled_extensions: List[str] = self._discover_plugin_packages(load_all_extensions)
+        plugins: dict[str, ModuleType] = {}
+        enabled_extensions: list[str] = self._discover_plugin_packages(load_all_extensions)
         LOGGER.info("Enabled extensions: %s", ", ".join(enabled_extensions))
         for name in enabled_extensions:
             try:
@@ -209,7 +210,7 @@ class InmantaBootloader(object):
 
     # Extension loading Phase II: collect slices
     def _collect_slices(
-        self, extensions: Dict[str, ModuleType], only_register_environment_settings: bool = False
+        self, extensions: dict[str, ModuleType], only_register_environment_settings: bool = False
     ) -> ApplicationContext:
         """
         Call the setup function on all extensions and let them register their slices in the ApplicationContext.
@@ -228,7 +229,7 @@ class InmantaBootloader(object):
         """
         Load all slices in the server
         """
-        exts: Dict[str, ModuleType] = self._load_extensions(load_all_extensions)
+        exts: dict[str, ModuleType] = self._load_extensions(load_all_extensions)
         ctx: ApplicationContext = self._collect_slices(exts, only_register_environment_settings)
         self.feature_manager = ctx.get_feature_manager()
         return ctx

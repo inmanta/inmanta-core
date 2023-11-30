@@ -128,7 +128,7 @@ def test_set_logfile_location(
     logger.info("This is a test message")
 
     # Verify the message was written to the log file
-    with open(str(log_file), "r") as f:
+    with open(str(log_file)) as f:
         contents = f.read()
         assert "This is a test message" in contents
 
@@ -163,7 +163,7 @@ def test_apply_options(tmpdir, log_file, log_file_level, verbose):
         assert error_in_output
 
     else:
-        with open(str(log_file), "r") as f:
+        with open(str(log_file)) as f:
             log_output = f.read().strip()
             debug_in_output = "DEBUG    test_logger debug: This is the first test" in log_output
             info_in_output = "INFO     test_logger info: This is the second test" in log_output
@@ -204,7 +204,7 @@ def test_logging_cleaned_after_apply_options(tmpdir):
     options3 = Options(log_file=log_file, log_file_level="WARNING", verbose="4")
     inmanta_logger.apply_options(options3)
     logger.warning("warning: This is the second test")
-    with open(str(log_file), "r") as f:
+    with open(str(log_file)) as f:
         contents = f.read()
         assert "WARNING  test_logger warning: This is the second test" in contents
 

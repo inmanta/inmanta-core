@@ -21,8 +21,9 @@ import os
 import re
 import sys
 from argparse import Namespace
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator, Optional, TextIO
+from typing import Optional, TextIO
 
 import colorlog
 from colorlog.formatter import LogColors

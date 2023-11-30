@@ -19,7 +19,6 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Set
 
 import pytest
 from pytest import fixture
@@ -58,7 +57,7 @@ class SessionSpy(SessionListener, ServerSlice):
         self.expires = 0
         self._sessions = []
 
-    async def new_session(self, session, endpoint_names_snapshot: Set[str]):
+    async def new_session(self, session, endpoint_names_snapshot: set[str]):
         self._sessions.append(session)
 
     @protocol.handle(get_status_x)
@@ -72,7 +71,7 @@ class SessionSpy(SessionListener, ServerSlice):
 
         return 200, {"agents": status_list}
 
-    async def expire(self, session, endpoint_names_snapshot: Set[str]):
+    async def expire(self, session, endpoint_names_snapshot: set[str]):
         self._sessions.remove(session)
         print(session._sid)
         self.expires += 1
@@ -83,7 +82,7 @@ class SessionSpy(SessionListener, ServerSlice):
 
 class Agent(protocol.SessionEndpoint):
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
-        super(Agent, self).__init__(name, timeout, reconnect_delay)
+        super().__init__(name, timeout, reconnect_delay)
         self.reconnect = 0
         self.disconnect = 0
         self.pushes = 0

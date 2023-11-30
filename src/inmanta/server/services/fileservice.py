@@ -18,7 +18,8 @@
 import base64
 import difflib
 import logging
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
+from typing import Optional
 
 from asyncpg.exceptions import UniqueViolationError
 
@@ -39,12 +40,12 @@ class FileService(protocol.ServerSlice):
     server_slice: Server
 
     def __init__(self) -> None:
-        super(FileService, self).__init__(SLICE_FILE)
+        super().__init__(SLICE_FILE)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     @handle(methods.upload_file, file_hash="id")
@@ -81,13 +82,13 @@ class FileService(protocol.ServerSlice):
         return file.content
 
     @handle(methods.stat_files)
-    async def stat_files(self, files: List[str]) -> Apireturn:
+    async def stat_files(self, files: list[str]) -> Apireturn:
         """
         Return which files in the list exist on the server
         """
         return 200, {"files": await self.stat_file_internal(files)}
 
-    async def stat_file_internal(self, files: Iterable[str]) -> List[str]:
+    async def stat_file_internal(self, files: Iterable[str]) -> list[str]:
         """
         Return which files in the list don't exist on the server
         """

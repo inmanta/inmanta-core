@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import Dict
 
 import py.path
 import pytest
@@ -40,7 +39,7 @@ from utils import PipIndex, create_python_package, module_from_template, v1_modu
 def test_module_update_with_install_mode_master(
     tmpdir: py.path.local,
     modules_repo: str,
-    kwargs_update_method: Dict[str, str],
+    kwargs_update_method: dict[str, str],
     mod2_should_be_updated: bool,
     mod8_should_be_updated: bool,
 ) -> None:
@@ -108,7 +107,7 @@ def test_module_update_with_v2_module(
 
     def assert_version_installed(module_name: str, version: str) -> None:
         package_name = ModuleV2Source.get_package_name_for(module_name)
-        installed_packages: Dict[str, Version] = process_env.get_installed_packages()
+        installed_packages: dict[str, Version] = process_env.get_installed_packages()
         assert package_name in installed_packages
         assert str(installed_packages[package_name]) == version
 

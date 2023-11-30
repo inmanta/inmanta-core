@@ -18,7 +18,7 @@
 import json
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pytest
 
@@ -33,7 +33,7 @@ from inmanta.server.server import Server
 from utils import LogSequence
 
 
-async def assert_resource_set_assignment(environment, assignment: Dict[str, Optional[str]]) -> None:
+async def assert_resource_set_assignment(environment, assignment: dict[str, Optional[str]]) -> None:
     """
     Verify whether the resources on the server are assignment to the resource sets given via the assignment argument.
 
@@ -395,7 +395,7 @@ x = exp::WrappedProxyTest(
     )
     snippetcompiler.do_export()
     tmp_file: str = os.path.join(snippetcompiler.project_dir, "dump.json")
-    with open(tmp_file, "r") as f:
+    with open(tmp_file) as f:
         export: dict = json.loads(f.read())
         my_dict: dict = {"dct": {"a": 1, "b": 2}}
         assert len(export) == 1
@@ -465,7 +465,7 @@ async def test_resource_set(snippetcompiler, modules_dir: str, environment, clie
     async def export_model(
         model: str,
         partial_compile: bool,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
     ) -> None:
         snippetcompiler.setup_for_snippet(
             model,
@@ -614,7 +614,7 @@ async def test_empty_resource_set_removal(snippetcompiler, environment) -> None:
     async def export_model(
         model: str,
         partial_compile: bool,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
     ) -> None:
         snippetcompiler.setup_for_snippet(
             model,
