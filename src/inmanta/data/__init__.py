@@ -3718,7 +3718,7 @@ class Compile(BaseDocument):
     failed_compile_message: Optional[str] = None
 
     @classmethod
-    async def get_substitute_by_id(cls, compile_id: uuid.UUID) -> Optional["Compile"]:
+    async def get_substitute_by_id(cls, compile_id: uuid.UUID, connection: Optional[Connection] = None) -> Optional["Compile"]:
         """
         Get a compile's substitute compile if it exists, otherwise get the compile by id.
 
@@ -3726,12 +3726,13 @@ class Compile(BaseDocument):
         :return: The compile object for compile c2 that is the substitute of compile c1 with the given id. If c1 does not have
             a substitute, returns c1 itself.
         """
-        result: Optional[Compile] = await cls.get_by_id(compile_id)
-        if result is None:
-            return None
-        if result.substitute_compile_id is None:
-            return result
-        return await cls.get_substitute_by_id(result.substitute_compile_id)
+        async with Compile.get_connection(connection=connection) as con:
+            result: Optional[Compile] = await cls.get_by_id(compile_id, connection=con)
+            if result is None:
+                return None
+            if result.substitute_compile_id is None:
+                return result
+            return await cls.get_substitute_by_id(result.substitute_compile_id, connection=con)
 
     @classmethod
     # TODO: Use join
@@ -4116,7 +4117,12 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def get_logs_for_version(
-        cls, environment: uuid.UUID, version: int, action: Optional[str] = None, limit: int = 0
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        action: Optional[str] = None,
+        limit: int = 0,
+        connection: Optional[Connection] = None,
     ) -> List["ResourceAction"]:
         query = f"""SELECT *
                         FROM {cls.table_name()}
@@ -4130,7 +4136,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection=connection) as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
@@ -5633,12 +5639,14 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    async def get_versions(cls, environment: uuid.UUID, start: int = 0, limit: int = DBLIMIT) -> List["ConfigurationModel"]:
+    async def get_versions(
+        cls, environment: uuid.UUID, start: int = 0, limit: int = DBLIMIT, connection: Optional[Connection] = None
+    ) -> List["ConfigurationModel"]:
         """
         Get all versions for an environment ordered descending
         """
         versions = await cls.get_list(
-            order_by_column="version", order="DESC", limit=limit, offset=start, environment=environment
+            order_by_column="version", order="DESC", limit=limit, offset=start, environment=environment, connection=connection
         )
         return versions
 
