@@ -309,3 +309,40 @@ implement Test_no_doc using b
     verify_anchor(23, 11, 15, "this is a test entity")
     verify_anchor(24, 29, 30, None)
     verify_anchor(24, 11, 22, None)
+
+
+def test_constructor_with_inferred_namespace(snippetcompiler):
+    """
+    Test that the anchor for a constructor for an entity with an inferred namespace is correctly added to the anchormap
+    The test checks if the anchormap correctly reflects the relationship between the
+    source range (where the entity is instantiated: line 9 in main.cf) and the target range (where the
+    entity is defined: line 1 in the _init.cf file of the tests module)
+    """
+
+    module: str = "tests"
+    target_path = os.path.join(os.path.dirname(__file__), "data", "modules", module, "model", "_init.cf")
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import mod1
+    import tests
+    entity A:
+    end
+
+    A.mytest [1] -- tests::Test [1]
+
+    A(mytest = Test())
+    """,
+        autostd=False,
+    )
+
+    compiler = Compiler()
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+
+    anchormap = sched.anchormap(compiler, statements, blocks)
+    assert len(anchormap) == 5
+    range_source = Range(os.path.join(snippetcompiler.project_dir, "main.cf"), 9, 16, 9, 20)
+    range_target = Range(target_path, 1, 8, 1, 12)
+
+    assert (range_source, range_target) in anchormap
