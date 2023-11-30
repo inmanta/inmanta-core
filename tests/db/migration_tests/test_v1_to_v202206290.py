@@ -23,7 +23,7 @@ import pytest
 
 
 @pytest.mark.slowtest
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202205250.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v1.sql"))
 async def test_added_resource_set_column(
     migrate_db_from: Callable[[], Awaitable[None]],
     postgresql_client,
