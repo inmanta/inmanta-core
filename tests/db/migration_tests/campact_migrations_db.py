@@ -26,8 +26,8 @@ import re
 import asyncpg
 import pytest
 
-MIGRATIONS_DIR = "../../src/inmanta/db/versions"
-UP_TO_VERSION = "202206290"  # Specify the version up to which migrations should be applied
+MIGRATIONS_DIR = "../../../src/inmanta/db/versions"
+UP_TO_VERSION = "5"  # Specify the version up to which migrations should be applied
 
 # Regular expression to match migration filenames
 MIGRATION_FILE_PATTERN = re.compile(r"^v(\d+)\.py$")
