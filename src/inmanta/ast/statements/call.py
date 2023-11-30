@@ -73,7 +73,6 @@ class FunctionCall(ReferenceStatement):
         self.wrapped_kwargs: list[WrappedKwargs] = wrapped_kwargs
         self.location: Location = location
         self.namespace: Namespace = namespace
-        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         self.kwargs: dict[str, ExpressionStatement] = {}
         for loc_name, expr in kwargs:
             arg_name: str = str(loc_name)
@@ -84,6 +83,7 @@ class FunctionCall(ReferenceStatement):
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
+        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         func = self.namespace.get_type(self.name)
         if isinstance(func, InmantaType.Primitive):
             self.function = Cast(self, func)

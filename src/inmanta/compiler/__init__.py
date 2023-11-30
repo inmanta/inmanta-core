@@ -194,7 +194,6 @@ class Compiler:
 
         project.load()
         statements, blocks = project.get_complete_ast()
-
         project.log_installed_modules()
 
         # This lookup variable provides efficiency in the loop below by skipping iterations for plugins

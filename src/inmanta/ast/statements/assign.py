@@ -90,6 +90,7 @@ class CreateList(ReferenceStatement):
         for item in self.items:
             # pass on lhs_attribute to children
             item.normalize(lhs_attribute=lhs_attribute)
+            self.anchors.extend(item.get_anchors())
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
@@ -228,6 +229,9 @@ class SetAttribute(AssignStatement, Resumer):
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # register this assignment as left hand side to the value on the right hand side
         self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
+        self.anchors.extend(self.rhs.get_anchors())
+        if self.lhs is not None:
+            self.anchors.extend(self.lhs.get_anchors())
 
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks
@@ -436,13 +440,13 @@ class IndexLookup(ReferenceStatement, Resumer):
     ) -> None:
         ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), wrapped_query)))
         self.index_type = index_type
-        self.anchors.append(TypeReferenceAnchor(index_type.namespace, index_type))
         self.query = [(str(n), e) for n, e in query]
         self.wrapped_query: list["WrappedKwargs"] = wrapped_query
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
+        self.anchors.append(TypeReferenceAnchor(self.index_type.namespace, self.index_type))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         requires: dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)

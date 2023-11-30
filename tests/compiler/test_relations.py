@@ -166,7 +166,7 @@ def test_m_to_n(snippetcompiler):
         """
 entity LogFile:
   string name
-  number members
+  int members
 end
 
 implement LogFile using std::none

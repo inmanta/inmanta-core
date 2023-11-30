@@ -266,6 +266,9 @@ class Scheduler:
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
     ) -> Sequence[tuple[Location, AnchorTarget]]:
+        """
+        This function should only be called after normalization is done
+        """
         prev = time.time()
 
         # first evaluate all definitions, this should be done in one iteration

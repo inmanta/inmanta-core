@@ -48,7 +48,7 @@ from inmanta.execute.dataflow import (
             [
                 """
                 entity A:
-                    number n
+                    int n
                 end
 
                 index A(n)

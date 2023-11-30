@@ -43,6 +43,7 @@ class BasicBlock:
         return self.__stmts
 
     def get_anchors(self) -> list[Anchor]:
+        """Should only be called after normalization."""
         return [a for s in self.__stmts for a in s.get_anchors()]
 
     def add(self, stmt: DynamicStatement) -> None:

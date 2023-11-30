@@ -79,6 +79,7 @@ class Statement(Namespaced):
         return self.location
 
     def get_anchors(self) -> list[Anchor]:
+        """Should only be called after normalization (DynamicStatement) or evaluation (DefinitionStatement)."""
         return self.anchors
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
@@ -491,11 +492,11 @@ class ReferenceStatement(ExpressionStatement):
     def __init__(self, children: Sequence[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
-        self.anchors.extend(anchor for e in self.children for anchor in e.get_anchors())
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        for c in self.children:
-            c.normalize()
+        for child in self.children:
+            child.normalize()
+            self.anchors.extend(child.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), *(subexpr.get_all_eager_promises() for subexpr in self.children))
@@ -520,12 +521,13 @@ class AssignStatement(DynamicStatement):
         DynamicStatement.__init__(self)
         self.lhs: Optional["Reference"] = lhs
         self.rhs: ExpressionStatement = rhs
-        if lhs is not None:
-            self.anchors.extend(lhs.get_anchors())
-        self.anchors.extend(rhs.get_anchors())
 
     def normalize(self) -> None:
         self.rhs.normalize()
+        if self.lhs is not None:
+            self.lhs.normalize()
+            self.anchors.extend(self.lhs.get_anchors())
+        self.anchors.extend(self.rhs.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(

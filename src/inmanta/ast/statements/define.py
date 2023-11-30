@@ -19,10 +19,11 @@
 
 import logging
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from typing import Optional
 
 from inmanta.ast import (
+    Anchor,
     AttributeReferenceAnchor,
     CompilerException,
     CompilerRuntimeWarning,
@@ -133,14 +134,13 @@ class DefineEntity(TypeDefinitionStatement):
         if "-" in name:
             raise HyphenException(lname)
 
-        self.anchors = [TypeReferenceAnchor(namespace, x) for x in parents]
-
         self.name = name
         self.attributes = attributes
         if comment is not None:
             self.comment = str(comment)
 
         self.parents = parents
+        self.anchors = [TypeReferenceAnchor(self.namespace, x) for x in self.parents]
 
         if len(self.parents) == 0 and not (self.name == "Entity" and self.namespace.name == "std"):
             dummy_location: Range = Range("__internal__", 1, 1, 1, 1)
@@ -275,8 +275,6 @@ class DefineImplementation(TypeDefinitionStatement):
 
         self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), self.comment)
         self.type.location = name.get_location()
-        self.anchors = [TypeReferenceAnchor(namespace, target_type)]
-        self.anchors.extend(statements.get_anchors())
 
     def __repr__(self) -> str:
         """
@@ -290,6 +288,7 @@ class DefineImplementation(TypeDefinitionStatement):
         """
         try:
             cls = self.namespace.get_type(self.entity)
+            self.anchors = [TypeReferenceAnchor(self.namespace, self.entity)]
             if not isinstance(cls, Entity):
                 raise TypingException(self, f"Implementation can only be define for an Entity, but {self.entity} is a {cls}")
             self.type.set_type(cls)
@@ -297,6 +296,16 @@ class DefineImplementation(TypeDefinitionStatement):
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
+
+    def get_anchors(self) -> list[Anchor]:
+        """
+        This method overrides the default get_anchors() to accommodate the two-stage normalization process.
+        DefineImplementations register anchors for their blocks. However, these anchors only come into existence
+        after the type normalization phase.
+        This implementation ensures that anchors are correctly gathered from both the type statements and
+        the block itself.
+        """
+        return [*self.type.statements.get_anchors(), *self.anchors]
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
         """
@@ -329,9 +338,6 @@ class DefineImplement(DefinitionStatement):
         self.entity = entity_name
         self.entity_location = entity_name.get_location()
         self.implementations = implementations
-        self.anchors = [TypeReferenceAnchor(x.namespace, x) for x in implementations]
-        self.anchors.append(TypeReferenceAnchor(entity_name.namespace, entity_name))
-        self.anchors.extend(select.get_anchors())
         self.location = entity_name.get_location()
         if inherit and (not isinstance(select, Literal) or select.value is not True):
             raise RuntimeException(self, "Conditional implementation with parents not allowed")
@@ -346,17 +352,26 @@ class DefineImplement(DefinitionStatement):
         """
         return "Implement(%s)" % (self.entity)
 
+    def get_anchors(self) -> list[Anchor]:
+        """
+        This method overrides the default get_anchors() to accommodate the two-stage normalization process.
+        DefineImplement should register anchors for an ExpressionStatement. This one is not yet normalized during
+        evaluation and so its anchors come into existence only after the type normalization phase.
+        This implementation ensures that anchors are also correctly gathered from the type statement.
+        """
+        return [*self.anchors, *self.select.get_anchors()]
+
     def evaluate(self) -> None:
         """
         Evaluate this statement.
         """
         try:
             entity_type = self.namespace.get_type(self.entity)
-
             if not isinstance(entity_type, Entity):
                 raise TypingException(
                     self, f"Implementation can only be define for an Entity, but {self.entity} is a {entity_type}"
                 )
+            self.anchors.append(TypeReferenceAnchor(self.entity.namespace, self.entity))
 
             # If one implements statement has parent declared, set to true
             entity_type.implements_inherits |= self.inherit
@@ -384,6 +399,7 @@ class DefineImplement(DefinitionStatement):
                     )
 
                 # add it
+                self.anchors.append(TypeReferenceAnchor(_impl.namespace, _impl))
                 implement.implementations.append(impl_obj)
 
             entity_type.add_implement(implement)
@@ -410,8 +426,6 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.set_location(name.get_location())
         self.basetype = basetype
-        self.anchors.append(TypeReferenceAnchor(namespace, basetype))
-        self.anchors.extend(expression.get_anchors())
         self.set_expression(expression)
         self.type = ConstraintType(self.namespace, str(name))
         self.type.location = name.get_location()
@@ -456,6 +470,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
+        self.anchors.append(TypeReferenceAnchor(self.namespace, self.basetype))
 
         constraint_type = self.type
 
@@ -463,6 +478,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
         self.expression.normalize()
+        self.anchors.extend(self.expression.get_anchors())
 
 
 Relationside = tuple[LocatableString, Optional[LocatableString], Optional[tuple[int, Optional[int]]]]
@@ -486,10 +502,6 @@ class DefineRelation(BiStatement):
         self.annotation_expression = [(ResultVariable(), exp) for exp in annotations]
         # for access to results
         self.annotations = [exp[0] for exp in self.annotation_expression]
-
-        self.anchors.extend(y for x in annotations for y in x.get_anchors())
-        self.anchors.append(TypeReferenceAnchor(left[0].namespace, left[0]))
-        self.anchors.append(TypeReferenceAnchor(right[0].namespace, right[0]))
 
         self.left: Relationside = left
         self.right: Relationside = right
@@ -561,6 +573,10 @@ class DefineRelation(BiStatement):
     def normalize(self) -> None:
         for _, exp in self.annotation_expression:
             exp.normalize()
+            self.anchors.extend(exp.get_anchors())
+
+        self.anchors.append(TypeReferenceAnchor(self.left[0].namespace, self.left[0]))
+        self.anchors.append(TypeReferenceAnchor(self.right[0].namespace, self.right[0]))
 
 
 class DefineIndex(DefinitionStatement):
@@ -571,11 +587,7 @@ class DefineIndex(DefinitionStatement):
     def __init__(self, entity_type: LocatableString, attributes: list[LocatableString]):
         DefinitionStatement.__init__(self)
         self.type = entity_type
-        self.attributes = [str(a) for a in attributes]
-        self.anchors.append(TypeReferenceAnchor(entity_type.namespace, entity_type))
-        self.anchors.extend(
-            [AttributeReferenceAnchor(x.get_location(), entity_type.namespace, entity_type, str(x)) for x in attributes]
-        )
+        self.attributes: Sequence[LocatableString] = attributes
 
     def types(self, recursive: bool = False) -> list[tuple[str, LocatableString]]:
         """
@@ -584,7 +596,7 @@ class DefineIndex(DefinitionStatement):
         return [("type", self.type)]
 
     def __repr__(self) -> str:
-        return "index {}({})".format(self.type, ", ".join(self.attributes))
+        return "index {}({})".format(self.type, ", ".join([str(a) for a in self.attributes]))
 
     def evaluate(self) -> None:
         """
@@ -592,15 +604,20 @@ class DefineIndex(DefinitionStatement):
         """
         entity_type = self.namespace.get_type(self.type)
         assert isinstance(entity_type, Entity), "%s is not an entity" % entity_type
+        self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.type))
 
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:
-            if attribute not in allattributes:
+            str_attribute = str(attribute)
+            if str_attribute not in allattributes:
                 raise NotFoundException(
-                    self, attribute, f"Attribute '{attribute}' referenced in index is not defined in entity {entity_type}"
+                    self, str_attribute, f"Attribute '{str_attribute}' referenced in index is not defined in entity {entity_type}"
                 )
             else:
-                rattribute = entity_type.get_attribute(attribute)
+                rattribute = entity_type.get_attribute(str_attribute)
+                self.anchors.append(
+                    AttributeReferenceAnchor(attribute.get_location(), self.type.namespace, self.type, str_attribute)
+                )
                 assert rattribute is not None  # Make mypy happy
                 if rattribute.is_optional():
                     raise IndexException(
@@ -612,7 +629,7 @@ class DefineIndex(DefinitionStatement):
                         self, f"Index can not contain list attributes, Attribute ' {attribute}.{entity_type}' is a list"
                     )
 
-        entity_type.add_index(self.attributes)
+        entity_type.add_index([str(a) for a in self.attributes])
 
 
 class PluginStatement(TypeDefinitionStatement):

@@ -139,7 +139,7 @@ entity Test extends Foo, foo::sub::Bar:
     \"\"\"
     string hello
     bool bar = true
-    number? ten=5
+    int? ten=5
 end
 """
         % documentation
@@ -578,7 +578,7 @@ index File(host, path)
     stmt = statements[0]
     assert isinstance(stmt, DefineIndex)
     assert str(stmt.type) == "File"
-    assert stmt.attributes == ["host", "path"]
+    assert [str(a) for a in stmt.attributes] == ["host", "path"]
 
 
 def test_ctr():

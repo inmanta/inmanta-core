@@ -186,7 +186,7 @@ def test_2030_type_overwrite_warning(snippetcompiler):
     with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
-typedef string as number matching self > 0
+typedef string as int matching self > 0
             """,
         )
         compiler.do_compile()

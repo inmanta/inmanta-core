@@ -29,11 +29,11 @@ def test_implement_parents(snippetcompiler, parents: bool):
     snippetcompiler.setup_for_snippet(
         """
 entity Parent:
-    number n
+    int n
 end
 
 entity Child extends Parent:
-    number m
+    int m
 end
 
 implement Parent using p
