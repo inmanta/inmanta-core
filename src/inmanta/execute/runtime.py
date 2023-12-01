@@ -17,7 +17,7 @@
 """
 from abc import abstractmethod
 from collections.abc import Hashable, Sequence
-from typing import TYPE_CHECKING, Deque, Dict, Generic, List, Literal, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Deque, Generic, List, Literal, Optional, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
