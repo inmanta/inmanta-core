@@ -699,7 +699,6 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             l11 = std::select(std::key_sort(tests::convert_unknowns(c2.values, Value(n=-1)), "n"), "n")
             l12 = std::select(std::key_sort(tests::convert_unknowns(c3.values, Value(n=-1)), "n"), "n")
 
-            # TODO: replace std::is_unknown with std::is_unknown()
             assert = true
             assert = std::is_unknown(l1)
             assert = not std::is_unknown(l2)

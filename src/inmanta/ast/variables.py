@@ -203,8 +203,9 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
         value implies that the variable is defined.
         """
-        if isinstance(value, (NoneValue, Unknown)):
-            # TODO: can this occur in pracice? I don't think so because it's always attached to a variable, never an expression
+        if isinstance(value, Unknown):
+            # TODO: bugfix entry
+            # value may or may not be defined, nothing can be decided yet
             return False
         self.target.set_value(True, self.owner.location)
         return True
@@ -232,8 +233,17 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         """
         try:
             value = variable.get_value()
+            if isinstance(value, Unknown):
+                # TODO: test
+                return Unknown(self)
             if isinstance(value, list):
-                return len(value) != 0
+                if len(value) == 0:
+                    return False
+                # TODO: test
+                elif all(isinstance(v, Unknown) for v in value):
+                    return Unknown(self)
+                else:
+                    return True
             elif isinstance(value, NoneValue):
                 return False
             return True
