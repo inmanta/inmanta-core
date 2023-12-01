@@ -591,6 +591,7 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
     compiler.do_compile()
 
 
+# TODO: add test for https://inmanta.slack.com/archives/CKRF0C8R3/p1701450237242909
 # TODO: tests from whiteboard + follow-up tickets + change entries
 # TODO: test for unknown or true (independent of list comprehensions)
 def test_list_comprehension_unknown(snippetcompiler) -> None:
@@ -656,8 +657,6 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
                     # unknowns should not be passed to value expression
                     Value(n=x)
                     for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
-                    # TODO: is this more representative?
-                    #if tests::is_uknown(x) or x > 1 or unknown
                 ]
             )
             # same with guard
@@ -700,22 +699,22 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             l11 = std::select(std::key_sort(tests::convert_unknowns(c2.values, Value(n=-1)), "n"), "n")
             l12 = std::select(std::key_sort(tests::convert_unknowns(c3.values, Value(n=-1)), "n"), "n")
 
-            # TODO: replace tests::is_uknown with std::is_unknown()
+            # TODO: replace std::is_unknown with std::is_unknown()
             assert = true
-            assert = tests::is_uknown(l1)
-            assert = not tests::is_uknown(l2)
-            assert = not tests::is_uknown(l3)
-            assert = not tests::is_uknown(l31)
-            assert = not tests::is_uknown(l32)
-            assert = not tests::is_uknown(l4)
-            assert = not tests::is_uknown(l5)
-            assert = not tests::is_uknown(l6)
-            assert = not tests::is_uknown(l7)
-            assert = not tests::is_uknown(l8)
-            assert = not tests::is_uknown(l9)
-            assert = not tests::is_uknown(l10)
-            assert = not tests::is_uknown(l11)
-            assert = not tests::is_uknown(l12)
+            assert = std::is_unknown(l1)
+            assert = not std::is_unknown(l2)
+            assert = not std::is_unknown(l3)
+            assert = not std::is_unknown(l31)
+            assert = not std::is_unknown(l32)
+            assert = not std::is_unknown(l4)
+            assert = not std::is_unknown(l5)
+            assert = not std::is_unknown(l6)
+            assert = not std::is_unknown(l7)
+            assert = not std::is_unknown(l8)
+            assert = not std::is_unknown(l9)
+            assert = not std::is_unknown(l10)
+            assert = not std::is_unknown(l11)
+            assert = not std::is_unknown(l12)
 
             l2_unknowns = [1, 2, "unknown"]
             l2_unknowns = tests::convert_unknowns(l2, "unknown")
