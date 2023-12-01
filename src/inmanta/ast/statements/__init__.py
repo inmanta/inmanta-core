@@ -48,6 +48,7 @@ from inmanta.execute.runtime import (
     VariableABC,
     WrappedValueVariable,
 )
+from inmanta.execute.util import Unknown
 
 if TYPE_CHECKING:
     from inmanta.ast.assign import SetAttribute  # noqa: F401
