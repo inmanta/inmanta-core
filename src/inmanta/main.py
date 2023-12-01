@@ -22,8 +22,9 @@ import os
 import shutil
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from time import sleep
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Optional, Union, cast
 
 import click
 import texttable

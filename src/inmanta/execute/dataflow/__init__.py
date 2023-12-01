@@ -16,10 +16,10 @@
     Contact: code@inmanta.com
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from functools import reduce
 from itertools import chain, filterfalse
-from typing import TYPE_CHECKING, Callable, Generic, Optional, TypeVar
+from typing import TYPE_CHECKING, Generic, Optional, TypeVar
 
 if TYPE_CHECKING:
     from inmanta.ast import Locatable

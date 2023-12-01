@@ -18,8 +18,8 @@
 import json
 import logging
 import re
-from collections.abc import Iterable, Iterator, Sequence
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union, cast
 
 import inmanta.util
 from inmanta import plugins

@@ -22,9 +22,9 @@ import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 from urllib import parse
 
 from inmanta import config as inmanta_config

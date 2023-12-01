@@ -26,12 +26,12 @@ import re
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Coroutine, Iterable, MutableMapping
+from collections.abc import Callable, Coroutine, Iterable, MutableMapping
 from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser

@@ -18,9 +18,10 @@
 
 import re
 import shutil
+from collections.abc import Callable
 from functools import total_ordering
 from itertools import chain
-from typing import Callable, Optional
+from typing import Optional
 
 import pytest
 

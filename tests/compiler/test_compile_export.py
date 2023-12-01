@@ -17,8 +17,9 @@
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 import pytest
 

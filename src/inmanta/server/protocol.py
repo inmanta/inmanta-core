@@ -21,9 +21,9 @@ import socket
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import importlib_metadata
 from tornado import gen, queues, routing, web

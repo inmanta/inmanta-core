@@ -18,9 +18,9 @@
 import json
 import os
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Optional
 
 import pydantic
 import pytest
