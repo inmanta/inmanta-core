@@ -6,7 +6,7 @@
     :license: Inmanta EULA
 """
 import os
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 import inmanta_plugins.lsm.allocation as lsm
 import psycopg2
