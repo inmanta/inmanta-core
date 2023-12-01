@@ -172,7 +172,7 @@ class CreateDict(ReferenceStatement):
     def __init__(self, items: list[tuple[str, ReferenceStatement]]) -> None:
         ReferenceStatement.__init__(self, [x[1] for x in items])
         self.items = items
-        seen = {}  # type: typing.Dict[str,ReferenceStatement]
+        seen: dict[str,ReferenceStatement] = {}
         for x, v in items:
             if x in seen:
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
