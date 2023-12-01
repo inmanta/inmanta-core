@@ -622,7 +622,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             name
             for name, arg in self.kwargs.items()
             if (
-                arg.is_kw_only_argument  # The argument was not provided as positional arg
+                arg.is_kw_only_argument  # The argument was not yet checked as positional arg
                 and name not in kwargs  # No input from user in keyword args
                 and not arg.has_default_value()  # No default value in plugin definition
             )
