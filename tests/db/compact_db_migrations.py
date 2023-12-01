@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 
 
-    Tool to populate the database and dump it for database update testing
+    Tool to compact db migration scripts
 """
 import asyncio
 import importlib
