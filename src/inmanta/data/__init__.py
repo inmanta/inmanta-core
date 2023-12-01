@@ -3714,7 +3714,7 @@ class Compile(BaseDocument):
 
     @classmethod
     # TODO: Use join
-    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict]:
+    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict[str, object]]:
         """
         Get the compile and the associated reports from the database
         """
@@ -3982,7 +3982,7 @@ class LogLine(DataDocument):
         return self._data["msg"]
 
     @property
-    def args(self) -> list:
+    def args(self) -> list[object]:
         return self._data["args"]
 
     @property

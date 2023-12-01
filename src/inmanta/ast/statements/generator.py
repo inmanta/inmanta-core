@@ -816,7 +816,7 @@ class Constructor(ExpressionStatement):
     ) -> None:
         super().__init__()
         self.class_type = class_type
-        self.__attributes = {}  # type: Dict[str,ExpressionStatement]
+        self.__attributes: dict[str,ExpressionStatement] = {}
         self.__attribute_locations: dict[str, LocatableString] = {}
         self.__wrapped_kwarg_attributes: list[WrappedKwargs] = wrapped_kwargs
         self.location = location
@@ -830,8 +830,8 @@ class Constructor(ExpressionStatement):
         self._lhs_attribute: Optional[AttributeAssignmentLHS] = None
         self._required_dynamic_args: list[str] = []  # index attributes required from kwargs or lhs_attribute
 
-        self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
-        self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
+        self._direct_attributes: dict[str,ExpressionStatement] = {}
+        self._indirect_attributes: dict[str,ExpressionStatement] = {}
 
     def pretty_print(self) -> str:
         return "{}({})".format(

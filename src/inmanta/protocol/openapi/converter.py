@@ -370,7 +370,7 @@ class FunctionParameterHandler:
                 result += f"* **{param_name}:**\n"
         return result
 
-    def _build_json_request_body(self, properties: dict) -> RequestBody:
+    def _build_json_request_body(self, properties: dict[str, Schema]) -> RequestBody:
         request_body = RequestBody(
             required=True,
             content={"application/json": MediaType(schema=Schema(type="object", properties=properties))},

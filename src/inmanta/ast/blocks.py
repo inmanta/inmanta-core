@@ -30,9 +30,9 @@ if TYPE_CHECKING:
 
 class BasicBlock:
     def __init__(self, namespace: Namespace, stmts: list[DynamicStatement] = []) -> None:
-        self.__stmts = []  # type: List[DynamicStatement]
-        self.__definition_stmts = []  # type: List[DefinitionStatement]
-        self.__variables = []  # type: List[Tuple[str, Statement]]
+        self.__stmts:  list[DynamicStatement] = []
+        self.__definition_stmts:  list[DefinitionStatement] = []
+        self.__variables:  list[tuple[str, Statement]] = []
         self.namespace = namespace
         self.context: "ExecutionContext" = None
 
