@@ -3714,7 +3714,7 @@ class Compile(BaseDocument):
 
     @classmethod
     # TODO: Use join
-    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict[str, object]]:
+    async def get_report(cls, compile_id: uuid.UUID) -> Optional[dict[str, Any]]:
         """
         Get the compile and the associated reports from the database
         """
