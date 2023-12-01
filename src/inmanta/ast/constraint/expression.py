@@ -38,6 +38,7 @@ from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedGradual, Reference
 from inmanta.execute.dataflow import DataflowGraph
 from inmanta.execute.runtime import ExecutionUnit, HangUnit, QueueScheduler, Resolver, ResultVariable, VariableABC
+from inmanta.execute.util import Unknown
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -209,6 +210,9 @@ class BinaryOperator(Operator):
         """
         The method that needs to be implemented for this operator
         """
+        # TODO: bugfix entry + tests
+        if any(isinstance(arg, Unknown) for arg in args):
+            return Unknown(self)
         # pylint: disable-msg=W0142
         return self._bin_op(*args)
 
@@ -268,6 +272,10 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
 
     def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         result = self.children[0].execute(requires, resolver, queue)
+        if isinstance(result, Unknown):
+            # TODO: tests and bugfix entry
+            target.set_value(result, self.location)
+            return
         self._validate_value(result, 0)
         assert isinstance(result, bool)
         # second operand will get emitted now or never, no need to hold its promises any longer

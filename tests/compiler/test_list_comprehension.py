@@ -591,6 +591,8 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
     compiler.do_compile()
 
 
+# TODO: tests from whiteboard + follow-up tickets + change entries
+# TODO: test for unknown or true (independent of list comprehensions)
 def test_list_comprehension_unknown(snippetcompiler) -> None:
     """
     Verify that list comprehensions propagate Unknowns appropriately.
@@ -607,9 +609,12 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             ## unknown iterable makes result unknown
             l1 = [x for x in unknown]
 
-            ## unknown in iterable becomes unknown in result
+            ## unknown in iterable becomes unknown in result, value expression is not executed
             l2 = [x for x in [1, 2, unknown]]
             l3 = [x for x in [1, unknown, 3] if true]
+            l31 = [1 for x in [1, unknown, 3] if true]
+            ## guard expression can filter out unknowns
+            l32 = [x for x in [1, unknown, 3] if not std::is_unknown(x)]
 
             ## unknown in guard expression becomes unknown in result
             l4 = [x for x in [1, 2, 3] if x > 1 or unknown]
@@ -647,18 +652,37 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
 
             # gradual with CreateList as source -> ListLiteral.listener code path
             c1 = Collector(
-                # TODO: should unknowns even be passed to value expression?
                 values=[
-                    Value(n=tests::is_uknown(x) ? 0 : x)
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
                     for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
                     # TODO: is this more representative?
                     #if tests::is_uknown(x) or x > 1 or unknown
                 ]
             )
+            # same with guard
+            c11 = Collector(
+                values=[
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
+                    for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
+                    if x > 1
+                ]
+            )
+            # same with guard that filters unknown
+            c12 = Collector(
+                values=[
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
+                    for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
+                    if not std::is_unknown(x)
+                ]
+            )
             # gradual with Reference as source -> ExpressionStatement.execute code path
             c2 = Collector(
                 values=[
-                    Value(n=tests::is_uknown(x) ? 0 : x)
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
                     for x in l2
                 ]
             )
@@ -670,14 +694,19 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
                     for x in c3_helper.values
                 ]
             )
-            l10 = std::select(std::key_sort(c1.values, "n"), "n")
-            l11 = std::select(std::key_sort(c2.values, "n"), "n")
-            l12 = std::select(std::key_sort(c3.values, "n"), "n")
+            l10 = std::select(std::key_sort(tests::convert_unknowns(c1.values, Value(n=-1)), "n"), "n")
+            l101 = std::select(std::key_sort(tests::convert_unknowns(c11.values, Value(n=-1)), "n"), "n")
+            l102 = std::select(std::key_sort(tests::convert_unknowns(c12.values, Value(n=-1)), "n"), "n")
+            l11 = std::select(std::key_sort(tests::convert_unknowns(c2.values, Value(n=-1)), "n"), "n")
+            l12 = std::select(std::key_sort(tests::convert_unknowns(c3.values, Value(n=-1)), "n"), "n")
 
+            # TODO: replace tests::is_uknown with std::is_unknown()
             assert = true
             assert = tests::is_uknown(l1)
             assert = not tests::is_uknown(l2)
             assert = not tests::is_uknown(l3)
+            assert = not tests::is_uknown(l31)
+            assert = not tests::is_uknown(l32)
             assert = not tests::is_uknown(l4)
             assert = not tests::is_uknown(l5)
             assert = not tests::is_uknown(l6)
@@ -692,31 +721,38 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             l2_unknowns = tests::convert_unknowns(l2, "unknown")
 
             l3_unknowns = [1, "unknown", 3]
-            l3_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l3]
+            l3_unknowns = tests::convert_unknowns(l3, "unknown")
+
+            l31_unknowns = [1, "unknown", 1]
+            l31_unknowns = tests::convert_unknowns(l31, "unknown")
+
+            l32 = [1, 3]
 
             l4_unknowns = ["unknown", 2, 3]
-            l4_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l4]
+            l4_unknowns = tests::convert_unknowns(l4, "unknown")
 
             l5_unknowns = [1, "unknown", "unknown"]
-            l5_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l5]
+            l5_unknowns = tests::convert_unknowns(l5, "unknown")
 
             l6_unknowns = ["unknown", 2, "unknown"]
-            l6_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l6]
+            l6_unknowns = tests::convert_unknowns(l6, "unknown")
 
             l7_unknowns = ["unknown", "unknown", "unknown", 1, 2, 3, "unknown", "unknown", "unknown"]
-            l7_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l7]
+            l7_unknowns = tests::convert_unknowns(l7, "unknown")
 
             l8_unknowns = ["unknown", 1, "unknown", "unknown", 2, "unknown", "unknown", 3, "unknown"]
-            l8_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l8]
+            l8_unknowns = tests::convert_unknowns(l8, "unknown")
 
             l9_unknowns = ["unknown", "unknown", "unknown", 1, 2, 3, "unknown", "unknown", "unknown"]
-            l9_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l9]
+            l9_unknowns = tests::convert_unknowns(l9, "unknown")
 
-            l10 = [0, 0, 1, 2, 3]
+            l10 = [-1, -1, 1, 2, 3]
+            l101 = [-1, -1, 2, 3]
+            l102 = [1, 2, 3]
 
-            l11 = [0, 1, 2]
+            l11 = [-1, 1, 2]
 
-            l12 = [0, 1]
+            l12 = [-1, 1]
             """.strip(
                 "\n"
             )
