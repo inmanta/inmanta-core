@@ -16,42 +16,23 @@
     Contact: code@inmanta.com
 """
 import datetime
+import typing
 import uuid
+from collections import abc
+from collections.abc import Sequence
 from enum import Enum
 from itertools import chain
-from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
+from typing import ClassVar, NewType, Optional, Self, Union
 
 import pydantic
 import pydantic.schema
-from pydantic import Extra, root_validator, validator
-from pydantic.fields import ModelField
-from pydantic.types import StrictFloat, StrictInt, StrictStr
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 import inmanta
 import inmanta.ast.export as ast_export
 from inmanta import const, data, protocol, resources
 from inmanta.stable_api import stable_api
-from inmanta.types import ArgumentTypes, JsonType, SimpleTypes, StrictNonIntBool
-
-# This reference to the actual pydantic field_type_schema method is only loaded once
-old_field_type_schema = pydantic.schema.field_type_schema
-
-
-def patch_pydantic_field_type_schema() -> None:
-    """
-    This ugly patch fixes the serialization of models containing Optional in them.
-    https://github.com/samuelcolvin/pydantic/issues/1270
-
-    The fix for this issue will be included in pydantic V2.
-    """
-
-    def patch_nullable(field: ModelField, **kwargs):
-        f_schema, definitions, nested_models = old_field_type_schema(field, **kwargs)
-        if field.allow_none:
-            f_schema["nullable"] = True
-        return f_schema, definitions, nested_models
-
-    pydantic.schema.field_type_schema = patch_nullable
+from inmanta.types import ArgumentTypes, JsonType, SimpleTypes
 
 
 def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datetime:
@@ -61,34 +42,33 @@ def api_boundary_datetime_normalizer(value: datetime.datetime) -> datetime.datet
         return value
 
 
-def validator_timezone_aware_timestamps(value: object) -> object:
+@stable_api
+class DateTimeNormalizerModel(pydantic.BaseModel):
     """
-    A Pydantic validator to ensure that all datetime times are timezone aware.
+    A model that normalizes all datetime values to be timezone aware. Assumes that all naive timestamps represent UTC times.
     """
-    if isinstance(value, datetime.datetime):
-        return api_boundary_datetime_normalizer(value)
-    else:
-        return value
+
+    @field_validator("*", mode="after")
+    @classmethod
+    def validator_timezone_aware_timestamps(cls: type, value: object) -> object:
+        """
+        Ensure that all datetime times are timezone aware.
+        """
+        if isinstance(value, datetime.datetime):
+            return api_boundary_datetime_normalizer(value)
+        else:
+            return value
 
 
 @stable_api
-class BaseModel(pydantic.BaseModel):
+class BaseModel(DateTimeNormalizerModel):
     """
     Base class for all data objects in Inmanta
     """
 
-    _normalize_timestamps: ClassVar[classmethod] = pydantic.validator("*", allow_reuse=True)(
-        validator_timezone_aware_timestamps
-    )
-
-    class Config:
-        """
-        Pydantic config.
-        """
-
-        # Populate models with the value property of enums, rather than the raw enum.
-        # This is useful to serialise model.dict() later
-        use_enum_values = True
+    # Populate models with the value property of enums, rather than the raw enum.
+    # This is useful to serialise model.dict() later
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=True)
 
 
 class ExtensionStatus(BaseModel):
@@ -103,11 +83,11 @@ class ExtensionStatus(BaseModel):
 
 class SliceStatus(BaseModel):
     """
-    Status response for slices loaded in the the server
+    Status response for slices loaded in the server
     """
 
     name: str
-    status: Dict[str, ArgumentTypes]
+    status: dict[str, ArgumentTypes]
 
 
 class FeatureStatus(BaseModel):
@@ -117,7 +97,7 @@ class FeatureStatus(BaseModel):
 
     slice: str
     name: str
-    value: Optional[Any]
+    value: Optional[object] = None
 
 
 class StatusResponse(BaseModel):
@@ -128,10 +108,10 @@ class StatusResponse(BaseModel):
     product: str
     edition: str
     version: str
-    license: Union[str, Dict[str, SimpleTypes]]
-    extensions: List[ExtensionStatus]
-    slices: List[SliceStatus]
-    features: List[FeatureStatus]
+    license: Union[str, dict[str, SimpleTypes]]
+    extensions: list[ExtensionStatus]
+    slices: list[SliceStatus]
+    features: list[FeatureStatus]
 
 
 @stable_api
@@ -140,7 +120,7 @@ class CompileData(BaseModel):
     Top level structure of compiler data to be exported.
     """
 
-    errors: List[ast_export.Error]
+    errors: list[ast_export.Error]
     """
         All errors occurred while trying to compile.
     """
@@ -148,49 +128,49 @@ class CompileData(BaseModel):
 
 class CompileRunBase(BaseModel):
     id: uuid.UUID
-    remote_id: Optional[uuid.UUID]
+    remote_id: Optional[uuid.UUID] = None
     environment: uuid.UUID
-    requested: Optional[datetime.datetime]
-    started: Optional[datetime.datetime]
+    requested: Optional[datetime.datetime] = None
+    started: Optional[datetime.datetime] = None
 
     do_export: bool
     force_update: bool
     metadata: JsonType
-    environment_variables: Dict[str, str]
+    environment_variables: dict[str, str]
 
     partial: bool
     removed_resource_sets: list[str]
 
-    exporter_plugin: Optional[str]
+    exporter_plugin: Optional[str] = None
 
-    notify_failed_compile: Optional[bool]
-    failed_compile_message: Optional[str]
+    notify_failed_compile: Optional[bool] = None
+    failed_compile_message: Optional[str] = None
 
 
 class CompileRun(CompileRunBase):
-    compile_data: Optional[CompileData]
+    compile_data: Optional[CompileData] = None
 
 
 class CompileReport(CompileRunBase):
-    completed: Optional[datetime.datetime]
-    success: Optional[bool]
-    version: Optional[int]
+    completed: Optional[datetime.datetime] = None
+    success: Optional[bool] = None
+    version: Optional[int] = None
 
 
 class CompileRunReport(BaseModel):
     id: uuid.UUID
     started: datetime.datetime
-    completed: Optional[datetime.datetime]
+    completed: Optional[datetime.datetime] = None
     command: str
     name: str
     errstream: str
     outstream: str
-    returncode: Optional[int]
+    returncode: Optional[int] = None
 
 
 class CompileDetails(CompileReport):
-    compile_data: Optional[CompileData]
-    reports: Optional[List[CompileRunReport]]
+    compile_data: Optional[CompileData] = None
+    reports: Optional[list[CompileRunReport]] = None
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
@@ -214,12 +194,12 @@ class AttributeStateChange(BaseModel):
     Changes in the attribute
     """
 
-    current: Optional[Any] = None
-    desired: Optional[Any] = None
+    current: Optional[object] = None
+    desired: Optional[object] = None
 
-    @validator("current", "desired")
+    @field_validator("current", "desired")
     @classmethod
-    def check_serializable(cls, v: Optional[Any]) -> Optional[Any]:
+    def check_serializable(cls, v: Optional[object]) -> Optional[object]:
         """
         Verify whether the value is serializable (https://github.com/inmanta/inmanta-core/issues/3470)
         """
@@ -235,7 +215,7 @@ class AttributeStateChange(BaseModel):
         return v
 
 
-EnvSettingType = Union[StrictNonIntBool, StrictInt, StrictFloat, StrictStr, Dict[str, Union[str, int, StrictNonIntBool]]]
+EnvSettingType = Union[bool, int, float, str, dict[str, Union[str, int, bool]]]
 
 
 class Environment(BaseModel):
@@ -250,10 +230,10 @@ class Environment(BaseModel):
     project_id: uuid.UUID
     repo_url: str
     repo_branch: str
-    settings: Dict[str, EnvSettingType]
+    settings: dict[str, EnvSettingType]
     halted: bool
-    description: Optional[str]
-    icon: Optional[str]
+    description: Optional[str] = None
+    icon: Optional[str] = None
 
 
 class Project(BaseModel):
@@ -263,7 +243,7 @@ class Project(BaseModel):
 
     id: uuid.UUID
     name: str
-    environments: List[Environment]
+    environments: list[Environment]
 
 
 class EnvironmentSetting(BaseModel):
@@ -288,24 +268,21 @@ class EnvironmentSetting(BaseModel):
     recompile: bool
     update_model: bool
     agent_restart: bool
-    allowed_values: Optional[List[EnvSettingType]]
+    allowed_values: Optional[list[EnvSettingType]] = None
 
 
 class EnvironmentSettingsReponse(BaseModel):
-    settings: Dict[str, EnvSettingType]
-    definition: Dict[str, EnvironmentSetting]
+    settings: dict[str, EnvSettingType]
+    definition: dict[str, EnvironmentSetting]
 
 
 class ModelMetadata(BaseModel):
     """Model metadata"""
 
-    inmanta_compile_state: const.Compilestate = const.Compilestate.success
+    inmanta_compile_state: const.Compilestate = Field(default=const.Compilestate.success, alias="inmanta:compile:state")
     message: str
     type: str
-    extra_data: Optional[JsonType]
-
-    class Config:
-        fields = {"inmanta_compile_state": {"alias": "inmanta:compile:state"}}
+    extra_data: Optional[JsonType] = None
 
 
 class ResourceMinimal(BaseModel):
@@ -315,15 +292,14 @@ class ResourceMinimal(BaseModel):
 
     id: ResourceVersionIdStr
 
+    @field_validator("id")
     @classmethod
-    @validator("id")
     def id_is_resource_version_id(cls, v):
         if resources.Id.is_resource_version_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceVersionIdStr")
 
-    class Config:
-        extra = Extra.allow
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
 
 
 class Resource(BaseModel):
@@ -334,24 +310,24 @@ class Resource(BaseModel):
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
-    last_deploy: Optional[datetime.datetime]
+    last_deploy: Optional[datetime.datetime] = None
     attributes: JsonType
     status: const.ResourceState
-    resource_set: Optional[str]
+    resource_set: Optional[str] = None
 
 
 class ResourceAction(BaseModel):
     environment: uuid.UUID
     version: int
-    resource_version_ids: List[ResourceVersionIdStr]
+    resource_version_ids: list[ResourceVersionIdStr]
     action_id: uuid.UUID
     action: const.ResourceAction
     started: datetime.datetime
-    finished: Optional[datetime.datetime]
-    messages: Optional[List[JsonType]]
-    status: Optional[const.ResourceState]
-    changes: Optional[JsonType]
-    change: Optional[const.Change]
+    finished: Optional[datetime.datetime] = None
+    messages: Optional[list[JsonType]] = None
+    status: Optional[const.ResourceState] = None
+    changes: Optional[JsonType] = None
+    change: Optional[const.Change] = None
     send_event: Optional[bool] = None  # Deprecated field
 
 
@@ -362,16 +338,16 @@ class ResourceDeploySummary(BaseModel):
     """
 
     total: int
-    by_state: Dict[str, int]
+    by_state: dict[str, int]
 
     @classmethod
-    def create_from_db_result(cls, summary_by_state: Dict[str, int]) -> "ResourceDeploySummary":
+    def create_from_db_result(cls, summary_by_state: dict[str, int]) -> "ResourceDeploySummary":
         full_summary_by_state = cls._ensure_summary_has_all_states(summary_by_state)
         total = cls._count_all_resources(full_summary_by_state)
         return ResourceDeploySummary(by_state=full_summary_by_state, total=total)
 
     @classmethod
-    def _ensure_summary_has_all_states(cls, summary_by_state: Dict[str, int]) -> Dict[str, int]:
+    def _ensure_summary_has_all_states(cls, summary_by_state: dict[str, int]) -> dict[str, int]:
         full_summary = summary_by_state.copy()
         for state in const.ResourceState:
             if state not in summary_by_state.keys() and state != const.ResourceState.dry:
@@ -379,27 +355,39 @@ class ResourceDeploySummary(BaseModel):
         return full_summary
 
     @classmethod
-    def _count_all_resources(cls, summary_by_state: Dict[str, int]) -> int:
+    def _count_all_resources(cls, summary_by_state: dict[str, int]) -> int:
         return sum(resource_count for resource_count in summary_by_state.values())
 
 
 class LogLine(BaseModel):
-    class Config:
-        """
-        Pydantic config.
-        """
-
-        # Override the setting from the BaseModel class as such that the level field is
-        # serialises using the name of the enum instead of its value. This is required
-        # to make sure that data sent to the API endpoints resource_action_update
-        # and resource_deploy_done are serialized consistently using the name of the enum.
-        use_enum_values = False
+    # Override the setting from the BaseModel class as such that the level field is
+    # serialized using the name of the enum instead of its value. This is required
+    # to make sure that data sent to the API endpoints resource_action_update
+    # and resource_deploy_done are serialized consistently using the name of the enum.
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
     level: const.LogLevel
     msg: str
-    args: List[Optional[ArgumentTypes]] = []
+    args: list[Optional[ArgumentTypes]] = []
     kwargs: JsonType = {}
     timestamp: datetime.datetime
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def validate_log_level(cls, value: object) -> const.LogLevel:
+        """
+        Validate the log level using the LogLevel enum. Pydantic's default validation does not suffice because of the
+        custom value aliasing behavior built on top of LogLevel to allow passing ints to the constructor.
+        """
+        try:
+            return const.LogLevel(value)
+        except ValueError:
+            # error message as close to pydantic's as possible but add in the int aliases
+            name_value_pairs: abc.Iterator[tuple[str, int]] = ((level.value, level.to_int) for level in const.LogLevel)
+            valid_input_descriptions: list[str] = [f"'{name}' | {num_value}" for name, num_value in name_value_pairs]
+            raise ValueError(
+                "Input should be %s" % " or ".join((", ".join(valid_input_descriptions[:-1]), valid_input_descriptions[-1]))
+            )
 
 
 class ResourceIdDetails(BaseModel):
@@ -426,10 +414,10 @@ class VersionedResource(BaseModel):
     resource_id: ResourceIdStr
     resource_version_id: ResourceVersionIdStr
     id_details: ResourceIdDetails
-    requires: List[ResourceVersionIdStr]
+    requires: list[ResourceVersionIdStr]
 
     @property
-    def all_fields(self) -> Dict[str, Any]:
+    def all_fields(self) -> dict[str, object]:
         return {**self.dict(), **self.id_details.dict()}
 
 
@@ -481,15 +469,14 @@ class VersionedResourceDetails(ResourceDetails):
     resource_version_id: ResourceVersionIdStr
     version: int
 
-    @root_validator
-    @classmethod
-    def ensure_version_field_set_in_attributes(cls, v: JsonType) -> JsonType:
+    @model_validator(mode="after")
+    def ensure_version_field_set_in_attributes(self) -> Self:
         # Due to a bug, the version field has always been present in the attributes dictionary.
         # This bug has been fixed in the database. For backwards compatibility reason we here make sure that the
         # version field is present in the attributes dictionary served out via the API.
-        if "version" not in v["attributes"]:
-            v["attributes"]["version"] = v["version"]
-        return v
+        if "version" not in self.attributes:
+            self.attributes["version"] = self.version
+        return self
 
 
 class ReleasedResourceDetails(ResourceDetails):
@@ -501,11 +488,11 @@ class ReleasedResourceDetails(ResourceDetails):
     :param requires_status: The id and status of the resources this resource requires
     """
 
-    last_deploy: Optional[datetime.datetime]
+    last_deploy: Optional[datetime.datetime] = None
     first_generated_time: datetime.datetime
     first_generated_version: int
     status: ReleasedResourceState
-    requires_status: Dict[ResourceIdStr, ReleasedResourceState]
+    requires_status: dict[ResourceIdStr, ReleasedResourceState]
 
 
 class ResourceHistory(BaseModel):
@@ -513,7 +500,7 @@ class ResourceHistory(BaseModel):
     date: datetime.datetime
     attributes: JsonType
     attribute_hash: str
-    requires: List[ResourceIdStr]
+    requires: list[ResourceIdStr]
 
 
 class ResourceLog(LogLine):
@@ -553,7 +540,7 @@ class ResourceDiff(BaseModel):
     """
 
     resource_id: ResourceIdStr
-    attributes: Dict[str, AttributeDiff]
+    attributes: dict[str, AttributeDiff]
     status: ResourceDiffStatus
 
 
@@ -563,8 +550,8 @@ class Parameter(BaseModel):
     value: str
     environment: uuid.UUID
     source: str
-    updated: Optional[datetime.datetime]
-    metadata: Optional[JsonType]
+    updated: Optional[datetime.datetime] = None
+    metadata: Optional[JsonType] = None
 
 
 class Fact(Parameter):
@@ -585,11 +572,11 @@ class Agent(BaseModel):
 
     environment: uuid.UUID
     name: str
-    last_failover: Optional[datetime.datetime]
+    last_failover: Optional[datetime.datetime] = None
     paused: bool
-    process_id: Optional[uuid.UUID]
-    process_name: Optional[str]
-    unpause_on_resume: Optional[bool]
+    process_id: Optional[uuid.UUID] = None
+    process_name: Optional[str] = None
+    unpause_on_resume: Optional[bool] = None
     status: const.AgentStatus
 
 
@@ -597,10 +584,10 @@ class AgentProcess(BaseModel):
     sid: uuid.UUID
     hostname: str
     environment: uuid.UUID
-    first_seen: Optional[datetime.datetime]
-    last_seen: Optional[datetime.datetime]
-    expired: Optional[datetime.datetime]
-    state: Optional[Dict[str, Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]]
+    first_seen: Optional[datetime.datetime] = None
+    last_seen: Optional[datetime.datetime] = None
+    expired: Optional[datetime.datetime] = None
+    state: Optional[dict[str, Union[dict[str, list[str]], dict[str, str], dict[str, float], str]]] = None
 
 
 class DesiredStateLabel(BaseModel):
@@ -612,7 +599,7 @@ class DesiredStateVersion(BaseModel):
     version: int
     date: datetime.datetime
     total: int
-    labels: List[DesiredStateLabel]
+    labels: list[DesiredStateLabel]
     status: const.DesiredStateVersionStatus
 
 
@@ -629,14 +616,14 @@ class DryRun(BaseModel):
     id: uuid.UUID
     environment: uuid.UUID
     model: int
-    date: Optional[datetime.datetime]
+    date: Optional[datetime.datetime] = None
     total: int = 0
     todo: int = 0
 
 
 class DryRunReport(BaseModel):
     summary: DryRun
-    diff: List[ResourceDiff]
+    diff: list[ResourceDiff]
 
 
 class Notification(BaseModel):
@@ -671,7 +658,7 @@ class Source(BaseModel):
     hash: str
     is_byte_code: bool
     module_name: str
-    requirements: List[str]
+    requirements: list[str]
 
 
 class EnvironmentMetricsResult(BaseModel):
@@ -690,8 +677,8 @@ class EnvironmentMetricsResult(BaseModel):
 
     start: datetime.datetime
     end: datetime.datetime
-    timestamps: List[datetime.datetime]
-    metrics: Dict[str, List[Optional[Union[float, Dict[str, float]]]]]
+    timestamps: list[datetime.datetime]
+    metrics: dict[str, list[Optional[Union[float, dict[str, float]]]]]
 
 
 class AuthMethod(str, Enum):
@@ -725,11 +712,11 @@ class DiscoveredResource(BaseModel):
     """
 
     discovered_resource_id: ResourceIdStr
-    values: JsonType
+    values: dict[str, object]
 
-    @validator("discovered_resource_id")
+    @field_validator("discovered_resource_id")
     @classmethod
-    def discovered_resource_id_is_resource_id(cls, v: str) -> Optional[Any]:
+    def discovered_resource_id_is_resource_id(cls, v: str) -> str:
         if resources.Id.is_resource_id(v):
             return v
         raise ValueError(f"id {v} is not of type ResourceIdStr")
@@ -741,3 +728,60 @@ class DiscoveredResource(BaseModel):
             discovered_at=datetime.datetime.now(),
             environment=env,
         )
+
+
+def hyphenize(field: str) -> str:
+    """Alias generator to convert python names (with `_`) to config file name (with `-`)"""
+    return field.replace("_", "-")
+
+
+@stable_api
+# This is part of both the config file schema and the api schema
+class PipConfig(BaseModel):
+    """
+    Base class to represent pip config internally
+
+    :param index_url: one pip index url for this project.
+    :param extra_index_url:  additional pip index urls for this project. This is generally only
+        recommended if all configured indexes are under full control of the end user to protect against dependency
+        confusion attacks. See the `pip install documentation <https://pip.pypa.io/en/stable/cli/pip_install/>`_ and
+        `PEP 708 (draft) <https://peps.python.org/pep-0708/>`_ for more information.
+    :param pre:  allow pre-releases when installing Python packages, i.e. pip --pre.
+        Defaults to None.
+        When None and pip.use-system-config=true we follow the system config.
+        When None and pip.use-system-config=false, we don't allow pre-releases.
+    :param use_system_config: defaults to false.
+        When true, sets the pip index url, extra index urls and pre according to the respective settings outlined above
+        but otherwise respect any pip environment variables and/or config in the pip config file,
+        including any extra-index-urls.
+
+        If no indexes are configured in pip.index-url/pip.extra-index-url
+        with this option enabled means to fall back to pip's default behavior:
+        use the pip index url from the environment, the config file, or PyPi, in that order.
+
+        For development, it is recommended to set this option to false, both for portability
+        (and related compatibility with tools like pytest-inmanta-lsm) and for security
+        (dependency confusion attacks could affect users that aren't aware that inmanta installs Python packages).
+    """
+
+    # Config needs to be in the top-level object, because is also affect serialization/deserialization
+    model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(
+        # use alias generator have `-` in names
+        alias_generator=hyphenize,
+        # allow use of aliases
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+    index_url: Optional[str] = None
+    # Singular to be consistent with pip itself
+    extra_index_url: Sequence[str] = []
+    pre: Optional[bool] = None
+    use_system_config: bool = False
+
+    def has_source(self) -> bool:
+        """Can this config get packages from anywhere?"""
+        return bool(self.index_url) or self.use_system_config
+
+
+LEGACY_PIP_DEFAULT = PipConfig(use_system_config=True)

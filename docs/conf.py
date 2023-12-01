@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # Inmanta documentation build configuration file, created by
 # sphinx-quickstart on Wed Aug 21 10:14:55 2013.

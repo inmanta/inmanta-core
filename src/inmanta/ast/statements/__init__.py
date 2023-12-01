@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 from collections import abc
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -65,8 +66,8 @@ class Statement(Namespaced):
 
     def __init__(self) -> None:
         Namespaced.__init__(self)
-        self.namespace = None  # type: Namespace
-        self.anchors = []  # type: List[Anchor]
+        self.namespace: Namespace = None
+        self.anchors: list[Anchor] = []
         self.lexpos: Optional[int] = None
 
     def get_namespace(self) -> "Namespace":
@@ -78,7 +79,8 @@ class Statement(Namespaced):
     def get_location(self) -> Location:
         return self.location
 
-    def get_anchors(self) -> List[Anchor]:
+    def get_anchors(self) -> list[Anchor]:
+        """Should only be called after normalization (DynamicStatement) or evaluation (DefinitionStatement)."""
         return self.anchors
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
@@ -152,7 +154,7 @@ class RequiresEmitStatement(DynamicStatement):
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         """
         Returns a dict of the result variables required for execution. Names are an opaque identifier. May emit statements to
         break execution is smaller segments.
@@ -176,7 +178,7 @@ class RequiresEmitStatement(DynamicStatement):
         """
         return [promise.schedule(self, resolver, queue) for promise in self.get_own_eager_promises()]
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         execute the statement, give the values provided in the requires dict.
         These values correspond to the values requested via requires_emit
@@ -207,7 +209,7 @@ class AttributeAssignmentLHS:
 class ExpressionStatement(RequiresEmitStatement):
     __slots__ = ()
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         """
         List of all variable names used by this statement. Artifact from the past, hardly used anymore.
         """
@@ -288,7 +290,7 @@ class Resumer(Locatable):
 
     __slots__ = ()
 
-    def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         pass
 
 
@@ -299,7 +301,7 @@ class RawResumer(Locatable):
 
     __slots__ = ()
 
-    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         pass
 
 
@@ -349,7 +351,7 @@ class VariableReferenceHook(RawResumer):
                 self,
             )
 
-    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue: QueueScheduler) -> None:
         """
         Fetches the variable when it's available and calls variable resumer.
         """
@@ -373,9 +375,7 @@ class VariableReferenceHook(RawResumer):
                 instance: object = self.instance.execute(instance_requires, resolver, queue)
 
                 if isinstance(instance, list):
-                    raise RuntimeException(
-                        self, "can not get attribute %s, %s is not an entity but a list" % (self.name, instance)
-                    )
+                    raise RuntimeException(self, f"can not get attribute {self.name}, {instance} is not an entity but a list")
                 if not isinstance(instance, Instance):
                     raise RuntimeException(
                         self,
@@ -396,19 +396,16 @@ class VariableReferenceHook(RawResumer):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
     def __str__(self) -> str:
-        return "%s.%s" % (self.instance, self.name)
+        return f"{self.instance}.{self.name}"
 
     def __repr__(self) -> str:
-        return "%s(%r, %s, %r, propagate_unset=%r)" % (
-            self.__class__.__name__,
-            self.instance,
-            self.name,
-            self.variable_resumer,
-            self.propagate_unset,
+        return (
+            f"{self.__class__.__name__}({self.instance!r}, "
+            f"{self.name}, {self.variable_resumer!r}, propagate_unset={self.propagate_unset!r})"
         )
 
 
@@ -524,20 +521,20 @@ class ReferenceStatement(ExpressionStatement):
     def __init__(self, children: Sequence[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children: Sequence[ExpressionStatement] = children
-        self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        for c in self.children:
-            c.normalize()
+        for child in self.children:
+            child.normalize()
+            self.anchors.extend(child.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), *(subexpr.get_all_eager_promises() for subexpr in self.children))
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return [req for v in self.children for req in v.requires()]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
         requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
         return requires
 
@@ -553,12 +550,13 @@ class AssignStatement(DynamicStatement):
         DynamicStatement.__init__(self)
         self.lhs: Optional["Reference"] = lhs
         self.rhs: ExpressionStatement = rhs
-        if lhs is not None:
-            self.anchors.extend(lhs.get_anchors())
-        self.anchors.extend(rhs.get_anchors())
 
     def normalize(self) -> None:
         self.rhs.normalize()
+        if self.lhs is not None:
+            self.lhs.normalize()
+            self.anchors.extend(self.lhs.get_anchors())
+        self.anchors.extend(self.rhs.get_anchors())
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(
@@ -567,7 +565,7 @@ class AssignStatement(DynamicStatement):
             self.rhs.get_all_eager_promises(),
         )
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         out = self.lhs.requires() if self.lhs is not None else []  # type : List[str]
         out.extend(self.rhs.requires())  # type : List[str]
         return out
@@ -595,7 +593,7 @@ class Literal(ExpressionStatement):
             return repr(self.value).lower()
         return repr(self.value)
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return []
 
     def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -628,7 +626,7 @@ class TypeDefinitionStatement(DefinitionStatement, Named, WithComment):
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
 
-    def register_types(self) -> Tuple[str, "NamedType"]:
+    def register_types(self) -> tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)
         return (self.fullName, self.type)
 

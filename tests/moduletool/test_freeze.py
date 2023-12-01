@@ -121,7 +121,7 @@ def test_project_freeze_disk(git_modules_dir: str, modules_repo: str, capsys, tm
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
     assert len(err) == 0, err
 
-    with open(os.path.join(coroot, "project.yml"), "r", encoding="utf-8") as fh:
+    with open(os.path.join(coroot, "project.yml"), encoding="utf-8") as fh:
         assert (
             fh.read()
             == """name: projectA
@@ -185,7 +185,7 @@ freeze_operator: ==
         assert len(err) == 0, err
         assert len(out) == 0, out
 
-        with open("project.yml", "r", encoding="utf-8") as fh:
+        with open("project.yml", encoding="utf-8") as fh:
             assert fh.read() == (
                 """name: projectA
 license: Apache 2.0
@@ -254,7 +254,7 @@ def test_module_freeze_self_disk(git_modules_dir: str, modules_repo: str, capsys
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
         assert os.path.getsize(modpath) != 0
 
-        with open(modpath, "r", encoding="utf-8") as fh:
+        with open(modpath, encoding="utf-8") as fh:
             outf = fh.read()
             assert outf == (
                 """name: modC

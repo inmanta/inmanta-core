@@ -18,7 +18,8 @@
 import datetime
 import logging
 import uuid
-from typing import Dict, List, Optional, Sequence, cast
+from collections.abc import Sequence
+from typing import Optional, cast
 
 from asyncpg import Connection
 
@@ -42,12 +43,12 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
     _compiler_service: CompilerService
 
     def __init__(self) -> None:
-        super(NotificationService, self).__init__(SLICE_NOTIFICATION)
+        super().__init__(SLICE_NOTIFICATION)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_COMPILER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -142,7 +143,7 @@ class NotificationService(protocol.ServerSlice, CompileStateListener):
         last_id: Optional[uuid.UUID] = None,
         start: Optional[datetime.datetime] = None,
         end: Optional[datetime.datetime] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "created.desc",
     ) -> ReturnValue[Sequence[Notification]]:
         try:

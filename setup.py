@@ -24,8 +24,7 @@ requires = [
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
     "pip>=21.3",
     "ply~=3.0",
-    # lower bound because of pydantic/pydantic#5821
-    "pydantic>=1.10.8,<2",
+    "pydantic~=2.5",
     "pyformance~=0.4",
     "PyJWT~=2.0",
     "pynacl~=1.5",
@@ -33,6 +32,7 @@ requires = [
     "pyyaml~=6.0",
     "texttable~=1.0",
     "tornado~=6.0",
+    "typing-extensions~=4.8.0",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
@@ -45,11 +45,13 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
-version = "10.0.1"
+# This version is managed by bumpversion. Should you ever update it manually, make sure to consistently update it everywhere
+# (See the bumpversion.cfg file for relevant locations).
+version = "11.0.0"
 
 setup(
     version=version,
-    python_requires=">=3.9",  # also update classifiers
+    python_requires=">=3.11",  # also update classifiers
     # Meta data
     name="inmanta-core",
     description="Inmanta deployment tool",
@@ -66,7 +68,7 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.11",
     ],
     keywords="orchestrator orchestration configurationmanagement",
     project_urls={

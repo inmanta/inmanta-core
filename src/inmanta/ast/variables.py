@@ -18,7 +18,7 @@
 
 import logging
 from collections import abc
-from typing import Dict, Generic, List, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
@@ -79,13 +79,13 @@ class Reference(ExpressionStatement):
                 e.set_statement(self)
                 raise
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return [self.full_name]
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
     ) -> dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+        requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
         requires[self.name] = resolver.lookup(self.full_name)
         return requires
@@ -223,7 +223,7 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
             # wait for variable completeness in case no value comes in at all
             RawUnit(queue_scheduler, resolver, {self: variable}, self, override_exception_location=False)
 
-    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         self.target.set_value(self._target_value(requires[self]), self.owner.location)
 
     def _target_value(self, variable: VariableABC[object]) -> bool:
@@ -243,7 +243,7 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
 
@@ -264,7 +264,7 @@ class AttributeReference(Reference):
             attribute.end,
         )
         reference: LocatableString = LocatableString(
-            "%s.%s" % (instance.full_name, attribute), range, instance.locatable_name.lexpos, instance.namespace
+            f"{instance.full_name}.{attribute}", range, instance.locatable_name.lexpos, instance.namespace
         )
         Reference.__init__(self, reference)
         self.attribute = attribute
@@ -272,12 +272,12 @@ class AttributeReference(Reference):
         # a reference to the instance
         self.instance = instance
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return self.instance.requires()
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
-    ) -> Dict[object, VariableABC]:
+    ) -> dict[object, VariableABC]:
         return self.requires_emit_gradual(resolver, queue, None, propagate_unset=propagate_unset)
 
     def requires_emit_gradual(
@@ -334,4 +334,4 @@ class AttributeReference(Reference):
         return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
 
     def __repr__(self) -> str:
-        return "%s.%s" % (repr(self.instance), str(self.attribute))
+        return f"{repr(self.instance)}.{self.attribute}"

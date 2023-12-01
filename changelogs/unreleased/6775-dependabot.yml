@@ -1,0 +1,5 @@
+change-type: patch
+description: Bump types-setuptools from 68.2.0.1 to 68.2.0.2
+destination-branches:
+- master
+sections: {}

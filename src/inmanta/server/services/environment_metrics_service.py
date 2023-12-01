@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import asyncpg
 
@@ -179,14 +179,14 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     """Slice for the management of metrics"""
 
     def __init__(self) -> None:
-        super(EnvironmentMetricsService, self).__init__(SLICE_ENVIRONMENT_METRICS)
-        self.metrics_collectors: Dict[str, MetricsCollector] = {}
+        super().__init__(SLICE_ENVIRONMENT_METRICS)
+        self.metrics_collectors: dict[str, MetricsCollector] = {}
         self.previous_timestamp = datetime.now().astimezone()
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def start(self) -> None:
@@ -349,7 +349,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
     async def get_environment_metrics(
         self,
         env: Environment,
-        metrics: List[str],
+        metrics: list[str],
         start_interval: datetime,
         end_interval: datetime,
         nb_datapoints: int,
@@ -435,7 +435,7 @@ class EnvironmentMetricsService(protocol.ServerSlice):
         """.strip()
 
         # Initialize everything with default values
-        result_metrics: Dict[str, List[Union[float, Dict[str, float], None]]] = {
+        result_metrics: dict[str, list[Union[float, dict[str, float], None]]] = {
             m: [0 if m == "orchestrator.compile_rate" else None for _ in range(nb_datapoints)] for m in metrics
         }
         async with EnvironmentMetricsGauge.get_connection() as con:
@@ -493,7 +493,7 @@ class ResourceCountMetricsCollector(MetricsCollector):
             ON r.environment = e.id AND r.status = s.name
             ORDER BY r.environment, r.status
             """
-        metric_values: List[MetricValue] = []
+        metric_values: list[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
             assert isinstance(record["count"], int)
@@ -539,7 +539,7 @@ LEFT JOIN agent_counts AS a
     ON a.environment = e.id AND a.status = s.status
 ORDER BY environment, s.status
         """
-        metric_values: List[MetricValue] = []
+        metric_values: list[MetricValue] = []
         result: Sequence[asyncpg.Record] = await connection.fetch(query)
         for record in result:
             assert isinstance(record["count"], int)
@@ -573,7 +573,7 @@ class CompileTimeMetricsCollector(MetricsCollector):
         values = [start_interval, end_interval]
         result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
 
-        metric_values: List[MetricValueTimer] = []
+        metric_values: list[MetricValueTimer] = []
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)
@@ -613,7 +613,7 @@ class CompileWaitingTimeMetricsCollector(MetricsCollector):
         values = [start_interval, end_interval]
         result: Sequence[asyncpg.Record] = await connection.fetch(query, *values)
 
-        metric_values: List[MetricValueTimer] = []
+        metric_values: list[MetricValueTimer] = []
         for record in result:
             assert isinstance(record["count"], int)
             assert isinstance(record["environment"], uuid.UUID)

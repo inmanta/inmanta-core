@@ -124,7 +124,7 @@ async def test_discovered_resource_get_paging(server, client, agent, environment
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page

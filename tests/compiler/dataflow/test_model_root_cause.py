@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import List, Set
 
 import pytest
 
@@ -41,13 +40,13 @@ def test_dataflow_model_root_cause(
     dataflow_test_helper.compile(
         """
 entity C:
-    number i
+    int i
 end
 
 
 entity V:
-    number n
-    number i
+    int n
+    int i
 end
 
 index V(i)
@@ -60,7 +59,7 @@ U.v [1] -- V
 
 
 entity X:
-    number n
+    int n
 end
 
 
@@ -103,8 +102,8 @@ i = c.i
     c_i: AttributeNode = get_attribute_node(graph, "c.i")
     u_v: AttributeNode = get_attribute_node(graph, "u.v")
 
-    attributes: List[AttributeNode] = [x_n, c_i, u_v]
-    root_causes: Set[AttributeNode] = {c_i}
+    attributes: list[AttributeNode] = [x_n, c_i, u_v]
+    root_causes: set[AttributeNode] = {c_i}
 
     if attribute_equivalence:
         cc_i: AttributeNode = get_attribute_node(graph, "cc.i")
@@ -118,7 +117,7 @@ def test_cyclic_model_a(dataflow_test_helper: DataflowTestHelper):
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 implement A using std::none
@@ -142,8 +141,8 @@ x.n = z.n
     y_n: AttributeNode = get_attribute_node(graph, "y.n")
     z_n: AttributeNode = get_attribute_node(graph, "z.n")
 
-    attributes: List[AttributeNode] = [x_n, y_n, z_n]
-    root_causes: Set[AttributeNode] = {z_n}
+    attributes: list[AttributeNode] = [x_n, y_n, z_n]
+    root_causes: set[AttributeNode] = {z_n}
 
     assert UnsetRootCauseAnalyzer(attributes).root_causes() == root_causes
 
@@ -159,7 +158,7 @@ def test_cyclic_model_b(dataflow_test_helper: DataflowTestHelper):
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 implement A using std::none
@@ -184,7 +183,7 @@ m = n
     x_n: AttributeNode = get_attribute_node(graph, "x.n")
     y_n: AttributeNode = get_attribute_node(graph, "y.n")
 
-    attributes: List[AttributeNode] = [x_n, y_n]
-    root_causes: Set[AttributeNode] = {x_n, y_n}
+    attributes: list[AttributeNode] = [x_n, y_n]
+    root_causes: set[AttributeNode] = {x_n, y_n}
 
     assert UnsetRootCauseAnalyzer(attributes).root_causes() == root_causes

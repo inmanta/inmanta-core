@@ -17,7 +17,6 @@
 """
 import os
 from collections import abc
-from typing import List
 
 import pytest
 
@@ -27,7 +26,7 @@ async def test_added_notification_related_columns_to_compile_table(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     postgresql_client,
     monkeypatch,
-    get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[List[str]]],
+    get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[list[str]]],
 ) -> None:
     """
     Test the database migration script that adds the `notify_failed_compile` and 'failed_compile_message' column to the

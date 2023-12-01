@@ -21,7 +21,7 @@ import logging
 import pkgutil
 import types
 from asyncio import Semaphore
-from typing import Optional, Set
+from typing import Optional
 
 import asyncpg
 import pytest
@@ -37,7 +37,7 @@ from utils import log_contains
 
 
 async def run_updates_and_verify(
-    get_columns_in_db_table, schema_manager: schema.DBSchema, current: Optional[Set[int]] = None, prefix: str = ""
+    get_columns_in_db_table, schema_manager: schema.DBSchema, current: Optional[set[int]] = None, prefix: str = ""
 ):
     async def update_function1(connection):
         await connection.execute(f"CREATE TABLE public.{prefix}tab(id integer primary key, val varchar NOT NULL);")
@@ -48,7 +48,7 @@ async def run_updates_and_verify(
     async def update_function3(connection):
         await connection.execute(f"ALTER TABLE public.{prefix}tab DROP COLUMN val;")
 
-    current_db_versions: Set[int] = await schema_manager.get_installed_versions()
+    current_db_versions: set[int] = await schema_manager.get_installed_versions()
     assert current is None or current_db_versions == current
     latest_version: int = max(current_db_versions) if len(current_db_versions) > 0 else 0
     update_function_map = [
@@ -66,7 +66,7 @@ async def run_updates_and_verify(
     assert set(await get_columns_in_db_table(f"{prefix}tab")) == {"id", "mycolumn"}
 
 
-async def get_core_versions(postgresql_client) -> Set[int]:
+async def get_core_versions(postgresql_client) -> set[int]:
     dbm = schema.DBSchema(CORE_SCHEMA_NAME, inmanta.db.versions, postgresql_client)
     try:
         return await dbm.get_installed_versions()
@@ -74,7 +74,7 @@ async def get_core_versions(postgresql_client) -> Set[int]:
         return set()
 
 
-async def assert_core_untouched(postgresql_client, corev: Optional[Set[int]] = None):
+async def assert_core_untouched(postgresql_client, corev: Optional[set[int]] = None):
     """
     Verify abscence of side-effect leaks to other cases
     """
@@ -103,7 +103,7 @@ async def test_dbschema_unclean(postgresql_client: asyncpg.Connection, get_colum
     assert await dbm.get_installed_versions() == set()
 
     await dbm.set_installed_version(5)
-    current_versions: Set[int] = await dbm.get_installed_versions()
+    current_versions: set[int] = await dbm.get_installed_versions()
     assert current_versions == {5}
 
     await run_updates_and_verify(get_columns_in_db_table, dbm, current_versions)
@@ -260,7 +260,7 @@ async def test_dbschema_update_db_schema(postgresql_client, get_columns_in_db_ta
 
 
 async def test_dbschema_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
-    corev: Set[int] = await get_core_versions(postgresql_client)
+    corev: set[int] = await get_core_versions(postgresql_client)
     db_schema = schema.DBSchema("test_dbschema_update_db_schema_failure", inmanta.db.versions, postgresql_client)
     await db_schema.ensure_self_update()
 
@@ -268,7 +268,7 @@ async def test_dbschema_update_db_schema_failure(postgresql_client, get_columns_
         # Syntax error should trigger database rollback
         await connection.execute("CREATE TABE public.tab(id integer primary key, val varchar NOT NULL);")
 
-    current_db_versions: Set[int] = await db_schema.get_installed_versions()
+    current_db_versions: set[int] = await db_schema.get_installed_versions()
     assert len(current_db_versions) == 0
     new_db_version = 1
     update_function_map = [Version(f"v{new_db_version}", update_function)]
@@ -306,7 +306,7 @@ def make_versions(idx, *fcts):
 
 
 async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_columns_in_db_table):
-    corev: Set[int] = await get_core_versions(postgresql_client)
+    corev: set[int] = await get_core_versions(postgresql_client)
     db_schema = schema.DBSchema("test_dbschema_partial_update_db_schema_failure", inmanta.db.versions, postgresql_client)
     await db_schema.ensure_self_update()
 
@@ -323,7 +323,7 @@ async def test_dbschema_partial_update_db_schema_failure(postgresql_client, get_
         # Fix syntax issue
         await connection.execute("CREATE TABLE public.tabc(id integer primary key, val varchar NOT NULL);")
 
-    current_db_versions: Set[int] = await db_schema.get_installed_versions()
+    current_db_versions: set[int] = await db_schema.get_installed_versions()
     assert len(current_db_versions) == 0
 
     update_function_map = make_versions(1, update_function_good, update_function_bad, update_function_good2)
@@ -382,7 +382,7 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
     async with postgresql_pool.acquire() as postgresql_client:
         async with postgresql_pool.acquire() as postgresql_client2:
             # schedule 3 updates, hang on second, unblock one, verify, unblock other, verify
-            corev: Set[int] = await get_core_versions(postgresql_client)
+            corev: set[int] = await get_core_versions(postgresql_client)
 
             db_schema = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client)
             db_schema2 = schema.DBSchema("test_multi_upgrade_lockout", inmanta.db.versions, postgresql_client2)
@@ -403,7 +403,7 @@ async def test_multi_upgrade_lockout(postgresql_pool, get_columns_in_db_table, h
                 # Fix syntax issue
                 await connection.execute("CREATE TABLE public.tabc(id integer primary key, val varchar NOT NULL);")
 
-            current_db_versions: Set[int] = await db_schema.get_installed_versions()
+            current_db_versions: set[int] = await db_schema.get_installed_versions()
             assert len(current_db_versions) == 0
 
             update_function_map = make_versions(1, update_function_a, update_function_b, update_function_c)

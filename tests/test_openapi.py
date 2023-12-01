@@ -19,7 +19,7 @@ import enum
 import inspect
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 from uuid import UUID
 
 import pytest
@@ -46,7 +46,7 @@ from inmanta.server.protocol import Server
 
 class DummyException(BaseHttpException):
     def __init__(self):
-        super(DummyException, self).__init__(status_code=405)
+        super().__init__(status_code=405)
 
 
 @pytest.fixture
@@ -253,7 +253,7 @@ def test_openapi_types_base_model():
     openapi_type = type_converter.get_openapi_type_of_parameter(
         inspect.Parameter("param", kind=inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=model.Environment)
     )
-    assert openapi_type.ref == type_converter.ref_prefix + "Environment"
+    assert openapi_type.ref == type_converter.openapi_ref_prefix + "Environment"
 
     environment_type = type_converter.resolve_reference(openapi_type.ref)
     assert environment_type.required == ["id", "name", "project_id", "repo_url", "repo_branch", "settings", "halted"]
@@ -273,7 +273,7 @@ def test_openapi_types_optional():
 
 def test_openapi_types_list():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[Union[int, UUID]])
+    openapi_type = type_converter.get_openapi_type(list[Union[int, UUID]])
     assert openapi_type == Schema(
         type="array", items=Schema(anyOf=[Schema(type="integer"), Schema(type="string", format="uuid")])
     )
@@ -281,9 +281,9 @@ def test_openapi_types_list():
 
 def test_openapi_types_enum():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[ResourceAction])
+    openapi_type = type_converter.get_openapi_type(list[ResourceAction])
     assert openapi_type.type == "array"
-    assert openapi_type.items.ref == type_converter.ref_prefix + "ResourceAction"
+    assert openapi_type.items.ref == type_converter.openapi_ref_prefix + "ResourceAction"
 
     resource_action_type = type_converter.components.schemas["ResourceAction"]
     assert resource_action_type.type == "string"
@@ -292,33 +292,33 @@ def test_openapi_types_enum():
 
 def test_openapi_types_dict():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Dict[str, UUID])
+    openapi_type = type_converter.get_openapi_type(dict[str, UUID])
     assert openapi_type == Schema(type="object", additionalProperties=Schema(type="string", format="uuid"))
 
 
 def test_openapi_types_list_of_model():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[model.Project])
+    openapi_type = type_converter.get_openapi_type(list[model.Project])
     assert openapi_type.type == "array"
-    assert openapi_type.items.ref == type_converter.ref_prefix + "Project"
+    assert openapi_type.items.ref == type_converter.openapi_ref_prefix + "Project"
 
 
 def test_openapi_types_list_of_list_of_optional_model():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(List[List[Optional[model.Project]]])
+    openapi_type = type_converter.get_openapi_type(list[list[Optional[model.Project]]])
     assert openapi_type.type == "array"
     assert openapi_type.items.type == "array"
-    assert openapi_type.items.items.ref == type_converter.ref_prefix + "Project"
+    assert openapi_type.items.items.ref == type_converter.openapi_ref_prefix + "Project"
     assert openapi_type.items.items.nullable
 
 
 def test_openapi_types_dict_of_union():
     type_converter = OpenApiTypeConverter()
-    openapi_type = type_converter.get_openapi_type(Dict[str, Union[model.Project, model.Environment]])
+    openapi_type = type_converter.get_openapi_type(dict[str, Union[model.Project, model.Environment]])
     assert openapi_type.type == "object"
     assert len(openapi_type.additionalProperties.anyOf) == 2
-    assert openapi_type.additionalProperties.anyOf[0].ref == type_converter.ref_prefix + "Project"
-    assert openapi_type.additionalProperties.anyOf[1].ref == type_converter.ref_prefix + "Environment"
+    assert openapi_type.additionalProperties.anyOf[0].ref == type_converter.openapi_ref_prefix + "Project"
+    assert openapi_type.additionalProperties.anyOf[1].ref == type_converter.openapi_ref_prefix + "Environment"
 
 
 def test_openapi_types_optional_union():
@@ -393,13 +393,13 @@ def test_openapi_types_anyurl():
     assert openapi_type == Schema(type="string", format="uri")
 
     openapi_type = type_converter.get_openapi_type(PostgresDsn)
-    assert openapi_type == Schema(type="string", format="uri")
+    assert openapi_type == Schema(type="string", format="multi-host-uri")
 
 
 def test_openapi_types_env_setting():
     type_converter = OpenApiTypeConverter()
     openapi_type = type_converter.get_openapi_type(EnvironmentSetting)
-    assert openapi_type.ref == type_converter.ref_prefix + "EnvironmentSetting"
+    assert openapi_type.ref == type_converter.openapi_ref_prefix + "EnvironmentSetting"
 
     env_settings_type = type_converter.resolve_reference(openapi_type.ref)
     assert env_settings_type.title == "EnvironmentSetting"
@@ -827,5 +827,5 @@ def test_get_openapi_type_for_on_enum() -> None:
         (BoolValEnum, OpenApiDataTypes.BOOLEAN.value),
     ]:
         schema = openapi_type_converter.get_openapi_type(python_type)
-        resolved_schema = schema.resolve(openapi_type_converter.ref_prefix, openapi_type_converter.components.schemas)
+        resolved_schema = schema.resolve(openapi_type_converter.openapi_ref_prefix, openapi_type_converter.components.schemas)
         assert resolved_schema.type == openapi_type

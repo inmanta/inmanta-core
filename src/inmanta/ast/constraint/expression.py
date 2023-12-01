@@ -20,7 +20,7 @@ import re
 from abc import ABCMeta, abstractmethod
 from collections import abc
 from itertools import chain
-from typing import Dict, List, Optional, Type
+from typing import Optional, Type
 
 import inmanta.execute.dataflow as dataflow
 from inmanta import stable_api
@@ -72,7 +72,7 @@ class OpMetaClass(ABCMeta):
         attribute = "_%s__op" % name
         if attribute in attr_dict:
             Operator.register_operator(attr_dict[attribute], self)
-        super(OpMetaClass, self).__init__(name, bases, attr_dict)
+        super().__init__(name, bases, attr_dict)
 
 
 class IsDefined(ReferenceStatement):
@@ -83,12 +83,12 @@ class IsDefined(ReferenceStatement):
             children = [attr]
         else:
             children = []
-        super(IsDefined, self).__init__(children)
+        super().__init__(children)
         self.attr = attr
         self.name = str(name)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
@@ -114,7 +114,7 @@ class IsDefined(ReferenceStatement):
 
     def pretty_print(self) -> str:
         if self.attr is not None:
-            name = "%s.%s" % (self.attr.pretty_print(), self.name)
+            name = f"{self.attr.pretty_print()}.{self.name}"
         else:
             name = self.name
         return "%s is defined" % name
@@ -128,10 +128,10 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     __slots__ = ("__number_arguments", "_arguments", "__name")
 
     # A hash to lookup each handler
-    __operator: Dict[str, "Type[Operator]"] = {}
+    __operator: dict[str, "Type[Operator]"] = {}
 
     @classmethod
-    def register_operator(cls, operator_string: str, operator_class: Type["Operator"]) -> None:
+    def register_operator(cls, operator_string: str, operator_class: type["Operator"]) -> None:
         """
         Register a new operator
         """
@@ -147,7 +147,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
 
         return None
 
-    def __init__(self, name: str, children: List[ExpressionStatement]) -> None:
+    def __init__(self, name: str, children: list[ExpressionStatement]) -> None:
         self.__number_arguments = len(children)
         self._arguments = children
         ReferenceStatement.__init__(self, self._arguments)
@@ -181,7 +181,7 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         arg_list = []
         for arg in self._arguments:
             arg_list.append(str(arg))
-        return "%s(%s)" % (self.__class__.__name__, ", ".join(arg_list))
+        return "{}({})".format(self.__class__.__name__, ", ".join(arg_list))
 
     def to_function(self):
         """
@@ -223,7 +223,7 @@ class BinaryOperator(Operator):
         """
 
     def pretty_print(self) -> str:
-        return "(%s %s %s)" % (self._arguments[0].pretty_print(), self.get_op(), self._arguments[1].pretty_print())
+        return f"({self._arguments[0].pretty_print()} {self.get_op()} {self._arguments[1].pretty_print()})"
 
     def __repr__(self) -> str:
         return self.pretty_print()
@@ -247,8 +247,8 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         return chain(self._own_eager_promises, self.children[0].get_all_eager_promises())
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp: ResultVariable = ResultVariable()
         temp.set_type(Bool())
@@ -263,14 +263,14 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
             Bool().validate(value)
         except RuntimeException as e:
             e.set_statement(self)
-            e.msg = "Invalid %s hand value `%s`: `%s` expects a boolean" % (
+            e.msg = "Invalid {} hand value `{}`: `{}` expects a boolean".format(
                 "left" if side == 0 else "right",
                 value,
                 self.get_op(),
             )
             raise e
 
-    def resume(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         result = self.children[0].execute(requires, resolver, queue)
         if isinstance(result, Unknown):
             # TODO: tests and bugfix entry
@@ -340,7 +340,7 @@ class UnaryOperator(Operator):
         """
 
     def pretty_print(self) -> str:
-        return "(%s %s)" % (self.get_op(), self._arguments[0].pretty_print())
+        return f"({self.get_op()} {self._arguments[0].pretty_print()})"
 
 
 class Not(UnaryOperator):
@@ -364,7 +364,7 @@ class Not(UnaryOperator):
             Bool().validate(arg)
         except RuntimeException as e:
             e.set_statement(self)
-            e.msg = "Invalid value `%s`: `%s` expects a boolean" % (arg, self.get_op())
+            e.msg = f"Invalid value `{arg}`: `{self.get_op()}` expects a boolean"
             raise e
         return not arg
 
@@ -387,7 +387,7 @@ class Regex(BinaryOperator):
         """
         assert arg2 == self.regex
         if not isinstance(arg1, str):
-            raise TypingException(self, "Regex can only be match with strings. %s is of type %s" % (arg1, type(arg1)))
+            raise TypingException(self, f"Regex can only be match with strings. {arg1} is of type {type(arg1)}")
 
         return self.regex.match(arg1) is not None
 

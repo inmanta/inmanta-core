@@ -61,9 +61,9 @@ class Provider(CRUDHandler):
         ctx.set_updated()
 
     _STATE = defaultdict(dict)
-    _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-    _RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-    _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+    _WRITE_COUNT = defaultdict(lambda: defaultdict(int))
+    _RELOAD_COUNT = defaultdict(lambda: defaultdict(int))
+    _READ_COUNT = defaultdict(lambda: defaultdict(int))
 
     @classmethod
     def touch(cls, agent, key):

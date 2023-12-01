@@ -33,9 +33,11 @@ import time
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
+from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Pattern, Set
+from re import Pattern
+from typing import TYPE_CHECKING, Any, Optional
 
 import click
 import more_itertools
@@ -61,7 +63,6 @@ from inmanta.module import (
     InvalidMetadata,
     InvalidModuleException,
     Module,
-    ModuleGeneration,
     ModuleLike,
     ModuleMetadata,
     ModuleMetadataFileNotFound,
@@ -104,7 +105,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "When this option is enabled, only version conflicts in the direct dependencies will result in an error. "
             "All other version conflicts will result in a warning. This option is mutually exclusive with the "
-            "\--strict-deps-check option."  # noqa: W605
+            r"\--strict-deps-check option."
         ),
     )
     parser.add_argument(
@@ -114,7 +115,7 @@ def add_deps_check_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help=(
             "When this option is enabled, a version conflict in any (transitive) dependency will results in an error. "
-            "This option is mutually exclusive with the \--no-strict-deps-check option."  # noqa: W605
+            r"This option is mutually exclusive with the \--no-strict-deps-check option."
         ),
     )
 
@@ -134,7 +135,7 @@ def get_strict_deps_check(no_strict_deps_check: bool, strict_deps_check: bool) -
     return strict_deps_check
 
 
-class ModuleLikeTool(object):
+class ModuleLikeTool:
     """Shared code for modules and projects"""
 
     def execute(self, cmd: Optional[str], args: argparse.Namespace) -> None:
@@ -207,7 +208,7 @@ class ModuleLikeTool(object):
 
         outversion = parse_version(outversion)
         if outversion <= old_version:
-            LOGGER.error("new versions (%s) is not larger then old version (%s), aborting" % (outversion, old_version))
+            LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
             return None
 
         return outversion
@@ -222,7 +223,7 @@ class ChangeType(enum.Enum):
     REVISION: str = "revision"
 
     def __lt__(self, other: "ChangeType") -> bool:
-        order: List[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
+        order: list[ChangeType] = [ChangeType.REVISION, ChangeType.PATCH, ChangeType.MINOR, ChangeType.MAJOR]
         if other not in order:
             return NotImplemented
         return order.index(self) < order.index(other)
@@ -408,7 +409,7 @@ compatible with the dependencies specified by the updated modules.
 
         freeze = project.get_freeze(mode=operator, recursive=recursive)
 
-        with open(project.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(project.get_metadata_file_path(), encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
@@ -468,10 +469,10 @@ compatible with the dependencies specified by the updated modules.
         else:
             my_project = project
 
-        def do_update(specs: "Dict[str, List[InmantaModuleRequirement]]", modules: List[str]) -> None:
+        def do_update(specs: Mapping[str, Sequence[InmantaModuleRequirement]], modules: list[str]) -> None:
             v2_modules = {module for module in modules if my_project.module_source.path_for(module) is not None}
 
-            v2_python_specs: List[Requirement] = [
+            v2_python_specs: list[Requirement] = [
                 module_spec.get_python_package_requirement()
                 for module, module_specs in specs.items()
                 for module_spec in module_specs
@@ -482,18 +483,20 @@ compatible with the dependencies specified by the updated modules.
                 # These could be constraints (-c) as well, but that requires additional sanitation
                 # Because for pip not every valid -r is a valid -c
                 current_requires = my_project.get_strict_python_requirements_as_list()
-                env.process_env.install_from_index(
+                env.process_env.install_for_config(
                     v2_python_specs + [Requirement.parse(r) for r in current_requires],
-                    my_project.module_source.urls,
+                    my_project.metadata.pip,
                     upgrade=True,
-                    allow_pre_releases=my_project.install_mode != InstallMode.release,
-                    use_pip_config=my_project.metadata.pip.use_config_file,
                 )
+                # Invalidate ast cache so that dependencies of installed modules can be updated as well
+                my_project.invalidate_state()
 
             for v1_module in set(modules).difference(v2_modules):
                 spec = specs.get(v1_module, [])
                 try:
                     ModuleV1.update(my_project, v1_module, spec, install_mode=my_project.install_mode)
+                    # Invalidate the state of the updated module
+                    my_project.invalidate_state(v1_module)
                 except Exception:
                     LOGGER.exception("Failed to update module %s", v1_module)
 
@@ -512,7 +515,7 @@ compatible with the dependencies specified by the updated modules.
                 # get AST
                 my_project.load_module_recursive(install=True)
                 # get current full set of requirements
-                specs: Dict[str, List[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
+                specs: dict[str, list[InmantaModuleRequirement]] = my_project.collect_imported_requirements()
                 if module is None:
                     modules = list(specs.keys())
                 else:
@@ -565,7 +568,7 @@ class ModuleTool(ModuleLikeTool):
             "add",
             help=add_help_msg,
             description=f"{add_help_msg} When executed on a project, the module is installed as well. "
-            f"Either \--v1 or \--v2 has to be set.",  # noqa: W605
+            r"Either \--v1 or \--v2 has to be set.",
             parents=parent_parsers,
         )
         add.add_argument(
@@ -597,17 +600,13 @@ class ModuleTool(ModuleLikeTool):
         install: ArgumentParser = subparser.add_parser(
             "install",
             parents=parent_parsers,
-            help="Install a module in the active Python environment.",
+            help="This command is no longer supported.",
             description="""
-Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the context
-of a project.
+        The 'inmanta module install' command is no longer supported. Instead, use one of the following approaches:
 
-This command might reinstall Python packages in the development venv if the currently installed versions are not compatible
-with the dependencies specified by the installed module.
-
-Like `pip install`, this command does not reinstall a module for which the same version is already installed, except in editable
-mode.
-        """.strip(),
+        1. To install a module in editable mode, use 'pip install -e .'.
+        2. For a non-editable installation, first run 'inmanta module build' followed by 'pip install ./dist/<dist-package>'.
+            """.strip(),
         )
         install.add_argument("-e", "--editable", action="store_true", help="Install in editable mode.")
         install.add_argument("path", nargs="?", help="The path to the module.")
@@ -732,7 +731,7 @@ mode.
             "release",
             parents=parent_parsers,
             help="Release a new stable or dev release for this module.",
-            description="""
+            description=r"""
 When a stable release is done, this command:
 
 * Does a commit that changes the current version to a stable version.
@@ -747,7 +746,7 @@ When a development release is done using the \--dev option, this command:
   \--major argument (\--patch is the default). When a CHANGELOG.md file is present in the root of the module
   directory then the version number in the changelog is also updated accordingly. The changelog file is always populated with
   the associated stable version and not a development version.
-            """.strip(),  # noqa: W605
+            """.strip(),
             formatter_class=RawTextHelpFormatter,
         )
         release.add_argument(
@@ -889,7 +888,7 @@ When a development release is done using the \--dev option, this command:
             project = self.get_project(load=True)
             return project.get_module(module, allow_v1=True)
 
-    def get_modules(self, module: Optional[str] = None) -> List[Module]:
+    def get_modules(self, module: Optional[str] = None) -> list[Module]:
         if module is not None:
             return [self.get_module(module)]
         else:
@@ -977,7 +976,7 @@ version: 0.0.1dev0"""
         project.get_complete_ast()
 
         names: abc.Sequence[str] = sorted(project.modules.keys())
-        specs: Dict[str, List[InmantaModuleRequirement]] = project.collect_imported_requirements()
+        specs: dict[str, list[InmantaModuleRequirement]] = project.collect_imported_requirements()
         for name in names:
             mod: Module = Project.get().modules[name]
             version = str(mod.version)
@@ -1022,28 +1021,16 @@ version: 0.0.1dev0"""
 
     def install(self, editable: bool = False, path: Optional[str] = None) -> None:
         """
-        Install a module in the active Python environment. Only works for v2 modules: v1 modules can only be installed in the
-        context of a project.
+        This command is no longer supported.
+        Use 'pip install -e .' to install a module in editable mode.
+        Use 'inmanta module build' followed by 'pip install ./dist/<dist-package>' for non-editable install.
         """
-
-        def install(install_path: str) -> None:
-            try:
-                env.process_env.install_from_source([env.LocalPackagePath(path=install_path, editable=editable)])
-            except env.ConflictingRequirements as e:
-                raise InvalidModuleException("Module installation failed due to conflicting dependencies") from e
-
-        module_path: str = os.path.abspath(path) if path is not None else os.getcwd()
-        module: Module = self.construct_module(None, module_path)
-        if editable:
-            if module.GENERATION == ModuleGeneration.V1:
-                raise ModuleVersionException(
-                    "Can not install v1 modules in editable mode. You can upgrade your module with `inmanta module v1tov2`."
-                )
-            install(module_path)
-        else:
-            with tempfile.TemporaryDirectory() as build_dir:
-                build_artifact: str = self.build(module_path, build_dir)
-                install(build_artifact)
+        raise CLIException(
+            "The 'inmanta module install' command is no longer supported. "
+            "For editable mode installation, use 'pip install -e .'. "
+            "For a regular installation, first run 'inmanta module build' and then 'pip install ./dist/<dist-package>'.",
+            exitcode=1,
+        )
 
     def status(self, module: Optional[str] = None) -> None:
         """
@@ -1137,7 +1124,7 @@ version: 0.0.1dev0"""
         for submodule in module_obj.get_all_submodules():
             freeze.update(module_obj.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
 
-        with open(module_obj.get_metadata_file_path(), "r", encoding="utf-8") as fd:
+        with open(module_obj.get_metadata_file_path(), encoding="utf-8") as fd:
             newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
@@ -1448,7 +1435,7 @@ class ModuleChangelog:
         """
         Return True iff this changelog contains a section of the given version.
         """
-        with open(self.path_changelog_file, "r", encoding="utf-8") as fh:
+        with open(self.path_changelog_file, encoding="utf-8") as fh:
             regex_version_header: re.Pattern[str] = self.regex_for_changelog_line(version)
             content = fh.read()
             return regex_version_header.search(content) is not None
@@ -1514,7 +1501,7 @@ class ModuleChangelog:
 class ModuleBuildFailedError(Exception):
     def __init__(self, msg: str, *args: Any) -> None:
         self.msg = msg
-        super(ModuleBuildFailedError, self).__init__(msg, *args)
+        super().__init__(msg, *args)
 
     def __str__(self) -> str:
         return self.msg
@@ -1549,7 +1536,7 @@ class DefaultIsolatedEnvCached(DefaultIsolatedEnv):
 
     def __enter__(self) -> DefaultIsolatedEnv:
         if not self._isolated_env:
-            self._isolated_env = super(DefaultIsolatedEnvCached, self).__enter__()
+            self._isolated_env = super().__enter__()
             self._install_build_requirements(self._isolated_env)
             # All build dependencies are installed, so we can disable the install() method on self._isolated_env.
             # This prevents unnecessary pip processes from being spawned.
@@ -1590,7 +1577,7 @@ build-backend = "setuptools.build_meta"
         Cleanup the cached build environment. It should be called at the end of the test suite.
         """
         if self._isolated_env:
-            super(DefaultIsolatedEnvCached, self).__exit__()
+            super().__exit__()
             self._isolated_env = None
 
 
@@ -1606,7 +1593,7 @@ class V2ModuleBuilder:
 
     def build(self, output_directory: str, dev_build: bool = False, byte_code: bool = False) -> str:
         """
-        Build the module and return the path to the build artifact.
+        Build the module using the pip system config and return the path to the build artifact.
 
         :param byte_code: When set to true, only bytecode will be included. This also results in a binary wheel
         """
@@ -1704,11 +1691,11 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         files_in_python_package_dir = self._get_files_in_directory(abs_path_namespace_package, ignore=BUILD_FILE_IGNORE_PATTERN)
         with zipfile.ZipFile(path_to_wheel) as z:
             dir_prefix = f"{rel_path_namespace_package}/"
-            files_in_wheel = set(
+            files_in_wheel = {
                 info.filename[len(dir_prefix) :]
                 for info in z.infolist()
                 if not info.is_dir() and info.filename.startswith(dir_prefix)
-            )
+            }
         unpackaged_files = files_in_python_package_dir - files_in_wheel
         if unpackaged_files:
             LOGGER.warning(
@@ -1724,7 +1711,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         if not os.path.exists(init_file):
             open(init_file, "w").close()
 
-    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern[str]] = None) -> Set[str]:
+    def _get_files_in_directory(self, directory: str, ignore: Optional[Pattern[str]] = None) -> set[str]:
         """
         Return the relative paths to all the files in all subdirectories of the given directory.
 
@@ -1738,14 +1725,14 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
 
         if not os.path.isdir(directory):
             raise Exception(f"{directory} is not a directory")
-        result: Set[str] = set()
+        result: set[str] = set()
         for dirpath, dirnames, filenames in os.walk(directory):
             if should_ignore(os.path.basename(dirpath)):
                 # ignore whole subdirectory
                 continue
-            relative_paths_to_filenames = set(
+            relative_paths_to_filenames = {
                 os.path.relpath(os.path.join(dirpath, f), directory) for f in filenames if not should_ignore(f)
-            )
+            }
             result = result | relative_paths_to_filenames
         return result
 
@@ -1775,7 +1762,7 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
 
     def _build_v2_module(self, build_path: str, output_directory: str) -> str:
         """
-        Build v2 module using PEP517 package builder.
+        Build v2 module using the pip system config and using PEP517 package builder.
         """
         try:
             with self._get_isolated_env_builder() as env:
@@ -1885,7 +1872,7 @@ graft inmanta_plugins/{self._module.name}/templates
 
         config_in = {}
         if os.path.exists(os.path.join(in_folder, "pyproject.toml")):
-            with open(os.path.join(in_folder, "pyproject.toml"), "r") as fh:
+            with open(os.path.join(in_folder, "pyproject.toml")) as fh:
                 loglevel = logging.WARNING if warn_on_merge else logging.INFO
                 LOGGER.log(
                     level=loglevel,
@@ -1936,12 +1923,12 @@ graft inmanta_plugins/{self._module.name}/templates
         config.add_section("options.packages.find")
 
         # add requirements
-        module_requirements: List[InmantaModuleRequirement] = [
+        module_requirements: list[InmantaModuleRequirement] = [
             req for req in self._module.get_all_requires() if req.project_name != self._module.name
         ]
-        python_requirements: List[str] = self._module.get_strict_python_requirements_as_list()
+        python_requirements: list[str] = self._module.get_strict_python_requirements_as_list()
         if module_requirements or python_requirements:
-            requires: List[str] = sorted([str(r.get_python_package_requirement()) for r in module_requirements])
+            requires: list[str] = sorted([str(r.get_python_package_requirement()) for r in module_requirements])
             requires += python_requirements
             config.set("options", "install_requires", "\n".join(requires))
 
