@@ -208,8 +208,7 @@ class WrappedValueVariable(VariableABC[T]):
         return self.value
 
     def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
-        if not isinstance(self.value, NoneValue):
-            resultcollector.receive_result(self.value, location)
+        resultcollector.receive_result(self.value, location)
         return True
 
     def waitfor(self, waiter: "Waiter") -> None:
@@ -328,8 +327,7 @@ class ListElementVariable(ResultVariable[T]):
 
     def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
         assert self.value is not None
-        if not isinstance(self.value, NoneValue):
-            resultcollector.receive_result(self.value, location)
+        resultcollector.receive_result(self.value, location)
         return True
 
 
