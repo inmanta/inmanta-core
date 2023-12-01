@@ -959,7 +959,7 @@ async def test_method_definition():
             Create a new project
             """
 
-    assert "Type typing.Iterator[str] of argument name can only be generic List, Dict or Literal" in str(e.value)
+    assert "Type collections.abc.Iterator[str] of argument name can only be generic List, Dict or Literal" in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
@@ -982,7 +982,7 @@ async def test_method_definition():
             Create a new project
             """
 
-    assert "Type typing.Dict[int, str] of argument name must be a Dict with str keys and not int" in str(e.value)
+    assert "Type dict[int, str] of argument name must be a Dict with str keys and not int" in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
