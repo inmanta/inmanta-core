@@ -4,4 +4,4 @@ issue-nr: 6726
 change-type: patch
 destination-branches: [master]
 sections:
-  upgrade-note: "For successful upgrading to this version, it is required to have inmanta-core version 7.0.0 or higher already installed."
+  upgrade-note: "For successful upgrading to this version, it is required to have inmanta-core version 6.4.0 or higher already installed."
