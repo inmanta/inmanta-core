@@ -265,7 +265,7 @@ class ExpressionStatement(RequiresEmitStatement):
             # TODO: test for loop with Unknown: should not include it
             # TODO: add test cases for NoneValue and Unknown
             # TODO: Unknown vs [1, 2, Unknown] vs Unknown when this is a substmt
-            resultcollector.receive_result_flatten(value, self.location)
+            resultcollector.receive_result_flatten(result, self.location)
         return result
 
     def as_constant(self) -> object:
