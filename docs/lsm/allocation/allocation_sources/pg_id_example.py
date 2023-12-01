@@ -6,7 +6,6 @@
     :license: Inmanta EULA
 """
 import os
-from typing import Optional
 from uuid import UUID
 
 import inmanta_plugins.lsm.allocation as lsm

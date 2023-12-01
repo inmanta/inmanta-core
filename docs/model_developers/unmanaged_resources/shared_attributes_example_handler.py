@@ -1,6 +1,5 @@
 import re
 from collections import abc
-from typing import Optional
 
 import pydantic
 

@@ -12,7 +12,9 @@
 # serve to show the default.
 import importlib.metadata
 import shutil
-import sys, os, pkg_resources, datetime
+import os
+import pkg_resources
+import datetime
 from importlib.metadata import PackageNotFoundError
 from sphinx.errors import ConfigError
 
