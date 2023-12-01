@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Literal, Optional, Set, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
@@ -72,12 +73,21 @@ class ResultCollector(Generic[T_contra]):
     def receive_result(self, value: T_contra, location: Location) -> bool:
         """
         Receive a single value for gradual execution. Called once for each value that is part of the result. May be `null` or
-        Unknown.
+        Unknown. Does not distinguish between Unknown as an element of a list and Unknown as a top-level value.
 
         :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
             waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
         """
         raise NotImplementedError()
+
+    def receive_result_flatten(self, value: Union[T_contra, Sequence[T_contra]], location: Location) -> bool:
+        # TODO: docstring
+        # TODO: test case with str that fails if isinstance checks for Sequence
+        for subvalue in value if isinstance(value, list) else [value]:
+            done: bool = self.receive_result(subvalue, location)
+            if done:
+                return True
+        return False
 
 
 class IPromise:
@@ -382,11 +392,10 @@ class ResultVariableProxy(VariableABC[T]):
             assert self._listener is not None
             listener, location = self._listener
             # simple case: single value. Multi-value variables implement their own listener functionality
-            for subvalue in value if isinstance(value, list) else [value]:
-                # TODO: add test cases for NoneValue and Unknown
-                # TODO: properly handle Unknown and NoneValue in all ResultCollector classes
-                # TODO: Unknown vs [1, 2, Unknown] vs Unknown when this is a substmt
-                listener.receive_result(subvalue, location)
+            # TODO: add test cases for NoneValue and Unknown
+            # TODO: properly handle Unknown and NoneValue in all ResultCollector classes
+            # TODO: Unknown vs [1, 2, Unknown] vs Unknown when this is a substmt
+            listener.receive_result_flatten(value, location)
             # clean up: prevent data leaks and ensure listener is only notified once
             self._listener = None
             self._notify_listeners = False

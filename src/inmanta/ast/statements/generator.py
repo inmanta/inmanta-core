@@ -356,7 +356,6 @@ class ListComprehension(RawResumer, ExpressionStatement):
 
         # indicate to helper that we're done
         if isinstance(iterable, Unknown):
-            # TODO: if Unknown was already reported gradually here, this will fail => top_level: bool parameter for r_e_grad?
             collector_helper.set_unknown()
         elif not isinstance(iterable, list):
             raise TypingException(
@@ -499,11 +498,6 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         if self._complete:
             raise InvalidCompilerState(self, "list comprehension helper received gradual result after it was declared complete")
 
-        if isinstance(value, Unknown):
-            # don't execute value expression, just propagate Unknown
-            self._results.append(WrappedValueVariable(value))
-            return False
-
         # Use special result variable for a pre-known value with listener capabilities. Using a plain `ResultVariable` would
         # break gradual execution (e.g. `Reference.requires_emit_gradual` registers self.lhs as listener)
         value_wrapper: ListElementVariable[object] = ListElementVariable(value, location)
@@ -516,15 +510,23 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         result_variable: ResultVariable[object] = ResultVariable()
         self._results.append(result_variable)
 
+        # propagate unknowns without executing value expression while still allowing to filter them out with the guard
+        value_expression: ExpressionStatement
+        if isinstance(value, Unknown):
+            value_expression = Literal(value)
+            self.statement.copy_location(value_expression)
+        else:
+            value_expression = self.statement.value_expression
+
         # execute the value expression and the guard
         guarded_expression: ExpressionStatement
         if self.statement.guard is None:
-            guarded_expression = self.statement.value_expression
+            guarded_expression = value_expression
         else:
             else_expression: ExpressionStatement = ListComprehensionGuard()
             guarded_expression = ConditionalExpression(
                 condition=self.statement.guard,
-                if_expression=self.statement.value_expression,
+                if_expression=value_expression,
                 else_expression=else_expression,
             )
             self.statement.copy_location(else_expression)
@@ -550,7 +552,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Set the final result to be an unknown. No elements should be gradually received in this case.
         Mutually exclusive with `complete`.
         """
-        if self._results:
+        if self._results and not all(isinstance(result, Unknown) for result in self._results):
             raise InvalidCompilerState(
                 self, "list comprehension helper got set_unknown after some (known) elements where received"
             )
