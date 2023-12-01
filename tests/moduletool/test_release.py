@@ -142,7 +142,7 @@ def test_release_stable_version(
     assert mod.version == Version("1.2.4.dev0")
     # Verify changelog file
     if changelog_file_exists:
-        with open(path_changelog_file, "r", encoding="utf-8") as fh:
+        with open(path_changelog_file, encoding="utf-8") as fh:
             assert fh.read() == get_changelog_content(after_release=True)
     else:
         assert not os.path.exists(path_changelog_file)
@@ -256,7 +256,7 @@ def test_bump_dev_version(
         assert Module.from_path(path_module).version == Version(expected_version)
         path_changelog_file = os.path.join(path_module, const.MODULE_CHANGELOG_FILE)
         if changelog_file_exists:
-            with open(path_changelog_file, "r", encoding="utf-8") as fh:
+            with open(path_changelog_file, encoding="utf-8") as fh:
                 # Ensure that only the first occurrence of the version number in the
                 # changelog file got replaced.
                 stable_version_number = expected_version.rsplit(".", maxsplit=1)[0]
@@ -360,7 +360,7 @@ def test_add_changelog_entry(tmpdir, modules_dir: str, monkeypatch, initial_chan
     changelog_message = "A changelog message."
     module_tool.release(dev=True, patch=True, changelog_message=changelog_message)
 
-    with open(path_changelog_file, "r", encoding="utf-8") as fh:
+    with open(path_changelog_file, encoding="utf-8") as fh:
         assert fh.read().strip() == updated_changelog.strip()
     assert get_commit_message_x_commits_ago(path=path_module, nb_previous_commit=0).strip() == changelog_message
 
@@ -487,7 +487,7 @@ def test_populate_changelog(tmpdir, modules_dir: str, monkeypatch, top_level_hea
     module_tool = ModuleTool()
     module_tool.release(dev=False, message="Commit changes")
 
-    with open(path_changelog_file, "r", encoding="utf-8") as fh:
+    with open(path_changelog_file, encoding="utf-8") as fh:
         assert (
             fh.read()
             == """
@@ -621,7 +621,7 @@ def test_failed_to_set_release_date(tmpdir, modules_dir: str, monkeypatch, caplo
         module_tool.release(dev=False)
     assert "Failed to set the release date in the changelog for version 1.1.0." in caplog.text
 
-    with open(path_changelog_file, "r", encoding="utf-8") as fh:
+    with open(path_changelog_file, encoding="utf-8") as fh:
         assert (
             fh.read().strip()
             == """

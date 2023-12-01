@@ -18,7 +18,7 @@
 import logging
 import os
 import platform
-from typing import TYPE_CHECKING, Callable, Dict, List, Union
+from typing import TYPE_CHECKING, Callable, Union
 
 if TYPE_CHECKING:
     from inmanta.agent.agent import Agent
@@ -30,11 +30,11 @@ except ImportError:
 
 LOGGER = logging.getLogger(__name__)
 
-ReportReturn = Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]
-reports: Dict[str, Callable[["Agent"], ReportReturn]] = {}
+ReportReturn = Union[dict[str, list[str]], dict[str, str], dict[str, float], str]
+reports: dict[str, Callable[["Agent"], ReportReturn]] = {}
 
 
-def collect_report(agent: "Agent") -> Dict[str, ReportReturn]:
+def collect_report(agent: "Agent") -> dict[str, ReportReturn]:
     out = {}
     for name, report in reports.items():
         try:
@@ -70,7 +70,7 @@ def report_hostname(agent: "Agent") -> str:
 reports["hostname"] = report_hostname
 
 
-def report_ips(agent: "Agent") -> Union[str, Dict[str, List[str]]]:
+def report_ips(agent: "Agent") -> Union[str, dict[str, list[str]]]:
     try:
         import netifaces
 
@@ -89,7 +89,7 @@ reports["ips"] = report_ips
 
 
 def report_python(agent: "Agent") -> str:
-    return "%s %s %s" % (platform.python_implementation(), platform.python_version(), platform.python_build())
+    return f"{platform.python_implementation()} {platform.python_version()} {platform.python_build()}"
 
 
 reports["python"] = report_python
@@ -102,7 +102,7 @@ def report_pid(agent: "Agent") -> str:
 reports["pid"] = report_pid
 
 
-def report_resources(agent: "Agent") -> Dict[str, float]:
+def report_resources(agent: "Agent") -> dict[str, float]:
     if resource is None:
         return {}
 

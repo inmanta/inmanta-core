@@ -19,8 +19,9 @@
 import abc
 import json
 from abc import ABC
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Dict, Generic, List, Optional, Sequence, Tuple, Type, TypeVar, Union, cast
+from typing import Generic, Optional, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
@@ -146,7 +147,7 @@ class PagingMetadata:
         self.after = after
         self.page_size = page_size
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         return {
             "total": self.total,
             "before": self.before,
@@ -164,11 +165,11 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         last_id: Optional[PRIMITIVE_SQL_TYPES] = None,
         start: Optional[PRIMITIVE_SQL_TYPES] = None,
         end: Optional[PRIMITIVE_SQL_TYPES] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         self.limit = self.validate_limit(limit)
         self.raw_filter = filter or {}
-        self.filter: Dict[str, QueryFilter] = self.process_filters(filter)
+        self.filter: dict[str, QueryFilter] = self.process_filters(filter)
         self.order = order
         self.requested_page_boundaries = RequestedPagingBoundaries(start, end, first_id, last_id)
         self.requested_page_boundaries.validate()
@@ -180,15 +181,14 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         e.g. "/api/v2/resource"
         """
-        pass
 
-    def get_extra_url_parameters(self) -> Dict[str, str]:
+    def get_extra_url_parameters(self) -> dict[str, str]:
         """
         Return additional URL query parameters required to construct the paging links
         """
         return {}
 
-    async def get_data(self) -> Tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
+    async def get_data(self) -> tuple[Sequence[T_DTO], Optional[PagingBoundaries]]:
         query_builder = self.get_base_query()
 
         # In this method, we use `data.Resource`
@@ -217,7 +217,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         """
         Convert the sequence of records into a sequence of DTO's
         """
-        pass
 
     @abc.abstractmethod
     def get_base_query(self) -> SimpleQueryBuilder:
@@ -226,7 +225,6 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         Must contain select, from and where clause if specific filtering is required
         """
-        pass
 
     def get_base_query_for_page_count(self) -> SimpleQueryBuilder:
         """
@@ -237,11 +235,10 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
     @property
     @abc.abstractmethod
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         """
         Return the specification of the allowed filters, see FilterValidator
         """
-        pass
 
     def clip_to_page(self, query_builder: SimpleQueryBuilder) -> SimpleQueryBuilder:
         """
@@ -360,7 +357,7 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
 
         sql_query, values = query_builder.build()
         result = await data.Resource.select_query(sql_query, values, no_obj=True)
-        result = cast(List[Record], result)
+        result = cast(list[Record], result)
         if not result:
             raise InvalidQueryParameter("Could not determine page bounds")
         return PagingMetadata(
@@ -375,13 +372,13 @@ class DataView(FilterValidator, Generic[T_ORDER, T_DTO], ABC):
         dtos: Sequence[T_DTO],
         paging_boundaries: Union[PagingBoundaries, RequestedPagingBoundaries],
         meta: PagingMetadata,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Construct the paging links
         """
         links = {}
 
-        url_query_params: Dict[str, Optional[Union[SimpleTypes, List[str]]]] = {
+        url_query_params: dict[str, Optional[Union[SimpleTypes, list[str]]]] = {
             "limit": self.limit,
             "sort": str(self.order),
         }
@@ -457,7 +454,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         last_id: Optional[ResourceVersionIdStr] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
     ) -> None:
@@ -474,7 +471,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         self.deploy_summary = deploy_summary
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "resource_type": ContainsPartialFilter,
             "agent": ContainsPartialFilter,
@@ -485,7 +482,7 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
     def get_base_url(self) -> str:
         return "/api/v2/resource"
 
-    def get_extra_url_parameters(self) -> Dict[str, str]:
+    def get_extra_url_parameters(self) -> dict[str, str]:
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
@@ -572,7 +569,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         environment: data.Environment,
         version: int,
         limit: Optional[int] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         first_id: Optional[ResourceVersionIdStr] = None,
         last_id: Optional[ResourceVersionIdStr] = None,
@@ -596,7 +593,7 @@ class ResourcesInVersionView(DataView[VersionedResourceOrder, model.VersionedRes
         return f"/api/v2/desiredstate/{self.version}"
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "resource_type": ContainsPartialFilter,
             "agent": ContainsPartialFilter,
@@ -629,7 +626,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         first_id: Optional[UUID] = None,
         last_id: Optional[UUID] = None,
@@ -648,7 +645,7 @@ class CompileReportView(DataView[CompileReportOrder, CompileReport]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "requested": DateRangeFilter,
             "success": BooleanEqualityFilter,
@@ -702,7 +699,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
         self,
         environment: data.Environment,
         limit: Optional[int] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         start: Optional[int] = None,
         end: Optional[int] = None,
@@ -719,7 +716,7 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "version": IntRangeFilter,
             "date": DateRangeFilter,
@@ -778,7 +775,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         self.rid = rid
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {}
 
     def get_base_url(self) -> str:
@@ -851,7 +848,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         rid: ResourceIdStr,
         limit: Optional[int] = None,
         sort: str = "resource_type.desc",
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
     ) -> None:
@@ -868,7 +865,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
         self.rid = rid
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "minimal_log_level": LogLevelFilter,
             "timestamp": DateRangeFilter,
@@ -876,7 +873,7 @@ class ResourceLogsView(DataView[ResourceLogOrder, ResourceLog]):
             "action": ContainsFilterResourceAction,
         }
 
-    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
         # Change the api names of the filters to the names used internally in the database
         query = super().process_filters(filter)
         if query.get("minimal_log_level"):
@@ -952,7 +949,7 @@ class FactsView(DataView[FactOrder, Fact]):
         last_id: Optional[UUID] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=FactOrder.parse_from_string(sort),
@@ -966,7 +963,7 @@ class FactsView(DataView[FactOrder, Fact]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
             "resource_id": ContainsPartialFilter,
@@ -1010,7 +1007,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
         last_id: Optional[UUID] = None,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=NotificationOrder.parse_from_string(sort),
@@ -1024,7 +1021,7 @@ class NotificationsView(DataView[NotificationOrder, model.Notification]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "title": ContainsPartialFilter,
             "message": ContainsPartialFilter,
@@ -1071,7 +1068,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
         last_id: Optional[UUID] = None,
         start: Optional[Union[str, datetime]] = None,
         end: Optional[Union[str, datetime]] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=ParameterOrder.parse_from_string(sort),
@@ -1085,7 +1082,7 @@ class ParameterView(DataView[ParameterOrder, model.Parameter]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
             "source": ContainsPartialFilter,
@@ -1128,7 +1125,7 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         end: Optional[Union[datetime, bool, str]] = None,
         first_id: Optional[str] = None,
         last_id: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
     ) -> None:
         super().__init__(
             order=AgentOrder.parse_from_string(sort),
@@ -1142,14 +1139,14 @@ class AgentView(DataView[AgentOrder, model.Agent]):
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         return {
             "name": ContainsPartialFilter,
             "process_name": ContainsPartialFilter,
             "status": ContainsFilter,
         }
 
-    def process_filters(self, filter: Optional[Dict[str, List[str]]]) -> Dict[str, QueryFilter]:
+    def process_filters(self, filter: Optional[dict[str, list[str]]]) -> dict[str, QueryFilter]:
         out_filter = super().process_filters(filter)
         # name is ambiguous, qualify
         if "name" in out_filter:
@@ -1221,7 +1218,7 @@ class DiscoveredResourceView(DataView[DiscoveredResourceOrder, model.DiscoveredR
         self.environment = environment
 
     @property
-    def allowed_filters(self) -> Dict[str, Type[Filter]]:
+    def allowed_filters(self) -> dict[str, type[Filter]]:
         """
         Return the specification of the allowed filters, see FilterValidator
         """
@@ -1280,7 +1277,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
         """The current offset of the values to be used for filter statements"""
         return len(self.values) + len(self._prelude_query_builder.values) + 1
 
-    def build(self) -> Tuple[str, List[object]]:
+    def build(self) -> tuple[str, list[object]]:
         prelude_query, prelude_values = self._prelude_query_builder.build()
         prelude_query_in_with_block = f"WITH prelude AS ({prelude_query})"
         delegate: SimpleQueryBuilder = SimpleQueryBuilder(
@@ -1328,7 +1325,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             prelude_query_builder=self._prelude_query_builder.order_and_limit(db_order, limit, backward_paging),
         )
 
-    def filter(self, filter_statements: List[str], values: List[object]) -> "PreludeBasedFilteringQueryBuilder":
+    def filter(self, filter_statements: list[str], values: list[object]) -> "PreludeBasedFilteringQueryBuilder":
         return PreludeBasedFilteringQueryBuilder(
             select_clause=self.select_clause,
             from_clause=self._from_clause,

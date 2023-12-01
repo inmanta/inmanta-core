@@ -19,7 +19,8 @@ import base64
 import difflib
 import logging
 import os
-from typing import Iterable, List, cast
+from collections.abc import Iterable
+from typing import cast
 
 from inmanta.protocol import handle, methods
 from inmanta.protocol.exceptions import BadRequest, NotFound, ServerError
@@ -39,12 +40,12 @@ class FileService(protocol.ServerSlice):
     server_slice: Server
 
     def __init__(self) -> None:
-        super(FileService, self).__init__(SLICE_FILE)
+        super().__init__(SLICE_FILE)
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_SERVER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -121,13 +122,13 @@ class FileService(protocol.ServerSlice):
                 )
 
     @handle(methods.stat_files)
-    async def stat_files(self, files: List[str]) -> Apireturn:
+    async def stat_files(self, files: list[str]) -> Apireturn:
         """
         Return which files in the list exist on the server
         """
         return 200, {"files": self.stat_file_internal(files)}
 
-    def stat_file_internal(self, files: Iterable[str]) -> List[str]:
+    def stat_file_internal(self, files: Iterable[str]) -> list[str]:
         """
         Return which files in the list don't exist on the server
         """
@@ -148,23 +149,23 @@ class FileService(protocol.ServerSlice):
         Diff the two files identified with the two hashes
         """
         if file_id_1 == "" or file_id_1 == "0":
-            file_1_lines: List[str] = []
+            file_1_lines: list[str] = []
         else:
             file_1_path = os.path.join(self.server_slice._server_storage["files"], file_id_1)
             if not os.path.exists(file_1_path):
                 raise NotFound()
 
-            with open(file_1_path, "r", encoding="utf-8") as fd:
+            with open(file_1_path, encoding="utf-8") as fd:
                 file_1_lines = fd.readlines()
 
         if file_id_2 == "" or file_id_2 == "0":
-            file_2_lines: List[str] = []
+            file_2_lines: list[str] = []
         else:
             file_2_path = os.path.join(self.server_slice._server_storage["files"], file_id_2)
             if not os.path.exists(file_2_path):
                 raise NotFound()
 
-            with open(file_2_path, "r", encoding="utf-8") as fd:
+            with open(file_2_path, encoding="utf-8") as fd:
                 file_2_lines = fd.readlines()
 
         try:

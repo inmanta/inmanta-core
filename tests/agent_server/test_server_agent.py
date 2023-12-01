@@ -23,7 +23,7 @@ import uuid
 from functools import partial
 from itertools import groupby
 from logging import DEBUG
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 from uuid import UUID
 
 import psutil
@@ -1488,7 +1488,7 @@ async def test_auto_deploy_no_splay(server, client, clienthelper, resource_conta
     assert result.result["agents"][0]["name"] == "agent1"
 
 
-def ps_diff_inmanta_agent_processes(original: List[psutil.Process], current_process: psutil.Process, diff: int = 0) -> None:
+def ps_diff_inmanta_agent_processes(original: list[psutil.Process], current_process: psutil.Process, diff: int = 0) -> None:
     current = _get_inmanta_agent_child_processes(current_process)
 
     def is_terminated(proc):
@@ -1508,8 +1508,8 @@ def ps_diff_inmanta_agent_processes(original: List[psutil.Process], current_proc
     assert len(original) + diff == len(
         current
     ), """procs found:
-        pre:%s
-        post:%s""" % (
+        pre:{}
+        post:{}""".format(
         original,
         current,
     )
@@ -1525,7 +1525,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     env_uuid = uuid.UUID(environment)
     agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
     current_process = psutil.Process()
-    agent_processes_pre: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    agent_processes_pre: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(env_uuid)
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
@@ -1575,7 +1575,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
 
         return _check_wait_condition
 
-    async def assert_session_state(expected_agent_states: Dict[str, AgentStatus], expected_agent_instances: List[str]) -> None:
+    async def assert_session_state(expected_agent_states: dict[str, AgentStatus], expected_agent_instances: list[str]) -> None:
         result = await data.AgentProcess.get_list()
         assert len(result) == 1
         sid = result[0].sid
@@ -1626,7 +1626,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
     # Stop server
     await asyncio.wait_for(server.stop(), timeout=15)
 
-    agent_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    agent_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     new_agent_processes = set(agent_processes) - set(agent_processes_pre)
 
     assert len(new_agent_processes) == 0, new_agent_processes
@@ -1679,7 +1679,7 @@ async def test_autostart_clear_environment(server, client, resource_container, e
     """
     resource_container.Provider.reset()
     current_process = psutil.Process()
-    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"internal": "", "agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
@@ -1843,7 +1843,7 @@ async def setup_environment_with_agent(client, project_name):
     return project_id, env_id
 
 
-def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[psutil.Process]:
+def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> list[psutil.Process]:
     def try_get_cmd(p: psutil.Process) -> str:
         try:
             return p.cmdline()
@@ -1857,7 +1857,7 @@ def _get_inmanta_agent_child_processes(parent_process: psutil.Process) -> List[p
 
 async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
-    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     (project_id, env_id) = await setup_environment_with_agent(client, "proj")
 
@@ -1873,7 +1873,7 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
 
 async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container, no_agent_backoff):
     current_process = psutil.Process()
-    inmanta_agent_child_processes: List[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
+    inmanta_agent_child_processes: list[psutil.Process] = _get_inmanta_agent_child_processes(current_process)
     resource_container.Provider.reset()
     (project1_id, env1_id) = await setup_environment_with_agent(client, "proj1")
     await setup_environment_with_agent(client, "proj2")
@@ -1908,7 +1908,7 @@ async def test_export_duplicate(resource_container, snippetcompiler):
     assert "exists more than once in the configuration model" in str(exc.value)
 
 
-class ResourceProvider(object):
+class ResourceProvider:
     def __init__(self, index, name, producer, state=None):
         self.name = name
         self.producer = producer
@@ -1916,8 +1916,8 @@ class ResourceProvider(object):
         self.index = index
 
     def get_resource(
-        self, resource_container: ResourceContainer, agent: str, key: str, version: str, requires: List[str]
-    ) -> Tuple[Dict[str, str], Optional[const.ResourceState]]:
+        self, resource_container: ResourceContainer, agent: str, key: str, version: str, requires: list[str]
+    ) -> tuple[dict[str, str], Optional[const.ResourceState]]:
         base = {
             "key": key,
             "value": "value1",
@@ -1931,7 +1931,7 @@ class ResourceProvider(object):
 
         state = None
         if self.state is not None:
-            state = ("test::Resource[%s,key=%s]" % (agent, key), self.state)
+            state = (f"test::Resource[{agent},key={key}]", self.state)
 
         return base, state
 
@@ -2695,7 +2695,7 @@ async def test_s_incremental_deploy_interrupts_full_deploy(
 @dataclasses.dataclass
 class Result:
     wait_for: int
-    values: Tuple[int, int, int]
+    values: tuple[int, int, int]
     msg: str
 
 
@@ -3443,7 +3443,7 @@ async def test_agent_stop_deploying_when_paused(
 
     version = await clienthelper.get_version()
 
-    def _get_resources(agent_name: str) -> List[Dict]:
+    def _get_resources(agent_name: str) -> list[dict]:
         return [
             {
                 "key": "key1",
@@ -3581,7 +3581,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
     Test whether facts set in the handler via the ctx.set_fact() method arrive on the server.
     """
 
-    def get_resources(version: str, params: List[data.Parameter]) -> List[Dict[str, Any]]:
+    def get_resources(version: str, params: list[data.Parameter]) -> list[dict[str, Any]]:
         return [
             {
                 "key": param.name,
@@ -3596,7 +3596,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
             for param in params
         ]
 
-    def compare_params(actual_params: List[data.Parameter], expected_params: List[data.Parameter]) -> None:
+    def compare_params(actual_params: list[data.Parameter], expected_params: list[data.Parameter]) -> None:
         actual_params = sorted(actual_params, key=lambda p: p.name)
         expected_params = sorted(expected_params, key=lambda p: p.name)
         assert len(expected_params) == len(actual_params)

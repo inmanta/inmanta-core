@@ -45,7 +45,7 @@ if False:
     from typing import Dict, List, Optional, Tuple, Union  # noqa: F401
 
 
-class IOBase(object):
+class IOBase:
     """
     Base class for an IO module. This class is python2 compatible so IOs that work remote can load this module on python2.
     """
@@ -93,7 +93,7 @@ class BashIO(IOBase):
 
     def __init__(self, uri, config, run_as=None):
         # type: (str, Dict[str, Optional[str]], Optional[str]) -> None
-        super(BashIO, self).__init__(uri, config)
+        super().__init__(uri, config)
         self.run_as = run_as
 
     def _run_as_args(self, *args):
@@ -123,12 +123,12 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise IOError("Failed to hash file")
+            raise OSError("Failed to hash file")
 
         hash = data[0].decode("utf-8").strip().split(" ")[0]
 
         if len(hash) != 40:
-            raise IOError("Invalid hash output")
+            raise OSError("Invalid hash output")
 
         return hash
 
@@ -146,7 +146,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise IOError()
+            raise OSError()
 
         return data[0].decode("utf-8")
 
@@ -159,7 +159,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise IOError()
+            raise OSError()
 
         return data[0]
 
@@ -181,11 +181,7 @@ class BashIO(IOBase):
             self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd
         )
 
-        if sys.version_info < (3, 0, 0):
-            # TODO timeout is not supported
-            data = result.communicate()
-        else:
-            data = result.communicate(timeout=timeout)
+        data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
@@ -211,7 +207,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise IOError()
+            raise OSError()
 
         return data[0].decode("utf-8").strip()
 
@@ -237,7 +233,7 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise IOError()
+            raise OSError()
 
         if "symbolic link" in data[0].decode("utf-8").strip():
             return True
@@ -255,11 +251,11 @@ class BashIO(IOBase):
         data = result.communicate()
 
         if result.returncode > 0:
-            raise IOError()
+            raise OSError()
 
         parts = data[0].decode("utf-8").strip().split(" ")
         if len(parts) != 3:
-            raise IOError()
+            raise OSError()
 
         status = {}
         status["owner"] = parts[1]
@@ -277,7 +273,7 @@ class BashIO(IOBase):
         result.communicate()
 
         if result.returncode > 0:
-            raise IOError()
+            raise OSError()
 
     def put(self, path, content):
         # type: (str, str) -> bool
@@ -290,7 +286,7 @@ class BashIO(IOBase):
         result.communicate(input=content)
 
         if result.returncode > 0:
-            raise IOError()
+            raise OSError()
 
         return True
 
@@ -301,7 +297,7 @@ class BashIO(IOBase):
         """
         args = None
         if user is not None and group is not None:
-            args = ["chown", "%s:%s" % (user, group)]
+            args = ["chown", f"{user}:{group}"]
 
         elif user is not None:
             args = ["chown", user]
@@ -454,11 +450,7 @@ class LocalIO(IOBase):
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
 
-        if sys.version_info < (3, 0, 0):
-            # TODO timeout is not supported
-            data = result.communicate()
-        else:
-            data = result.communicate(timeout=timeout)
+        data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
@@ -593,14 +585,14 @@ class LocalIO(IOBase):
         elif not isinstance(user, int):
             _user = self._get_uid(user)
             if _user is None:
-                raise LookupError("no such user: {!r}".format(user))
+                raise LookupError(f"no such user: {user!r}")
 
         if group is None:
             _group = -1
         elif not isinstance(group, int):
             _group = self._get_gid(group)
             if _group is None:
-                raise LookupError("no such group: {!r}".format(group))
+                raise LookupError(f"no such group: {group!r}")
 
         os.chown(path, _user, _group)
 

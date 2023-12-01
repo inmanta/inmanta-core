@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Iterator
 from functools import reduce
 from itertools import chain
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple, Type
+from typing import Callable, Optional
 
 import pytest
 
@@ -72,19 +73,19 @@ def get_dataflow_node(graph: DataflowGraph, name: str) -> AssignableNodeReferenc
     """
     Returns a dataflow node for a graph by name. Name is allowed to have '.' for attribute nodes.
     """
-    parts: List[str] = name.split(".")
+    parts: list[str] = name.split(".")
     return reduce(lambda acc, part: AttributeNodeReference(acc, part), parts[1:], graph.resolver.get_dataflow_node(parts[0]))
 
 
 class DataflowTestHelper:
     def __init__(self, snippetcompiler) -> None:
         self.snippetcompiler = snippetcompiler
-        self._types: Dict[str, inmanta_type.Type] = {}
+        self._types: dict[str, inmanta_type.Type] = {}
         self._namespace: Optional[Namespace] = None
-        self._instances: Dict[str, InstanceNode] = {}
-        self._tokens: List[str] = []
+        self._instances: dict[str, InstanceNode] = {}
+        self._tokens: list[str] = []
 
-    def get_types(self) -> Dict[str, inmanta_type.Type]:
+    def get_types(self) -> dict[str, inmanta_type.Type]:
         return self._types
 
     def get_namespace(self) -> Namespace:
@@ -96,7 +97,7 @@ class DataflowTestHelper:
         assert graph is not None
         return graph
 
-    def compile(self, snippet: str, expected_error_type: Optional[Type[RuntimeException]] = None) -> None:
+    def compile(self, snippet: str, expected_error_type: Optional[type[RuntimeException]] = None) -> None:
         def compile():
             self.snippetcompiler.setup_for_snippet(snippet)
             Config.set("compiler", "datatrace_enable", "true")
@@ -117,7 +118,7 @@ class DataflowTestHelper:
             except Exception as e:
                 if isinstance(e, AssertionError):
                     raise e
-                assert False, "Expected %s, got %s" % (expected_error_type, e)
+                assert False, f"Expected {expected_error_type}, got {e}"
 
     def _consume_token_instance(self) -> Optional[str]:
         if self._tokens[0] != "<instance>":
@@ -137,7 +138,7 @@ class DataflowTestHelper:
             raise Exception("Invalid syntax: expected attribute name, got `%s`" % attribute)
         return attribute
 
-    def _consume_token_lhs(self) -> Callable[[List[NodeReference], Optional[str]], None]:
+    def _consume_token_lhs(self) -> Callable[[list[NodeReference], Optional[str]], None]:
         node: AssignableNode
         instance_id: Optional[str] = self._consume_token_instance()
         if instance_id is not None:
@@ -160,7 +161,7 @@ class DataflowTestHelper:
         if self._consume_token_attribute() is not None:
             raise Exception("Syntax error: this simple language only supports attributes directly on instances in the lhs.")
 
-        def continuation(rhs: List[NodeReference], instance_bind: Optional[str] = None) -> None:
+        def continuation(rhs: list[NodeReference], instance_bind: Optional[str] = None) -> None:
             if instance_bind is not None:
                 assert (
                     len(node.instance_assignments) == 1
@@ -169,7 +170,7 @@ class DataflowTestHelper:
                 self._instances[instance_bind] = instance_node
                 rhs.append(instance_node.reference())
             # test element equality: NodeReference does not define sort or hash so this is the only way
-            actual_rhs: List[NodeReference] = [assignment.rhs for assignment in node.assignments()]
+            actual_rhs: list[NodeReference] = [assignment.rhs for assignment in node.assignments()]
             for rhs_elem in rhs:
                 assert rhs_elem in actual_rhs
                 actual_rhs.remove(rhs_elem)
@@ -182,7 +183,7 @@ class DataflowTestHelper:
         if token != "->":
             raise Exception("Invalid syntax: expected `->`, got `%s`" % token)
 
-    def _consume_token_rhs_element(self) -> Tuple[Optional[NodeReference], Optional[str]]:
+    def _consume_token_rhs_element(self) -> tuple[Optional[NodeReference], Optional[str]]:
         instance_id: Optional[str] = self._consume_token_instance()
         if instance_id is not None:
             if self._consume_token_attribute() is not None:
@@ -207,8 +208,8 @@ class DataflowTestHelper:
                     attribute_name = self._consume_token_attribute()
                 return (node_ref, None)
 
-    def _consume_token_rhs(self, continuation: Callable[[List[NodeReference], Optional[str]], None]) -> None:
-        nodes: List[NodeReference] = []
+    def _consume_token_rhs(self, continuation: Callable[[list[NodeReference], Optional[str]], None]) -> None:
+        nodes: list[NodeReference] = []
         instance_bind: Optional[str] = None
 
         def consume_node(instance_bind: Optional[str] = None) -> Optional[str]:
@@ -261,11 +262,11 @@ class DataflowTestHelper:
         """
         self._tokens = graphstring.split()
         while len(self._tokens) > 0:
-            continuation: Callable[[List[NodeReference], Optional[str]], None] = self._consume_token_lhs()
+            continuation: Callable[[list[NodeReference], Optional[str]], None] = self._consume_token_lhs()
             self._consume_token_edge()
             self._consume_token_rhs(continuation)
 
-    def verify_leaves(self, leaves: Dict[str, Set[str]]) -> None:
+    def verify_leaves(self, leaves: dict[str, set[str]]) -> None:
         """
         Verifies that the leaves correspond with the graph's leaves.
         :param leaves: dict with variable names as keys and a set of leaves for each variable as values.
@@ -273,7 +274,7 @@ class DataflowTestHelper:
         """
         for key, value in leaves.items():
             lhs: AssignableNodeReference = get_dataflow_node(self.get_graph(), key)
-            rhs: Set[AssignableNode] = set(chain.from_iterable(get_dataflow_node(self.get_graph(), v).nodes() for v in value))
+            rhs: set[AssignableNode] = set(chain.from_iterable(get_dataflow_node(self.get_graph(), v).nodes() for v in value))
             assert set(lhs.leaf_nodes()) == rhs
 
 

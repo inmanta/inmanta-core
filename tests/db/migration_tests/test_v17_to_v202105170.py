@@ -18,8 +18,9 @@
 import json
 import os
 import uuid
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from datetime import datetime
-from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional
+from typing import Callable, Optional
 
 import pydantic
 import pytest
@@ -40,7 +41,7 @@ async def migrate_v17_to_v202105170(
     Returns a callable that performs a v17 database restore and migrates to v202105170.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v17.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v17.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
@@ -58,7 +59,7 @@ async def test_timestamp_timezones(
     All timestamps should be timezone-aware.
     """
 
-    async def fetch_timestamps() -> Dict[str, List[Dict[str, Optional[datetime]]]]:
+    async def fetch_timestamps() -> dict[str, list[dict[str, Optional[datetime]]]]:
         return {
             table: [
                 {**record} for record in await postgresql_client.fetch(f"SELECT %s FROM public.{table};" % ", ".join(columns))
@@ -66,14 +67,14 @@ async def test_timestamp_timezones(
             for table, columns in TIMESTAMP_COLUMNS.items()
         }
 
-    async def fetch_action_log_timestamps() -> List[datetime]:
+    async def fetch_action_log_timestamps() -> list[datetime]:
         return [
             pydantic.parse_obj_as(datetime, json.loads(msg)["timestamp"])
             for record in await postgresql_client.fetch("SELECT messages FROM public.resourceaction ORDER BY action_id;")
             for msg in record["messages"]
         ]
 
-    def timezone_aware(timestamps: Dict[str, List[Dict[str, Optional[datetime]]]]) -> Iterator[bool]:
+    def timezone_aware(timestamps: dict[str, list[dict[str, Optional[datetime]]]]) -> Iterator[bool]:
         return (
             timestamp.tzinfo is not None
             for table, rows in timestamps.items()
@@ -102,15 +103,15 @@ async def test_timestamp_timezones(
         """
     )
 
-    naive_timestamps: Dict[str, List[Dict[str, Optional[datetime]]]] = await fetch_timestamps()
+    naive_timestamps: dict[str, list[dict[str, Optional[datetime]]]] = await fetch_timestamps()
     assert not any(timezone_aware(naive_timestamps))
-    naive_action_log_timestamps: List[datetime] = await fetch_action_log_timestamps()
+    naive_action_log_timestamps: list[datetime] = await fetch_action_log_timestamps()
     assert len(naive_action_log_timestamps) > 0
     assert all(timestamp.tzinfo is None for timestamp in naive_action_log_timestamps)
 
     await migrate_v17_to_v202105170()
 
-    migrated_timestamps: Dict[str, List[Dict[str, Optional[datetime]]]] = await fetch_timestamps()
+    migrated_timestamps: dict[str, list[dict[str, Optional[datetime]]]] = await fetch_timestamps()
     assert all(timezone_aware(migrated_timestamps))
 
     compile: Optional[Compile] = await Compile.get_by_id(compile_id)

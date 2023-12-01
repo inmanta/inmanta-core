@@ -19,7 +19,7 @@
 """
 import datetime
 import uuid
-from typing import Dict, List, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
@@ -42,10 +42,10 @@ from .openapi.model import OpenAPI
 )
 def put_partial(
     tid: uuid.UUID,
-    resource_state: Optional[Dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
-    unknowns: Optional[List[Dict[str, PrimitiveTypes]]] = None,
-    resource_sets: Optional[Dict[ResourceIdStr, Optional[str]]] = None,
-    removed_resource_sets: Optional[List[str]] = None,
+    resource_state: Optional[dict[ResourceIdStr, Literal[ResourceState.available, ResourceState.undefined]]] = None,
+    unknowns: Optional[list[dict[str, PrimitiveTypes]]] = None,
+    resource_sets: Optional[dict[ResourceIdStr, Optional[str]]] = None,
+    removed_resource_sets: Optional[list[str]] = None,
     **kwargs: object,  # bypass the type checking for the resources and version_info argument
 ) -> ReturnValue[int]:
     """
@@ -104,7 +104,7 @@ def project_delete(id: uuid.UUID) -> None:
 
 
 @typedmethod(path="/project", operation="GET", client_types=[ClientType.api], api_version=2)
-def project_list(environment_details: bool = False) -> List[model.Project]:
+def project_list(environment_details: bool = False) -> list[model.Project]:
     """
     Returns a list of projects ordered alphabetically by name. The environments within each project are also sorted by name.
 
@@ -195,7 +195,7 @@ def environment_delete(id: uuid.UUID) -> None:
 
 
 @typedmethod(path="/environment", operation="GET", client_types=[ClientType.api], api_version=2)
-def environment_list(details: bool = False) -> List[model.Environment]:
+def environment_list(details: bool = False) -> list[model.Environment]:
     """
     Returns a list of environments
 
@@ -302,7 +302,7 @@ def environment_clear(id: uuid.UUID) -> None:
     client_types=[ClientType.api, ClientType.compiler],
     api_version=2,
 )
-def environment_create_token(tid: uuid.UUID, client_types: List[str], idempotent: bool = True) -> str:
+def environment_create_token(tid: uuid.UUID, client_types: list[str], idempotent: bool = True) -> str:
     """
     Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
     environment.
@@ -461,9 +461,9 @@ def get_agents(
     end: Optional[Union[datetime.datetime, bool, str]] = None,
     first_id: Optional[str] = None,
     last_id: Optional[str] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "name.asc",
-) -> List[model.Agent]:
+) -> list[model.Agent]:
     """
     Get all of the agents in the given environment
 
@@ -504,7 +504,7 @@ def get_agent_process_details(tid: uuid.UUID, id: uuid.UUID, report: bool = Fals
 
 
 @typedmethod(path="/agentmap", api=False, server_agent=True, operation="POST", client_types=[], api_version=2)
-def update_agent_map(agent_map: Dict[str, str]) -> None:
+def update_agent_map(agent_map: dict[str, str]) -> None:
     """
     Notify an agent about the fact that the autostart_agent_map has been updated.
 
@@ -540,7 +540,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
-) -> ReturnValue[List[model.ResourceAction]]:
+) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
 
@@ -581,8 +581,8 @@ def resource_deploy_done(
     rvid: model.ResourceVersionIdStr,
     action_id: uuid.UUID,
     status: ResourceState,
-    messages: List[model.LogLine] = [],
-    changes: Dict[str, model.AttributeStateChange] = {},
+    messages: list[model.LogLine] = [],
+    changes: dict[str, model.AttributeStateChange] = {},
     change: Optional[Change] = None,
 ) -> None:
     """
@@ -612,7 +612,7 @@ def resource_deploy_start(
     tid: uuid.UUID,
     rvid: model.ResourceVersionIdStr,
     action_id: uuid.UUID,
-) -> Dict[model.ResourceVersionIdStr, ResourceState]:
+) -> dict[model.ResourceVersionIdStr, ResourceState]:
     """
     Report to the server that the agent will start the deployment of the given resource.
 
@@ -637,7 +637,7 @@ def get_resource_events(
     tid: uuid.UUID,
     rvid: model.ResourceVersionIdStr,
     exclude_change: Optional[Change] = None,
-) -> Dict[model.ResourceIdStr, List[model.ResourceAction]]:
+) -> dict[model.ResourceIdStr, list[model.ResourceAction]]:
     """
     Return relevant events for a resource, i.e. all deploy actions for each of its dependencies since this resources' last
     successful deploy or all deploy actions if this resources hasn't been deployed before. The resource actions are sorted in
@@ -688,10 +688,10 @@ def resource_list(
     last_id: Optional[model.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "resource_type.desc",
     deploy_summary: bool = False,
-) -> List[model.LatestReleasedResource]:
+) -> list[model.LatestReleasedResource]:
     """
     :param tid: The id of the environment this resource belongs to
     :param limit: Limit the number of instances that are returned
@@ -761,7 +761,7 @@ def resource_history(
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
     sort: str = "date.desc",
-) -> List[model.ResourceHistory]:
+) -> list[model.ResourceHistory]:
     """
     :param tid: The id of the environment this resource belongs to
     :param rid: The id of the resource
@@ -794,9 +794,9 @@ def resource_logs(
     limit: Optional[int] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "timestamp.desc",
-) -> List[model.ResourceLog]:
+) -> list[model.ResourceLog]:
     """
     Get the logs of a specific resource.
 
@@ -849,7 +849,7 @@ def resource_logs(
 @typedmethod(
     path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> List[model.Fact]:
+def get_facts(tid: uuid.UUID, rid: model.ResourceIdStr) -> list[model.Fact]:
     """
     Get the facts related to a specific resource. The results are sorted alphabetically by name.
     :param tid: The id of the environment
@@ -885,9 +885,9 @@ def get_compile_reports(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "requested.desc",
-) -> List[model.CompileReport]:
+) -> list[model.CompileReport]:
     """
     Get the compile reports from an environment.
 
@@ -952,9 +952,9 @@ def list_desired_state_versions(
     limit: Optional[int] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "version.desc",
-) -> List[model.DesiredStateVersion]:
+) -> list[model.DesiredStateVersion]:
     """
     Get the desired state versions from an environment.
 
@@ -1013,9 +1013,9 @@ def get_resources_in_version(
     last_id: Optional[model.ResourceVersionIdStr] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "resource_type.desc",
-) -> List[model.VersionedResource]:
+) -> list[model.VersionedResource]:
     """
     Get the resources that belong to a specific version.
 
@@ -1055,7 +1055,7 @@ def get_diff_of_versions(
     tid: uuid.UUID,
     from_version: int,
     to_version: int,
-) -> List[model.ResourceDiff]:
+) -> list[model.ResourceDiff]:
     """
     Compare two versions of desired states, and provide the difference between them,
     with regard to their resources and the attributes of these resources.
@@ -1106,9 +1106,9 @@ def get_parameters(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[Union[datetime.datetime, str]] = None,
     end: Optional[Union[datetime.datetime, str]] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "name.asc",
-) -> List[model.Parameter]:
+) -> list[model.Parameter]:
     """
     List the parameters in an environment
 
@@ -1151,9 +1151,9 @@ def get_all_facts(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "name.asc",
-) -> List[model.Fact]:
+) -> list[model.Fact]:
     """
     List the facts in an environment.
 
@@ -1200,7 +1200,7 @@ def dryrun_trigger(tid: uuid.UUID, version: int) -> uuid.UUID:
 @typedmethod(
     path="/dryrun/<version>", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
-def list_dryruns(tid: uuid.UUID, version: int) -> List[model.DryRun]:
+def list_dryruns(tid: uuid.UUID, version: int) -> list[model.DryRun]:
     """
     Query a list of dry runs for a specific version
 
@@ -1245,9 +1245,9 @@ def list_notifications(
     last_id: Optional[uuid.UUID] = None,
     start: Optional[datetime.datetime] = None,
     end: Optional[datetime.datetime] = None,
-    filter: Optional[Dict[str, List[str]]] = None,
+    filter: Optional[dict[str, list[str]]] = None,
     sort: str = "created.desc",
-) -> List[model.Notification]:
+) -> list[model.Notification]:
     """
     List the notifications in an environment.
 
@@ -1331,7 +1331,7 @@ def update_notification(
     client_types=[ClientType.agent],
     api_version=2,
 )
-def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[model.Source]:
+def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> list[model.Source]:
     """
     Get the code for the given version and the given resource
     :param tid: The id of the environment
@@ -1350,7 +1350,7 @@ def get_source_code(tid: uuid.UUID, version: int, resource_type: str) -> List[mo
 )
 def get_environment_metrics(
     tid: uuid.UUID,
-    metrics: List[str],
+    metrics: list[str],
     start_interval: datetime.datetime,
     end_interval: datetime.datetime,
     nb_datapoints: int,
@@ -1393,7 +1393,7 @@ def login(username: str, password: str) -> ReturnValue[model.LoginReturn]:
 
 
 @typedmethod(path="/user", operation="GET", client_types=[ClientType.api], api_version=2)
-def list_users() -> List[model.User]:
+def list_users() -> list[model.User]:
     """List all users
 
     :return: A list of all users"""

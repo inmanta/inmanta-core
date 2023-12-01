@@ -18,7 +18,7 @@
 import logging
 import os
 from collections import defaultdict
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 import pkg_resources
 import yaml
@@ -79,7 +79,7 @@ class BoolFeature(Feature[bool]):
         super().__init__(slice, name, description, True)
 
 
-class StringListFeature(Feature[List[str]]):
+class StringListFeature(Feature[list[str]]):
     """A feature that holds a list of allowed values. When the list contains "*" it matches everything."""
 
     def __init__(self, slice: str, name: str, description: str = "") -> None:
@@ -107,13 +107,13 @@ class FeatureManager:
     """
 
     def __init__(self) -> None:
-        self._features: Dict[str, Dict[str, Feature[object]]] = defaultdict(lambda: {})
-        self._feature_config: Dict[str, Dict[str, Any]] = self._load_feature_config()
+        self._features: dict[str, dict[str, Feature[object]]] = defaultdict(dict)
+        self._feature_config: dict[str, dict[str, Any]] = self._load_feature_config()
 
-    def get_features(self) -> List[Feature[object]]:
+    def get_features(self) -> list[Feature[object]]:
         return [feature for slice in self._features.values() for feature in slice.values()]
 
-    def _load_feature_config(self) -> Dict[str, Dict[str, Any]]:
+    def _load_feature_config(self) -> dict[str, dict[str, Any]]:
         feature_file = feature_file_config.get()
         if feature_file is None:
             return {}
@@ -185,14 +185,14 @@ class FeatureManager:
 @stable_api
 class ApplicationContext:
     def __init__(self) -> None:
-        self._slices: List[ServerSlice] = []
+        self._slices: list[ServerSlice] = []
         self._feature_manager: Optional[FeatureManager] = None
 
     def register_slice(self, slice: ServerSlice) -> None:
         assert slice is not None
         self._slices.append(slice)
 
-    def get_slices(self) -> List[ServerSlice]:
+    def get_slices(self) -> list[ServerSlice]:
         return self._slices
 
     def set_feature_manager(self, feature_manager: FeatureManager) -> None:
@@ -207,7 +207,7 @@ class ApplicationContext:
     def get_product_metadata(self) -> ProductMetadata:
         return self.get_feature_manager().get_product_metadata()
 
-    def get_extension_statuses(self) -> List[ExtensionStatus]:
+    def get_extension_statuses(self) -> list[ExtensionStatus]:
         return ServerSlice.get_extension_statuses(list(self._slices))
 
     def register_environment_setting(self, setting: data.Setting) -> None:

@@ -21,7 +21,6 @@ import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
-from typing import Dict
 
 from pytest import fixture
 
@@ -207,11 +206,11 @@ def resource_container():
 
     # Remote control state, shared over all resources
     _STATE = defaultdict(dict)
-    _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-    _RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-    _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
-    _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
-    _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
+    _WRITE_COUNT = defaultdict(lambda: defaultdict(int))
+    _RELOAD_COUNT = defaultdict(lambda: defaultdict(int))
+    _READ_COUNT = defaultdict(lambda: defaultdict(int))
+    _TO_SKIP = defaultdict(lambda: defaultdict(int))
+    _TO_FAIL = defaultdict(lambda: defaultdict(int))
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
@@ -557,7 +556,7 @@ def resource_container():
             self,
             ctx: HandlerContext,
             resource: Resource,
-            requires: Dict[ResourceIdStr, const.ResourceState],
+            requires: dict[ResourceIdStr, const.ResourceState],
         ) -> None:
             if self.skip(resource.id.agent_name, resource.key):
                 raise SkipResource()

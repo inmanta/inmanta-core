@@ -17,8 +17,9 @@
 """
 import copy
 import logging
+from collections.abc import Sequence
 from itertools import chain
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Optional
 
 import pytest
 
@@ -197,7 +198,7 @@ def test_escape_and_un_escape(escaped: str, unescaped: str) -> None:
         ),
     ],
 )
-def test_parsing_special_characters(dict_path: str, value_to_parse: Dict, expected: object) -> None:
+def test_parsing_special_characters(dict_path: str, value_to_parse: dict, expected: object) -> None:
     """
     End-to-end test to verify whether escape characters are correctly interpreted.
     """
@@ -266,7 +267,7 @@ def test_parsing_keyed_list(
     dict_path_str: str,
     valid_path: bool,
     relation: Optional[DictPathValue],
-    key_value_pairs: Optional[Sequence[Tuple[Optional[DictPathValue], Optional[DictPathValue]]]],
+    key_value_pairs: Optional[Sequence[tuple[Optional[DictPathValue], Optional[DictPathValue]]]],
 ) -> None:
     """
     Verify whether the KeyedList/WildKeyedList classes correctly parse

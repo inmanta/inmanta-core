@@ -18,23 +18,8 @@
 import json
 import logging
 import re
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-)
+from collections.abc import Iterable, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
 
 import inmanta.util
 from inmanta import plugins
@@ -60,7 +45,7 @@ T = TypeVar("T", bound="Resource")
 
 
 @stable_api
-class resource(object):  # noqa: N801
+class resource:  # noqa: N801
     """
     A decorator that registers a new resource. The decorator must be applied to classes that inherit from
     :class:`~inmanta.resources.Resource`
@@ -76,7 +61,7 @@ class resource(object):  # noqa: N801
 
     # The _resources dict is accessed by the compile function in pytest-inmanta.
     # see https://github.com/inmanta/pytest-inmanta/pull/381
-    _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
+    _resources: dict[str, tuple[type["Resource"], dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
         if not isinstance(agent, str):
@@ -84,7 +69,7 @@ class resource(object):  # noqa: N801
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
-    def __call__(self, cls: Type[T]) -> Type[T]:
+    def __call__(self, cls: type[T]) -> type[T]:
         """
         The wrapping
         """
@@ -108,7 +93,7 @@ class resource(object):  # noqa: N801
         return cls._resources.keys()
 
     @classmethod
-    def get_class(cls, name: str) -> Tuple[Optional[Type["Resource"]], Optional[Dict[str, str]]]:
+    def get_class(cls, name: str) -> tuple[Optional[type["Resource"]], Optional[dict[str, str]]]:
         """
         Get the class definition for the given entity.
         """
@@ -118,7 +103,7 @@ class resource(object):  # noqa: N801
         return (None, None)
 
     @classmethod
-    def get_resources(cls) -> Iterator[Tuple[str, Type["Resource"]]]:
+    def get_resources(cls) -> Iterator[tuple[str, type["Resource"]]]:
         """Return an iterator over resource type, resource definition"""
         return (
             (resource_type, resource_definition) for resource_type, (resource_definition, _options) in cls._resources.items()
@@ -166,8 +151,8 @@ def to_id(entity: "proxy.DynamicProxy") -> Optional[str]:
 
 class ResourceMeta(type):
     @classmethod
-    def _get_parent_fields(cls, bases: Sequence[Type["Resource"]]) -> List[str]:
-        fields: List[str] = []
+    def _get_parent_fields(cls, bases: Sequence[type["Resource"]]) -> list[str]:
+        fields: list[str] = []
         for base in bases:
             if "fields" in base.__dict__:
                 if not isinstance(base.__dict__["fields"], (tuple, list)):
@@ -208,7 +193,7 @@ class Resource(metaclass=ResourceMeta):
     fields: Sequence[str] = ("send_event",)
     send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
-    map: Dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
+    map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
 
     @staticmethod
     def get_send_event(_exporter: "export.Exporter", obj: "Resource") -> bool:
@@ -219,7 +204,7 @@ class Resource(metaclass=ResourceMeta):
 
     @classmethod
     def convert_requires(
-        cls, resources: Dict["runtime.Instance", "Resource"], ignored_resources: Set["runtime.Instance"]
+        cls, resources: dict["runtime.Instance", "Resource"], ignored_resources: set["runtime.Instance"]
     ) -> None:
         """
         Convert all requires
@@ -228,8 +213,8 @@ class Resource(metaclass=ResourceMeta):
         :param ignored_resources: A set of model objects that have been ignored (and not converted to resources)
         """
         for res in resources.values():
-            final_requires: Set["Resource"] = set()
-            initial_requires: List["runtime.Instance"] = [x for x in res.model.requires]
+            final_requires: set["Resource"] = set()
+            initial_requires: list["runtime.Instance"] = [x for x in res.model.requires]
 
             for r in initial_requires:
                 if r in resources:
@@ -265,7 +250,7 @@ class Resource(metaclass=ResourceMeta):
         :param agent_attribute: The "path" to the attribute that defines the agent
         """
         # first get the agent attribute
-        path_elements: List[str] = agent_attribute.split(".")
+        path_elements: list[str] = agent_attribute.split(".")
         agent_value = model_object
         for el in path_elements:
             try:
@@ -376,14 +361,14 @@ class Resource(metaclass=ResourceMeta):
                 raise ResourceException("Resource field names can not start with _, reported in %s" % cls.__name__)
             if field in RESERVED_FOR_RESOURCE:
                 raise ResourceException(
-                    "Resource %s is a reserved keyword and not a valid field name, reported in %s" % (field, cls.__name__)
+                    f"Resource {field} is a reserved keyword and not a valid field name, reported in {cls.__name__}"
                 )
 
     def __init__(self, _id: "Id") -> None:
         self.id = _id
-        self.requires: Set[Id] = set()
-        self.resource_requires: Set[Resource] = set()
-        self.unknowns: Set[str] = set()
+        self.requires: set[Id] = set()
+        self.resource_requires: set[Resource] = set()
+        self.unknowns: set[str] = set()
 
         if not hasattr(self.__class__, "fields"):
             raise Exception("A resource should have a list of fields")
@@ -393,12 +378,12 @@ class Resource(metaclass=ResourceMeta):
 
         self.version = _id.version
 
-    def populate(self, fields: Dict[str, Any], force_fields: bool = False) -> None:
+    def populate(self, fields: dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:
             if field in fields or force_fields:
                 setattr(self, field, fields[field])
             else:
-                raise Exception("Resource with id %s does not have field %s" % (fields["id"], field))
+                raise Exception("Resource with id {} does not have field {}".format(fields["id"], field))
         if "requires" in fields:
             # parse requires into ID's
             for require in fields["requires"]:
@@ -439,7 +424,7 @@ class Resource(metaclass=ResourceMeta):
         """
         Serialize this resource to its dictionary representation
         """
-        dictionary: Dict[str, Any] = {}
+        dictionary: dict[str, Any] = {}
 
         for field in self.__class__.fields:
             dictionary[field] = getattr(self, field)
@@ -494,7 +479,7 @@ PARSE_RVID_REGEX = re.compile(
 
 
 @stable_api
-class Id(object):
+class Id:
     """
     A unique id that identifies a resource that is managed by an agent
     """
@@ -677,7 +662,7 @@ class HostNotFoundException(Exception):
         from inmanta.data import ResourceAction
 
         ra = ResourceAction()  # @UndefinedVariable
-        ra.message = "Failed to access host %s as user %s over ssh." % (self.hostname, self.user)
+        ra.message = f"Failed to access host {self.hostname} as user {self.user} over ssh."
         ra.data = {"host": self.hostname, "user": self.user, "error": self.error}
 
         return ra

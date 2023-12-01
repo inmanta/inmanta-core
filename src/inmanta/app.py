@@ -47,10 +47,11 @@ import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from collections import abc
+from collections.abc import Coroutine
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Coroutine, Dict, Optional
+from typing import Any, Callable, Optional
 
 import click
 from tornado import gen
@@ -225,7 +226,7 @@ class ExperimentalFeatureFlags:
     """
 
     def __init__(self) -> None:
-        self.metavar_to_option: Dict[str, Option[bool]] = {}
+        self.metavar_to_option: dict[str, Option[bool]] = {}
 
     def _get_name(self, option: Option[bool]) -> str:
         return f"flag_{option.name}"
@@ -385,7 +386,7 @@ def compile_project(options: argparse.Namespace) -> None:
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
-        print(" %s: %s" % (cmd, info["help"]))
+        print(" {}: {}".format(cmd, info["help"]))
 
 
 def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
@@ -599,7 +600,7 @@ def export(options: argparse.Namespace) -> None:
 
         summary_reporter = CompileSummaryReporter()
 
-        types: Optional[Dict[str, inmanta_type.Type]]
+        types: Optional[dict[str, inmanta_type.Type]]
         scopes: Optional[Namespace]
 
         t1 = time.time()

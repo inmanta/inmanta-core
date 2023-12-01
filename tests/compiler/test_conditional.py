@@ -152,16 +152,16 @@ entity Test:
 end
 implement Test using std::none
 test = Test()
-if %s:
+if {}:
     test.field = "if_branche"
-elif %s:
+elif {}:
     test.field = "elif1_branche"
-elif %s:
+elif {}:
     test.field = "elif2_branche"
 else:
     test.field = "else_branche"
 end
-            """ % (
+            """.format(
         if_value,
         elif1_value,
         elif2_value,

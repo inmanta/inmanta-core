@@ -313,7 +313,7 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
         (stdout, _, _) = run_without_tty(args)
     assert log_file in os.listdir(log_dir)
     log_file = os.path.join(log_dir, log_file)
-    with open(log_file, "r") as f:
+    with open(log_file) as f:
         log_lines = f.readlines()
     check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=True)
     check_logs(stdout, [], regexes_required_lines, timed=True)
@@ -376,10 +376,10 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
         print(line)
     for regex in compiled_regexes_requires_lines:
         if not any(regex.match(line) for line in log_lines):
-            pytest.fail("Required pattern was not found in log lines: %s" % (regex.pattern,))
+            pytest.fail(f"Required pattern was not found in log lines: {regex.pattern}")
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.match(line) for line in log_lines):
-            pytest.fail("Forbidden pattern found in log lines: %s" % (regex.pattern,))
+            pytest.fail(f"Forbidden pattern found in log lines: {regex.pattern}")
 
 
 def test_check_shutdown():

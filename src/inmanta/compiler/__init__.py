@@ -18,8 +18,9 @@
 import logging
 import sys
 from collections import abc
+from collections.abc import Sequence
 from itertools import chain
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Optional
 
 import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
@@ -96,7 +97,7 @@ def do_compile(refs: Optional[abc.Mapping[object, object]] = None) -> tuple[dict
 def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") -> None:
     from inmanta.execute.dataflow.graphic import GraphicRenderer
 
-    types: Dict[str, inmanta_type.Type] = scheduler.get_types()
+    types: dict[str, inmanta_type.Type] = scheduler.get_types()
     ns: Namespace = compiler.get_ns()
     config_ns: Namespace = ns.get_child("__config__")
     GraphicRenderer.view(
@@ -109,7 +110,7 @@ def show_dataflow_graphic(scheduler: scheduler.Scheduler, compiler: "Compiler") 
     )
 
 
-def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tuple[Location, AnchorTarget]]:
+def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[tuple[Location, AnchorTarget]]:
     """
     Return all lexical references
 
@@ -127,7 +128,7 @@ def anchormap(refs: Optional[abc.Mapping[object, object]] = None) -> Sequence[Tu
     return sched.get_anchormap(compiler, statements, blocks)
 
 
-def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
+def get_types_and_scopes() -> tuple[dict[str, inmanta_type.Type], Namespace]:
     """
     Only run the compilation steps required to extract the different types and scopes.
     """
@@ -138,7 +139,7 @@ def get_types_and_scopes() -> Tuple[Dict[str, inmanta_type.Type], Namespace]:
     return sched.get_types(), compiler.get_ns()
 
 
-class Compiler(object):
+class Compiler:
     """
     An inmanta compiler
 
@@ -150,10 +151,10 @@ class Compiler(object):
     def __init__(self, cf_file: str = "main.cf", refs: Optional[abc.Mapping[object, object]] = None) -> None:
         self.__root_ns: Optional[Namespace] = None
         self._data: CompileData = CompileData()
-        self.plugins: Dict[str, Plugin] = {}
+        self.plugins: dict[str, Plugin] = {}
         self.refs = refs if refs is not None else {}
 
-    def get_plugins(self) -> Dict[str, Plugin]:
+    def get_plugins(self) -> dict[str, Plugin]:
         return self.plugins
 
     def is_loaded(self) -> bool:
@@ -175,10 +176,10 @@ class Compiler(object):
         """
         Return the content of the given file
         """
-        with open(path, "r", encoding="utf-8") as file_d:
+        with open(path, encoding="utf-8") as file_d:
             return file_d.read()
 
-    def compile(self) -> Tuple[List["Statement"], List["BasicBlock"]]:
+    def compile(self) -> tuple[list["Statement"], list["BasicBlock"]]:
         """
         This method will parse and prepare everything to start evaluation
         the configuration specification.
@@ -207,7 +208,7 @@ class Compiler(object):
             mod_ns = cls.__module__.split(".")
             if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception(
-                    "All plugin modules should be loaded in the %s package not in %s" % (const.PLUGINS_PACKAGE, cls.__module__)
+                    f"All plugin modules should be loaded in the {const.PLUGINS_PACKAGE} package not in {cls.__module__}"
                 )
 
             mod_ns = mod_ns[1:]
@@ -278,7 +279,7 @@ class Compiler(object):
             """
             handled: bool = False
             if isinstance(exception, MultiException):
-                unset_attrs: Dict[dataflow.AttributeNode, UnsetException] = {
+                unset_attrs: dict[dataflow.AttributeNode, UnsetException] = {
                     cause.instance.instance_node.node().register_attribute(cause.attribute.name): cause
                     for cause in exception.get_causes()
                     if isinstance(cause, UnsetException)
@@ -286,12 +287,12 @@ class Compiler(object):
                     if cause.instance.instance_node is not None
                     if cause.attribute is not None
                 }
-                root_causes: Set[dataflow.AttributeNode] = UnsetRootCauseAnalyzer(unset_attrs.keys()).root_causes()
+                root_causes: set[dataflow.AttributeNode] = UnsetRootCauseAnalyzer(unset_attrs.keys()).root_causes()
                 for attr, e in unset_attrs.items():
                     if attr not in root_causes:
                         exception.others.remove(e)
                 handled = True
-            causes: List[CompilerException] = exception.get_causes()
+            causes: list[CompilerException] = exception.get_causes()
             for cause in causes:
                 if add_trace(cause):
                     handled = True

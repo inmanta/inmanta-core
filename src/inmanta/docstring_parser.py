@@ -17,7 +17,7 @@
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Optional
 
 import docstring_parser
 
@@ -37,7 +37,7 @@ class DocString:
                 new_meta.append(attr)
         doc_string.meta = new_meta
 
-        self._attr_description_map: Dict[str, str] = {attr.args[1]: attr.description for attr in doc_string.meta}
+        self._attr_description_map: dict[str, str] = {attr.args[1]: attr.description for attr in doc_string.meta}
         self._doc_string: docstring_parser.Docstring = doc_string
 
     def get_description(self) -> Optional[str]:
@@ -57,7 +57,7 @@ class DocString:
         """
         return self._attr_description_map.get(attr_name, None)
 
-    def get_attribute_description_map(self) -> Dict[str, str]:
+    def get_attribute_description_map(self) -> dict[str, str]:
         """
         Return the dict which maps the attribute name to its description.
         """
