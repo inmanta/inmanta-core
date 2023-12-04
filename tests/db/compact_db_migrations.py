@@ -34,9 +34,11 @@ MIGRATION_FILE_PATTERN = re.compile(r"^v(\d+)\.py$")
 
 
 # Extract version number from the filename
-def extract_version(filename):
+def extract_version(filename: str) -> int:
     match = MIGRATION_FILE_PATTERN.match(filename)
-    return int(match.group(1)) if match else None
+    if match is None:
+        raise ValueError(f"Filename {filename} does not match the expected migration file pattern")
+    return int(match.group(1))
 
 
 # Apply a migration script
