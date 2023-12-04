@@ -33,7 +33,7 @@ from inmanta.ast import (
 )
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast.type import NamedType, Type
+from inmanta.ast.type import Float, NamedType, Type
 from inmanta.execute.runtime import Instance, QueueScheduler, Resolver, dataflow
 from inmanta.execute.util import AnyType
 
@@ -382,6 +382,7 @@ class Entity(NamedType, WithComment):
         been set
         """
         attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
+
         # check if an index entry can be added
         for index_attributes in self.get_indices():
             index_ok = True
@@ -427,9 +428,16 @@ class Entity(NamedType, WithComment):
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params)
             )
-
-        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x: x[0])])
-
+        key = ", ".join(
+            [
+                "%s=%s"
+                % (
+                    k,
+                    repr(self.get_attribute(k).type.cast(v) if isinstance(self.get_attribute(k).type, Float) else v),
+                )
+                for k, v in sorted(params, key=lambda x: x[0])
+            ]
+        )
         if target is None:
             if key in self._index:
                 return self._index[key]

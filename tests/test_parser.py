@@ -141,7 +141,7 @@ entity Test extends Foo, foo::sub::Bar:
     \"\"\"
     string hello
     bool bar = true
-    number? ten=5
+    int? ten=5
 end
 """
         % documentation
