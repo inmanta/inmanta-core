@@ -290,7 +290,7 @@ host=localhost
         if not os.path.islink(server_env) or os.readlink(server_env) != full_path:
             if os.path.exists(server_env):
                 os.unlink(server_env)
-            os.symlink(full_path, server_env)
+            os.symlink(src=full_path, dst=server_env)
 
         return True
 
