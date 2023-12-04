@@ -34,16 +34,19 @@ async def test_compact_and_dump(postgres_db, database_name):
     """
     outfile = "./compacted_dump.sql"
     connection = await asyncpg.connect(
-        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password,database = database_name,
+        host=postgres_db.host,
+        port=postgres_db.port,
+        user=postgres_db.user,
+        password=postgres_db.password,
+        database=database_name,
     )
 
     try:
         # Initialize and use DBSchema
-        package_name = "src.inmanta.db."+PACKAGE_NAME
-        package = importlib.import_module(package_name)
+        package = importlib.import_module(PACKAGE_NAME)
         schema_manager = DBSchema(CORE_SCHEMA_NAME, package, connection)
         await schema_manager.ensure_db_schema()
-        #await schema_manager.set_installed_version("todo")
+        await schema_manager.set_installed_version(1)
     finally:
         await connection.close()
 
