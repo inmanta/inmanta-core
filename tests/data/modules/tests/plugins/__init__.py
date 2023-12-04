@@ -1,5 +1,6 @@
 from _collections import defaultdict
 from inmanta import resources
+from inmanta.execute.proxy import UnknownException
 from inmanta.execute.util import Unknown
 from inmanta.plugins import PluginException, plugin
 
@@ -28,6 +29,21 @@ def is_uknown(inp: "any") -> "bool":
 @plugin(allow_unknown=True)
 def do_uknown(inp: "any") -> "string":
     return "XX"
+
+
+@plugin
+def convert_unknowns(inp: "list", replace: "any") -> "list":
+    def convert():
+        iterator = iter(inp)
+        while True:
+            try:
+                yield next(iterator)
+            except UnknownException:
+                yield replace
+            except StopIteration:
+                break
+
+    return list(convert())
 
 
 counter = defaultdict(lambda: 0)

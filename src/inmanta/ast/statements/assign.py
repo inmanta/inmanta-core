@@ -124,12 +124,10 @@ class CreateList(ReferenceStatement):
         requires[self] = temp
         return requires
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Create this list
         """
-        super().execute(requires, resolver, queue)
-
         # gradual case, everything is in placeholder
         if self in requires:
             return requires[self]
@@ -188,11 +186,10 @@ class CreateDict(ReferenceStatement):
 
         return qlist
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Create this list
         """
-        super().execute(requires, resolver, queue)
         qlist = {}
 
         for i in range(len(self.items)):
@@ -399,8 +396,7 @@ class MapLookup(ReferenceStatement):
         self.key = key
         self.location = themap.get_location().merge(key.location)
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         mapv = self.themap.execute(requires, resolver, queue)
         if isinstance(mapv, Unknown):
             return Unknown(self)
@@ -469,8 +465,7 @@ class IndexLookup(ReferenceStatement, Resumer):
             target,
         )
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -582,8 +577,7 @@ class StringFormat(FormattedString):
         super().__init__(format_string, [k for (k, _) in variables])
         self._variables = variables
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)
@@ -628,8 +622,7 @@ class StringFormatV2(FormattedString):
         super().__init__(format_string, only_refs)
         self._variables: abc.Mapping[Reference, str] = {ref: full_name for (ref, full_name) in variables}
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         formatter: FStringFormatter = FStringFormatter()
 
         # We can't cache the formatter because it has no ability to cache the parsed string
