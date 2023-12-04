@@ -2,6 +2,6 @@ change-type: minor
 description: "Support `*args` and `**kwargs` arguments in plugin signatures."
 issue-nr: 6691
 issue-repo: inmanta-core
-destination-branches: [master, iso6]
+destination-branches: [iso6]
 sections:
   feature: "{{description}}"
