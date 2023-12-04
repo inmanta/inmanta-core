@@ -44,7 +44,6 @@ async def test_compact_and_dump(postgres_db, database_name):
     )
 
     try:
-        # Initialize and use DBSchema
         package = importlib.import_module(PACKAGE_NAME)
         schema_manager = DBSchema(CORE_SCHEMA_NAME, package, connection)
         await schema_manager.ensure_db_schema()
@@ -59,7 +58,7 @@ async def test_compact_and_dump(postgres_db, database_name):
         "-p",
         str(postgres_db.port),
         "-U",
-        postgres_db.user,  # Place the username right after the '-U' option
+        postgres_db.user,
         "-f",
         outfile,
         "-O",
