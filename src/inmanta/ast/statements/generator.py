@@ -187,7 +187,6 @@ class GradualFor(ResultCollector[object]):
         self.stmt = stmt
         self.seen: set[int] = set()
 
-    # TODO: document unknown behavior
     def receive_result(self, value: object, location: Location) -> bool:
         if isinstance(value, Unknown):
             # skip unknowns
