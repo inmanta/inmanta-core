@@ -208,11 +208,12 @@ class Null(inmanta_type.Type):
         return self.type_string()
 
 
-# Define some types which are only used in the context of plugins.
+# Define some types which are used in the context of plugins.
 PLUGIN_TYPES = {
     "any": inmanta_type.Type(),  # Any value will pass validation
     "expression": inmanta_type.Type(),  # Any value will pass validation
     "null": Null(),  # Only NoneValue will pass validation
+    None: Null(),  # Only NoneValue will pass validation
 }
 
 
@@ -257,15 +258,15 @@ class PluginValue:
         :param resolver: The namespace that can be used to resolve the type annotation of this
             argument.
         """
+        if self.type_expression in PLUGIN_TYPES:
+            self._resolved_type = PLUGIN_TYPES[self.type_expression]
+            return self._resolved_type
+
         if not isinstance(self.type_expression, str):
             raise CompilerException(
                 "Bad annotation in plugin %s for %s, expected str but got %s (%s)"
                 % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression)
             )
-
-        if self.type_expression in PLUGIN_TYPES:
-            self._resolved_type = PLUGIN_TYPES[self.type_expression]
-            return self._resolved_type
 
         plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
         locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
@@ -418,6 +419,13 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         # Inspect the function to get its arguments and annotations
         arg_spec = inspect.getfullargspec(function)
 
+        # Load the return annotation.  If not return annotation is provided, the returned
+        # type is "any".
+        if "return" not in arg_spec.annotations:
+            self.return_type = PluginReturn("any")
+        else:
+            self.return_type = PluginReturn(arg_spec.annotations["return"])
+
         def get_annotation(arg: str) -> object:
             """
             Get the annotation for a specific argument, and if none exists, raise an exception
@@ -429,13 +437,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 )
 
             return arg_spec.annotations[arg]
-
-        # Make sure we have a return annotation even for implicit "null"
-        # If no return annotation (or a Falsy value) is provided, we write
-        # "null" in the annotations dict so that we can use the get_annotation
-        # helper defined above.
-        arg_spec.annotations["return"] = arg_spec.annotations.get("return") or "null"
-        self.return_type = PluginReturn(get_annotation("return"))
 
         if arg_spec.varargs is not None:
             # We have a catch-all positional arguments
