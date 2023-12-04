@@ -356,18 +356,6 @@ CREATE TABLE public.resourceaction_resource (
     resource_version integer NOT NULL
 );
 
-
---
--- Name: schemamanager; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.schemamanager (
-    name character varying NOT NULL,
-    legacy_version integer,
-    installed_versions integer[]
-);
-
-
 --
 -- Name: unknownparameter; Type: TABLE; Schema: public; Owner: -
 --
@@ -518,15 +506,6 @@ ALTER TABLE ONLY public.resourceaction
 
 ALTER TABLE ONLY public.resourceaction_resource
     ADD CONSTRAINT resourceaction_resource_pkey PRIMARY KEY (environment, resource_id, resource_version, resource_action_id);
-
-
---
--- Name: schemamanager schemamanager_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schemamanager
-    ADD CONSTRAINT schemamanager_pkey PRIMARY KEY (name);
-
 
 --
 -- Name: unknownparameter unknownparameter_pkey; Type: CONSTRAINT; Schema: public; Owner: -
