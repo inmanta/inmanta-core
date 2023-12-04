@@ -1,5 +1,5 @@
 """
-    Copyright 2023 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,3 +15,17 @@
 
     Contact: code@inmanta.com
 """
+
+from asyncpg import Connection
+
+DISABLED = False
+
+
+async def update(connection: Connection) -> None:
+    schema = """
+
+    ALTER TABLE public.resource
+        ADD COLUMN resource_set varchar;
+    """
+    async with connection.transaction():
+        await connection.execute(schema)

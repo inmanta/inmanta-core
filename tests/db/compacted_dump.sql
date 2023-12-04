@@ -1,28 +1,21 @@
-"""
-    Copyright 2019 Inmanta
+--
+-- PostgreSQL database dump
+--
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+-- Dumped from database version 14.9 (Ubuntu 14.9-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.9 (Ubuntu 14.9-0ubuntu0.22.04.1)
 
-        http://www.apache.org/licenses/LICENSE-2.0
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-
-    Contact: code@inmanta.com
-"""
-
-import asyncpg
-
-DISABLED = False
-
-
-async def update(connection: asyncpg.Connection) -> None:
-    schema = """
 --
 -- Name: change; Type: TYPE; Schema: public; Owner: -
 --
@@ -110,6 +103,9 @@ CREATE TYPE public.versionstate AS ENUM (
 );
 
 
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
 
 --
 -- Name: agent; Type: TABLE; Schema: public; Owner: -
@@ -321,8 +317,7 @@ CREATE TABLE public.resource (
     provides character varying[] DEFAULT ARRAY[]::character varying[],
     resource_type character varying NOT NULL,
     resource_id_value character varying NOT NULL,
-    last_non_deploying_status public.non_deploying_resource_state
-    DEFAULT 'available'::public.non_deploying_resource_state NOT NULL,
+    last_non_deploying_status public.non_deploying_resource_state DEFAULT 'available'::public.non_deploying_resource_state NOT NULL,
     resource_set character varying
 );
 
@@ -356,6 +351,18 @@ CREATE TABLE public.resourceaction_resource (
     resource_id character varying NOT NULL,
     resource_version integer NOT NULL
 );
+
+
+--
+-- Name: schemamanager; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schemamanager (
+    name character varying NOT NULL,
+    legacy_version integer,
+    installed_versions integer[]
+);
+
 
 --
 -- Name: unknownparameter; Type: TABLE; Schema: public; Owner: -
@@ -508,6 +515,15 @@ ALTER TABLE ONLY public.resourceaction
 ALTER TABLE ONLY public.resourceaction_resource
     ADD CONSTRAINT resourceaction_resource_pkey PRIMARY KEY (environment, resource_id, resource_version, resource_action_id);
 
+
+--
+-- Name: schemamanager schemamanager_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schemamanager
+    ADD CONSTRAINT schemamanager_pkey PRIMARY KEY (name);
+
+
 --
 -- Name: unknownparameter unknownparameter_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
@@ -597,16 +613,14 @@ CREATE INDEX compile_env_started_index ON public.compile USING btree (environmen
 -- Name: configurationmodel_env_released_version_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX configurationmodel_env_released_version_index ON public.configurationmodel
-USING btree (environment, released, version DESC);
+CREATE UNIQUE INDEX configurationmodel_env_released_version_index ON public.configurationmodel USING btree (environment, released, version DESC);
 
 
 --
 -- Name: configurationmodel_env_version_total_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX configurationmodel_env_version_total_index ON public.configurationmodel
-USING btree (environment, version DESC, total);
+CREATE UNIQUE INDEX configurationmodel_env_version_total_index ON public.configurationmodel USING btree (environment, version DESC, total);
 
 
 --
@@ -704,16 +718,14 @@ CREATE INDEX resource_environment_resource_type_index ON public.resource USING b
 -- Name: resourceaction_environment_action_started_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resourceaction_environment_action_started_index ON public.resourceaction
-USING btree (environment, action, started DESC);
+CREATE INDEX resourceaction_environment_action_started_index ON public.resourceaction USING btree (environment, action, started DESC);
 
 
 --
 -- Name: resourceaction_environment_version_started_index; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX resourceaction_environment_version_started_index ON public.resourceaction
-USING btree (environment, version, started DESC);
+CREATE INDEX resourceaction_environment_version_started_index ON public.resourceaction USING btree (environment, version, started DESC);
 
 
 --
@@ -797,8 +809,7 @@ ALTER TABLE ONLY public.compile
 --
 
 ALTER TABLE ONLY public.compile
-    ADD CONSTRAINT compile_substitute_compile_id_fkey
-    FOREIGN KEY (substitute_compile_id) REFERENCES public.compile(id) ON DELETE CASCADE;
+    ADD CONSTRAINT compile_substitute_compile_id_fkey FOREIGN KEY (substitute_compile_id) REFERENCES public.compile(id) ON DELETE CASCADE;
 
 
 --
@@ -806,8 +817,7 @@ ALTER TABLE ONLY public.compile
 --
 
 ALTER TABLE ONLY public.configurationmodel
-    ADD CONSTRAINT configurationmodel_environment_fkey
-    FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE;
+    ADD CONSTRAINT configurationmodel_environment_fkey FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE;
 
 
 --
@@ -815,8 +825,7 @@ ALTER TABLE ONLY public.configurationmodel
 --
 
 ALTER TABLE ONLY public.dryrun
-    ADD CONSTRAINT dryrun_environment_model_fkey FOREIGN KEY (environment, model)
-    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT dryrun_environment_model_fkey FOREIGN KEY (environment, model) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
 
 --
@@ -856,8 +865,7 @@ ALTER TABLE ONLY public.report
 --
 
 ALTER TABLE ONLY public.resource
-    ADD CONSTRAINT resource_environment_model_fkey FOREIGN KEY (environment, model)
-    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT resource_environment_model_fkey FOREIGN KEY (environment, model) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
 
 --
@@ -865,19 +873,15 @@ ALTER TABLE ONLY public.resource
 --
 
 ALTER TABLE ONLY public.resourceaction
-    ADD CONSTRAINT resourceaction_environment_version_fkey FOREIGN KEY (environment, version)
-    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT resourceaction_environment_version_fkey FOREIGN KEY (environment, version) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
 
 --
--- Name: resourceaction_resource resourceaction_resource_environment_resource_id_resource_v_fkey;
--- Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: resourceaction_resource resourceaction_resource_environment_resource_id_resource_v_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.resourceaction_resource
-    ADD CONSTRAINT resourceaction_resource_environment_resource_id_resource_v_fkey
-    FOREIGN KEY (environment, resource_id, resource_version)
-    REFERENCES public.resource(environment, resource_id, model) ON DELETE CASCADE;
+    ADD CONSTRAINT resourceaction_resource_environment_resource_id_resource_v_fkey FOREIGN KEY (environment, resource_id, resource_version) REFERENCES public.resource(environment, resource_id, model) ON DELETE CASCADE;
 
 
 --
@@ -885,8 +889,7 @@ ALTER TABLE ONLY public.resourceaction_resource
 --
 
 ALTER TABLE ONLY public.resourceaction_resource
-    ADD CONSTRAINT resourceaction_resource_resource_action_id_fkey
-    FOREIGN KEY (resource_action_id) REFERENCES public.resourceaction(action_id) ON DELETE CASCADE;
+    ADD CONSTRAINT resourceaction_resource_resource_action_id_fkey FOREIGN KEY (resource_action_id) REFERENCES public.resourceaction(action_id) ON DELETE CASCADE;
 
 
 --
@@ -894,8 +897,7 @@ ALTER TABLE ONLY public.resourceaction_resource
 --
 
 ALTER TABLE ONLY public.unknownparameter
-    ADD CONSTRAINT unknownparameter_environment_fkey FOREIGN KEY (environment)
-    REFERENCES public.environment(id) ON DELETE CASCADE;
+    ADD CONSTRAINT unknownparameter_environment_fkey FOREIGN KEY (environment) REFERENCES public.environment(id) ON DELETE CASCADE;
 
 
 --
@@ -903,9 +905,10 @@ ALTER TABLE ONLY public.unknownparameter
 --
 
 ALTER TABLE ONLY public.unknownparameter
-    ADD CONSTRAINT unknownparameter_environment_version_fkey FOREIGN KEY (environment, version)
-    REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
+    ADD CONSTRAINT unknownparameter_environment_version_fkey FOREIGN KEY (environment, version) REFERENCES public.configurationmodel(environment, version) ON DELETE CASCADE;
 
-"""
-    async with connection.transaction():
-        await connection.execute(schema)
+
+--
+-- PostgreSQL database dump complete
+--
+

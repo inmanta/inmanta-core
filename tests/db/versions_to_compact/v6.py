@@ -1,5 +1,5 @@
 """
-    Copyright 2023 Inmanta
+    Copyright 2020 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,3 +15,19 @@
 
     Contact: code@inmanta.com
 """
+from asyncpg import Connection
+
+DISABLED = False
+
+
+async def update(connection: Connection) -> None:
+    await connection.execute(
+        """
+ALTER TABLE public.compile DROP CONSTRAINT compile_substitute_compile_id_fkey;
+ALTER TABLE public.compile
+    ADD CONSTRAINT compile_substitute_compile_id_fkey
+    FOREIGN KEY (substitute_compile_id) REFERENCES public.compile (id)
+    ON DELETE CASCADE;
+
+        """
+    )

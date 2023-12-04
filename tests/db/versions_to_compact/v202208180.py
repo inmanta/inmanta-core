@@ -1,5 +1,5 @@
 """
-    Copyright 2023 Inmanta
+    Copyright 2022 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,3 +15,11 @@
 
     Contact: code@inmanta.com
 """
+
+from asyncpg import Connection
+
+
+async def update(connection: Connection) -> None:
+    async with connection.transaction():
+        # Don't add foreign key to allow for deletion (cleanup) of base version
+        await connection.execute("ALTER TABLE public.configurationmodel ADD COLUMN partial_base int DEFAULT NULL;")
