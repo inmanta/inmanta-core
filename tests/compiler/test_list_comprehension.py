@@ -591,7 +591,7 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
     compiler.do_compile()
 
 
-# TODO: add test for https://inmanta.slack.com/archives/CKRF0C8R3/p1701450237242909
+# TODO: compile list of breaking changes
 # TODO: tests from whiteboard + follow-up tickets + change entries
 # TODO: test for unknown or true (independent of list comprehensions)
 def test_list_comprehension_unknown(snippetcompiler) -> None:
@@ -612,6 +612,9 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
 
             ## unknown in iterable becomes unknown in result, value expression is not executed
             l2 = [x for x in [1, 2, unknown]]
+            ## value expression not executed: one of the major motivations for this is that it may lead to "known" values
+            ## as a result of an unknown
+            l21 = [[1, 2, 3] for x in [1, 2, unknown]]
             l3 = [x for x in [1, unknown, 3] if true]
             l31 = [1 for x in [1, unknown, 3] if true]
             ## guard expression can filter out unknowns
@@ -702,6 +705,7 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             assert = true
             assert = std::is_unknown(l1)
             assert = not std::is_unknown(l2)
+            assert = not std::is_unknown(l21)
             assert = not std::is_unknown(l3)
             assert = not std::is_unknown(l31)
             assert = not std::is_unknown(l32)
@@ -717,6 +721,9 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
 
             l2_unknowns = [1, 2, "unknown"]
             l2_unknowns = tests::convert_unknowns(l2, "unknown")
+
+            l21_unknowns = [1, 2, 3, 1, 2, 3, "unknown"]
+            l21_unknowns = tests::convert_unknowns(l21, "unknown")
 
             l3_unknowns = [1, "unknown", 3]
             l3_unknowns = tests::convert_unknowns(l3, "unknown")
