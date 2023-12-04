@@ -46,7 +46,6 @@ async def test_compact_and_dump(postgres_db, database_name):
         package = importlib.import_module(PACKAGE_NAME)
         schema_manager = DBSchema(CORE_SCHEMA_NAME, package, connection)
         await schema_manager.ensure_db_schema()
-        await schema_manager.set_installed_version(1)
     finally:
         await connection.close()
 
