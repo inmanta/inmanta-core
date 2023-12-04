@@ -61,6 +61,39 @@ def test_for_error_2(snippetcompiler):
     )
 
 
+# TODO: compile list of breaking changes
+def test_for_loop_on_list_attribute(snippetcompiler):
+    """
+    Verify the basic workings of the for loop statement when applied to a plain list attribute.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        entity A:
+            list l
+        end
+
+        implement A using std::none
+
+        a = A(l=[1, 2])
+
+        entity Assert:
+            bool success
+        end
+        implement Assert using std::none
+        assert = Assert()
+
+        for x in a.l:
+            assert.success = true
+            if x != 1 and x != 2:
+                # trigger exception
+                assert.success = false
+            end
+        end
+        """
+    )
+    compiler.do_compile()
+
+
 def test_for_loop_fully_gradual(snippetcompiler):
     """
     Verify that the compiler does not produce progress potential for the for loop because it may cause it too freeze too
