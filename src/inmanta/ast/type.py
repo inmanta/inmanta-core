@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import copy
+import functools
 import numbers
 from collections.abc import Sequence
 from typing import Callable
@@ -25,6 +27,7 @@ from typing import Optional
 from inmanta.ast import (
     DuplicateException,
     Locatable,
+    LocatableString,
     Named,
     Namespace,
     NotFoundException,
@@ -746,3 +749,39 @@ TYPES: dict[str, Type] = {  # Part of the stable API
     Maps Inmanta :term:`DSL` types to their internal representation. For each key, value pair, `value.type_string()` is
     guaranteed to return key.
 """
+
+
+@stable_api
+def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
+    """
+    Convert a locatable type string, into a real inmanta type, that can be used for validation.
+
+    :param locatable_type: An object pointing to the type expression.
+    :param resolver: The namespace that can be used to resolve the type expression
+    """
+    # quickfix issue #1774
+    allowed_element_type: Type = Type()
+    if locatable_type.value == "list":
+        return TypedList(allowed_element_type)
+    if locatable_type.value == "dict":
+        return TypedDict(allowed_element_type)
+
+    # stack of transformations to be applied to the base inmanta_type.Type
+    # transformations will be applied right to left
+    transformation_stack: List[Callable[[Type], Type]] = []
+
+    if locatable_type.value.endswith("?"):
+        # We don't want to modify the object we received as argument
+        locatable_type = copy.copy(locatable_type)
+        locatable_type.value = locatable_type.value[0:-1]
+        transformation_stack.append(NullableType)
+
+    if locatable_type.value.endswith("[]"):
+        # We don't want to modify the object we received as argument
+        locatable_type = copy.copy(locatable_type)
+        locatable_type.value = locatable_type.value[0:-2]
+        transformation_stack.append(TypedList)
+
+    return functools.reduce(
+        lambda acc, transform: transform(acc), reversed(transformation_stack), resolver.get_type(locatable_type)
+    )
