@@ -593,7 +593,6 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
 
 # TODO: compile list of breaking changes
 # TODO: tests from whiteboard + follow-up tickets + change entries
-# TODO: test for unknown or true (independent of list comprehensions)
 def test_list_comprehension_unknown(snippetcompiler) -> None:
     """
     Verify that list comprehensions propagate Unknowns appropriately.

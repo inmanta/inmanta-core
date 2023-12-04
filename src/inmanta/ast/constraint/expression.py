@@ -210,10 +210,9 @@ class BinaryOperator(Operator):
         """
         The method that needs to be implemented for this operator
         """
-        # TODO: bugfix entry + tests
+        # TODO: bugfix entry -> special mention for `==`, `!=`, `not`, `in` -> used to return False, now Unknown
         if any(isinstance(arg, Unknown) for arg in args):
             return Unknown(self)
-        # pylint: disable-msg=W0142
         return self._bin_op(*args)
 
     @abstractmethod
@@ -273,7 +272,6 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         result = self.children[0].execute(requires, resolver, queue)
         if isinstance(result, Unknown):
-            # TODO: tests and bugfix entry
             target.set_value(result, self.location)
             return
         self._validate_value(result, 0)
@@ -330,8 +328,10 @@ class UnaryOperator(Operator):
         """
         This method calls the implementation of the operator
         """
-        # pylint: disable-msg=W0142
-        return self._un_op(args[0])
+        arg = args[0]
+        if isinstance(arg, Unknown):
+            return Unknown(self)
+        return self._un_op(arg)
 
     @abstractmethod
     def _un_op(self, arg: object) -> object:
@@ -552,17 +552,27 @@ class In(BinaryOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         BinaryOperator.__init__(self, "in", op1, op2)
 
+    def _op(self, args):
+        # override parent implementation to not propagate unknowns eagerly
+        return self._bin_op(*args)
+
     def _bin_op(self, arg1: object, arg2: object) -> object:
         """
         @see Operator#_op
         """
+        if isinstance(arg1, Unknown):
+            return Unknown(self)
+
         if isinstance(arg2, dict):
             return arg1 in arg2
         elif isinstance(arg2, list):
+            any_unknown: bool = False
             for arg in arg2:
                 if arg == arg1:
                     return True
+                if isinstance(arg, Unknown):
+                    any_unknown = True
+            # if we did not find arg1 in arg2 but there are unknowns we can't be sure
+            return Unknown(self) if any_unknown else False
         else:
             raise TypingException(self, "Operand two of 'in' can only be a list or dict (%s)" % arg2)
-
-        return False

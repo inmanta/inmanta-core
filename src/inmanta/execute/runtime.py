@@ -88,7 +88,6 @@ class ResultCollector(Generic[T_contra]):
         :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
             waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
         """
-        # TODO: test case with str that fails if isinstance checks for Sequence
         for subvalue in value if isinstance(value, list) else [value]:
             done: bool = self.receive_result(subvalue, location)
             if done:
@@ -394,7 +393,6 @@ class ResultVariableProxy(VariableABC[T]):
             assert self._listener is not None
             listener, location = self._listener
             # simple case: single value. Multi-value variables implement their own listener functionality
-            # TODO: add test cases for NoneValue and Unknown
             listener.receive_result_flatten(value, location)
             # clean up: prevent data leaks and ensure listener is only notified once
             self._listener = None

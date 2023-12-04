@@ -262,7 +262,6 @@ class ExpressionStatement(RequiresEmitStatement):
         resultcollector: Optional[ResultCollector] = requires.get((self, ResultCollector), None)
         # `result is None` represents the absence of a result, not the `null` DSL value
         if result is not None and resultcollector is not None:
-            # TODO: test for loop with Unknown: should not include it
             resultcollector.receive_result_flatten(result, self.location)
         return result
 
