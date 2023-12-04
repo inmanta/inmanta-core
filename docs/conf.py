@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # Inmanta documentation build configuration file, created by
 # sphinx-quickstart on Wed Aug 21 10:14:55 2013.
@@ -13,7 +12,9 @@
 # serve to show the default.
 import importlib.metadata
 import shutil
-import sys, os, pkg_resources, datetime
+import os
+import pkg_resources
+import datetime
 from importlib.metadata import PackageNotFoundError
 from sphinx.errors import ConfigError
 

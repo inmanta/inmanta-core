@@ -21,8 +21,9 @@ import ssl
 import uuid
 from asyncio import CancelledError
 from collections import defaultdict
+from collections.abc import MutableMapping, Sequence
 from json import JSONDecodeError
-from typing import Dict, List, MutableMapping, Optional, Sequence, Union
+from typing import Optional, Union
 
 import tornado
 from pyformance import timer
@@ -45,7 +46,7 @@ class RESTHandler(tornado.web.RequestHandler):
     A generic class use by the transport
     """
 
-    def initialize(self, transport: "RESTServer", config: Dict[str, common.UrlMethod]) -> None:
+    def initialize(self, transport: "RESTServer", config: dict[str, common.UrlMethod]) -> None:
         self._transport: "RESTServer" = transport
         self._config = config
 
@@ -54,7 +55,7 @@ class RESTHandler(tornado.web.RequestHandler):
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
             raise exceptions.BaseHttpException(
-                405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
+                405, f"{http_method} is not supported for this url. Supported methods: {allowed}"
             )
 
         return self._config[http_method]
@@ -112,7 +113,7 @@ class RESTHandler(tornado.web.RequestHandler):
             )
         return body
 
-    async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
+    async def _call(self, kwargs: dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
         An rpc like call
         """
@@ -238,7 +239,7 @@ class StaticContentHandler(tornado.web.RequestHandler):
         self._content = content
         self._content_type = content_type
 
-    def get(self, *args: List[str], **kwargs: Dict[str, str]) -> None:
+    def get(self, *args: list[str], **kwargs: dict[str, str]) -> None:
         self.set_header("Content-Type", self._content_type)
         self.write(self._content)
         self.set_status(200)
@@ -255,7 +256,7 @@ class RESTServer(RESTBase):
         super().__init__()
 
         self._id = id
-        self.headers: Dict[str, str] = {}
+        self.headers: dict[str, str] = {}
         self.session_manager = session_manager
         # number of ongoing requests
         self.inflight_counter = 0
@@ -278,9 +279,9 @@ class RESTServer(RESTBase):
         return self.session_manager.validate_sid(sid)
 
     def get_global_url_map(
-        self, targets: List[inmanta.protocol.endpoints.CallTarget]
-    ) -> Dict[str, Dict[str, common.UrlMethod]]:
-        global_url_map: Dict[str, Dict[str, common.UrlMethod]] = defaultdict(dict)
+        self, targets: list[inmanta.protocol.endpoints.CallTarget]
+    ) -> dict[str, dict[str, common.UrlMethod]]:
+        global_url_map: dict[str, dict[str, common.UrlMethod]] = defaultdict(dict)
         for slice in targets:
             url_map = slice.get_op_mapping()
             for url, configs in url_map.items():
@@ -290,14 +291,14 @@ class RESTServer(RESTBase):
         return global_url_map
 
     async def start(
-        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+        self, targets: Sequence[inmanta.protocol.endpoints.CallTarget], additional_rules: list[routing.Rule] = []
     ) -> None:
         """
         Start the server on the current ioloop
         """
-        global_url_map: Dict[str, Dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
+        global_url_map: dict[str, dict[str, common.UrlMethod]] = self.get_global_url_map(targets)
 
-        rules: List[routing.Rule] = []
+        rules: list[routing.Rule] = []
         rules.extend(additional_rules)
 
         for url, handler_config in global_url_map.items():

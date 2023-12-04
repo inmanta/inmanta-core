@@ -20,7 +20,8 @@ import logging
 import os
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Any, Deque, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
+from collections.abc import Iterable, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Deque, Optional
 
 from inmanta import plugins
 from inmanta.ast import Anchor, AnchorTarget, CompilerException, CycleException, Location, MultiException, RuntimeException
@@ -58,23 +59,23 @@ LOGGER = logging.getLogger(__name__)
 MAX_ITERATIONS = 100_000
 
 
-class Scheduler(object):
+class Scheduler:
     """
     This class schedules statements for execution
     """
 
     def __init__(
-        self, track_dataflow: bool = False, relation_precedence_rules: Optional[List["RelationPrecedenceRule"]] = None
+        self, track_dataflow: bool = False, relation_precedence_rules: Optional[list["RelationPrecedenceRule"]] = None
     ) -> None:
         if relation_precedence_rules is None:
             relation_precedence_rules = []
         self.track_dataflow: bool = track_dataflow
-        self.types: Dict[str, Type] = {}
+        self.types: dict[str, Type] = {}
         # The precedence rules specified in the project.yml file. This list may contain rules that are invalid with
         # respect to the model.
-        self.relation_precedence_rules: List["RelationPrecedenceRule"] = relation_precedence_rules
+        self.relation_precedence_rules: list["RelationPrecedenceRule"] = relation_precedence_rules
 
-    def _set_precedence_rules_on_relationship_attributes(self) -> List[RelationAttribute]:
+    def _set_precedence_rules_on_relationship_attributes(self) -> list[RelationAttribute]:
         """
         This method:
            * Validates the relation precedence rules in self.relation_precedence_policy and raises an exception for invalid
@@ -133,23 +134,23 @@ class Scheduler(object):
             )
         return attribute
 
-    def freeze_all(self, exns: List[CompilerException]) -> None:
+    def freeze_all(self, exns: list[CompilerException]) -> None:
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
             t.final(exns)
 
-        instances: List[Instance] = self.types["std::Entity"].get_all_instances()
+        instances: list[Instance] = self.types["std::Entity"].get_all_instances()
 
         for i in instances:
             i.final(exns)
 
     def dump(self, type: str = "std::Entity") -> None:
-        instances: List[Instance] = self.types[type].get_all_instances()
+        instances: list[Instance] = self.types[type].get_all_instances()
 
         for i in instances:
             i.dump()
 
-    def verify_done(self) -> List[Instance]:
-        instances: List[Instance] = self.types["std::Entity"].get_all_instances()
+    def verify_done(self) -> list[Instance]:
+        instances: list[Instance] = self.types["std::Entity"].get_all_instances()
         notdone = []
         for i in instances:
             if not i.verify_done():
@@ -157,23 +158,23 @@ class Scheduler(object):
 
         return notdone
 
-    def get_types(self) -> Dict[str, Type]:
+    def get_types(self) -> dict[str, Type]:
         return self.types
 
     def dump_not_done(self) -> None:
         for i in self.verify_done():
             i.dump()
 
-    def sort_entities(self, entity_map: Dict[str, DefineEntity]) -> List[DefineEntity]:
-        out: List[DefineEntity] = []
-        loopstack: Set[str] = set()
+    def sort_entities(self, entity_map: dict[str, DefineEntity]) -> list[DefineEntity]:
+        out: list[DefineEntity] = []
+        loopstack: set[str] = set()
         while len(entity_map) > 0:
             workon = next(iter(entity_map.keys()))
             self.do_sort_entities(entity_map, workon, out, loopstack)
         return out
 
     def do_sort_entities(
-        self, entity_map: Dict[str, DefineEntity], name: str, acc: List[DefineEntity], loopstack: Set[str]
+        self, entity_map: dict[str, DefineEntity], name: str, acc: list[DefineEntity], loopstack: set[str]
     ) -> None:
         nexte = entity_map[name]
         try:
@@ -195,8 +196,8 @@ class Scheduler(object):
         This is the first compiler stage that defines all types_and_impl
         """
         # get all relevant stmts
-        definitions: List["DefinitionStatement"] = [d for d in statements if isinstance(d, DefinitionStatement)]
-        others: List["Statement"] = [d for d in statements if not isinstance(d, DefinitionStatement)]
+        definitions: list["DefinitionStatement"] = [d for d in statements if isinstance(d, DefinitionStatement)]
+        others: list["Statement"] = [d for d in statements if not isinstance(d, DefinitionStatement)]
 
         if not len(others) == 0:
             raise Exception("others not empty %s" % repr(others))
@@ -208,7 +209,7 @@ class Scheduler(object):
         compiler.get_ns().set_primitives(TYPES)
 
         # all stmts contributing types and impls
-        newtypes: List[Tuple[str, NamedType]] = [
+        newtypes: list[tuple[str, NamedType]] = [
             k for k in [t.register_types() for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None
         ]
 
@@ -218,7 +219,7 @@ class Scheduler(object):
         # now that we have objects for all types, populate them
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
         other_definitions = [t for t in definitions if not isinstance(t, DefineImplement)]
-        entities: Dict[str, DefineEntity] = {t.fullName: t for t in other_definitions if isinstance(t, DefineEntity)}
+        entities: dict[str, DefineEntity] = {t.fullName: t for t in other_definitions if isinstance(t, DefineEntity)}
         type_constraints = [t for t in other_definitions if isinstance(t, DefineTypeConstraint)]
         other_definitions = [t for t in other_definitions if not isinstance(t, (DefineEntity, DefineTypeConstraint))]
         indices = [t for t in other_definitions if isinstance(t, DefineIndex)]
@@ -264,7 +265,7 @@ class Scheduler(object):
 
     def get_anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
-    ) -> Sequence[Tuple[Location, AnchorTarget]]:
+    ) -> Sequence[tuple[Location, AnchorTarget]]:
         """
         This function should only be called after normalization is done
         """
@@ -293,7 +294,7 @@ class Scheduler(object):
 
     def anchormap(
         self, compiler: "Compiler", statements: Sequence["Statement"], blocks: Sequence["BasicBlock"]
-    ) -> Sequence[Tuple[Location, Location]]:
+    ) -> Sequence[tuple[Location, Location]]:
         """
         This methode exists for backward compatibility with inmantals
         """
@@ -302,7 +303,7 @@ class Scheduler(object):
 
         return range_to_range
 
-    def find_wait_cycle(self, attributes_with_precedence_rule: List[RelationAttribute], allwaiters: Set[Waiter]) -> bool:
+    def find_wait_cycle(self, attributes_with_precedence_rule: list[RelationAttribute], allwaiters: set[Waiter]) -> bool:
         """
         Preconditions: no progress is made anymore
 
@@ -330,7 +331,7 @@ class Scheduler(object):
             return resolve_proxies(variable.variable)
 
         # Determine drvs that should be frozen to break the cycle
-        freeze_candidates: List[DelayedResultVariable[object]] = []
+        freeze_candidates: list[DelayedResultVariable[object]] = []
         for waiter in allwaiters:
             for rv in waiter.requires.values():
                 real_rv: Optional[VariableABC] = resolve_proxies(rv)
@@ -359,7 +360,7 @@ class Scheduler(object):
 
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
-        attributes_with_precedence_rule: List[RelationAttribute] = self._set_precedence_rules_on_relationship_attributes()
+        attributes_with_precedence_rule: list[RelationAttribute] = self._set_precedence_rules_on_relationship_attributes()
 
         # give all loose blocks an empty XC
         # register the XC's as scopes
@@ -380,7 +381,7 @@ class Scheduler(object):
         # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters: Deque[DelayedResultVariable[Any]] = deque()
         # queue containing everything, to find hanging statements
-        all_statements: Set[Waiter] = set()
+        all_statements: set[Waiter] = set()
 
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
@@ -491,7 +492,7 @@ class Scheduler(object):
         if i == max_iterations:
             raise CompilerException(f"Could not complete model, max_iterations {max_iterations} reached.")
 
-        excns: List[CompilerException] = []
+        excns: list[CompilerException] = []
         self.freeze_all(excns)
 
         now = time.time()
@@ -529,7 +530,7 @@ class InvalidRelationPrecedenceRuleError(CompilerException):
     """
 
     def __init__(self, msg: str) -> None:
-        super(InvalidRelationPrecedenceRuleError, self).__init__(msg)
+        super().__init__(msg)
 
 
 class PrioritisedDelayedResultVariableQueue:
@@ -547,8 +548,8 @@ class PrioritisedDelayedResultVariableQueue:
 
     def __init__(
         self,
-        attributes_with_precedence_rule: List[RelationAttribute],
-        drvs: Optional[List[DelayedResultVariable[object]]] = None,
+        attributes_with_precedence_rule: list[RelationAttribute],
+        drvs: Optional[list[DelayedResultVariable[object]]] = None,
     ) -> None:
         relation_precedence_graph = RelationPrecedenceGraph(attributes_with_precedence_rule)
         # A queue that indicates a valid order in which the self._constraint_variables have to be returned
@@ -559,7 +560,7 @@ class PrioritisedDelayedResultVariableQueue:
         self._freeze_order_working_list: Deque[RelationAttribute] = self._freeze_order.copy()
 
         self._unconstraint_variables: Deque[DelayedResultVariable[object]] = deque()
-        self._constraint_variables: Dict[RelationAttribute, Deque[DelayedResultVariable[object]]] = {
+        self._constraint_variables: dict[RelationAttribute, Deque[DelayedResultVariable[object]]] = {
             relation_attribute: deque() for relation_attribute in self._freeze_order
         }
         self._non_relation_variables: Deque[DelayedResultVariable] = deque()
@@ -642,7 +643,7 @@ class CycleInRelationPrecedencePolicyError(CompilerException):
     """
 
     def __init__(self) -> None:
-        super(CycleInRelationPrecedencePolicyError, self).__init__("A cycle exists in the relation precedence policy")
+        super().__init__("A cycle exists in the relation precedence policy")
 
 
 class RelationPrecedenceGraph:
@@ -650,12 +651,12 @@ class RelationPrecedenceGraph:
     A graph representation of the relation precedence policy provided to the compiler.
     """
 
-    def __init__(self, relation_attributes_with_precedence_rule: Optional[List[RelationAttribute]] = None) -> None:
+    def __init__(self, relation_attributes_with_precedence_rule: Optional[list[RelationAttribute]] = None) -> None:
         if relation_attributes_with_precedence_rule is None:
             relation_attributes_with_precedence_rule = []
         # The root nodes of the graph, where all other nodes attach to.
-        self.root_nodes: Set[RelationPrecedenceGraphNode] = set()
-        self.attribute_to_node: Dict[RelationAttribute, RelationPrecedenceGraphNode] = {}
+        self.root_nodes: set[RelationPrecedenceGraphNode] = set()
+        self.attribute_to_node: dict[RelationAttribute, RelationPrecedenceGraphNode] = {}
         # Creates nodes in graph
         for first_attribute in relation_attributes_with_precedence_rule:
             for then_attribute in first_attribute.freeze_dependents:
@@ -687,15 +688,15 @@ class RelationPrecedenceGraph:
             node = self.attribute_to_node[relation_attribute]
         return node
 
-    def get_freeze_order(self) -> List[RelationAttribute]:
+    def get_freeze_order(self) -> list[RelationAttribute]:
         """
         Return all the RelationAttributes in this graph in the order in which
         they should be frozen.
         """
         if not self.attribute_to_node:
             return []
-        work: Set[RelationPrecedenceGraphNode] = set(self.root_nodes)
-        result: List[RelationAttribute] = []
+        work: set[RelationPrecedenceGraphNode] = set(self.root_nodes)
+        result: list[RelationAttribute] = []
 
         def get_next_ready_item_in_work() -> RelationPrecedenceGraphNode:
             assert work
@@ -724,8 +725,8 @@ class RelationPrecedenceGraphNode:
 
     def __init__(self, relation_attribute: RelationAttribute) -> None:
         self.relation_attribute: RelationAttribute = relation_attribute
-        self.dependents: Set[RelationPrecedenceGraphNode] = set()
-        self.dependencies: Set[RelationPrecedenceGraphNode] = set()
+        self.dependents: set[RelationPrecedenceGraphNode] = set()
+        self.dependencies: set[RelationPrecedenceGraphNode] = set()
 
     def add_dependent(self, dependent: "RelationPrecedenceGraphNode") -> None:
         self.dependents.add(dependent)

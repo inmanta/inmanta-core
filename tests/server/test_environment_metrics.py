@@ -19,9 +19,9 @@ import functools
 import operator
 import uuid
 from collections import abc, defaultdict
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable, List, Optional, cast
+from typing import Optional, cast
 
 import asyncpg
 import pytest
@@ -795,7 +795,7 @@ async def test_compile_time_metric(client, server):
     metrics_service.register_metric_collector(metrics_collector=ctmc)
 
     # Insert a few compiles.
-    compile_times: List[float] = [1.2, 2.3, 3.4]
+    compile_times: list[float] = [1.2, 2.3, 3.4]
     await add_compiles(env_uuid1, compile_times)
 
     await metrics_service.flush_metrics()
@@ -822,7 +822,7 @@ async def test_compile_time_metric(client, server):
     envs = await data.Environment.get_list(project=project_id)
     assert len(envs) == 2
 
-    compile_times: List[float] = [2.1, 4.3]
+    compile_times: list[float] = [2.1, 4.3]
     await add_compiles(env_uuid2, compile_times)
 
     await metrics_service.flush_metrics()
@@ -843,7 +843,7 @@ async def test_compile_time_metric(client, server):
     )
 
     # Add another set of compiles to the first environment.
-    compile_times: List[float] = [1.1, 2.2, 3.3, 4.4]
+    compile_times: list[float] = [1.1, 2.2, 3.3, 4.4]
     await add_compiles(env_uuid1, compile_times)
 
     await metrics_service.flush_metrics()
@@ -938,7 +938,7 @@ async def test_compile_wait_time_metric(client, server):
     metrics_service.register_metric_collector(metrics_collector=cwtmc)
 
     # Insert a few compiles.
-    wait_times: List[float] = [1.2, 2.3, 3.4]
+    wait_times: list[float] = [1.2, 2.3, 3.4]
     await add_compiles(env_uuid1, wait_times)
     await metrics_service.flush_metrics()
 
@@ -964,7 +964,7 @@ async def test_compile_wait_time_metric(client, server):
     envs = await data.Environment.get_list(project=project_id)
     assert len(envs) == 2
 
-    wait_times: List[float] = [2.1, 4.3]
+    wait_times: list[float] = [2.1, 4.3]
     await add_compiles(env_uuid2, wait_times)
     await metrics_service.flush_metrics()
 
@@ -984,7 +984,7 @@ async def test_compile_wait_time_metric(client, server):
     )
 
     # Add another set of compiles to the first environment.
-    wait_times: List[float] = [1.1, 2.2, 3.3, 4.4]
+    wait_times: list[float] = [1.1, 2.2, 3.3, 4.4]
     await add_compiles(env_uuid1, wait_times)
 
     await metrics_service.flush_metrics()

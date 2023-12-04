@@ -22,7 +22,8 @@
 
 import importlib
 import multiprocessing
-from typing import Callable, Iterator, Optional
+from collections.abc import Callable, Iterator
+from typing import Optional
 
 import pytest
 

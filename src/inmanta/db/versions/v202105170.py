@@ -17,7 +17,6 @@
 """
 import json
 from datetime import datetime
-from typing import Dict, List
 
 from asyncpg import Connection, Record
 
@@ -26,7 +25,7 @@ from inmanta import const
 DISABLED = False
 
 
-TIMESTAMP_COLUMNS: Dict[str, List[str]] = {
+TIMESTAMP_COLUMNS: dict[str, list[str]] = {
     "agent": ["last_failover"],
     "agentinstance": ["expired"],
     "agentprocess": ["first_seen", "last_seen", "expired"],
@@ -52,14 +51,14 @@ async def update(connection: Connection) -> None:
 
     # update timestamps embedded in jsonb types
     def transform_message(message: str) -> str:
-        obj: Dict = json.loads(message)
+        obj: dict = json.loads(message)
         if "timestamp" in obj:
             obj["timestamp"] = (
                 datetime.strptime(obj["timestamp"], const.TIME_ISOFMT).astimezone().isoformat(timespec="microseconds")
             )
         return json.dumps(obj)
 
-    records: List[Record] = await connection.fetch("SELECT action_id, messages FROM public.resourceaction")
+    records: list[Record] = await connection.fetch("SELECT action_id, messages FROM public.resourceaction")
     await connection.executemany(
         """
         UPDATE public.resourceaction

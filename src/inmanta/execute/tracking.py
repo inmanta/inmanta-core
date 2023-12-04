@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from inmanta.execute.runtime import Instance
 
 
-class Tracker(object):
+class Tracker:
     def get_next(self) -> "List[Tracker]":
         return []
 

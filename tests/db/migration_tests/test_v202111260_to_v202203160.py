@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import Awaitable, Callable, List
+from collections.abc import Awaitable, Callable
 
 import pytest
 
@@ -28,8 +28,8 @@ from inmanta.data import Resource
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202111260.sql"))
 async def test_added_last_non_deploying_status_column(
     migrate_db_from: Callable[[], Awaitable[None]],
-    get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
-    get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
+    get_columns_in_db_table: Callable[[str], Awaitable[list[str]]],
+    get_custom_postgresql_types: Callable[[], Awaitable[list[str]]],
 ) -> None:
     """
     Test the database migration script that adds the `last_non_deploying_status` column to the database.

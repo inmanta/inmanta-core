@@ -22,8 +22,9 @@ import socket
 import uuid
 from asyncio import CancelledError, run_coroutine_threadsafe, sleep
 from collections import abc, defaultdict
+from collections.abc import Callable, Coroutine
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple
+from typing import Any, Optional
 from urllib import parse
 
 from inmanta import config as inmanta_config
@@ -37,30 +38,30 @@ from .rest import client
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class CallTarget(object):
+class CallTarget:
     """
     A baseclass for all classes that are target for protocol calls / methods
     """
 
-    def _get_endpoint_metadata(self) -> Dict[str, List[Tuple[str, Callable]]]:
+    def _get_endpoint_metadata(self) -> dict[str, list[tuple[str, Callable]]]:
         total_dict = {
             method_name: method
             for method_name, method in inspect.getmembers(self)
             if callable(method) and method_name[0] != "_"
         }
 
-        methods: Dict[str, List[Tuple[str, Callable]]] = defaultdict(list)
+        methods: dict[str, list[tuple[str, Callable]]] = defaultdict(list)
         for name, attr in total_dict.items():
             if hasattr(attr, "__protocol_method__"):
                 methods[attr.__protocol_method__.__name__].append((name, attr))
 
         return methods
 
-    def get_op_mapping(self) -> Dict[str, Dict[str, UrlMethod]]:
+    def get_op_mapping(self) -> dict[str, dict[str, UrlMethod]]:
         """
         Build a mapping between urls, ops and methods
         """
-        url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
+        url_map: dict[str, dict[str, UrlMethod]] = defaultdict(dict)
 
         # Loop over all methods in this class that have a handler annotation. The handler annotation refers to a method
         # definition. This method definition defines how the handler is invoked.
@@ -91,20 +92,20 @@ class Endpoint(TaskHandler):
     """
 
     def __init__(self, name: str):
-        super(Endpoint, self).__init__()
+        super().__init__()
         self._name: str = name
         self._node_name: str = inmanta_config.nodename.get()
-        self._end_point_names: Set[str] = set()
-        self._targets: List[CallTarget] = []
+        self._end_point_names: set[str] = set()
+        self._targets: list[CallTarget] = []
 
     def add_call_target(self, target: CallTarget) -> None:
         self._targets.append(target)
 
     @property
-    def call_targets(self) -> List[CallTarget]:
+    def call_targets(self) -> list[CallTarget]:
         return self._targets
 
-    def get_end_point_names(self) -> Set[str]:
+    def get_end_point_names(self) -> set[str]:
         return self._end_point_names
 
     async def add_end_point_name(self, name: str) -> None:
@@ -140,7 +141,7 @@ class Endpoint(TaskHandler):
 
     async def stop(self) -> None:
         """Stop this endpoint"""
-        await super(Endpoint, self).stop()
+        await super().stop()
 
 
 class SessionEndpoint(Endpoint, CallTarget):
@@ -183,7 +184,6 @@ class SessionEndpoint(Endpoint, CallTarget):
         """
         This method is called after starting the client transport, but before sending the first heartbeat.
         """
-        pass
 
     async def start(self) -> None:
         """
@@ -197,20 +197,18 @@ class SessionEndpoint(Endpoint, CallTarget):
 
     async def stop(self) -> None:
         await self._sched.stop()
-        await super(SessionEndpoint, self).stop()
+        await super().stop()
 
     async def on_reconnect(self) -> None:
         """
         Called when a connection becomes active. i.e. when a first heartbeat is received after startup or
         a first hearbeat after an :py:`on_disconnect`
         """
-        pass
 
     async def on_disconnect(self) -> None:
         """
         Called when the connection is lost unexpectedly (not on shutdown)
         """
-        pass
 
     async def perform_heartbeat(self) -> None:
         """
@@ -237,7 +235,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                         self.add_background_task(self.on_reconnect())
                     if result.result is not None:
                         if "method_calls" in result.result:
-                            method_calls: List[common.Request] = [
+                            method_calls: list[common.Request] = [
                                 common.Request.from_dict(req) for req in result.result["method_calls"]
                             ]
                             # FIXME: reuse transport?
@@ -266,7 +264,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         kwargs, config = transport.match_call(method_call.url, method_call.method)
 
         if config is None:
-            msg = "An error occurred during heartbeat method call (%s %s %s): %s" % (
+            msg = "An error occurred during heartbeat method call ({} {} {}): {}".format(
                 method_call.reply_id,
                 method_call.method,
                 method_call.url,
@@ -346,7 +344,7 @@ class Client(Endpoint):
         self._exact_version = exact_version
 
     async def _call(
-        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> common.Result:
         """
         Execute a call and return the result
@@ -386,7 +384,7 @@ class Client(Endpoint):
         return wrap
 
 
-class SyncClient(object):
+class SyncClient:
     """
     A synchronous client that communicates with end-point based on its configuration
     """
@@ -425,7 +423,7 @@ class SyncClient(object):
             self._client = client
 
     def __getattr__(self, name: str) -> Callable[..., common.Result]:
-        def async_call(*args: List[object], **kwargs: Dict[str, object]) -> common.Result:
+        def async_call(*args: list[object], **kwargs: dict[str, object]) -> common.Result:
             method: Callable[..., abc.Awaitable[common.Result]] = getattr(self._client, name)
             with_timeout: abc.Awaitable[common.Result] = asyncio.wait_for(method(*args, **kwargs), self.timeout)
 
@@ -452,7 +450,7 @@ class SessionClient(Client):
         self._sid = sid
 
     async def _call(
-        self, method_properties: common.MethodProperties, args: List[object], kwargs: Dict[str, object]
+        self, method_properties: common.MethodProperties, args: list[object], kwargs: dict[str, object]
     ) -> common.Result:
         """
         Execute the rpc call

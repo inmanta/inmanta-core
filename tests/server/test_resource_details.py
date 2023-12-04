@@ -17,7 +17,7 @@
 """
 import datetime
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -108,7 +108,7 @@ async def env_with_resources(server, client):
         path: str,
         status: ResourceState,
         version: int,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         agent: str = "internal",
         resource_type: str = "std::File",
         environment: UUID = env.id,

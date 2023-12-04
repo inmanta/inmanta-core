@@ -18,7 +18,7 @@
 import datetime
 import os
 from collections import abc
-from typing import Awaitable, Callable, List
+from collections.abc import Awaitable, Callable
 
 import pytest
 
@@ -28,7 +28,7 @@ from inmanta.data import DiscoveredResource, Environment
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202303071.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-    get_tables_in_db: Callable[[], Awaitable[List[str]]],
+    get_tables_in_db: Callable[[], Awaitable[list[str]]],
 ) -> None:
     """
     verify that the discoveredresource table is created

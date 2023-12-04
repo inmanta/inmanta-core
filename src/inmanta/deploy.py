@@ -22,7 +22,7 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Dict, Optional, Set, Tuple
+from typing import Optional
 
 from inmanta import config, const, module, postgresproc, protocol
 from inmanta.config import Config
@@ -44,7 +44,7 @@ class FinishedException(Exception):
     """
 
 
-class Deploy(object):
+class Deploy:
     _data_path: str
     _project_path: str
     _server_proc: subprocess.Popen
@@ -162,7 +162,7 @@ host=localhost
                 try:
                     s.connect(("localhost", int(self._server_port)))
                     return True
-                except (IOError, socket.error):
+                except OSError:
                     time.sleep(0.25)
             finally:
                 s.close()
@@ -389,7 +389,7 @@ host=localhost
             if report:
                 self.progress_dryrun_report(dryrun_id)
 
-    def _get_deploy_stats(self, version: int) -> Tuple[int, int, Dict[str, str]]:
+    def _get_deploy_stats(self, version: int) -> tuple[int, int, dict[str, str]]:
         version_result = self._client.get_version(tid=self._environment_id, id=version)
         if version_result.code != 200:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
@@ -409,7 +409,7 @@ host=localhost
 
     def progress_deploy_report(self, version: int) -> None:
         print("Starting deploy")
-        current_ready: Set[str] = set()
+        current_ready: set[str] = set()
         total = 0
         deployed = -1
         while total > deployed:
@@ -425,14 +425,14 @@ host=localhost
                 sys.stdout.flush()
 
             for res in new:
-                print("%s - %s" % (res, ready[res]))
+                print(f"{res} - {ready[res]}")
 
             print("[%d / %d]" % (deployed, total))
             time.sleep(1)
 
         print("Deploy ready")
 
-    def _get_dryrun_status(self, dryrun_id: str) -> Tuple[int, int, JsonType]:
+    def _get_dryrun_status(self, dryrun_id: str) -> tuple[int, int, JsonType]:
         result = self._client.dryrun_report(self._environment_id, dryrun_id)
 
         if result.code != 200:
@@ -444,7 +444,7 @@ host=localhost
     def progress_dryrun_report(self, dryrun_id: str) -> None:
         print("Starting dryrun")
 
-        current_ready: Set[str] = set()
+        current_ready: set[str] = set()
         todo = 1
         while todo > 0:
             # if we already printed progress, move cursor one line up
@@ -454,12 +454,12 @@ host=localhost
 
             total, todo, ready = self._get_dryrun_status(dryrun_id)
 
-            ready_keys: Set[str] = set(ready.keys())
+            ready_keys: set[str] = set(ready.keys())
             new = ready_keys - current_ready
             current_ready = ready_keys
 
             for res in new:
-                changes: Dict[str, Tuple[str, str]] = ready[res]["changes"]
+                changes: dict[str, tuple[str, str]] = ready[res]["changes"]
                 if len(changes) == 0:
                     print("%s - no changes" % res)
                 else:

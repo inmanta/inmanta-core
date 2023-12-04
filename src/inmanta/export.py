@@ -22,7 +22,8 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+from collections.abc import Callable, Sequence
+from typing import Any, Optional, Union
 
 import pydantic
 
@@ -42,7 +43,7 @@ from inmanta.util import get_compiler_version, hash_file
 
 LOGGER = logging.getLogger(__name__)
 
-unknown_parameters: List[Dict[str, str]] = []
+unknown_parameters: list[dict[str, str]] = []
 
 cfg_env = Option("config", "environment", None, "The environment this model is associated with", is_uuid_opt)
 cfg_export = Option(
@@ -55,9 +56,9 @@ cfg_export = Option(
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
-ModelDict = Dict[str, Entity]
-ResourceDict = Dict[Id, Resource]
-ProxiedType = Dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
+ModelDict = dict[str, Entity]
+ResourceDict = dict[Id, Resource]
+ProxiedType = dict[str, Sequence[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
 
 
 class DependencyCycleException(Exception):
@@ -98,23 +99,23 @@ def upload_code(conn: protocol.SyncClient, tid: uuid.UUID, version: int, code_ma
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
 
-class Exporter(object):
+class Exporter:
     """
     This class handles exporting the compiled configuration model
     """
 
     # instance vars
-    types: Optional[Dict[str, Entity]]
+    types: Optional[dict[str, Entity]]
     scopes: Optional[Namespace]
     failed: bool  # did the compile fail?
 
     # class vars
-    __export_functions: Dict[str, Tuple[List[str], Callable[["Exporter", ProxiedType], None]]] = {}
+    __export_functions: dict[str, tuple[list[str], Callable[["Exporter", ProxiedType], None]]] = {}
     # type is not entirely right, ProxiedType argument can be absent
-    __dep_manager: List[Callable[[ModelDict, ResourceDict], None]] = []
+    __dep_manager: list[Callable[[ModelDict, ResourceDict], None]] = []
 
     @classmethod
-    def add(cls, name: str, types: List[str], function: Callable[["Exporter", ProxiedType], None]) -> None:
+    def add(cls, name: str, types: list[str], function: Callable[["Exporter", ProxiedType], None]) -> None:
         """
         Add a new export function
         """
@@ -131,20 +132,20 @@ class Exporter(object):
         self.options = options
 
         self._resources: ResourceDict = {}
-        self._resource_sets: Dict[str, Optional[str]] = {}
-        self._empty_resource_sets: List[str] = []
-        self._resource_state: Dict[str, ResourceState] = {}
-        self._unknown_objects: Set[str] = set()
+        self._resource_sets: dict[str, Optional[str]] = {}
+        self._empty_resource_sets: list[str] = []
+        self._resource_state: dict[str, ResourceState] = {}
+        self._unknown_objects: set[str] = set()
         # Actual version (placeholder for partial export) is set as soon as export starts.
         self._version: Optional[int] = None
         self._scope = None
         self.failed = False
 
-        self._file_store: Dict[str, bytes] = {}
+        self._file_store: dict[str, bytes] = {}
 
-    def _get_instance_proxies_of_types(self, types: List[str]) -> Dict[str, Sequence[ProxiedType]]:
+    def _get_instance_proxies_of_types(self, types: list[str]) -> dict[str, Sequence[ProxiedType]]:
         """Returns a dict of instances for the given types"""
-        proxies: Dict[str, Sequence[ProxiedType]] = {}
+        proxies: dict[str, Sequence[ProxiedType]] = {}
         for t in types:
             if self.types is not None and t in self.types:
                 proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
@@ -153,7 +154,7 @@ class Exporter(object):
 
         return proxies
 
-    def _load_resources(self, types: Dict[str, Entity]) -> None:
+    def _load_resources(self, types: dict[str, Entity]) -> None:
         """
         Load all registered resources and resource_sets
         """
@@ -193,20 +194,20 @@ class Exporter(object):
         self._load_resource_sets(types, resource_mapping)
         Resource.convert_requires(resource_mapping, ignored_set)
 
-    def _load_resource_sets(self, types: Dict[str, Entity], resource_mapping: Dict["Instance", "Resource"]) -> None:
+    def _load_resource_sets(self, types: dict[str, Entity], resource_mapping: dict["Instance", "Resource"]) -> None:
         """
         load the resource_sets in a dict with as keys resource_ids and as values the name of the resource_set
         the resource belongs to.
         This method should only be called after all resources have been extracted from the model.
         """
-        resource_sets: Dict[str, Optional[str]] = {}
-        resource_set_instances: List["Instance"] = (
+        resource_sets: dict[str, Optional[str]] = {}
+        resource_set_instances: list["Instance"] = (
             types["std::ResourceSet"].get_all_instances() if "std::ResourceSet" in types else []
         )
         for resource_set_instance in resource_set_instances:
             name: str = resource_set_instance.get_attribute("name").get_value()
             empty_set: bool = True
-            resources_in_set: List[Instance] = resource_set_instance.get_attribute("resources").get_value()
+            resources_in_set: list[Instance] = resource_set_instance.get_attribute("resources").get_value()
             for resource_in_set in resources_in_set:
                 if resource_in_set in resource_mapping:
                     resource_id: str = resource_mapping[resource_in_set].id.resource_str()
@@ -290,16 +291,16 @@ class Exporter(object):
 
         # Clean up requires and resource_requires
         for res in self._resources.values():
-            res.requires = set((cleanup(r) for r in res.requires))
-            res.resource_requires = set(self._resources[r] for r in res.requires)
+            res.requires = {cleanup(r) for r in res.requires}
+            res.resource_requires = {self._resources[r] for r in res.requires}
 
     def _validate_graph(self) -> None:
         """
         Validate the graph and if requested by the user, dump it
         """
-        done: Set[Resource] = set()
+        done: set[Resource] = set()
 
-        def find_cycle(current: Resource, working: Set[Resource]) -> None:
+        def find_cycle(current: Resource, working: set[Resource]) -> None:
             if current in done:
                 return
             if current in working:
@@ -325,7 +326,7 @@ class Exporter(object):
                 dot += '\t"%s";\n' % res_id
 
                 for req in res.resource_requires:
-                    dot += '\t"%s" -> "%s";\n' % (res_id, str(req))
+                    dot += f'\t"{res_id}" -> "{str(req)}";\n'
 
             dot += "}\n"
 
@@ -348,9 +349,9 @@ class Exporter(object):
 
     def run(
         self,
-        types: Optional[Dict[str, Entity]],
+        types: Optional[dict[str, Entity]],
         scopes: Optional[Namespace],
-        metadata: Dict[str, str] = {},
+        metadata: dict[str, str] = {},
         no_commit: bool = False,
         include_status: bool = False,
         model_export: bool = False,
@@ -364,7 +365,7 @@ class Exporter(object):
         start = time.time()
         if not partial_compile and resource_sets_to_remove:
             raise Exception("Cannot remove resource sets when a full compile was done")
-        resource_sets_to_remove_all: List[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
+        resource_sets_to_remove_all: list[str] = list(resource_sets_to_remove) if resource_sets_to_remove is not None else []
 
         self.types = types
         self.scopes = scopes
@@ -453,7 +454,7 @@ class Exporter(object):
 
         self._resources[resource.id] = resource
 
-    def resources_to_list(self) -> List[Dict[str, Any]]:
+    def resources_to_list(self) -> list[dict[str, Any]]:
         """Convert the resource list to a json representation"""
         resources = []
 
@@ -484,10 +485,10 @@ class Exporter(object):
     def commit_resources(
         self,
         version: Optional[int],
-        resources: List[Dict[str, str]],
-        metadata: Dict[str, str],
+        resources: list[dict[str, str]],
+        metadata: dict[str, str],
         partial_compile: bool,
-        resource_sets_to_remove: List[str],
+        resource_sets_to_remove: list[str],
     ) -> int:
         """
         Commit the entire list of resources to the configuration server.
@@ -605,7 +606,7 @@ class Exporter(object):
 
 
 @stable_api
-class dependency_manager(object):  # noqa: N801
+class dependency_manager:  # noqa: N801
     """
     Register a function that manages dependencies in the configuration model that will be deployed.
     """
@@ -614,7 +615,7 @@ class dependency_manager(object):  # noqa: N801
         Exporter.add_dependency_manager(function)
 
 
-class code_manager(object):  # noqa: N801
+class code_manager:  # noqa: N801
     """Register a function that will be invoked after all resource and handler code is collected. A code manager can add
     or modify code before it is uploaded to the server.
     """
@@ -623,7 +624,7 @@ class code_manager(object):  # noqa: N801
         pass
 
 
-class export(object):  # noqa: N801
+class export:  # noqa: N801
     """
     A decorator that registers an export function
     """
@@ -658,9 +659,9 @@ def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
     path = os.path.join(prefix, "services")
     with open(path, "w+", encoding="utf-8") as fd:
         for svc in types["std::Service"]:
-            fd.write("%s -> %s\n" % (svc.host.name, svc.name))  # type: ignore
+            fd.write(f"{svc.host.name} -> {svc.name}\n")  # type: ignore
 
     path = os.path.join(prefix, "packages")
     with open(path, "w+", encoding="utf-8") as fd:
         for pkg in types["std::Package"]:
-            fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))  # type: ignore
+            fd.write(f"{pkg.host.name} -> {pkg.name}\n")  # type: ignore

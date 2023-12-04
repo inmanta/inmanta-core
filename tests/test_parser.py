@@ -18,7 +18,6 @@
 import logging
 import re
 import warnings
-from typing import List
 
 import pytest
 
@@ -427,7 +426,7 @@ implement Test using parents  \""" testc \"""
     "implementations",
     [["parents", "std::none"], ["std::none", "parents"], ["i1", "parents", "i2"], ["std::none"], ["i1", "i2"]],
 )
-def test_implements_parent_in_list(implementations: List[str]):
+def test_implements_parent_in_list(implementations: list[str]):
     statements = parse_code(
         """
 implement Test using %s
