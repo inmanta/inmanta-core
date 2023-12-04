@@ -664,3 +664,31 @@ def test_if_statement_unknown(snippetcompiler) -> None:
         )
     )
     compiler.do_compile()
+
+
+def test_conditional_expression_unknown(snippetcompiler) -> None:
+    """
+    Verify behavior of the conditional expression with regards to unknown values.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            assert = true
+            assert = std::is_unknown(tests::unknown() ? true : false)
+            assert = std::is_unknown(true ? tests::unknown() : false)
+            assert = std::is_unknown(false ? true : tests::unknown())
+
+            # branch should not be executed
+            entity Contradiction: end
+            implementation contradict for Contradiction:
+                x = 0 x = 1
+            end
+            implement Contradiction using contradict
+
+            assert = std::is_unknown(tests::unknown() ? Contradiction() : Contradiction())
+            """
+        )
+    )
+    compiler.do_compile()
