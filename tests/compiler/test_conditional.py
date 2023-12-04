@@ -626,3 +626,43 @@ def test_conditional_expression_gradual(snippetcompiler) -> None:
         )
     )
     compiler.do_compile()
+
+# TODO: bugfix entry
+def test_if_statement_unknown(snippetcompiler) -> None:
+    """
+    Verify behavior of the if statement with regards to unknown values.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            import tests
+
+            entity Assert:
+                bool success
+            end
+            implement Assert using std::none
+            assert = Assert(success=true)
+
+            if tests::unknown():
+                assert.success = false
+            else:
+                assert.success = false
+            end
+
+            if tests::unknown() == true:
+                assert.success = false
+            else:
+                assert.success = false
+            end
+
+            if tests::unknown() == false:
+                assert.success = false
+            else:
+                assert.success = false
+            end
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()

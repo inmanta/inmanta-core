@@ -61,39 +61,80 @@ def test_for_error_2(snippetcompiler):
     )
 
 
-# TODO: compile list of breaking changes
-def test_for_loop_on_list_attribute(snippetcompiler):
+def test_for_loop_on_list_attribute(snippetcompiler) -> None:
     """
     Verify the basic workings of the for loop statement when applied to a plain list attribute.
     """
     snippetcompiler.setup_for_snippet(
-        """
-        entity A:
-            list l
-        end
-
-        implement A using std::none
-
-        a = A(l=[1, 2])
-
-        entity Assert:
-            bool success
-        end
-        implement Assert using std::none
-        assert = Assert()
-
-        for x in a.l:
-            assert.success = true
-            if x != 1 and x != 2:
-                # trigger exception
-                assert.success = false
+        textwrap.dedent(
+            """
+            entity A:
+                list l
             end
-        end
-        """
+
+            implement A using std::none
+
+            a = A(l=[1, 2])
+
+            entity Assert:
+                bool success
+            end
+            implement Assert using std::none
+            assert = Assert()
+
+            for x in a.l:
+                assert.success = true
+                if x != 1 and x != 2:
+                    # trigger exception
+                    assert.success = false
+                end
+            end
+            """.strip(
+                "\n"
+            )
+        )
     )
     compiler.do_compile()
 
 
+def test_for_loop_unknown(snippetcompiler) -> None:
+    """
+    Verify the behavior of the for loop regarding unknowns.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """
+            import tests
+
+            entity Assert:
+                bool success
+            end
+            implement Assert using std::none
+            assert = Assert(success=true)
+
+            for x in tests::unknown():
+                # body should not be executed at all if entire list is unknown
+                assert.success = false
+            end
+
+            for x in [1, 2, tests::unknown()]:
+                # unknowns in list should be skipped
+                if x != 1 and x != 2:
+                    assert.success = false
+                end
+                if std::is_unknown(x):
+                    assert.success = false
+                end
+            end
+            """.strip(
+                "\n"
+            )
+        )
+    )
+    compiler.do_compile()
+
+
+# TODO: create ticket for unknown in index
 def test_for_loop_fully_gradual(snippetcompiler):
     """
     Verify that the compiler does not produce progress potential for the for loop because it may cause it too freeze too
