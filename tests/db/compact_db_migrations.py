@@ -34,7 +34,7 @@ async def test_compact_and_dump(postgres_db, database_name):
     """
     outfile = "./compacted_dump.sql"
     connection = await asyncpg.connect(
-        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password
+        host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, password=postgres_db.password,database = database_name,
     )
 
     try:
