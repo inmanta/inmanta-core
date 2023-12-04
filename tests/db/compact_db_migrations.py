@@ -61,6 +61,7 @@ async def test_compact_and_dump(postgres_db, database_name):
         outfile,
         "-O",
         "-U",
+        "-s",  # This option tells pg_dump to dump only the schema, no data
         postgres_db.user,
         database_name,
     )
