@@ -95,8 +95,6 @@ def test_for_loop_on_list_attribute(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-# TODO: create ticket for unknown in index
-# TODO: bugfix/breaking change entry -> for used to include unknowns (double check), not anymore
 def test_for_loop_unknown(snippetcompiler) -> None:
     """
     Verify the behavior of the for loop regarding unknowns.

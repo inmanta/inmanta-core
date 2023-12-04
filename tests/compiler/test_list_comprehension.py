@@ -592,7 +592,7 @@ def test_list_comprehension_empty_items(snippetcompiler, monkeypatch) -> None:
 
 
 # TODO: check compliance of all AST nodes
-# TODO: compile list of breaking changes
+# TODO: test for conditional expression
 def test_list_comprehension_unknown(snippetcompiler) -> None:
     """
     Verify that list comprehensions propagate Unknowns appropriately.

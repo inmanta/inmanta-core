@@ -484,7 +484,6 @@ def test_is_defined(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-# TODO: bugfix/breaking change entry -> `is defined` for unknown or list containing unknown
 def test_is_defined_unknown(snippetcompiler) -> None:
     """
     Verify is defined behavior with regards to unknowns

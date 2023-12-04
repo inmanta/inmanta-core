@@ -210,7 +210,6 @@ class BinaryOperator(Operator):
         """
         The method that needs to be implemented for this operator
         """
-        # TODO: bugfix entry -> special mention for `==`, `!=`, `not`, `in` -> used to return False, now Unknown
         if any(isinstance(arg, Unknown) for arg in args):
             return Unknown(self)
         return self._bin_op(*args)
