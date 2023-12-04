@@ -194,14 +194,16 @@ class PluginMeta(type):
 class Null(inmanta_type.Type):
     """
     This custom type is used for the validation of plugins which only
-    accept null as an argument or return value.  It is meant to be used
-    as the element_type of an instance of the `NullableType` class.
+    accept null as an argument or return value.
     """
 
-    def validate(self, value: object | None) -> bool:
-        return isinstance(value, NoneValue)
+    def validate(self, value: Optional[object]) -> bool:
+        if isinstance(value, NoneValue):
+            return True
 
-    def type_string(self) -> str | None:
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+
+    def type_string(self) -> str:
         return "null"
 
     def type_string_internal(self) -> str:
@@ -286,16 +288,7 @@ class PluginValue:
             return False
 
         # Validate the value, use custom validate method of the type if it exists
-        valid = self.resolved_type.validate(value)
-
-        if not valid:
-            # Validation fail, we should raise an exception
-            raise ValueError(
-                "Invalid %s for %s: value %s has type %s (expected %s)"
-                % (self.VALUE_TYPE, self.VALUE_NAME, repr(value), type(value).__name__, type(self.resolved_type).__name__)
-            )
-
-        return True
+        return self.resolved_type.validate(value)
 
 
 class PluginArgument(PluginValue):
@@ -371,6 +364,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.var_args: Optional[PluginArgument] = None
         self.kwargs: dict[str, PluginArgument] = dict()
         self.var_kwargs: Optional[PluginArgument] = None
+        self.all_args: dict[str, PluginArgument] = dict()
         self.return_type: PluginReturn = PluginReturn("null")
         if hasattr(self.__class__, "__function__"):
             self._load_signature(self.__class__.__function__)
@@ -394,9 +388,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.resolver = self.namespace
 
         # Resolve all the types that we expect to receive as input of our plugin
-        for arg in self.kwargs.values():
-            # Normalizing the kwargs will also normalize the args as they are all
-            # included in this dict
+        for arg in self.all_args.values():
             arg.resolve_type(self, self.resolver)
         if self.var_args is not None:
             self.var_args.resolve_type(self, self.resolver)
@@ -415,6 +407,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         self.var_args = None
         self.kwargs = dict()
         self.var_kwargs = None
+        self.all_args = dict()
 
         # Inspect the function to get its arguments and annotations
         arg_spec = inspect.getfullargspec(function)
@@ -466,25 +459,24 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 # from the model.
                 position -= 1
 
-            self.args.append(
-                PluginArgument(
-                    arg_name=arg,
-                    arg_type=annotation,
-                    arg_position=position,
-                    default_value=(
-                        arg_spec.defaults[position - defaults_start_at]
-                        if position >= defaults_start_at
-                        else PluginArgument.NO_DEFAULT_VALUE_SET
-                    ),
-                )
+            argument = PluginArgument(
+                arg_name=arg,
+                arg_type=annotation,
+                arg_position=position,
+                default_value=(
+                    arg_spec.defaults[position - defaults_start_at]
+                    if position >= defaults_start_at
+                    else PluginArgument.NO_DEFAULT_VALUE_SET
+                ),
             )
 
-            # All positional arguments can also be assigned as kwargs
-            self.kwargs[arg] = self.args[position]
+            # This is a positional argument, we register it now
+            self.args.append(argument)
+            self.all_args[arg] = argument
 
         # Save all key-word arguments
         for arg in arg_spec.kwonlyargs:
-            self.kwargs[arg] = PluginArgument(
+            argument = PluginArgument(
                 arg_name=arg,
                 arg_type=get_annotation(arg),
                 default_value=(
@@ -493,6 +485,8 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     else PluginArgument.NO_DEFAULT_VALUE_SET
                 ),
             )
+            self.kwargs[arg] = argument
+            self.all_args[arg] = argument
 
     def get_signature(self) -> str:
         """
@@ -544,10 +538,13 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         Get the argument with a given name, raise a RuntimeException if it doesn't exists.
         If a catch-all keyword argument is defined, it will never raise a RuntimeException.
 
+        We currently don't support positional-only parameters, so we can simply look for any
+        parameter named this way, positional or not.
+
         :param name: The name of the argument
         """
-        if name in self.kwargs:
-            return self.kwargs[name]
+        if name in self.all_args:
+            return self.all_args[name]
         elif self.var_kwargs is not None:
             return self.var_kwargs
         else:
