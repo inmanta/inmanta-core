@@ -28,7 +28,7 @@ import pytest
 
 UP_TO_VERSION = "202206290"  # Specify the version up to which migrations should be applied
 
-MIGRATIONS_DIR = "../../src/inmanta/db/versions"
+MIGRATIONS_DIR = f"{os.path.dirname(os.path.dirname(__file__))}/src/inmanta/db/versions"
 # Regular expression to match migration filenames
 MIGRATION_FILE_PATTERN = re.compile(r"^v(\d+)\.py$")
 
