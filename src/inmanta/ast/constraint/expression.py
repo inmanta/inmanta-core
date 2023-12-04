@@ -323,7 +323,7 @@ class UnaryOperator(Operator):
     def __init__(self, name: str, op1: ExpressionStatement) -> None:
         Operator.__init__(self, name, [op1])
 
-    def _op(self, args):
+    def _op(self, args: abc.Sequence[object]) -> object:
         """
         This method calls the implementation of the operator
         """
