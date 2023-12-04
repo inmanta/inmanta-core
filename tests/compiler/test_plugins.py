@@ -372,3 +372,21 @@ import keyword_only_arguments
     assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
         "sum_all(a: 'int', b: 'int' = 1, *, c: 'int', d: 'int' = 2) -> 'int'"
     )
+
+
+def test_returned_types(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that the value returned from a plugin are validated correctly.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import plugin_returned_type_validation
+
+plugin_returned_type_validation::as_any_explicit({"a": "a"})
+plugin_returned_type_validation::as_any_implicit({"a": "a"})
+plugin_returned_type_validation::as_none(null)
+plugin_returned_type_validation::as_null(null)
+plugin_returned_type_validation::as_string("a")
+        """
+    )
+    compiler.do_compile()
