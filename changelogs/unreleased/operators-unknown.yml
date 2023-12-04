@@ -1,0 +1,7 @@
+description: 'Compiler: add support for "Unknown" values in operators'
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso6
