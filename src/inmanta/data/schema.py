@@ -19,9 +19,10 @@
 import logging
 import pkgutil
 import re
+from collections.abc import Coroutine
 from itertools import takewhile
 from types import ModuleType
-from typing import Any, Callable, Coroutine, List, Optional, Set, Tuple
+from typing import Any, Callable, Optional
 
 from asyncpg import Connection, UndefinedColumnError, UndefinedTableError
 from asyncpg.protocol import Record
@@ -46,16 +47,12 @@ CREATE TABLE IF NOT EXISTS public.schemamanager (
 class TableNotFound(Exception):
     """Raised when a table is not found in the database"""
 
-    pass
-
 
 class ColumnNotFound(Exception):
     """Raised when a column is not found in the database"""
 
-    pass
 
-
-class Version(object):
+class Version:
     """Internal representation of a version"""
 
     def __init__(self, name: str, function: Callable[[Connection], Coroutine[Any, Any, None]]):
@@ -68,7 +65,7 @@ class Version(object):
         return int(name[1:])
 
 
-class DBSchema(object):
+class DBSchema:
     """
     Schema Manager, ensures the schema is up to date.
 
@@ -153,7 +150,7 @@ class DBSchema(object):
             else:
                 self.logger.info("Other process has already performed a database upgrade.")
 
-    async def _legacy_migration_row(self, all_versions: Optional[List[int]] = None) -> None:
+    async def _legacy_migration_row(self, all_versions: Optional[list[int]] = None) -> None:
         """
         Migration for this instance's row to new (2021) schema management. Backfills the installed_versions column for this
         instance based on the legacy_version column and the currently available versions. Assumes all versions lower than the
@@ -179,7 +176,7 @@ class DBSchema(object):
                 self.name,
             )
 
-    async def _update_db_schema(self, update_functions: Optional[List[Version]] = None) -> None:
+    async def _update_db_schema(self, update_functions: Optional[list[Version]] = None) -> None:
         """
         Main update function
 
@@ -196,7 +193,7 @@ class DBSchema(object):
             await self.connection.execute(f"LOCK TABLE {SCHEMA_VERSION_TABLE} IN ACCESS EXCLUSIVE MODE")
             # get current version again, in transaction this time
             try:
-                installed_versions: Set[int] = await self.get_installed_versions()
+                installed_versions: set[int] = await self.get_installed_versions()
             except TableNotFound:
                 self.logger.exception("Schemamanager table disappeared, should not occur.")
                 raise
@@ -236,7 +233,7 @@ class DBSchema(object):
             raise TableNotFound() from e
         return version["legacy_version"] if version is not None else 0
 
-    async def get_installed_versions(self) -> Set[int]:
+    async def get_installed_versions(self) -> set[int]:
         """
         Returns the set of all versions that have been installed.
 
@@ -267,10 +264,10 @@ class DBSchema(object):
             {version},
         )
 
-    def _get_update_functions(self) -> List[Version]:
+    def _get_update_functions(self) -> list[Version]:
         module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(self.package.__path__) if not ispkg]
 
-        def get_modules(mod_name: str) -> Tuple[str, ModuleType]:
+        def get_modules(mod_name: str) -> tuple[str, ModuleType]:
             fq_module_name = self.package.__name__ + "." + mod_name
             return mod_name, __import__(fq_module_name, fromlist=["update"])
 

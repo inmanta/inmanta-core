@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from typing import Set
 
 import pytest
 
@@ -45,7 +44,7 @@ z -> x
         % ("42" if assign else ""),
     )
     all_vars: str = "xyz"
-    leaves: Set[str] = {"y"} if assign else set(iter(all_vars))
+    leaves: set[str] = {"y"} if assign else set(iter(all_vars))
     dataflow_test_helper.verify_leaves({var: leaves for var in all_vars})
 
 

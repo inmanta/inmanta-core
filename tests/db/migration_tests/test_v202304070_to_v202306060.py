@@ -17,7 +17,8 @@
 """
 import os
 from collections import abc
-from typing import Awaitable, Callable, List
+from collections.abc import Awaitable
+from typing import Callable
 
 import pytest
 
@@ -26,7 +27,7 @@ import pytest
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
     get_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
-    get_tables_in_db: Callable[[], Awaitable[List[str]]],
+    get_tables_in_db: Callable[[], Awaitable[list[str]]],
     get_primary_key_columns_in_db_table: abc.Callable[[str], abc.Awaitable[abc.Sequence[str]]],
 ) -> None:
     """

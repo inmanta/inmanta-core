@@ -207,7 +207,7 @@ import test_674
 
 test_674::test_not_nullable_list(null)
         """,
-        "Invalid value 'null', expected number[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+        "Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
     )
 
 

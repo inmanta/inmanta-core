@@ -30,7 +30,7 @@ from inmanta.server.bootloader import InmantaBootloader
 @pytest.fixture
 async def migrate_v2_to_v3(hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config):
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v2.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v2.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()

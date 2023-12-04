@@ -17,7 +17,7 @@
 """
 
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import pytest
 from asyncpg import Connection
@@ -32,7 +32,7 @@ async def migrate_v4_to_v5(
     hard_clean_db, hard_clean_db_post, postgresql_client: Connection, async_finalizer, server_config
 ) -> AsyncIterator[None]:
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v4.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v4.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()

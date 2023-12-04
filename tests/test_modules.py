@@ -21,8 +21,9 @@ import os
 import shutil
 import tempfile
 import unittest
+from collections.abc import Mapping
 from importlib.abc import Loader
-from typing import List, Mapping, Optional, Tuple, Type
+from typing import Optional
 from unittest import mock
 
 import py
@@ -32,7 +33,8 @@ from _io import StringIO
 from inmanta import const, env, module
 from inmanta.ast import CompilerException
 from inmanta.compiler.help.explainer import ExplainerFactory
-from inmanta.env import LocalPackagePath, PipConfig
+from inmanta.data.model import PipConfig
+from inmanta.env import LocalPackagePath
 from inmanta.loader import PluginModuleFinder, PluginModuleLoader
 from inmanta.module import InmantaModuleRequirement
 from inmanta.moduletool import ModuleTool
@@ -131,7 +133,7 @@ def test_is_versioned(
     snippetcompiler_clean.modules_dir = None
 
     def compile_and_assert_warning(
-        module_name: str, needs_versioning_warning: bool, install_v2_modules: List[LocalPackagePath] = []
+        module_name: str, needs_versioning_warning: bool, install_v2_modules: list[LocalPackagePath] = []
     ) -> None:
         caplog.clear()
         snippetcompiler_clean.setup_for_snippet(
@@ -207,10 +209,10 @@ def test_get_requirements(
     modules_dir: str,
     modules_v2_dir: str,
     v1_module: bool,
-    all_python_requirements: List[str],
-    strict_python_requirements: List[str],
-    module_requirements: List[str],
-    module_v2_requirements: List[str],
+    all_python_requirements: list[str],
+    strict_python_requirements: list[str],
+    module_requirements: list[str],
+    module_v2_requirements: list[str],
 ) -> None:
     """
     Test the different methods to get the requirements of a module.
@@ -228,7 +230,7 @@ def test_get_requirements(
     assert set(mod.get_strict_python_requirements_as_list()) == set(strict_python_requirements)
     assert set(mod.get_module_requirements()) == set(module_requirements)
     assert set(mod.get_module_v2_requirements()) == set(module_v2_requirements)
-    assert set(mod.requires()) == set(module.InmantaModuleRequirement.parse(req) for req in module_requirements)
+    assert set(mod.requires()) == {module.InmantaModuleRequirement.parse(req) for req in module_requirements}
 
 
 @pytest.mark.parametrize("editable", [True, False])
@@ -271,7 +273,7 @@ def test_module_v2_source_path_for_v1(snippetcompiler) -> None:
 
     # make sure the v1 module finder is configured and discovered by env.process_env
     assert PluginModuleFinder.MODULE_FINDER is not None
-    module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.std")
+    module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file("inmanta_plugins.std")
     assert module_info is not None
     path, loader = module_info
     assert path is not None
@@ -416,7 +418,7 @@ def test_from_path(tmpdir: py.path.local, projects_dir: str, modules_dir: str, m
         path: str,
         *,
         subdir: Optional[str] = None,
-        expected: Mapping[Type[module.ModuleLike], Optional[Type[module.ModuleLike]]],
+        expected: Mapping[type[module.ModuleLike], Optional[type[module.ModuleLike]]],
     ) -> None:
         """
         Check the functionality for the given path and expected outcomes.

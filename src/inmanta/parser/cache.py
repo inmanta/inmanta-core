@@ -17,7 +17,7 @@
 """
 import logging
 import os
-from typing import List, Optional
+from typing import Optional
 
 from inmanta.ast import Namespace
 from inmanta.ast.statements import Statement
@@ -31,7 +31,7 @@ LOGGER = logging.getLogger(__name__)
 class CacheEnvelope:
     """Every cached file gets the exact modification time of the file it is caching, to have cheap, accurate invalidation"""
 
-    def __init__(self, timestamp: float, statements: List[Statement]) -> None:
+    def __init__(self, timestamp: float, statements: list[Statement]) -> None:
         self.timestamp = timestamp
         self.statements = statements
 
@@ -84,7 +84,7 @@ class CacheManager:
     def detach_from_project(self) -> None:
         self.root_cache_dir = None
 
-    def un_cache(self, namespace: Namespace, filename: str) -> Optional[List[Statement]]:
+    def un_cache(self, namespace: Namespace, filename: str) -> Optional[list[Statement]]:
         if not self.cache_enabled.get():
             # cache not enabled
             return None
@@ -120,7 +120,7 @@ class CacheManager:
             )
             return None
 
-    def cache(self, namespace: Namespace, filename: str, statements: List[Statement]) -> None:
+    def cache(self, namespace: Namespace, filename: str, statements: list[Statement]) -> None:
         if not self.cache_enabled.get():
             # cache not enabled
             return

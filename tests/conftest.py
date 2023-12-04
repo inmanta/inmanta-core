@@ -84,8 +84,9 @@ import traceback
 import uuid
 import venv
 from collections import abc
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from configparser import ConfigParser
-from typing import AsyncIterator, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Callable, Dict, Optional, Union
 
 import asyncpg
 import pkg_resources
@@ -253,7 +254,7 @@ def postgres_db(request: pytest.FixtureRequest):
 
     if os.path.exists(pg_logfile):
         has_deadlock = False
-        with open(pg_logfile, "r") as fh:
+        with open(pg_logfile) as fh:
             for line in fh:
                 if "deadlock" in line:
                     has_deadlock = True
@@ -269,7 +270,7 @@ def postgres_db(request: pytest.FixtureRequest):
 async def run_without_keeping_psql_logs(postgres_db):
     if os.path.exists(pg_logfile):
         # Store the original content of the logfile
-        with open(pg_logfile, "r") as file:
+        with open(pg_logfile) as file:
             original_content = file.read()
     yield
 
@@ -421,7 +422,7 @@ async def clean_db(postgresql_pool, create_db, postgres_db):
 
 @pytest.fixture(scope="function")
 def get_columns_in_db_table(postgresql_client):
-    async def _get_columns_in_db_table(table_name: str) -> List[str]:
+    async def _get_columns_in_db_table(table_name: str) -> list[str]:
         result = await postgresql_client.fetch(
             "SELECT column_name "
             "FROM information_schema.columns "
@@ -434,7 +435,7 @@ def get_columns_in_db_table(postgresql_client):
 
 @pytest.fixture(scope="function")
 def get_primary_key_columns_in_db_table(postgresql_client):
-    async def _get_primary_key_columns_in_db_table(table_name: str) -> List[str]:
+    async def _get_primary_key_columns_in_db_table(table_name: str) -> list[str]:
         # Query taken from here: https://wiki.postgresql.org/wiki/Retrieve_primary_key_columns
         result = await postgresql_client.fetch(
             "SELECT a.attname FROM pg_index i "
@@ -449,7 +450,7 @@ def get_primary_key_columns_in_db_table(postgresql_client):
 
 @pytest.fixture(scope="function")
 def get_tables_in_db(postgresql_client):
-    async def _get_tables_in_db() -> List[str]:
+    async def _get_tables_in_db() -> list[str]:
         result = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
         return [r["table_name"] for r in result]
 
@@ -457,13 +458,13 @@ def get_tables_in_db(postgresql_client):
 
 
 @pytest.fixture(scope="function")
-def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[List[str]]]:
+def get_custom_postgresql_types(postgresql_client) -> Callable[[], Awaitable[list[str]]]:
     """
     Fixture that returns an async callable that returns all the custom types defined
     in the PostgreSQL database.
     """
 
-    async def f() -> List[str]:
+    async def f() -> list[str]:
         return await db_util.postgres_get_custom_types(postgresql_client)
 
     return f
@@ -680,9 +681,9 @@ async def agent_factory(server):
     async def create_agent(
         environment: uuid.UUID,
         hostname: Optional[str] = None,
-        agent_map: Optional[Dict[str, str]] = None,
+        agent_map: Optional[dict[str, str]] = None,
         code_loader: bool = False,
-        agent_names: List[str] = [],
+        agent_names: list[str] = [],
     ) -> Agent:
         a = Agent(hostname=hostname, environment=environment, agent_map=agent_map, code_loader=code_loader)
         for agent_name in agent_names:
@@ -1031,7 +1032,7 @@ def write_db_update_file():
     yield _write_db_update_file
 
 
-class KeepOnFail(object):
+class KeepOnFail:
     def keep(self) -> "Optional[Dict[str, str]]":
         pass
 
@@ -1054,9 +1055,7 @@ def pytest_runtest_makereport(item, call):
 
         if resources:
             # we are behind report formatting, so write to report, not item
-            rep.sections.append(
-                ("Resources Kept", "\n".join(["%s %s" % (label, resource) for label, resource in resources.items()]))
-            )
+            rep.sections.append(("Resources Kept", "\n".join([f"{label} {resource}" for label, resource in resources.items()])))
 
 
 class ReentrantVirtualEnv(VirtualEnv):
@@ -1069,7 +1068,7 @@ class ReentrantVirtualEnv(VirtualEnv):
     """
 
     def __init__(self, env_path: str) -> None:
-        super(ReentrantVirtualEnv, self).__init__(env_path)
+        super().__init__(env_path)
         self.working_set = None
 
     def deactivate(self):
@@ -1135,13 +1134,13 @@ class SnippetCompilationTest(KeepOnFail):
         *,
         autostd: bool = True,
         install_project: bool = True,
-        install_v2_modules: Optional[List[LocalPackagePath]] = None,
-        add_to_module_path: Optional[List[str]] = None,
-        python_package_sources: Optional[List[str]] = None,
-        project_requires: Optional[List[InmantaModuleRequirement]] = None,
-        python_requires: Optional[List[Requirement]] = None,
+        install_v2_modules: Optional[list[LocalPackagePath]] = None,
+        add_to_module_path: Optional[list[str]] = None,
+        python_package_sources: Optional[list[str]] = None,
+        project_requires: Optional[list[InmantaModuleRequirement]] = None,
+        python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
-        relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
+        relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         strict_deps_check: Optional[bool] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
@@ -1185,7 +1184,7 @@ class SnippetCompilationTest(KeepOnFail):
         self,
         autostd: bool,
         install_project: bool,
-        install_v2_modules: Optional[List[LocalPackagePath]] = None,
+        install_v2_modules: Optional[list[LocalPackagePath]] = None,
         main_file: str = "main.cf",
         strict_deps_check: Optional[bool] = None,
     ):
@@ -1208,7 +1207,7 @@ class SnippetCompilationTest(KeepOnFail):
         """
         env.mock_process_env(env_path=self.env)
 
-    def _install_v2_modules(self, install_v2_modules: Optional[List[LocalPackagePath]] = None) -> None:
+    def _install_v2_modules(self, install_v2_modules: Optional[list[LocalPackagePath]] = None) -> None:
         """Assumes we have a project set"""
         install_v2_modules = install_v2_modules if install_v2_modules is not None else []
         module_tool = ModuleTool()
@@ -1232,12 +1231,12 @@ class SnippetCompilationTest(KeepOnFail):
     def setup_for_snippet_external(
         self,
         snippet: str,
-        add_to_module_path: Optional[List[str]] = None,
-        python_package_sources: Optional[List[str]] = None,
-        project_requires: Optional[List[InmantaModuleRequirement]] = None,
-        python_requires: Optional[List[Requirement]] = None,
+        add_to_module_path: Optional[list[str]] = None,
+        python_package_sources: Optional[list[str]] = None,
+        project_requires: Optional[list[InmantaModuleRequirement]] = None,
+        python_requires: Optional[list[Requirement]] = None,
         install_mode: Optional[InstallMode] = None,
-        relation_precedence_rules: Optional[List[RelationPrecedenceRule]] = None,
+        relation_precedence_rules: Optional[list[RelationPrecedenceRule]] = None,
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
@@ -1291,7 +1290,7 @@ class SnippetCompilationTest(KeepOnFail):
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
-    def _get_modulepath_for_project_yml_file(self, add_to_module_path: List[str] = []) -> str:
+    def _get_modulepath_for_project_yml_file(self, add_to_module_path: list[str] = []) -> str:
         dirs = [self.libs]
         if self.modules_dir:
             dirs.append(self.modules_dir)
@@ -1304,7 +1303,7 @@ class SnippetCompilationTest(KeepOnFail):
         include_status=False,
         do_raise=True,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         return self._do_export(
             deploy=False,
@@ -1324,14 +1323,14 @@ class SnippetCompilationTest(KeepOnFail):
         include_status=False,
         do_raise=True,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState]]]:
         """
         helper function to allow actual export to be run on a different thread
         i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
 
-        class Options(object):
+        class Options:
             pass
 
         options = Options()
@@ -1369,8 +1368,9 @@ class SnippetCompilationTest(KeepOnFail):
         include_status=False,
         do_raise=True,
         partial_compile: bool = False,
-        resource_sets_to_remove: Optional[List[str]] = None,
+        resource_sets_to_remove: Optional[list[str]] = None,
     ) -> Union[tuple[int, ResourceDict], tuple[int, ResourceDict, dict[str, const.ResourceState], Optional[dict[str, object]]]]:
+        """Export to an actual server"""
         return await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: self._do_export(
@@ -1465,7 +1465,7 @@ def projects_dir() -> str:
     yield os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
-class CLI(object):
+class CLI:
     async def run(self, *args, **kwargs):
         # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
@@ -1491,7 +1491,7 @@ def cli(caplog):
         yield CLI()
 
 
-class AsyncCleaner(object):
+class AsyncCleaner:
     def __init__(self):
         self.register = []
 
@@ -1509,7 +1509,7 @@ async def async_finalizer():
     await asyncio.gather(*[item() for item in cleaner.register])
 
 
-class CompileRunnerMock(object):
+class CompileRunnerMock:
     def __init__(
         self, request: data.Compile, make_compile_fail: bool = False, runner_queue: Optional[queue.Queue] = None
     ) -> None:
@@ -1520,7 +1520,7 @@ class CompileRunnerMock(object):
         self._runner_queue = runner_queue
         self.block = False
 
-    async def run(self, force_update: Optional[bool] = False) -> Tuple[bool, None]:
+    async def run(self, force_update: Optional[bool] = False) -> tuple[bool, None]:
         now = datetime.datetime.now()
 
         if self._runner_queue is not None:
@@ -1575,7 +1575,7 @@ async def mocked_compiler_service_block(server, monkeypatch):
 
 
 @pytest.fixture
-def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.local]]:
+def tmpvenv(tmpdir: py.path.local) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Creates a venv with the latest pip in `${tmpdir}/.venv` where `${tmpdir}` is the directory returned by the `tmpdir`
     fixture. This venv is completely decoupled from the active development venv.
@@ -1591,8 +1591,8 @@ def tmpvenv(tmpdir: py.path.local) -> Iterator[Tuple[py.path.local, py.path.loca
 
 @pytest.fixture
 def tmpvenv_active(
-    deactive_venv, tmpvenv: Tuple[py.path.local, py.path.local]
-) -> Iterator[Tuple[py.path.local, py.path.local]]:
+    deactive_venv, tmpvenv: tuple[py.path.local, py.path.local]
+) -> Iterator[tuple[py.path.local, py.path.local]]:
     """
     Activates the venv created by the `tmpvenv` fixture within the currently running process. This venv is completely decoupled
     from the active development venv. As a result, any attempts to load new modules from the development venv will fail until
@@ -1737,7 +1737,7 @@ async def migrate_db_from(
     if marker is None or len(marker.args) != 1:
         raise ValueError("Please set the db version to restore using `@pytest.mark.db_restore_dump(<file>)`")
     # restore old version
-    with open(marker.args[0], "r") as fh:
+    with open(marker.args[0]) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     bootloader: InmantaBootloader = InmantaBootloader()
@@ -1775,7 +1775,7 @@ All modules present in the tests/data/module_v2 directory should satisfy the abo
 the test suite caches the python environment used to build the V2 modules. This cache relies on the assumption that all modules
 use the same build-backend and build requirements.
         """.strip()
-        with open(pyproject_toml_path, "r", encoding="utf-8") as fh:
+        with open(pyproject_toml_path, encoding="utf-8") as fh:
             pyproject_toml_as_dct = toml.load(fh)
             try:
                 if pyproject_toml_as_dct["build-system"]["build-backend"] != "setuptools.build_meta" or set(

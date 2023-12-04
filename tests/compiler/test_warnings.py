@@ -18,7 +18,7 @@
 
 import logging
 import warnings
-from typing import Optional, Type, Union
+from typing import Optional, Union
 
 import pytest
 
@@ -42,7 +42,7 @@ def test_warnings(option: Optional[str], expected_error: bool, expected_warning:
     message_internal_warning: str = "Some external warning"
     external_warning: Warning = Warning(None, message_internal_warning)
 
-    def contains_warning(caught_warnings, category: Type[Warning], message: str) -> bool:
+    def contains_warning(caught_warnings, category: type[Warning], message: str) -> bool:
         return any(issubclass(w.category, category) and str(w.message) == message for w in caught_warnings)
 
     # Apply config
@@ -84,14 +84,14 @@ def test_filter_external_warnings(caplog) -> None:
         (CompilerRuntimeWarning(None, "my inmanta warning"), CompilerRuntimeWarning, "/path/to/filename", 42),
     ],
 )
-def test_warning_format(caplog, warning: Union[str, Warning], category: Type[Warning], filename: str, lineno: int):
+def test_warning_format(caplog, warning: Union[str, Warning], category: type[Warning], filename: str, lineno: int):
     caplog.set_level(logging.WARNING)
     WarningsManager.apply_config({})
     warnings.resetwarnings()
     warnings.filterwarnings("default", category=Warning)
     warnings.warn_explicit(warning, category, filename, lineno)
     if isinstance(warning, inmanta_warnings.InmantaWarning):
-        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, "%s: %s" % (category.__name__, warning))]
+        assert caplog.record_tuples == [("inmanta.warnings", logging.WARNING, f"{category.__name__}: {warning}")]
     else:
         assert caplog.record_tuples == [
             (
@@ -186,7 +186,7 @@ def test_2030_type_overwrite_warning(snippetcompiler):
     with warnings.catch_warnings(record=True) as caught_warnings:
         snippetcompiler.setup_for_snippet(
             """
-typedef string as number matching self > 0
+typedef string as int matching self > 0
             """,
         )
         compiler.do_compile()

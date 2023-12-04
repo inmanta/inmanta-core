@@ -152,16 +152,16 @@ entity Test:
 end
 implement Test using std::none
 test = Test()
-if %s:
+if {}:
     test.field = "if_branche"
-elif %s:
+elif {}:
     test.field = "elif1_branche"
-elif %s:
+elif {}:
     test.field = "elif2_branche"
 else:
     test.field = "else_branche"
 end
-            """ % (
+            """.format(
         if_value,
         elif1_value,
         elif2_value,
@@ -394,7 +394,7 @@ def test_1804_false_and_condition(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity A:
-    number n
+    int n
 end
 implement A using std::none
 

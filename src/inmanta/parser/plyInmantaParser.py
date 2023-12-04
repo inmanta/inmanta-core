@@ -20,8 +20,9 @@ import logging
 import re
 import string
 from collections import abc
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
@@ -137,7 +138,6 @@ def p_main(p: YaccProduction) -> None:
 # - simple placeholder to unify multiple similar rules with optional tokens under one production
 def p_empty(p: YaccProduction) -> None:
     "empty : %prec LOW"
-    pass
 
 
 def p_main_head(p: YaccProduction) -> None:
@@ -885,15 +885,15 @@ def p_constant_fstring(p: YaccProduction) -> None:
     formatter = string.Formatter()
 
     # formatter.parse returns an iterable of tuple (literal_text, field_name, format_spec, conversion)
-    parsed: Iterable[Tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(str(p[1]))
+    parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(str(p[1]))
 
     start_lnr = p[1].location.lnr
     start_char_pos = p[1].location.start_char + 2  # FSTRING tokens begin with `f"` or `f'` of length 2
 
-    locatable_matches: List[Tuple[str, LocatableString]] = []
+    locatable_matches: list[tuple[str, LocatableString]] = []
 
     def locate_match(
-        match: Tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int
+        match: tuple[str, Optional[str], Optional[str], Optional[str]], start_char_pos: int, end_char: int
     ) -> None:
         """
         Associates a parsed field name with a locatable string
@@ -919,7 +919,7 @@ def p_constant_fstring(p: YaccProduction) -> None:
         if match[2]:
             # A format specifier was provided
             start_char_pos += 1  # Account for the ":" character
-            sub_parsed: Iterable[Tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(match[2])
+            sub_parsed: Iterable[tuple[str, Optional[str], Optional[str], Optional[str]]] = formatter.parse(match[2])
             for submatch in sub_parsed:
                 if not submatch[1]:
                     # Happens when the format string ends with literal text (and not a replacement field): we're done parsing.
@@ -956,7 +956,7 @@ format_regex_compiled = re.compile(format_regex, re.MULTILINE | re.DOTALL)
 
 
 def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal, StringFormat]:
-    matches: List[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
+    matches: list[re.Match[str]] = list(format_regex_compiled.finditer(str(string_ast)))
     if len(matches) == 0:
         return Literal(str(string_ast))
 
@@ -965,7 +965,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     whole_string = str(string_ast)
     mls_offset: int = 3 if mls else 1  # len(""")  or len(') or len(")
 
-    def char_count_to_lnr_char(position: int) -> Tuple[int, int]:
+    def char_count_to_lnr_char(position: int) -> tuple[int, int]:
         # convert in-string position to lnr/charcount
         before = whole_string[0:position]
         lines = before.count("\n")
@@ -974,7 +974,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
         else:
             return start_lnr + lines, position - before.rindex("\n")
 
-    locatable_matches: List[Tuple[str, LocatableString]] = []
+    locatable_matches: list[tuple[str, LocatableString]] = []
     for match in matches:
         start_line, start_char = char_count_to_lnr_char(match.start(2))
         end_line, end_char = char_count_to_lnr_char(match.end(2))
@@ -985,7 +985,7 @@ def get_string_ast_node(string_ast: LocatableString, mls: bool) -> Union[Literal
     return StringFormat(str(string_ast), convert_to_references(locatable_matches))
 
 
-def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[Tuple["Reference", str]]:
+def convert_to_references(variables: list[tuple[str, LocatableString]]) -> list[tuple["Reference", str]]:
     """
     This function is used in a context of string formatting. It expects variables that are part of a single line
     format string and converts them to a format that can be processed by StringFormat (for regular
@@ -1032,10 +1032,10 @@ def convert_to_references(variables: List[Tuple[str, LocatableString]]) -> List[
         return LocatableString(variable_full_trim, range, locatable.lexpos, locatable.namespace)
 
     assert namespace
-    _vars: List[Tuple[Reference, str]] = []
+    _vars: list[tuple[Reference, str]] = []
     for match, var in variables:
         var_name: str = str(var)
-        var_parts: List[str] = var_name.split(".")
+        var_parts: list[str] = var_name.split(".")
 
         ref_locatable_string: LocatableString = normalize(var_parts[0], var)
 
@@ -1205,7 +1205,7 @@ def p_class_ref_direct(p: YaccProduction) -> None:
 
 def p_class_ref(p: YaccProduction) -> None:
     "class_ref : ns_ref SEP CID"
-    p[0] = "%s::%s" % (str(p[1]), p[3])
+    p[0] = f"{str(p[1])}::{p[3]}"
     merge_lnr_to_string(p, 1, 3)
 
 
@@ -1216,7 +1216,7 @@ def p_class_ref_err_dot(p: YaccProduction) -> None:
     cid: LocatableString = p[3]
     assert namespace
     full_string: LocatableString = LocatableString(
-        "%s.%s" % (var_str, cid),
+        f"{var_str}.{cid}",
         expand_range(var_str.location, cid.location),
         var_str.lexpos,
         namespace,
@@ -1248,7 +1248,7 @@ def p_class_ref_list_term_err(p: YaccProduction) -> None:
 
 def p_ns_ref(p: YaccProduction) -> None:
     "ns_ref : ns_ref SEP ID"
-    p[0] = "%s::%s" % (p[1], p[3])
+    p[0] = f"{p[1]}::{p[3]}"
     merge_lnr_to_string(p, 1, 3)
 
 
@@ -1298,7 +1298,7 @@ lexer = plyInmantaLex.lexer
 parser = yacc.yacc()
 
 
-def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statement]:
+def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statement]:
     """Actual parsing code"""
     global file
     file = tfile
@@ -1309,7 +1309,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statem
     lexer.begin("INITIAL")
 
     if content is None:
-        with open(tfile, "r", encoding="utf-8") as myfile:
+        with open(tfile, encoding="utf-8") as myfile:
             data = myfile.read()
             if len(data) == 0:
                 return []
@@ -1332,7 +1332,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> List[Statem
 cache_manager = CacheManager()
 
 
-def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> List[Statement]:
+def parse(namespace: Namespace, filename: str, content: Optional[str] = None) -> list[Statement]:
     statements = cache_manager.un_cache(namespace, filename)
     if statements is not None:
         return statements

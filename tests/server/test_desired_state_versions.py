@@ -19,7 +19,6 @@ import datetime
 import json
 import uuid
 from operator import itemgetter
-from typing import Dict, List, Tuple
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
@@ -31,7 +30,7 @@ from inmanta.server.config import get_bind_port
 
 
 @pytest.fixture
-async def environments_with_versions(server, client) -> Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]:
+async def environments_with_versions(server, client) -> tuple[dict[str, uuid.UUID], list[datetime.datetime]]:
     project = data.Project(name="test")
     await project.insert()
 
@@ -98,7 +97,7 @@ async def environments_with_versions(server, client) -> Tuple[Dict[str, uuid.UUI
 
 
 async def test_filter_versions(
-    server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
+    server, client, environments_with_versions: tuple[dict[str, uuid.UUID], list[datetime.datetime]]
 ):
     """Test querying desired state versions."""
     environments, cm_timestamps = environments_with_versions
@@ -193,7 +192,7 @@ def version_numbers(desired_state_objects):
     ],
 )
 async def test_desired_state_versions_paging(
-    server, client, order: str, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
+    server, client, order: str, environments_with_versions: tuple[dict[str, uuid.UUID], list[datetime.datetime]]
 ):
     """Test querying desired state versions with paging, using different sorting parameters."""
     environments, timestamps = environments_with_versions
@@ -224,7 +223,7 @@ async def test_desired_state_versions_paging(
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page
@@ -292,7 +291,7 @@ async def test_desired_state_versions_paging(
 
 
 async def test_sorting_validation(
-    server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
+    server, client, environments_with_versions: tuple[dict[str, uuid.UUID], list[datetime.datetime]]
 ):
     environments, _ = environments_with_versions
     env = environments["multiple_versions"]
@@ -310,7 +309,7 @@ async def test_sorting_validation(
 
 
 async def test_filter_validation(
-    server, client, environments_with_versions: Tuple[Dict[str, uuid.UUID], List[datetime.datetime]]
+    server, client, environments_with_versions: tuple[dict[str, uuid.UUID], list[datetime.datetime]]
 ):
     environments, _ = environments_with_versions
     env = environments["multiple_versions"]

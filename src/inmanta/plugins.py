@@ -57,7 +57,7 @@ class PluginDeprecationWarning(InmantaWarning):
 
 
 @stable_api
-class Context(object):
+class Context:
     """
     An instance of this class is used to pass context to the plugin
     """
@@ -150,23 +150,23 @@ class PluginMeta(type):
     A metaclass that keeps track of concrete plugin subclasses. This class is responsible for all plugin registration.
     """
 
-    def __new__(cls, name: str, bases: Tuple[type, ...], dct: Dict[str, object]) -> Type:
+    def __new__(cls, name: str, bases: tuple[type, ...], dct: dict[str, object]) -> type:
         subclass = type.__new__(cls, name, bases, dct)
         if hasattr(subclass, "__function_name__"):
             cls.add_function(subclass)
         return subclass
 
-    __functions: Dict[str, Type["Plugin"]] = {}
+    __functions: dict[str, type["Plugin"]] = {}
 
     @classmethod
-    def add_function(cls, plugin_class: Type["Plugin"]) -> None:
+    def add_function(cls, plugin_class: type["Plugin"]) -> None:
         """
         Add a function plugin class
         """
         cls.__functions[plugin_class.__fq_plugin_name__] = plugin_class
 
     @classmethod
-    def get_functions(cls) -> Dict[str, "Type[Plugin]"]:
+    def get_functions(cls) -> dict[str, "Type[Plugin]"]:
         """
         Get all functions that are registered
         """
@@ -586,7 +586,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # would have raised as exception
             raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
 
-    def check_args(self, args: List[object], kwargs: Dict[str, object]) -> bool:
+    def check_args(self, args: list[object], kwargs: dict[str, object]) -> bool:
         """
         Check if the arguments of the call match the function signature.
 
@@ -653,7 +653,6 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # (4) Validate the input value
             if not kwarg.validate(value):
                 return False
-
         return True
 
     def emit_statement(self) -> "DynamicStatement":
@@ -676,7 +675,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 result = p.communicate()
 
                 if len(result[0]) == 0:
-                    raise Exception("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
+                    raise Exception(f"{self.__function_name__} requires {_bin} to be available in $PATH")
 
     @classmethod
     def deprecate_function(cls, replaced_by: Optional[str] = None) -> None:
@@ -715,7 +714,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         return value
 
     def get_full_name(self) -> str:
-        return "%s::%s" % (self.ns.get_full_name(), self.__class__.__function_name__)
+        return f"{self.ns.get_full_name()}::{self.__class__.__function_name__}"
 
     def type_string(self) -> str:
         return self.get_full_name()
@@ -734,7 +733,7 @@ class PluginException(Exception):
 @stable_api
 def plugin(
     function: Optional[Callable] = None,
-    commands: Optional[List[str]] = None,
+    commands: Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
 ) -> Callable:
@@ -751,7 +750,7 @@ def plugin(
 
     def curry_name(
         name: Optional[str] = None,
-        commands: Optional[List[str]] = None,
+        commands: Optional[list[str]] = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
     ) -> Callable:

@@ -18,7 +18,7 @@
 
 import json
 from pathlib import Path
-from typing import Callable, Optional, Type
+from typing import Callable, Optional
 
 import pytest
 
@@ -30,7 +30,7 @@ from inmanta.data.model import CompileData
 from inmanta.parser import ParserException
 
 
-def export_to_file(path: Path, expected_error_type: Optional[Type[CompilerException]] = None) -> CompileData:
+def export_to_file(path: Path, expected_error_type: Optional[type[CompilerException]] = None) -> CompileData:
     """
     Compiles, exporting to a file, and returns the file contents, loaded as CompileData.
     """
@@ -46,8 +46,8 @@ def export_to_file(path: Path, expected_error_type: Optional[Type[CompilerExcept
 
 
 @pytest.fixture
-def tempfile_export(tmp_path: Path) -> Callable[[Optional[Type[CompilerException]]], CompileData]:
-    def do_export(expected_error_type: Optional[Type[CompilerException]] = None) -> CompileData:
+def tempfile_export(tmp_path: Path) -> Callable[[Optional[type[CompilerException]]], CompileData]:
+    def do_export(expected_error_type: Optional[type[CompilerException]] = None) -> CompileData:
         return export_to_file(tmp_path / "myfile", expected_error_type)
 
     return do_export
@@ -124,7 +124,7 @@ x = 1
 def test_export_compile_data_to_file_categories(
     snippetcompiler,
     snippet: str,
-    exception: Type[CompilerException],
+    exception: type[CompilerException],
     category: ast_export.ErrorCategory,
     message,
     report_exnc,

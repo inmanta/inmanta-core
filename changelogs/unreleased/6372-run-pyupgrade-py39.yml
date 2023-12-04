@@ -1,0 +1,4 @@
+description: Run pyupgrade with python3.9
+issue-nr: 6372
+change-type: patch
+destination-branches: [master, iso6]
