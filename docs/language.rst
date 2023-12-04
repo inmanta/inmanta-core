@@ -125,14 +125,18 @@ Literal values can be assigned to variables
 Primitive types
 ==============================
 
-The basic primitive types are ``string``, ``number``, ``int`` or ``bool``. These basic types also support type casts:
+The basic primitive types are ``string``, ``float``, ``int`` or ``bool``. These basic types also support type casts:
+
+.. note::
+    To initialize or assign a float, the value should either include a decimal point or be explicitly converted to a float type.
+
 
 .. code-block:: inmanta
 
     assert = true
     assert = int("1") == 1
-    assert = number("1.2") == 1.2
-    assert = number(true) == 1
+    assert = float("1.2") == 1.2
+    assert = int(true) == 1
     assert = bool(1.2) == true
     assert = bool(0) == false
     assert = bool(null) == false
@@ -164,7 +168,7 @@ For example
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
 
 
-Lists of primitive types are also primitive types: ``string[]``, ``number[]``, ``bool[]`` or ``mac_addr[]``
+Lists of primitive types are also primitive types: ``string[]``, ``float[]``, ``bool[]`` or ``mac_addr[]``
 
 ``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
 
@@ -690,11 +694,13 @@ For indices on relations (instead of attributes) an alternative syntax can be us
     # a == b
 
 .. note::
-    The use of ``number`` as part of index properties is
+    The use of ``float`` (or ``number``) as part of index properties is
     generally discouraged. This is due to the reliance of index matching on precise equality,
     while floating-point numbers are represented with an inherent imprecision.
     If floating-point attributes are used in an index, it is crucial to handle arithmetic
     operations with caution to ensure the accuracy of the attribute values for index operations.
+
+
 
 
 For loop

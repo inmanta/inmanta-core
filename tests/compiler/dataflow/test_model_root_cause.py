@@ -40,13 +40,13 @@ def test_dataflow_model_root_cause(
     dataflow_test_helper.compile(
         """
 entity C:
-    number i
+    int i
 end
 
 
 entity V:
-    number n
-    number i
+    int n
+    int i
 end
 
 index V(i)
@@ -59,7 +59,7 @@ U.v [1] -- V
 
 
 entity X:
-    number n
+    int n
 end
 
 
@@ -117,7 +117,7 @@ def test_cyclic_model_a(dataflow_test_helper: DataflowTestHelper):
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 implement A using std::none
@@ -158,7 +158,7 @@ def test_cyclic_model_b(dataflow_test_helper: DataflowTestHelper):
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 implement A using std::none
