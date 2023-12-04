@@ -31,7 +31,7 @@ from inmanta.db.versions.v202211230 import (
 from inmanta.resources import Id
 
 
-@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps", "v202209160.sql"))
+@pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps", "v1.sql"))
 async def test_drop_resource_version_id(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
