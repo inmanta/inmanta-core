@@ -23,7 +23,7 @@ import subprocess
 import warnings
 from collections import abc
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Optional, Type, TypeVar
 
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
