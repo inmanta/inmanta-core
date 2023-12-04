@@ -18,7 +18,7 @@
 
 import logging
 from collections import abc
-from typing import Generic, Optional, TypeVar
+from typing import Generic, Optional, TypeVar, Union
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
@@ -226,7 +226,7 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
     def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         self.target.set_value(self._target_value(requires[self]), self.owner.location)
 
-    def _target_value(self, variable: VariableABC[object]) -> bool | Unknown:
+    def _target_value(self, variable: VariableABC[object]) -> Union[bool, Unknown]:
         """
         Returns the target value based on the attribute variable's value or absence of a value.
         """
