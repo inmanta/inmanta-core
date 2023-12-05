@@ -46,7 +46,7 @@ async def compact_and_dump(
         """
         Extracts the version number from a filename.
         """
-        match = re.match(r"^v(\d+)", filename)
+        match = re.match(r"^v(\d+)\.py", filename)
         return int(match[1]) if match else None
 
     def get_sorted_versions(directory: str) -> List[int]:
@@ -55,10 +55,9 @@ async def compact_and_dump(
         """
         versions = []
         for filename in os.listdir(directory):
-            if filename.endswith(".py"):
-                version = extract_version(filename)
-                if version is not None:  # only select the .py files with a version number and ignore __init__.py
-                    versions.append(version)
+            version = extract_version(filename)
+            if version is not None:  # only select the .py files with a version number and ignore __init__.py
+                versions.append(version)
         return sorted(versions)
 
     def check_versions(compact_dir: str, original_dir: str) -> None:
