@@ -216,7 +216,7 @@ PLUGIN_TYPES = {
     "any": inmanta_type.Type(),  # Any value will pass validation
     "expression": inmanta_type.Type(),  # Any value will pass validation
     "null": Null(),  # Only NoneValue will pass validation
-    None: Null(),  # Only NoneValue will pass validation
+    None: inmanta_type.Type(),  # In iso6, a None return type accepts any value, from iso7+ it expects a None value.
 }
 
 
