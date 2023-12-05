@@ -453,6 +453,15 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 self._context = position
                 continue
 
+            # Resolve the default before changing the position because
+            # of the context presence, as the defaults list definitely
+            # takes into account the context presence.
+            default = (
+                arg_spec.defaults[position - defaults_start_at]
+                if position >= defaults_start_at
+                else PluginArgument.NO_DEFAULT_VALUE_SET
+            )
+
             if self._context != -1:
                 # If we have a context argument, the position index
                 # needs to be adapted as this context object can never be passed
@@ -463,11 +472,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                 arg_name=arg,
                 arg_type=annotation,
                 arg_position=position,
-                default_value=(
-                    arg_spec.defaults[position - defaults_start_at]
-                    if position >= defaults_start_at
-                    else PluginArgument.NO_DEFAULT_VALUE_SET
-                ),
+                default_value=default,
             )
 
             # This is a positional argument, we register it now
