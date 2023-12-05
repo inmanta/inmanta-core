@@ -29,7 +29,6 @@ from inmanta.data.schema import CORE_SCHEMA_NAME, DBSchema
 PACKAGE_NAME = "versions_to_compact"
 
 
-@pytest.mark.asyncio
 async def test_compact_and_dump(postgres_db, database_name):
     """
     Compact, apply database migrations using DBSchema, and dump the database schema with modifications.
