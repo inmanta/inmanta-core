@@ -24,8 +24,8 @@ import os
 import re
 
 import asyncpg
-import pytest
 
+from inmanta.ast.type import List
 from inmanta.data.schema import CORE_SCHEMA_NAME, DBSchema
 
 PACKAGE_NAME = "versions_to_compact"
@@ -33,20 +33,27 @@ PACKAGE_NAME = "versions_to_compact"
 
 def extract_version(filename):
     match = re.match(r"^v(\d+)", filename)
-    return int(match.group(1)) if match else None
+    return int(match[1]) if match else None
 
 
-def get_sorted_versions(directory):
+def get_sorted_versions(directory: str) -> List[int]:
+    """
+    Get a sorted list of version numbers from all migration scripts in a directory.
+    """
     versions = []
     for filename in os.listdir(directory):
         if filename.endswith(".py"):
             version = extract_version(filename)
-            if version is not None:
+            if version is not None:  # only select the .py files with a version number and ignore __init__.py
                 versions.append(version)
     return sorted(versions)
 
 
-def check_versions(compact_dir, original_dir):
+def check_versions(compact_dir: str, original_dir: str) -> None:
+    """
+    Check that the versions in the compact directory contain v1 up to a certain version vX,
+    and that all versions in the original directory are strictly higher than vX.
+    """
     compact_versions = get_sorted_versions(compact_dir)
     original_versions = get_sorted_versions(original_dir)
 
@@ -62,7 +69,7 @@ def check_versions(compact_dir, original_dir):
     if highest_compact > lowest_original:
         raise ValueError(
             f"Overlap detected: a version number in the scripts to compact ({highest_compact}) has a higher "
-            f"version than on of the remaining migration scripts({lowest_original})"
+            f"version than one of the remaining migration scripts ({lowest_original})"
         )
 
 
