@@ -390,3 +390,18 @@ plugin_returned_type_validation::as_string("a")
         """
     )
     compiler.do_compile()
+
+
+def test_context_and_defaults(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that the usage of the context argument together with default
+    values doesn't cause any issue
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import plugin_context_and_defaults
+
+plugin_context_and_defaults::func()
+        """
+    )
+    compiler.do_compile()
