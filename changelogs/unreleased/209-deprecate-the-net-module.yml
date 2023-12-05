@@ -1,0 +1,7 @@
+description: Deprecate the net module.
+issue-nr: 209
+issue-repo: net
+change-type: minor
+destination-branches: [master]
+sections:
+  deprecation-note: "The ``net`` module has been deprecated."
