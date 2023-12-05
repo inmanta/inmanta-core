@@ -27,7 +27,6 @@ from typing import List
 import asyncpg
 
 from inmanta.data.schema import DBSchema
-
 # The content of this file was moved to inmanta.db.util to allow it to be used from other extensions.
 # This import statement is present to ensure backwards compatibility.
 from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, PGRestore  # noqa: F401
