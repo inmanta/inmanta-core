@@ -35,11 +35,15 @@ from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, 
 PACKAGE_NAME = "versions_to_compact"
 
 
-async def compact_and_dump(
-    compact_dir: str, original_dir: str, schema_name: str, database_name: str, postgres_db: asyncpg.Connection
-) -> None:
+async def compact_and_dump(compact_dir: str, original_dir: str, schema_name: str, database_name: str, postgres_db) -> None:
     """
     Compact, apply database migrations using DBSchema, and dump the database schema with modifications.
+
+    :param compact_dir: Directory containing the migration scripts to be compacted.
+    :param original_dir: Directory containing the original migration scripts.
+    :param schema_name: Name of the schema to be used in DBSchema.
+    :param database_name: Name of the database to connect to.
+    :param postgres_db: this should be the postgres_db fixture.
     """
 
     def extract_version(filename):
@@ -118,3 +122,6 @@ async def compact_and_dump(
         database_name,
     )
     await proc.wait()
+    # Check the return code of the process
+    if proc.returncode != 0:
+        raise RuntimeError("pg_dump process failed")
