@@ -23,6 +23,7 @@ import pytest
 from inmanta.agent import Agent
 from inmanta.const import AgentTriggerMethod
 from test_data_concurrency import slowdown_queries
+from utils import retry_limited
 
 LOGGER = logging.getLogger("test")
 
@@ -234,3 +235,85 @@ async def test_6477_stale_event(
     assert result.code == 200, result.result
     assert len(result.result["resources"]) == 1
     assert result.result["resources"][0]["resource_id"] == "test::Resource[agent2,key=key2]"
+
+
+@pytest.mark.slowtest
+async def test_6477_stale_success(
+    server, agent_factory, environment, resource_container, clienthelper, client, monkeypatch, no_agent_backoff
+):
+    """
+    Consider:
+
+    a version v1 is deploying
+    resource a[k=k1],v=1 is deploying
+    a new version v2 is released
+    resource a[k=k1],v=1 is completed
+    resource a[k=k1],v=2 start to deploy, seeing a[k=k1],v=2 as available
+    """
+    agent = await agent_factory(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost"},
+        code_loader=False,
+        agent_names=["agent1"],
+    )
+
+    async def make_version() -> int:
+        version = await clienthelper.get_version()
+        rvid = f"test::Wait[agent1,key=key1],v={version}"
+        rvid2 = f"test::Resource[agent1,key=key2],v={version}"
+
+        resources = [
+            {
+                "key": "key1",
+                "value": "value1",
+                "id": rvid,
+                "send_event": True,
+                "purged": False,
+                "requires": [],
+            },
+            {
+                "key": "key2",
+                "value": "value1",
+                "id": rvid2,
+                "send_event": False,
+                "purged": False,
+                "requires": [rvid],
+            },
+        ]
+        await clienthelper.put_version_simple(resources, version)
+        return version
+
+    async def get_status_map() -> dict[str, str]:
+        result = await client.resource_list(environment)
+        assert result.code == 200, result.result
+        return {resource["id_details"]["resource_id_value"]: resource["status"] for resource in result.result["data"]}
+
+    async def wait_for_deploying():
+        return (await get_status_map())["key1"] == "deploying"
+
+    v1 = await make_version()
+    assert resource_container.Provider.readcount("agent1", "key1") == 0
+    #  a version v1 is deploying
+    #  resource a[k=k1],v=1 is deploying
+    result = await client.release_version(environment, v1, True)
+    assert result.code == 200
+    await retry_limited(wait_for_deploying, 10)
+
+    #     a new version v2 is released
+    v2 = await make_version()
+    result = await client.release_version(environment, v2, False)
+    assert result.code == 200
+    #     resource a[k=k1],v=1 is completed
+    await resource_container.wait_for_done_with_waiters(client, environment, v1, 2)
+    #     resource a[k=k1],v=2 start to deploy, seeing a[k=k1],v=2 as available
+
+    sid = agent.sessionid
+    result = await agent._client.get_resources_for_agent(environment, "agent1", incremental_deploy=True, sid=sid)
+    assert result.code == 200, result.result
+    assert len(result.result["resources"]) == 1
+    assert result.result["resources"][0]["resource_id"] == "test::Resource[agent1,key=key2]"
+
+    # We report the required resource as deployed, so the agent can deploy the requiring resource
+    status = await get_status_map()
+    assert status["key1"] == "deployed"
