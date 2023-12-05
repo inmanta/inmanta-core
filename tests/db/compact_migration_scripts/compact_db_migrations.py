@@ -21,7 +21,7 @@
 import os
 
 from common import compact_and_dump
-from inmanta.data.schema import CORE_SCHEMA_NAME, DBSchema
+from inmanta.data.schema import CORE_SCHEMA_NAME
 
 
 async def test_compact_and_dump(postgres_db, database_name):
