@@ -42,7 +42,7 @@ async def compact_and_dump(
     Compact, apply database migrations using DBSchema, and dump the database schema with modifications.
     """
 
-    def extract_version(filename):
+    def extract_version(filename: str) -> Optional[int]:
         """
         Extracts the version number from a filename.
         """
