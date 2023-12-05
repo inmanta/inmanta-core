@@ -33,7 +33,7 @@ async def test_compact_and_dump(postgres_db, database_name):
     """
     Compact, apply database migrations using DBSchema, and dump the database schema with modifications.
     """
-    outfile = "./compacted_dump.sql"
+    outfile = f"{os.path.dirname(__file__)}/compacted_dump.sql"
     connection = await asyncpg.connect(
         host=postgres_db.host,
         port=postgres_db.port,
