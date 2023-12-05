@@ -35,12 +35,17 @@ from inmanta.db.util import MODE_READ_COMMAND, MODE_READ_INPUT, AsyncSingleton, 
 PACKAGE_NAME = "versions_to_compact"
 
 
-async def compact_and_dump(compact_dir, original_dir, schema_name, database_name, postgres_db):
+async def compact_and_dump(
+    compact_dir: str, original_dir: str, schema_name: str, database_name: str, postgres_db: asyncpg.Connection
+) -> None:
     """
     Compact, apply database migrations using DBSchema, and dump the database schema with modifications.
     """
 
     def extract_version(filename):
+        """
+        Extracts the version number from a filename.
+        """
         match = re.match(r"^v(\d+)", filename)
         return int(match[1]) if match else None
 
