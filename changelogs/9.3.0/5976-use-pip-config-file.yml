@@ -2,6 +2,3 @@ description: improved support for pip config files by adding the use_config_file
 issue-nr: 5976
 change-type: minor
 destination-branches: [master, iso6]
-sections:
-  minor-improvement: "{{description}}"
-
