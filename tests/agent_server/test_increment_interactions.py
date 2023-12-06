@@ -296,13 +296,13 @@ async def test_6477_stale_success(
     assert resource_container.Provider.readcount("agent1", "key1") == 0
     #  a version v1 is deploying
     #  resource a[k=k1],v=1 is deploying
-    result = await client.release_version(environment, v1, True)
+    result = await client.release_version(environment, v1, push=True)
     assert result.code == 200
     await retry_limited(wait_for_deploying, 10)
 
     #     a new version v2 is released
     v2 = await make_version()
-    result = await client.release_version(environment, v2, False)
+    result = await client.release_version(environment, v2, push=False)
     assert result.code == 200
     #     resource a[k=k1],v=1 is completed
     await resource_container.wait_for_done_with_waiters(client, environment, v1, 2)
