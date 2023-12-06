@@ -8,6 +8,11 @@ Upgrading the orchestrator can be done either in-place or by setting up a new or
 and migrating the state from the old to the new instance. The sections below describe the upgrade procedure
 for each of both situations. These procedures can be used for major and non-major version upgrades.
 
+.. note::
+
+    Make sure to read the new version's changelog for any version specific upgrade notes, before
+    proceeding with any of the upgrade procedures mentioned below.
+
 Upgrading the orchestrator in-place
 ###################################
 
