@@ -35,12 +35,15 @@ from inmanta.data.schema import DBSchema  # isort:skip
 PACKAGE_NAME = "versions_to_compact"
 
 
-async def compact_and_dump(compact_dir: str, original_dir: str, schema_name: str, database_name: str, postgres_db) -> None:
+async def compact_and_dump(
+    compact_dir: str, original_dir: str, outfile: str, schema_name: str, database_name: str, postgres_db
+) -> None:
     """
     Compact, apply database migrations using DBSchema, and dump the database schema with modifications.
 
     :param compact_dir: Directory containing the migration scripts to be compacted.
     :param original_dir: Directory containing the original migration scripts.
+    :param outfile: Location of the output file where the dump will be created.
     :param schema_name: Name of the schema to be used in DBSchema.
     :param database_name: Name of the database to connect to.
     :param postgres_db: this should be the postgres_db fixture.
@@ -89,7 +92,6 @@ async def compact_and_dump(compact_dir: str, original_dir: str, schema_name: str
 
     check_versions(compact_dir, original_dir)
 
-    outfile = f"{os.path.dirname(__file__)}/compacted_dump.sql"
     connection = await asyncpg.connect(
         host=postgres_db.host,
         port=postgres_db.port,
