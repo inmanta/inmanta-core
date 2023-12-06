@@ -65,8 +65,9 @@ the DSL. This can be used to create plugins that use python reserved names such 
         print("inmanta")
 
 
-A more complex plugin accepts arguments and returns a value. Compared to what python supports as
-function arguments, only positional-only arguments are not supported.
+A more complex plugin accepts arguments and returns a value. Compared to what `python supports as
+function arguments <https://docs.python.org/3/glossary.html#term-parameter>`_, only positional-only
+arguments are not supported.
 The following example creates a plugin that converts a string to uppercase:
 
 .. code-block:: python
