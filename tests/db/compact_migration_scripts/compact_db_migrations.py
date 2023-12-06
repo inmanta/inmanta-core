@@ -31,5 +31,6 @@ async def test_compact_and_dump(postgres_db, database_name):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     compact_dir = os.path.join(script_dir, "versions_to_compact")
     original_dir = os.path.abspath(os.path.join(script_dir, "../../../src/inmanta/db/versions"))
+    outfile = f"{os.path.dirname(__file__)}/compacted_dump.sql"
 
-    await compact_and_dump(compact_dir, original_dir, CORE_SCHEMA_NAME, database_name, postgres_db)
+    await compact_and_dump(compact_dir, original_dir, outfile, CORE_SCHEMA_NAME, database_name, postgres_db)
