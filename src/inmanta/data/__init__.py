@@ -2983,6 +2983,12 @@ RETURNING last_version;
         Acquires a transaction-level advisory lock for concurrency control between release_version and
         calls that need the latest version.
 
+        This lock should also be held when updating any resource state in any other way than the normal agent deploy path
+        Up to now, this means
+        - setting resource state after increment calculation on release
+        - propagation of resource state from a stale deploy to the latest version
+        - setting resource state after increment calculation on agent pull
+
         :param env: The environment to acquire the lock for.
         :param shared: If true, doesn't conflict with other shared locks, only with non-shared ones.
         :param connection: The connection hosting the transaction for which to acquire a lock.

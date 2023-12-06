@@ -320,6 +320,25 @@ class ResourceService(protocol.ServerSlice):
 
         now = datetime.datetime.now().astimezone()
 
+        def on_agent(res: ResourceIdStr) -> bool:
+            idr = Id.parse_id(res)
+            return idr.get_agent_name() == agent
+
+        # This is a bit subtle
+        # Any resource we consider deployed has to be marked as such
+        # Otherwise the agent will fail the deployment
+        # Stale successful deployments can cause resource that were available to be now considered deployed
+        # We don't do this back propagation on deploy,
+        #   because it is about a lot of resource that need to grab a lock to check if they are stale
+        # We do it here, as we always have.
+        # BUT because we race with other code paths that update resource state, we need to grab the lock
+        async with data.Resource.get_connection() as connection:
+            async with connection.transaction():
+                # lock out release version and deploy_done
+                await env.acquire_release_version_lock(connection=connection)
+                # set already done to deployed
+                await self.mark_deployed(env, neg_increment, now, version, filter=on_agent)
+
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
         deploy_model: list[dict[str, Any]] = []
