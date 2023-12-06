@@ -35,7 +35,7 @@ the following code:
     from inmanta.plugins import plugin
 
     @plugin
-    def hello():
+    def hello() -> None:
         print("Hello world!")
 
 
@@ -58,14 +58,16 @@ the DSL. This can be used to create plugins that use python reserved names such 
     from inmanta.plugins import plugin
 
     @plugin("print")
-    def printf():
+    def printf() -> None:
         """
             Prints inmanta
         """
         print("inmanta")
 
 
-A more complex plugin accepts arguments and returns a value. Regular arguments and keyword-only arguments are both supported.
+A more complex plugin accepts arguments and returns a value. Regular arguments, keyword-only arguments
+and variable arguments (`*args`, `**kwargs`) are all supported.  Compared to what python supports as
+function arguments, only positional-only arguments are not supported.
 The following example creates a plugin that converts a string to uppercase:
 
 .. code-block:: python
@@ -100,7 +102,7 @@ from a plugin should be of a subtype of this base exception.
     from inmanta.plugins import plugin, PluginException
 
     @plugin
-    def raise_exception(message: "string"):
+    def raise_exception(message: "string") -> None:
         raise PluginException(message)
 
 If your plugin requires external libraries, add them as dependencies of the module. For more details on how to add dependencies
@@ -129,7 +131,7 @@ for example if the plugin below is called:
 
     @deprecated(replaced_by="my_new_plugin")
     @plugin
-    def printf():
+    def printf() -> None:
         """
             Prints inmanta
         """
@@ -166,7 +168,7 @@ The previous example would then look like this. For older inmanta versions, repl
 
     @deprecated(replaced_by="my_new_plugin")
     @plugin
-    def printf():
+    def printf() -> None:
         """
             Prints inmanta
         """
