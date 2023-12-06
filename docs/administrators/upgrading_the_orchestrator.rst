@@ -46,14 +46,14 @@ This section describes how to upgrade an orchestrator in-place.
 5. When accessing the web console, all the environments will be visible, and still halted.
 6. One environment at a time:
 
-    a. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
-    dropdown of the ``Recompile`` button. (``/console/desiredstate?env=<your-env-id>``).
+   a. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
+   dropdown of the ``Recompile`` button. (``/console/desiredstate?env=<your-env-id>``).
 
-    b. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
+   b. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
 
-    .. warning::
+   .. warning::
 
-        Make sure the compilation has finished and was successful before moving on to the next steps.
+       Make sure the compilation has finished and was successful before moving on to the next steps.
 
 
 Upgrading by migrating from one orchestrator to another orchestrator
