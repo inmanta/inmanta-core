@@ -864,6 +864,8 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     )
     assert result.code == 200
 
+    #  adding a resource action with its change field set to "created" to test the get_resource_actions
+    #  filtering on resources with changes
     rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v=1"
     await data.Resource.new(
         environment=uuid.UUID(environment),
@@ -872,14 +874,12 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
         attributes={"purge_on_delete": False, "purged": True, "requires": []},
     ).insert()
 
-    result = await client.get_resource_actions(tid=environment)
-    assert result.code == 200
     later_action_id = uuid.uuid4()
     start_time = datetime.now()
     resource_action = data.ResourceAction(
         environment=uuid.UUID(environment),
         version=1,
-        resource_version_ids=[f"std::File[agent1,path=/etc/file1],v={1}"],
+        resource_version_ids=[rvid_r1_v1],
         action_id=later_action_id,
         action=const.ResourceAction.deploy,
         started=start_time,

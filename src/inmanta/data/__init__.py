@@ -4292,6 +4292,7 @@ class ResourceAction(BaseDocument):
         if first_timestamp:
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
+
         async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
