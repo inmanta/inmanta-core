@@ -1120,7 +1120,7 @@ class Resolver:
         self.namespace = namespace
         self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
 
-    def lookup(self, name: LocatableString, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None) -> Typeorvalue:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
         LOGGER.debug(f"runtime.py lookup for {str(name)}")
@@ -1131,7 +1131,7 @@ class Resolver:
         else:
             ns = self.namespace
 
-        return ns.lookup(name)
+        return ns.lookup(name, full_location)
 
     def get_root_resolver(self) -> "Resolver":
         return self
@@ -1224,14 +1224,13 @@ class ExecutionContext(Resolver):
             return self.slots[name]
         return self.resolver.lookup(name, root)
 
-    def direct_lookup(self, name: LocatableString) -> ResultVariable:
+    def direct_lookup(self, name: str, full_location: Optional[LocatableString] = None) -> ResultVariable:
         # import pdb
         # pdb.set_trace()
-        var_name = str(name)
-        if var_name in self.slots:
-            return self.slots[var_name]
+        if name in self.slots:
+            return self.slots[name]
         else:
-            raise NotFoundException(None, name, "variable %s not found" % name)
+            raise NotFoundException(None, full_location, "variable %s not found" % name)
 
     def emit(self, queue: QueueScheduler) -> None:
         self.block.emit(self, queue)

@@ -371,11 +371,11 @@ class Namespace(Namespaced):
             raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
         return self.visible_namespaces[name]
 
-    def lookup(self, name: LocatableString) -> "Union[Type, ResultVariable]":
+    def lookup(self, name: str, full_location: Optional[LocatableString] = None) -> "Union[Type, ResultVariable]":
         LOGGER.debug(f"ast__init__ lookup for {str(name)}")
         var_name = str(name)
         if "::" not in var_name:
-            return self.get_scope().direct_lookup(name)
+            return self.get_scope().direct_lookup(name, full_location)
         parts = var_name.rsplit("::", 1)
         return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
