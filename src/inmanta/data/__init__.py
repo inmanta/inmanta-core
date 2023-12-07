@@ -4212,6 +4212,7 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
         resource_id: Optional[ResourceIdStr] = None,
+        exclude_nochange: bool = False,
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
@@ -4287,6 +4288,8 @@ class ResourceAction(BaseDocument):
         if first_timestamp:
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
+        if exclude_nochange:
+            query += f" AND ra.change <> 'nochange'::public.change"
 
         async with cls.get_connection() as con:
             async with con.transaction():
