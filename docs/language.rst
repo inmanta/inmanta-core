@@ -864,3 +864,76 @@ Plug-ins
 For more complex operations, python plugins can be used. Plugins are exposed in the Inmanta language as function calls, such as the template function call. A template
 accepts parameters and returns a value that it computed out of the variables. Each module that is included can also provide plug-ins. These plug-ins are accessible within the namespace of the
 module. The :ref:`module-plugins` section of the module guide provides more details about how to write a plugin.
+
+
+.. _language_unknowns:
+Unknowns
+========
+
+Wherever the configuration model interacts with the outside world (e.g. to fetch external values) :term:`unknown` values
+may be present. These unknowns are propagated through the model to finally end up in the resources that require these unknown
+values. This section describes how unknown values flow through the model, and perhaps equally importantly, where they do not
+flow at all.
+
+.. note::
+    Unknowns are a subtle concept. Luckily, for the majority of model development you don't really need to take them into
+    account. However, for some advanced scenarios it may be important to know how and where they may occur.
+
+For the most part, unknowns are simply propagated along the data flow: statements like assignment statements, constructors
+and lists simply include the unknown in their result like they would any other value. Any expression that can not produce
+a definite result without knowing the value, will return another unknown. And finally, statements that expand the model
+with new blocks based on some value, like the if statement and the for loop, simply do not expand the model with their
+respective blocks for unknowns.
+
+The model below presents some examples of how an unknown propagates.
+
+.. code-block:: inmanta
+
+    # std::env returns an unknown if the environment variable is not (yet) set
+    my_unknown = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST")
+
+    a = my_unknown  # a is unknown
+    b = [1, 2, my_unknown, 3]  # b is a list with 1 unknown element
+    c = my_unknown is defined  # we can not know if c is null, so c is also unknown
+    d = true or my_unknown  # trivial, value of my_unknown is irrelevant -> d is true
+    e = my_unknown or true  # lazy boolean operator can not compute result without knowing the value -> e is unknown
+    f = (e == my_unknown)  # both e and my_unknown are unknown but they aren't necessarily the same value -> f is unknown
+
+    if my_unknown:
+        # this block is never executed
+    else:
+        # neither is this one
+    end
+
+    for x in my_unknown:
+        # neither is this one
+    end
+
+    for x in [1, 2, my_unknown]:
+        # this block is executed twice: x=1 and x=2
+    end
+
+    g = my_unknown ? true : false  # condition is unknown -> neither branch is executed, result is unknown
+    h = [1 for x in [1, 2, my_unknown]]  # the expression `1` is executed once with x=1 and once with x=2. Unknown is propagated as is -> h = [1, 1, unknown]
+    i = [1 for x in [1, 2, my_unknown] if not std::is_unknown(x)]  # the unknown is filtered out -> i = [1, 1]
+
+Now that we've covered how unknowns flow through the model, we can discuss what an unknown value actually means. In most cases
+it simply represents an unknown value. But because of the propagation semantics outlined above, if it happens to occur in a
+list, it may in fact represent any number of values: not only the value is unknown, also its size.
+
+For example, consider a list comprehension that filters a list on some condition. If the list contains an unknown, the compiler
+can not know if the filter applies so it will propagate the unknown to the result. When the unknown eventually becomes known,
+it might remain in the result, or it might be filtered out, depending on whether it matches the condition.
+
+.. code-block:: inmanta
+
+    my_unknown = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST")
+    my_unknown2 = std::get_env("THIS_ENV_VAR_DOES_NOT_EXIST2")
+
+    l = [1, my_unknown, 3, my_unknown2, 5]
+    a = [x for x in l if x > 2]  # l = [unknown, 3, unknown, 5]
+
+    # an unknown can even represent more than one unknown value
+    b = my_unknown == 0 ? [1, 2] : [3, 4]  # b = unknown -> when it becomes known it will be either [1, 2] or [3, 4]
+
+    c = std::len(l)  # c = unknown (l contains unknowns, so its length is also unknown)
