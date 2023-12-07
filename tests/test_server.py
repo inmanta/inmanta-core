@@ -866,7 +866,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
 
     #  adding a resource action with its change field set to "created" to test the get_resource_actions
     #  filtering on resources with changes
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v=1"
+    rvid_r1_v1 = "std::File[agent1,path=/etc/file1],v=1"
     await data.Resource.new(
         environment=uuid.UUID(environment),
         status=const.ResourceState.available,
