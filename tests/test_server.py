@@ -864,9 +864,33 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     )
     assert result.code == 200
 
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v=1"
+    await data.Resource.new(
+        environment=uuid.UUID(environment),
+        status=const.ResourceState.available,
+        resource_version_id=rvid_r1_v1,
+        attributes={"purge_on_delete": False, "purged": True, "requires": []},
+    ).insert()
+
+    result = await client.get_resource_actions(tid=environment)
+    assert result.code == 200
+    later_action_id = uuid.uuid4()
+    start_time = datetime.now()
+    resource_action = data.ResourceAction(
+        environment=uuid.UUID(environment),
+        version=1,
+        resource_version_ids=[f"std::File[agent1,path=/etc/file1],v={1}"],
+        action_id=later_action_id,
+        action=const.ResourceAction.deploy,
+        started=start_time,
+        change=const.Change.created,
+    )
+    await resource_action.insert()
+
     # Get the status from a resource
     result = await client.get_resource_actions(tid=environment)
     assert result.code == 200
+    assert len(result.result["data"]) == 3
 
     result = await client.get_resource_actions(tid=environment, attribute="path")
     assert result.code == 400
@@ -883,14 +907,18 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     # Query actions happening later than the start of the test case
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1))
     assert result.code == 200
-    assert len(result.result["data"]) == 2
+    assert len(result.result["data"]) == 3
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), last_timestamp=now)
     assert result.code == 400
     result = await client.get_resource_actions(tid=environment, action_id=action_id)
     assert result.code == 400
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), action_id=action_id)
     assert result.code == 200
-    assert len(result.result["data"]) == 2
+    assert len(result.result["data"]) == 3
+
+    result = await client.get_resource_actions(tid=environment, exclude_nochange=True)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
 
 
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):

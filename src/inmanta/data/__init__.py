@@ -4277,6 +4277,10 @@ class ResourceAction(BaseDocument):
             query += f" AND started < ${parameter_index}"
             values.append(cls._get_value(last_timestamp))
             parameter_index += 1
+
+        if exclude_nochange:
+            query += f" AND ra.change <> '{const.Change.nochange.value}'"
+
         if first_timestamp:
             query += " ORDER BY started, action_id"
         else:
@@ -4288,9 +4292,6 @@ class ResourceAction(BaseDocument):
         if first_timestamp:
             query = f"""SELECT * FROM ({query}) AS matching_actions
                         ORDER BY matching_actions.started DESC, matching_actions.action_id DESC"""
-        if exclude_nochange:
-            query += f" AND ra.change <> 'nochange'::public.change"
-
         async with cls.get_connection() as con:
             async with con.transaction():
                 return [cls(**record, from_postgres=True) async for record in con.cursor(query, *values)]
