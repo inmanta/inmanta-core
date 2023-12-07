@@ -1127,7 +1127,7 @@ class ResourceService(protocol.ServerSlice):
             previous_params["first_timestamp"] = resource_action_dtos[0].started
             previous_params["action_id"] = resource_action_dtos[0].action_id
             links["prev"] = url_concat(base_url, previous_params)
-        return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
+        return_value = ReturnValue(response=[], links=links if links else None)
         return return_value
 
     @handle(methods_v2.get_resource_events, env="tid", resource_id="rvid")
