@@ -1,0 +1,7 @@
+description: 'Improve ha db setup documentation'
+change-type: patch
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso6
