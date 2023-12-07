@@ -15,6 +15,9 @@
 
     Contact: code@inmanta.com
 """
+import logging
+LOGGER: logging.Logger = logging.getLogger(__name__)
+
 from abc import abstractmethod
 from collections.abc import Hashable, Sequence
 from typing import TYPE_CHECKING, Deque, Generic, List, Literal, Optional, TypeVar, Union, cast
@@ -31,7 +34,7 @@ from inmanta.ast import (
     Namespace,
     NotFoundException,
     OptionalValueException,
-    RuntimeException,
+    RuntimeException, LocatableString,
 )
 from inmanta.ast.type import Type
 from inmanta.execute import dataflow, proxy
@@ -1117,9 +1120,12 @@ class Resolver:
         self.namespace = namespace
         self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: LocatableString, root: Optional[Namespace] = None) -> Typeorvalue:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
+        LOGGER.debug(f"runtime.py lookup for {str(name)}")
+        LOGGER.debug(f"runtime.py {root=}")
+        LOGGER.debug(f"runtime.py {self.namespace=}")
         if root is not None:
             ns = root
         else:
@@ -1141,6 +1147,7 @@ class Resolver:
         except NotFoundException:
             # This block is only executed if the model contains a reference to an undefined variable.
             # Since we don't know in which scope it should be defined, we assume top scope.
+            LOGGER.log("get_dataflow_node NOT FOUND")
             root_graph: Optional[DataflowGraph] = self.get_root_resolver().dataflow_graph
             assert root_graph is not None
             return root_graph.get_own_variable(name)
@@ -1217,9 +1224,12 @@ class ExecutionContext(Resolver):
             return self.slots[name]
         return self.resolver.lookup(name, root)
 
-    def direct_lookup(self, name: str) -> ResultVariable:
-        if name in self.slots:
-            return self.slots[name]
+    def direct_lookup(self, name: LocatableString) -> ResultVariable:
+        # import pdb
+        # pdb.set_trace()
+        var_name = str(name)
+        if var_name in self.slots:
+            return self.slots[var_name]
         else:
             raise NotFoundException(None, name, "variable %s not found" % name)
 

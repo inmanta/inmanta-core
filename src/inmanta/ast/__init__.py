@@ -25,6 +25,8 @@ from inmanta import warnings
 from inmanta.ast import export
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
+import logging
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 try:
     from typing import TYPE_CHECKING
@@ -363,14 +365,18 @@ class Namespace(Namespaced):
         self.visible_namespaces[name] = ns
 
     def lookup_namespace(self, name: str) -> Import:
+        LOGGER.debug(f"LOOKUPLOOKUPLOOKUP for {name}")
+
         if name not in self.visible_namespaces:
             raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
         return self.visible_namespaces[name]
 
-    def lookup(self, name: str) -> "Union[Type, ResultVariable]":
-        if "::" not in name:
+    def lookup(self, name: LocatableString) -> "Union[Type, ResultVariable]":
+        LOGGER.debug(f"ast__init__ lookup for {str(name)}")
+        var_name = str(name)
+        if "::" not in var_name:
             return self.get_scope().direct_lookup(name)
-        parts = name.rsplit("::", 1)
+        parts = var_name.rsplit("::", 1)
         return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
     def get_type(self, typ: LocatableString) -> "Type":
