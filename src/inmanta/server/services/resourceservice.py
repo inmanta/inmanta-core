@@ -347,7 +347,7 @@ class ResourceService(protocol.ServerSlice):
             now,
             version,
             filter=on_agent,
-            only_update_from_states={const.ResourceState.available, const.ResourceState.deploying}
+            only_update_from_states={const.ResourceState.available, const.ResourceState.deploying},
         )
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
