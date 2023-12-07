@@ -866,6 +866,12 @@ class ResourceService(protocol.ServerSlice):
                         },
                     )
 
+                if only_update_from_states is not None:
+                    resources = [resource for resource in resources if resource.status in only_update_from_states]
+                    if not resources:
+                        return 200, {"message": "no resources with the given state found"}
+                    resource_ids = [resource.resource_version_id for resource in resources]
+
                 # validate transitions
                 if is_resource_state_update:
                     # no escape from terminal
@@ -942,8 +948,7 @@ class ResourceService(protocol.ServerSlice):
                     # transient resource update
                     if not is_resource_action_finished:
                         for res in resources:
-                            if only_update_from_states is None or res.status in only_update_from_states:
-                                await update_fields_resource(res, status=status, connection=connection)
+                            await update_fields_resource(res, status=status, connection=connection)
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
                         return 200
@@ -967,25 +972,24 @@ class ResourceService(protocol.ServerSlice):
 
                         model_version = None
                         for res in resources:
-                            if only_update_from_states is None or res.status in only_update_from_states:
-                                extra_fields = {}
-                                if status == ResourceState.deployed and not is_increment_notification:
-                                    extra_fields["last_success"] = resource_action.started
-                                if propagate_last_produced_events:
-                                    extra_fields["last_produced_events"] = finished
-                                await update_fields_resource(
-                                    res, last_deploy=finished, status=status, **extra_fields, connection=connection
-                                )
-                                model_version = res.model
+                            extra_fields = {}
+                            if status == ResourceState.deployed and not is_increment_notification:
+                                extra_fields["last_success"] = resource_action.started
+                            if propagate_last_produced_events:
+                                extra_fields["last_produced_events"] = finished
+                            await update_fields_resource(
+                                res, last_deploy=finished, status=status, **extra_fields, connection=connection
+                            )
+                            model_version = res.model
 
-                                if (
-                                    "purged" in res.attributes
-                                    and res.attributes["purged"]
-                                    and status == const.ResourceState.deployed
-                                ):
-                                    await data.Parameter.delete_all(
-                                        environment=env.id, resource_id=res.resource_id, connection=connection
-                                    )
+                            if (
+                                "purged" in res.attributes
+                                and res.attributes["purged"]
+                                and status == const.ResourceState.deployed
+                            ):
+                                await data.Parameter.delete_all(
+                                    environment=env.id, resource_id=res.resource_id, connection=connection
+                                )
 
         if is_resource_state_update and is_resource_action_finished:
             self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
