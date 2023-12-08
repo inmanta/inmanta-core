@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import sys
+import textwrap
 from asyncio import subprocess
 
 import py
@@ -32,6 +33,7 @@ from inmanta.command import ShowUsageException
 from inmanta.compiler.config import feature_compiler_cache
 from inmanta.config import Config
 from inmanta.const import VersionState
+from utils import v1_module_from_template
 
 
 def app(args):
@@ -67,13 +69,15 @@ async def install_project(python_env: env.PythonEnvironment, project_dir: py.pat
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(project_dir)
     )
     try:
-        await asyncio.wait_for(process.communicate(), timeout=30)
+        (stdout, stderr) = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         (stdout, stderr) = await process.communicate()
         print(stdout.decode())
         print(stderr.decode())
         raise e
+
+    assert process.returncode == 0, f"{stdout}\n\n{stderr}"
 
 
 def test_help(inmanta_config, capsys):

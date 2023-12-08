@@ -15,8 +15,9 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 import logging
+import time
 import uuid
 
 import pytest
@@ -45,11 +46,16 @@ def get_agent_status_x(id: str):
     pass
 
 
+@method(path="/notify/<id>", operation="GET", server_agent=True, timeout=10, reply=False)
+def get_agent_push(id: str):
+    pass
+
+
 class SessionSpy(SessionListener, ServerSlice):
     def __init__(self):
         ServerSlice.__init__(self, "sessionspy")
         self.expires = 0
-        self.__sessions = []
+        self._sessions = []
 
     async def new_session(self, session, endpoint_names_snapshot: set[str]):
         self._sessions.append(session)
@@ -57,7 +63,7 @@ class SessionSpy(SessionListener, ServerSlice):
     @protocol.handle(get_status_x)
     async def get_status_x(self, tid):
         status_list = []
-        for session in self.__sessions:
+        for session in self._sessions:
             client = session.get_client()
             status = await client.get_agent_status_x("x")
             if status is not None and status.code == 200:
@@ -71,7 +77,7 @@ class SessionSpy(SessionListener, ServerSlice):
         self.expires += 1
 
     def get_sessions(self):
-        return self.__sessions
+        return self._sessions
 
 
 class Agent(protocol.SessionEndpoint):
@@ -79,10 +85,17 @@ class Agent(protocol.SessionEndpoint):
         super().__init__(name, timeout, reconnect_delay)
         self.reconnect = 0
         self.disconnect = 0
+        self.pushes = 0
 
     @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):
         return 200, {"status": "ok", "agents": list(self.end_point_names)}
+
+    @protocol.handle(get_agent_push)
+    async def get_agent_push(self, id):
+        self.pushes += 1
+        LOGGER.debug("PUSH!")
+        await asyncio.sleep(1)
 
     async def on_reconnect(self) -> None:
         self.reconnect += 1
@@ -136,6 +149,15 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, databas
     assert len(status.result["agents"]) == 1
     assert status.result["agents"][0]["status"], "ok"
     await server.stop()
+
+    # test no reply
+    for session in server._sessions:
+        client = session.get_client()
+        now = time.monotonic()
+        status = await client.get_agent_push("x")
+        duration = time.monotonic() - now
+        assert duration < 0.9  # less then built-in wait time
+        assert status.result is None
 
     await rs.stop()
     await agent.stop()
