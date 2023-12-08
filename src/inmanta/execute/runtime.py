@@ -1018,8 +1018,8 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except RuntimeException as e:
-            e.set_statement(self.owner)
-            e.location = self.owner.location
+            e.set_statement(self.owner, replace=False)
+            # e.location = self.owner.location
             raise e
 
     def __repr__(self) -> str:
@@ -1126,6 +1126,7 @@ class Resolver:
         LOGGER.debug(f"runtime.py lookup for {str(name)}")
         LOGGER.debug(f"runtime.py {root=}")
         LOGGER.debug(f"runtime.py {self.namespace=}")
+        LOGGER.debug(f"runtime.py {full_location=}")
         if root is not None:
             ns = root
         else:
@@ -1141,6 +1142,7 @@ class Resolver:
 
     def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
         try:
+            # LOGGER.log("get_dataflow_node")
             result_variable: Typeorvalue = self.lookup(name)
             assert isinstance(result_variable, ResultVariable)
             return result_variable.get_dataflow_node()
@@ -1172,10 +1174,10 @@ class VariableResolver(Resolver):
             DataflowGraph(self, parent=self.parent.dataflow_graph) if self.parent.dataflow_graph is not None else None
         )
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None) -> Typeorvalue:
         if root is None and name == self.name:
             return self.variable
-        return self.parent.lookup(name, root)
+        return self.parent.lookup(name, root, full_location)
 
     def get_root_resolver(self) -> "Resolver":
         return self.parent.get_root_resolver()
@@ -1191,10 +1193,10 @@ class NamespaceResolver(Resolver):
         if parent.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, parent.dataflow_graph)
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None) -> Typeorvalue:
         if root is not None:
-            return self.parent.lookup(name, root)
-        return self.parent.lookup(name, self.root)
+            return self.parent.lookup(name, root, full_location)
+        return self.parent.lookup(name, self.root, full_location)
 
     def for_namespace(self, namespace: Namespace) -> "Resolver":
         return NamespaceResolver(self, namespace)
@@ -1217,20 +1219,21 @@ class ExecutionContext(Resolver):
                 node_ref: dataflow.AssignableNodeReference = dataflow.AssignableNode(name).reference()
                 var.set_dataflow_node(node_ref)
 
-    def lookup(self, name: str, root: Optional[Namespace] = None) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None) -> Typeorvalue:
         if "::" in name:
-            return self.resolver.lookup(name, root)
+            return self.resolver.lookup(name, root, full_location)
         if name in self.slots:
             return self.slots[name]
-        return self.resolver.lookup(name, root)
+        return self.resolver.lookup(name, root, full_location)
 
     def direct_lookup(self, name: str, full_location: Optional[LocatableString] = None) -> ResultVariable:
         # import pdb
         # pdb.set_trace()
+        # LOGGER.debug(f"Execution context directlookup {name=} {str(full_location.location)=}")
         if name in self.slots:
             return self.slots[name]
         else:
-            raise NotFoundException(None, full_location, "variable %s not found" % name)
+            raise NotFoundException(full_location, name, f"variable {name} not found" )
 
     def emit(self, queue: QueueScheduler) -> None:
         self.block.emit(self, queue)

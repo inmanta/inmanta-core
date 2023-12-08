@@ -23,6 +23,9 @@ from itertools import chain
 from string import Formatter
 from typing import Optional, TypeVar
 
+import logging
+LOGGER: logging.Logger = logging.getLogger(__name__)
+
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AttributeException,
@@ -365,7 +368,8 @@ class Assign(AssignStatement):
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
-        target = resolver.lookup(self.name)
+        LOGGER.debug(f"assign.py emit {self.name}")
+        target = resolver.lookup(str(self.name), full_location=self.name)
         assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)
@@ -564,6 +568,8 @@ class FormattedString(ReferenceStatement):
 
     def __repr__(self) -> str:
         return "Format(%s)" % self._format_string
+    def __str__(self) -> str:
+        return self._format_string
 
 
 class StringFormat(FormattedString):

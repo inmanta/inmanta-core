@@ -127,6 +127,7 @@ class SubConstructor(RequiresEmitStatement):
             requires.update(self.implements.constraint.requires_emit(resv, queue))
             return requires
         except NotFoundException as e:
+            LOGGER.debug("SUBCONST EXCPETION")
             e.set_statement(self.implements)
             raise e
 
