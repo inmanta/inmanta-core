@@ -3,7 +3,7 @@
 Environment variables
 =====================
 
-Environment variables can be supplied to the Inmanta server and it's agents.
+Environment variables can be supplied to the Inmanta server and its agents.
 
 
 Supplying environment variables to the Inmanta server

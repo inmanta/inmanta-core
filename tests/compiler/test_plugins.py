@@ -18,12 +18,18 @@
 import logging
 import os
 import re
+import typing
 
 import pytest
 
+import inmanta.ast.statements.define
 import inmanta.compiler as compiler
+import inmanta.plugins
 from inmanta.ast import CompilerException, ExplicitPluginException, Namespace, RuntimeException
 from utils import log_contains
+
+if typing.TYPE_CHECKING:
+    from conftest import SnippetCompilationTest
 
 
 def test_plugin_excn(snippetcompiler):
@@ -80,7 +86,8 @@ def test_kwargs_in_plugin_call_missing_arg(snippetcompiler):
         """
 std::equals(42, desc="they differ")
         """,
-        "Missing 1 required arguments for equals(): arg2" " (reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
+        "std::equals() missing 1 required positional argument: 'arg2' "
+        "(reported in std::equals(42,desc='they differ') ({dir}/main.cf:2))",
     )
 
 
@@ -89,7 +96,7 @@ def test_kwargs_in_plugin_call_double_arg(snippetcompiler):
         """
 std::equals(42, 42, arg1=42)
         """,
-        "Multiple values for arg1 in equals() (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
+        "std::equals() got multiple values for argument 'arg1' (reported in std::equals(42,42,arg1=42) ({dir}/main.cf:2))",
     )
 
 
@@ -99,7 +106,8 @@ def test_plugin_has_no_type_annotation(snippetcompiler):
 import plugin_missing_type_annotation
 plugin_missing_type_annotation::no_type_annotation(42)
         """,
-        "All arguments of plugin 'no_type_annotation' should be annotated",
+        "All arguments of plugin 'plugin_missing_type_annotation::no_type_annotation' "
+        "should be annotated: 'a' has no annotation",
     )
 
 
@@ -199,7 +207,7 @@ import test_674
 
 test_674::test_not_nullable_list(null)
         """,
-        "Invalid value 'null', expected number[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
+        "Invalid value 'null', expected int[] (reported in test_674::test_not_nullable_list(null) ({dir}/main.cf:4))",
     )
 
 
@@ -218,10 +226,10 @@ x = null
 def test_1778_context_as_kwarg_reject(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-std::generate_password("pw_id", context=42)
+std::generate_password("pw_id", 42, context=42)
         """,
-        "Invalid keyword argument 'context' for 'generate_password()'"
-        " (reported in std::generate_password('pw_id',context=42) ({dir}/main.cf:2))",
+        "std::generate_password() got an unexpected keyword argument: 'context' "
+        "(reported in std::generate_password('pw_id',42,context=42) ({dir}/main.cf:2))",
     )
 
 
@@ -317,4 +325,83 @@ keyword_only_arguments::sum_all(1, 2)
     )
     with pytest.raises(RuntimeException) as exc_info:
         compiler.do_compile()
-    assert "Missing 1 required arguments for sum_all(): c" in exc_info.value.msg
+    assert "sum_all() missing 1 required keyword-only argument: 'c'" in exc_info.value.msg
+
+
+def test_catch_all_arguments(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that catch all positional and keyword arguments work as expected.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import catch_all_arguments
+
+# Test regular case.  No extra argument is provided
+std::equals(catch_all_arguments::sum_all(1, b=2), 3)
+
+# Test with extra values provided
+std::equals(catch_all_arguments::sum_all(1, 2, 3, b=4, c=5, d=6), 21)
+        """
+    )
+    compiler.do_compile()
+
+
+def test_signature(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that the get_signature method of the plugins work as expected.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+# Import some modules which define plugins
+import catch_all_arguments
+import keyword_only_arguments
+        """
+    )
+    statements, _ = compiler.do_compile()
+
+    # Get all plugins objects, we get them from the statements, and recognize them
+    # by their `get_signature` method.
+    plugins: dict[str, inmanta.plugins.Plugin] = {
+        name: stmt for name, stmt in statements.items() if hasattr(stmt, "get_signature")
+    }
+
+    assert (
+        plugins["catch_all_arguments::sum_all"].get_signature()
+        == "sum_all(a: 'int', *aa: 'int', b: 'int', **bb: 'int') -> 'int'"
+    )
+    assert plugins["keyword_only_arguments::sum_all"].get_signature() == (
+        "sum_all(a: 'int', b: 'int' = 1, *, c: 'int', d: 'int' = 2) -> 'int'"
+    )
+
+
+def test_returned_types(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that the value returned from a plugin are validated correctly.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import plugin_returned_type_validation
+
+plugin_returned_type_validation::as_any_explicit({"a": "a"})
+plugin_returned_type_validation::as_any_implicit({"a": "a"})
+plugin_returned_type_validation::as_none(null)
+plugin_returned_type_validation::as_null(null)
+plugin_returned_type_validation::as_string("a")
+        """
+    )
+    compiler.do_compile()
+
+
+def test_context_and_defaults(snippetcompiler: "SnippetCompilationTest") -> None:
+    """
+    Test that the usage of the context argument together with default
+    values doesn't cause any issue
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+import plugin_context_and_defaults
+
+plugin_context_and_defaults::func()
+        """
+    )
+    compiler.do_compile()

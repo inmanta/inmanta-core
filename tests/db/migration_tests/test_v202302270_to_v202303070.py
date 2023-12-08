@@ -17,7 +17,8 @@
 """
 import os
 from collections import abc
-from typing import Awaitable, Callable, List
+from collections.abc import Awaitable
+from typing import Callable
 
 import pytest
 
@@ -25,8 +26,8 @@ import pytest
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202302270.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-    get_tables_in_db: Callable[[], Awaitable[List[str]]],
-    get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
+    get_tables_in_db: Callable[[], Awaitable[list[str]]],
+    get_custom_postgresql_types: Callable[[], Awaitable[list[str]]],
 ) -> None:
     """
     verify that the user table is renamed correctly

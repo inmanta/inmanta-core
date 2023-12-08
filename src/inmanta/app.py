@@ -47,10 +47,11 @@ import traceback
 from argparse import ArgumentParser
 from asyncio import ensure_future
 from collections import abc
+from collections.abc import Coroutine
 from configparser import ConfigParser
 from threading import Timer
 from types import FrameType
-from typing import Any, Callable, Coroutine, Dict, Optional
+from typing import Any, Callable, Optional
 
 import click
 from tornado import gen
@@ -233,7 +234,7 @@ class ExperimentalFeatureFlags:
     """
 
     def __init__(self) -> None:
-        self.metavar_to_option: Dict[str, Option[bool]] = {}
+        self.metavar_to_option: dict[str, Option[bool]] = {}
 
     def _get_name(self, option: Option[bool]) -> str:
         return f"flag_{option.name}"
@@ -374,15 +375,15 @@ def compile_project(options: argparse.Namespace) -> None:
         import cProfile
         import pstats
 
-        with summary_reporter.compiler_exception.capture():
-            cProfile.runctx("do_compile()", globals(), {}, "run.profile")
-        p = pstats.Stats("run.profile")
-        p.strip_dirs().sort_stats("time").print_stats(20)
-    else:
-        t1 = time.time()
-        with summary_reporter.compiler_exception.capture():
-            do_compile()
-        LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
+            with summary_reporter.compiler_exception.capture():
+                cProfile.runctx("do_compile()", globals(), {}, "run.profile")
+            p = pstats.Stats("run.profile")
+            p.strip_dirs().sort_stats("time").print_stats(20)
+        else:
+            t1 = time.time()
+            with summary_reporter.compiler_exception.capture():
+                do_compile()
+            LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
 
     summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
@@ -391,7 +392,7 @@ def compile_project(options: argparse.Namespace) -> None:
 def list_commands(options: argparse.Namespace) -> None:
     print("The following commands are available:")
     for cmd, info in Commander.commands().items():
-        print(" %s: %s" % (cmd, info["help"]))
+        print(" {}: {}".format(cmd, info["help"]))
 
 
 def help_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
@@ -603,30 +604,32 @@ def export(options: argparse.Namespace) -> None:
 
     summary_reporter = CompileSummaryReporter()
 
-    types: Optional[Dict[str, inmanta_type.Type]]
-    scopes: Optional[Namespace]
+        types: Optional[dict[str, inmanta_type.Type]]
+        scopes: Optional[Namespace]
 
-    with summary_reporter.compiler_exception.capture():
-        try:
-            (types, scopes) = do_compile()
-        except Exception:
-            types, scopes = (None, None)
-            raise
+        t1 = time.time()
+        with summary_reporter.compiler_exception.capture():
+            try:
+                (types, scopes) = do_compile()
+            except Exception:
+                types, scopes = (None, None)
+                raise
 
-    # Even if the compile failed we might have collected additional data such as unknowns. So
-    # continue the export
+    with inmanta_logger_config.run_in_logger_mode(LoggerMode.EXPORTER):
+        # Even if the compile failed we might have collected additional data such as unknowns. So
+        # continue the export
 
-    export = Exporter(options)
-    with summary_reporter.exporter_exception.capture():
-        results = export.run(
-            types,
-            scopes,
-            metadata=metadata,
-            model_export=options.model_export,
-            export_plugin=options.export_plugin,
-            partial_compile=options.partial_compile,
-            resource_sets_to_remove=options.delete_resource_set,
-        )
+        export = Exporter(options)
+        with summary_reporter.exporter_exception.capture():
+            results = export.run(
+                types,
+                scopes,
+                metadata=metadata,
+                model_export=options.model_export,
+                export_plugin=options.export_plugin,
+                partial_compile=options.partial_compile,
+                resource_sets_to_remove=options.delete_resource_set,
+            )
 
     if not summary_reporter.is_failure() and options.deploy:
         version = results[0]
@@ -636,7 +639,8 @@ def export(options: argparse.Namespace) -> None:
         agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
         conn.release_version(tid, version, True, agent_trigger_method)
 
-    summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
+        LOGGER.debug("The entire export command took %0.03f seconds", time.time() - t1)
+        summary_reporter.print_summary_and_exit(show_stack_traces=options.errors)
 
 
 class Color(enum.Enum):

@@ -113,7 +113,7 @@ def test_is_defined_attribute(snippetcompiler, capsys, condition_block):
         f"""
 
 entity A:
-    number? a
+    int? a
 end
 
 implement A using std::none
@@ -133,7 +133,7 @@ def test_is_defined_attribute_not(snippetcompiler, capsys, condition_block_with_
         f"""
 
 entity A:
-    number? a = null
+    int? a = null
 end
 
 implement A using std::none
@@ -151,8 +151,8 @@ x = A()
 @pytest.mark.parametrize(
     "relation, attr_type",
     [
-        (False, "number?"),
-        (False, "number[]?"),
+        (False, "int?"),
+        (False, "int[]?"),
         (True, "[0:1]"),
         (True, "[0:]"),
     ],
@@ -188,7 +188,7 @@ def test_is_defined_attribute_not_3(snippetcompiler, capsys, condition_block):
         f"""
 
     entity A:
-        number[]? a = null
+        int[]? a = null
     end
 
     implement A using std::none
@@ -208,7 +208,7 @@ def test_is_defined_attribute_2(snippetcompiler, capsys):
         """
 
     entity A:
-        number[]? a
+        int[]? a
     end
 
     implement A using std::none
@@ -461,3 +461,77 @@ isdef = a.other.other is defined
             " {dir}/main.cf:7)`) (reported in a.other.other ({dir}/main.cf:9))"
         ),
     )
+
+
+def test_is_defined(snippetcompiler) -> None:
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            entity A: end
+            A.x [0:] -- A
+            A.y [0:] -- A
+
+            implement A using std::none
+
+
+            a = A()
+            if not a.x is defined:
+                a.y += A()
+            end
+            """
+        )
+    )
+    compiler.do_compile()
+
+
+def test_is_defined_unknown(snippetcompiler) -> None:
+    """
+    Verify is defined behavior with regards to unknowns
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            assert = true
+
+            # primitive values: defined if not null
+            value = 1
+            unknown = tests::unknown()
+            null_value = null
+            empty_list = []
+            null_list = [null]
+            unknown_list = [tests::unknown()]
+            partially_known_list = [tests::unknown(), 1]
+
+            assert = value is defined
+            assert = not (null_value is defined)
+            assert = std::is_unknown(unknown is defined)
+
+            assert = not (empty_list is defined)
+            assert = null_list is defined  # null is not defined but a list with an element is, even if it's null
+            assert = std::is_unknown(unknown_list is defined)
+            assert = partially_known_list is defined
+
+            entity A: end
+            A.others [0:] -- A
+            implement A using std::none
+
+            # relations:
+            rel_unset = A()
+            rel_null = A(others=null)
+            rel_empty = A(others=[])
+            rel_unknown = A(others=tests::unknown())
+            rel_unknown_list = A(others=[tests::unknown()])
+            rel_partially_known_list = A(others=[tests::unknown(), A()])
+
+            assert = not (rel_unset.others is defined)
+            assert = not (rel_null.others is defined)
+            assert = not (rel_empty.others is defined)
+            assert = std::is_unknown(rel_unknown.others is defined)
+            assert = std::is_unknown(rel_unknown_list.others is defined)
+            assert = rel_partially_known_list.others is defined
+            """
+        )
+    )
+    compiler.do_compile()

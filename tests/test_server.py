@@ -22,14 +22,14 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import partial
 
 import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import const, data, loader, resources
+from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
@@ -698,7 +698,7 @@ async def test_batched_code_upload(
     for name, source_info in code_manager.get_types():
         res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
-        assert len(source_info) == 2
+        assert len(source_info) >= 2
         for info in source_info:
             assert info.hash in res.result["sources"]
             code = res.result["sources"][info.hash]
@@ -741,7 +741,7 @@ async def test_resource_action_log(server, client, environment):
     resource_action_log = server.get_slice(SLICE_RESOURCE).get_resource_action_log_file(environment)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
-    with open(resource_action_log, "r") as f:
+    with open(resource_action_log) as f:
         contents = f.read()
         parts = contents.split(" ")
         # Date and time
@@ -758,15 +758,35 @@ async def test_invalid_sid(server, client, environment):
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
 
 
-async def test_get_param(server, client, environment):
+@pytest.mark.parametrize("tz_aware_timestamp", [True, False])
+async def test_get_param(server, client, environment, tz_aware_timestamp: bool):
+    config.Config.set("server", "tz-aware-timestamps", str(tz_aware_timestamp).lower())
+
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    assert result.code == 200
     metadata = {"key1": "val1", "key2": "val2"}
+
     await client.set_param(environment, "param", ParameterSource.user, "val", "", metadata, False)
     await client.set_param(environment, "param2", ParameterSource.user, "val2", "", {"a": "b"}, False)
 
     res = await client.list_params(tid=environment, query={"key1": "val1"})
     assert res.code == 200
+
+    def check_datetime_serialization(timestamp: str, tz_aware_timestamp):
+        """
+        Check that the given timestamp was serialized appropriately according to the server.tz-aware-timestamps option.
+        """
+        expected_format: str = const.TIME_ISOFMT
+        if tz_aware_timestamp:
+            expected_format += "%z"
+        is_aware = datetime.strptime(timestamp, expected_format).tzinfo is not None
+        assert is_aware == tz_aware_timestamp
+
+    check_datetime_serialization(res.result["now"], tz_aware_timestamp)
+
     parameters = res.result["parameters"]
     assert len(parameters) == 1
+
     metadata_received = parameters[0]["metadata"]
     assert len(metadata_received) == 2
     for k, v in metadata.items():
@@ -961,7 +981,7 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
     # Use the next link for pagination
     next_page = result.result["links"]["next"]
     port = opt.get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     url = f"{base_url}{next_page}"
     client = AsyncHTTPClient()
     request = HTTPRequest(
@@ -1147,7 +1167,10 @@ async def test_resource_deploy_start_action_id_conflict(server, client, environm
     await execute_resource_deploy_start(expected_return_code=409, resulting_nr_resource_actions=1)
 
 
-@pytest.mark.parametrize("endpoint_to_use", ["resource_deploy_done", "resource_action_update"])
+@pytest.mark.parametrize(
+    "endpoint_to_use",
+    ["resource_deploy_done", "resource_action_update"],
+)
 async def test_resource_deploy_done(server, client, environment, agent, caplog, endpoint_to_use):
     """
     Ensure that the `resource_deploy_done` endpoint behaves in the same way as the `resource_action_update` endpoint
@@ -1217,7 +1240,7 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     caplog.clear()
     with caplog.at_level(logging.DEBUG):
         # Mark deployment as done
-        now = datetime.now()
+        now = datetime.now().astimezone()
         if endpoint_to_use == "resource_deploy_done":
             result = await agent._client.resource_deploy_done(
                 tid=env_id,
@@ -1266,22 +1289,30 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
     assert resource_action["action"] == const.ResourceAction.deploy
     assert resource_action["started"] is not None
     assert resource_action["finished"] is not None
-    assert resource_action["messages"] == [
+
+    expected_timestamp: str
+    if opt.server_tz_aware_timestamps.get():
+        expected_timestamp = now.astimezone().isoformat(timespec="microseconds")
+    else:
+        expected_timestamp = now.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+
+    expected_resource_action_messages = [
         {
             "level": const.LogLevel.DEBUG.name,
             "msg": "message",
             "args": [],
             "kwargs": {"keyword": 123, "none": None},
-            "timestamp": now.isoformat(timespec="microseconds"),
+            "timestamp": expected_timestamp,
         },
         {
             "level": const.LogLevel.INFO.name,
             "msg": "test",
             "args": [],
             "kwargs": {},
-            "timestamp": now.isoformat(timespec="microseconds"),
+            "timestamp": expected_timestamp,
         },
     ]
+    assert resource_action["messages"] == expected_resource_action_messages
     assert resource_action["status"] == const.ResourceState.deployed
     assert resource_action["changes"] == {rvid_r1_v1: {"attr1": AttributeStateChange(current=None, desired="test").dict()}}
     assert resource_action["change"] == const.Change.purged.value
@@ -1409,7 +1440,7 @@ async def test_start_location_no_redirect(server):
     Ensure that there is no redirection for the "start" location. (issue #3497)
     """
     port = opt.get_bind_port()
-    base_url = "http://localhost:%s/" % (port,)
+    base_url = f"http://localhost:{port}/"
     http_client = AsyncHTTPClient()
     request = HTTPRequest(
         url=base_url,
@@ -1424,8 +1455,8 @@ async def test_redirect_dashboard_to_console(server, path):
     Ensure that there is a redirection from the dashboard to the webconsole
     """
     port = opt.get_bind_port()
-    base_url = "http://localhost:%s/dashboard%s" % (port, path)
-    result_url = "http://localhost:%s/console%s" % (port, path)
+    base_url = f"http://localhost:{port}/dashboard{path}"
+    result_url = f"http://localhost:{port}/console{path}"
     http_client = AsyncHTTPClient()
     request = HTTPRequest(
         url=base_url,
@@ -1617,7 +1648,7 @@ async def test_serialization_attributes_of_resource_to_api(client, server, envir
 
     result = await client.versioned_resource_details(tid=environment, version=version, rid=resource_id)
     assert result.code == 200
-    assert result.result["data"]["attributes"] == attributes_on_api
+    assert result.result["data"]["attributes"] == attributes_on_api, result.result["data"]
 
     result = await client.resource_details(tid=environment, rid=resource_id)
     assert result.code == 200

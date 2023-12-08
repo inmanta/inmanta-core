@@ -25,7 +25,7 @@ import shutil
 import sys
 from logging import INFO
 from types import ModuleType
-from typing import List, Optional, Set
+from typing import Optional
 
 import py
 import pytest
@@ -33,6 +33,7 @@ from pytest import fixture
 
 import utils
 from inmanta import const, env, loader, moduletool
+from inmanta.env import PipConfig
 from inmanta.loader import ModuleSource, SourceInfo
 from inmanta.module import Project
 
@@ -79,8 +80,8 @@ def test_code_manager(tmpdir: py.path.local):
     assert "std::File" in types
     assert "std::Directory" in types
 
-    single_type_list: List[SourceInfo] = types["std::File"]
-    multi_type_list: List[SourceInfo] = types["std::Directory"]
+    single_type_list: list[SourceInfo] = types["std::File"]
+    multi_type_list: list[SourceInfo] = types["std::Directory"]
 
     assert len(single_type_list) == 1
     single_content: str = assert_content(single_type_list[0], single.MyHandler)
@@ -91,7 +92,7 @@ def test_code_manager(tmpdir: py.path.local):
     )
 
     # get_file_hashes
-    mgr_contents: Set[bytes] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
+    mgr_contents: set[bytes] = {mgr.get_file_content(hash) for hash in mgr.get_file_hashes()}
     assert single_content in mgr_contents
     assert multi_content in mgr_contents
 
@@ -283,7 +284,12 @@ def test_plugin_module_finder(
         str(venv_module_dir),
         new_content_init_py="where = 'venv'",
     )
-    moduletool.ModuleTool().install(path=str(venv_module_dir))
+    mod_artifact_path = moduletool.ModuleTool().build(path=str(venv_module_dir))
+    env.process_env.install_for_config(
+        requirements=[],
+        paths=[env.LocalPackagePath(path=mod_artifact_path)],
+        config=PipConfig(use_system_config=True),
+    )
 
     module_to_reload: Optional[ModuleType] = None
     if reload:

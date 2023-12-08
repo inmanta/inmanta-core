@@ -19,6 +19,8 @@ import logging
 import os
 import sys
 from argparse import Namespace
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Optional, TextIO
 
 import colorlog

@@ -6,7 +6,7 @@
     :license: Inmanta EULA
 """
 import os
-from typing import Optional, Tuple
+from typing import Optional
 from uuid import UUID
 
 import psycopg2
@@ -39,7 +39,7 @@ class PGServiceIdAllocator(ExternalServiceIdAllocator[int]):
         """Close connection"""
         self.conn.close()
 
-    def _get_value_from_result(self, result: Optional[Tuple[int]]) -> Optional[int]:
+    def _get_value_from_result(self, result: Optional[tuple[int]]) -> Optional[int]:
         if result and result[0]:
             return result[0]
         return None
@@ -104,7 +104,7 @@ class PGAllocationResource(PurgeableResource):
 @provider("vlan_assignment::PGAllocation", name="pgallocation")
 class PGAllocation(CRUDHandler[PGAllocationResource]):
     def __init__(self, *args, **kwargs):
-        super(PGAllocation, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._allocator = PGServiceIdAllocator(attribute="vlan_id")
 
     def pre(self, ctx: handler.HandlerContext, resource: PGAllocationResource) -> None:

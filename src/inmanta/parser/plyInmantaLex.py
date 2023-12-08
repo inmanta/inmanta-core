@@ -67,7 +67,7 @@ tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX"
 
 def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"f(\"([^\\\"\n]|\\.)*\")|f(\'([^\\\'\n]|\\.)*\')"
-    t.value = t.value[2:-1]
+    t.value = safe_decode(token=t, warning_message="Invalid escape sequence in f-string.", start=2, end=-1)
     lexer = t.lexer
 
     end = lexer.lexpos - lexer.linestart + 1
@@ -138,14 +138,12 @@ def t_COMMENT(t: lex.LexToken) -> None:  # noqa: N802
     r"\#.*?\n"
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
-    pass
 
 
 def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
     r"\//.*?\n"
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
-    pass
 
 
 def t_MLS(t: lex.LexToken) -> lex.LexToken:
@@ -211,7 +209,7 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
         start = end - (e - s)
 
         r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
-        raise ParserException(r, t.value, "Regex error in %s: '%s'" % (t.value, error))
+        raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
 
 
 # Define a rule so we can track line numbers
@@ -240,8 +238,8 @@ lexer = lex.lex()
 
 
 def safe_decode(token: lex.LexToken, warning_message: str, start: int = 1, end: int = -1) -> str:
-    """
-    Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.  # noqa: W605
+    r"""
+    Check for the presence of an invalid escape sequence (e.g. "\.") in the value attribute of a given token.
     This function assumes to be called from within a t_STRING or a t_MLS rule.
 
     - Python < 3.12 raises a DeprecationWarning when encountering an invalid escape sequence

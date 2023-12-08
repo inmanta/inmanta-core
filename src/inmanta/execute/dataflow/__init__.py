@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
+from collections.abc import Iterable, Iterator
 from functools import reduce
 from itertools import chain, filterfalse
-from typing import TYPE_CHECKING, Callable, Dict, FrozenSet, Generic, Iterable, Iterator, List, Optional, Set, Tuple, TypeVar
+from typing import TYPE_CHECKING, Callable, Generic, Optional, TypeVar
 
 if TYPE_CHECKING:
     from inmanta.ast import Locatable
@@ -169,9 +170,9 @@ class DataflowGraph:
         # keeps track of variables that have not been declared in the resolver's scope. This should only be populated
         # if the model refers to a variable in the rhs that has no declaration in the left hand side.
         # For example `n = y.n` in a scope that does not contain a `y = ...` statement.
-        self._own_variables: Dict[str, AssignableNode] = {}
+        self._own_variables: dict[str, AssignableNode] = {}
         # keeps track of instance nodes and their responsible
-        self._own_instances: Dict["Constructor", InstanceNode] = {}
+        self._own_instances: dict["Constructor", InstanceNode] = {}
 
     def get_own_variable(self, name: str) -> "AssignableNodeReference":
         """
@@ -378,7 +379,7 @@ class AttributeNodeReference(AssignableNodeReference):
         return self.instance_var_ref == other.instance_var_ref and self.attribute == other.attribute
 
     def __repr__(self) -> str:
-        return "%s.%s" % (repr(self.instance_var_ref), self.attribute)
+        return f"{repr(self.instance_var_ref)}.{self.attribute}"
 
 
 class InstanceAttributeNodeReference(AssignableNodeReference):
@@ -601,9 +602,9 @@ class AssignableNode(Node):
     def __init__(self, name: str) -> None:
         Node.__init__(self)
         self.name: str = name
-        self.assignable_assignments: List[Assignment[AssignableNodeReference]] = []
-        self.value_assignments: List[Assignment[ValueNodeReference]] = []
-        self.instance_assignments: List[Assignment[InstanceNodeReference]] = []
+        self.assignable_assignments: list[Assignment[AssignableNodeReference]] = []
+        self.value_assignments: list[Assignment[ValueNodeReference]] = []
+        self.instance_assignments: list[Assignment[InstanceNodeReference]] = []
         self.equivalence: Equivalence = Equivalence(frozenset([self]))
         self.result_variable: Optional[ResultVariable] = None
 
@@ -650,7 +651,7 @@ class AssignableNode(Node):
         """
         # Gather all equivalences on the path between the rhs's leaves and this node.
         # The existence of such a trail indicates an assignment loop.
-        equivalence_trail: Set[Equivalence] = reduce(
+        equivalence_trail: set[Equivalence] = reduce(
             set.union,
             (n.equivalence.equivalences_on_path(self) for n in var_ref.nodes()),
             set(),
@@ -684,9 +685,9 @@ class Equivalence:
     __slots__ = ("nodes", "tentative_instance")
 
     def __init__(
-        self, nodes: FrozenSet[AssignableNode] = frozenset(), tentative_instance: Optional["InstanceNode"] = None
+        self, nodes: frozenset[AssignableNode] = frozenset(), tentative_instance: Optional["InstanceNode"] = None
     ) -> None:
-        self.nodes: FrozenSet[AssignableNode] = nodes
+        self.nodes: frozenset[AssignableNode] = nodes
         self.tentative_instance: Optional[InstanceNode] = tentative_instance
 
     def merge(self, other: "Equivalence") -> "Equivalence":
@@ -724,7 +725,7 @@ class Equivalence:
                 yield from (node.reference() for node in self.nodes)
         yield from (node for assignment in self.external_assignable_assignments() for node in assignment.rhs.leaves())
 
-    def equivalences_on_path(self, node: AssignableNode) -> Set["Equivalence"]:
+    def equivalences_on_path(self, node: AssignableNode) -> set["Equivalence"]:
         """
         Returns the set of all equivalences on the assignment path originating from this equivalence
         and terminating in the equivalence containing node.
@@ -732,7 +733,7 @@ class Equivalence:
         """
         if node in self.nodes:
             return {self}
-        child_paths: Set[Equivalence] = reduce(
+        child_paths: set[Equivalence] = reduce(
             set.union,
             (
                 n.equivalence.equivalences_on_path(node)
@@ -740,7 +741,7 @@ class Equivalence:
             ),
             set(),
         )
-        return child_paths.union({self}) if len(child_paths) > 0 else set(())
+        return child_paths.union({self}) if len(child_paths) > 0 else set()
 
     def _is_internal_assignment(self, assignment: Assignment[AssignableNodeReference]) -> bool:
         filtered: Iterator[AssignableNode] = filter(assignment.rhs.ref_to_node, self.nodes)
@@ -823,7 +824,7 @@ class AttributeNode(AssignableNode):
     def __init__(self, instance: "InstanceNode", name: str) -> None:
         AssignableNode.__init__(self, name)
         self.instance: InstanceNode = instance
-        self.responsibles: Set[Tuple["Locatable", DataflowGraph]] = set(())
+        self.responsibles: set[tuple["Locatable", DataflowGraph]] = set()
 
     def assign(self, node_ref: NodeReference, responsible: "Locatable", context: "DataflowGraph") -> None:
         # only add assignment for each responsible once, this check is necessary for bidirectional attributes
@@ -834,7 +835,7 @@ class AttributeNode(AssignableNode):
         self.instance.assign_other_direction(self.name, node_ref, responsible, context)
 
     def __repr__(self) -> str:
-        return "attribute %s on %s" % (super().__repr__(), repr(self.instance))
+        return f"attribute {super().__repr__()} on {repr(self.instance)}"
 
 
 class InstanceNode(Node):
@@ -857,12 +858,12 @@ class InstanceNode(Node):
         attributes: Iterable[str],
     ) -> None:
         Node.__init__(self)
-        self.attributes: Dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
+        self.attributes: dict[str, AttributeNode] = {name: AttributeNode(self, name) for name in attributes}
         self.entity: Optional["Entity"] = None
         self.responsible: Optional["Constructor"] = None
         self.context: Optional["DataflowGraph"] = None
         self._index_node: Optional[InstanceNode] = None
-        self._all_index_nodes: Set["InstanceNode"] = {self}
+        self._all_index_nodes: set["InstanceNode"] = {self}
 
     def reference(self) -> InstanceNodeReference:
         return InstanceNodeReference(self)
@@ -899,9 +900,9 @@ class InstanceNode(Node):
         self._index_node = index_node
         self.attributes = {}
         index_node.get_self().update_all_index_nodes(self._all_index_nodes)
-        self._all_index_nodes = set(())
+        self._all_index_nodes = set()
 
-    def update_all_index_nodes(self, index_nodes: Set["InstanceNode"]) -> None:
+    def update_all_index_nodes(self, index_nodes: set["InstanceNode"]) -> None:
         """
         Adds a set of index nodes to this node's set of all index matches.
         """
@@ -909,7 +910,7 @@ class InstanceNode(Node):
             return self.get_self().update_all_index_nodes(index_nodes)
         self._all_index_nodes.update(index_nodes)
 
-    def get_all_index_nodes(self) -> Set["InstanceNode"]:
+    def get_all_index_nodes(self) -> set["InstanceNode"]:
         """
         Returns all index matches for this node.
         """

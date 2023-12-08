@@ -1,0 +1,9 @@
+description: number type should no longer differentiate between integer and decimal notation when used in indexes.
+issue-nr: 6526
+issue-repo: inmanta-core
+change-type: minor
+destination-branches: [master]
+sections:
+  feature: "Introduce the 'float' type for floating point numbers"
+  deprecation-note: "Deprecate the 'number' type. Use the 'int' or 'float' type instead"
+

@@ -1,0 +1,6 @@
+change-type: patch
+description: Fix bugs introduced in https://github.com/inmanta/inmanta-core/pull/6808
+destination-branches: [master]
+sections:
+  minor-improvement: "Stricter type checking of values returned by plugins."
+  upgrade-note: "Stricter type checking of values returned by plugins. Specifying None as returned type requires None to be returned."

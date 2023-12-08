@@ -61,6 +61,102 @@ def test_for_error_2(snippetcompiler):
     )
 
 
+def test_for_loop_on_list_attribute(snippetcompiler) -> None:
+    """
+    Verify the basic workings of the for loop statement when applied to a plain list attribute.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            entity A:
+                list l
+            end
+
+            implement A using std::none
+
+            a = A(l=[1, 2])
+
+            entity Assert:
+                bool success  # no default -> trigger not-set exception if for loop is not executed
+            end
+            implement Assert using std::none
+            assert = Assert()
+
+            for x in a.l:
+                assert.success = true
+                if x != 1 and x != 2:
+                    # trigger exception
+                    assert.success = false
+                end
+            end
+            """
+        )
+    )
+    compiler.do_compile()
+
+
+def test_for_loop_unknown(snippetcompiler) -> None:
+    """
+    Verify the behavior of the for loop regarding unknowns.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            import tests
+
+            entity Assert:
+                bool success = true
+            end
+            implement Assert using std::none
+            assert = Assert()
+
+            for x in tests::unknown():
+                # body should not be executed at all if entire list is unknown
+                assert.success = false
+            end
+
+            for x in [1, 2, tests::unknown()]:
+                # unknowns in list should be skipped
+                if x != 1 and x != 2:
+                    assert.success = false
+                end
+                if std::is_unknown(x):
+                    assert.success = false
+                end
+            end
+            """
+        )
+    )
+    compiler.do_compile()
+
+
+def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
+    """
+    Verify the flattening behavior of ResultCollector.receive_result_flatten.
+    """
+    snippetcompiler.setup_for_snippet(
+        textwrap.dedent(
+            """\
+            entity Assert:
+                bool success = true
+            end
+            implement Assert using std::none
+            assert = Assert()
+
+            # nested list containing a string
+            # => no flattening would result in `["test"]` in the list
+            # => naive flattening might treat the string as a sequence and flatten to ["t", "e", "s", "t"]
+            for x in [["test"]]:
+                if x != "test":
+                    assert.success = false
+                end
+            end
+            """
+        )
+    )
+    compiler.do_compile()
+
+
 def test_for_loop_fully_gradual(snippetcompiler):
     """
     Verify that the compiler does not produce progress potential for the for loop because it may cause it too freeze too
@@ -68,7 +164,7 @@ def test_for_loop_fully_gradual(snippetcompiler):
     """
     snippetcompiler.setup_for_snippet(
         textwrap.dedent(
-            """
+            """\
             entity A: end
             A.x [0:] -- A
             A.y [0:] -- A
@@ -91,9 +187,7 @@ def test_for_loop_fully_gradual(snippetcompiler):
             for y in a.y:
                 std::print(y)
             end
-            """.strip(
-                "\n"
-            )
+            """
         )
     )
     compiler.do_compile()

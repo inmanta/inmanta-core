@@ -18,7 +18,6 @@
 
 import typing
 from functools import reduce
-from typing import Tuple
 
 import pytest
 from more_itertools import pairwise
@@ -34,10 +33,10 @@ from inmanta.execute.util import NoneValue
 @pytest.mark.parametrize("multi", [True, False])
 @pytest.mark.parametrize("nullable", [True, False])
 def test_dsl_types_type_string(base_type_string: str, multi: bool, nullable: bool):
-    def apply_multi_if(tp: Type, type_string: str) -> Tuple[Type, str]:
+    def apply_multi_if(tp: Type, type_string: str) -> tuple[Type, str]:
         return (TypedList(tp), "%s[]" % type_string) if multi else (tp, type_string)
 
-    def apply_nullable_if(tp: Type, type_string: str) -> Tuple[Type, str]:
+    def apply_nullable_if(tp: Type, type_string: str) -> tuple[Type, str]:
         return (NullableType(tp), "%s?" % type_string) if nullable else (tp, type_string)
 
     assert base_type_string in TYPES
@@ -66,9 +65,9 @@ def test_attribute_validate(multi: bool, nullable: bool) -> None:
     validate([0, 1, NoneValue()], False)
 
 
-def create_type(base_type: typing.Type[Type], multi: bool = False, nullable: bool = False) -> Type:
+def create_type(base_type: type[Type], multi: bool = False, nullable: bool = False) -> Type:
     base: Type = base_type()
-    transformations: typing.List[typing.Callable[[Type], Type]] = [
+    transformations: list[typing.Callable[[Type], Type]] = [
         lambda t: TypedList(t) if multi else t,
         lambda t: NullableType(t) if nullable else t,
     ]
@@ -76,12 +75,12 @@ def create_type(base_type: typing.Type[Type], multi: bool = False, nullable: boo
 
 
 @pytest.mark.parametrize("base_type", [Bool, Integer, LiteralDict, LiteralList, Number, String])
-def test_type_equals_simple(base_type: typing.Type[Type]) -> None:
+def test_type_equals_simple(base_type: type[Type]) -> None:
     assert create_type(base_type) == create_type(base_type)
 
 
 def test_type_equals_transformations() -> None:
-    def all_transformations() -> typing.List[Type]:
+    def all_transformations() -> list[Type]:
         return [
             create_type(base_type, multi, nullable)
             for multi in [True, False]
@@ -89,8 +88,8 @@ def test_type_equals_transformations() -> None:
             for base_type in [Integer, Number]
         ]
 
-    l1: typing.List[Type] = all_transformations()
-    l2: typing.List[Type] = all_transformations()
+    l1: list[Type] = all_transformations()
+    l2: list[Type] = all_transformations()
     assert l1 == l2
     for t1, t2 in pairwise(l1):
         assert t1 != t2
