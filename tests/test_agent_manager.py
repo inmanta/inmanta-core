@@ -21,7 +21,7 @@ import logging
 import typing
 import uuid
 from asyncio import subprocess
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Optional
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
@@ -41,7 +41,7 @@ from utils import UNKWN, assert_equal_ish, retry_limited
 LOGGER = logging.getLogger(__name__)
 
 
-class Collector(object):
+class Collector:
     def __init__(self):
         self.values = []
 
@@ -66,12 +66,12 @@ async def api_call_future(*args, **kwargs) -> Result:
     return Result(200, "X")
 
 
-class MockSession(object):
+class MockSession:
     """
     An environment that segments agents connected to the server
     """
 
-    def __init__(self, sid, tid, endpoint_names: Set[str], nodename):
+    def __init__(self, sid, tid, endpoint_names: set[str], nodename):
         self._sid = sid
         self.tid = tid
         self.endpoint_names = endpoint_names
@@ -790,9 +790,9 @@ async def test_agent_actions(server, client, async_finalizer):
     result = await client.create_environment(project_id=project_id, name="test2")
     env2_id = UUID(result.result["environment"]["id"])
 
-    env_to_agent_map: Dict[UUID, agent.Agent] = {}
+    env_to_agent_map: dict[UUID, agent.Agent] = {}
 
-    async def start_agent(env_id: UUID, agent_names: List[str]) -> None:
+    async def start_agent(env_id: UUID, agent_names: list[str]) -> None:
         for agent_name in agent_names:
             await data.Agent(environment=env_id, name=agent_name, paused=False).insert()
 
@@ -812,7 +812,7 @@ async def test_agent_actions(server, client, async_finalizer):
 
     await asyncio.gather(start_agent(env1_id, ["agent1", "agent2"]), start_agent(env2_id, ["agent1"]))
 
-    async def assert_agents_paused(expected_statuses: Dict[Tuple[UUID, str], bool]) -> None:
+    async def assert_agents_paused(expected_statuses: dict[tuple[UUID, str], bool]) -> None:
         async def _does_expected_status_match_actual_status() -> bool:
             for (env_id, agent_name), paused in expected_statuses.items():
                 # Check in-memory session state
@@ -912,7 +912,7 @@ async def test_agent_actions(server, client, async_finalizer):
         )
 
     # set up for halt test
-    async def assert_agents_halt_state(env_id: UUID, agents_running: Dict[str, bool], halted: bool) -> None:
+    async def assert_agents_halt_state(env_id: UUID, agents_running: dict[str, bool], halted: bool) -> None:
         """
         :param agents_running: dictionary of agents that were running before environment halting.
         """
@@ -987,12 +987,12 @@ async def test_agent_on_resume_actions(server, environment, client, agent_factor
     result = await client.agent_action(environment, name="agent2", action=AgentAction.pause.value)
     assert result.code == 200
 
-    async def assert_agents_on_resume_state(agent_states: Dict[str, Optional[bool]]) -> None:
+    async def assert_agents_on_resume_state(agent_states: dict[str, Optional[bool]]) -> None:
         for agent_name, on_resume in agent_states.items():
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.unpause_on_resume is on_resume
 
-    async def assert_agents_paused_state(agent_states: Dict[str, bool]) -> None:
+    async def assert_agents_paused_state(agent_states: dict[str, bool]) -> None:
         for agent_name, paused in agent_states.items():
             agent_from_db = await data.Agent.get_one(environment=env_id, name=agent_name)
             assert agent_from_db.paused is paused
@@ -1188,7 +1188,7 @@ async def test_error_handling_agent_fork(server, environment, monkeypatch):
     exception_message = "The start of the agent failed"
 
     async def _dummy_fork_inmanta(
-        self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
     ) -> subprocess.Process:
         raise Exception(exception_message)
 
@@ -1291,7 +1291,7 @@ async def test_auto_started_agent_log_in_debug_mode(server, environment):
     log_file_path = f"{logdir}/agent-{environment}.log"  # Path to the log file
 
     def log_contains_debug_line():
-        with open(log_file_path, mode="r") as f:
+        with open(log_file_path) as f:
             log_content = f.read()
         return "DEBUG    inmanta.protocol.endpoints Start transport for client agent" in log_content
 

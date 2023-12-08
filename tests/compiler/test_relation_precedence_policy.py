@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from typing import Set
 
 import pytest
 
@@ -31,7 +30,7 @@ class DummyRelationAttribute(RelationAttribute):
 
     def __init__(self, fq_attr_name: str) -> None:
         self.fq_attr_name = fq_attr_name
-        self.freeze_dependents: Set[RelationAttribute] = set()
+        self.freeze_dependents: set[RelationAttribute] = set()
 
     def __hash__(self) -> "int":
         return hash(self.fq_attr_name)

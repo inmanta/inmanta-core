@@ -17,7 +17,7 @@
 """
 import os
 from collections import abc
-from typing import Awaitable, Callable, List
+from collections.abc import Awaitable, Callable
 
 import pytest
 
@@ -25,7 +25,7 @@ import pytest
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), "dumps/v202306060.sql"))
 async def test_migration(
     migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
-    get_type_of_column: Callable[[], Awaitable[List[str]]],
+    get_type_of_column: Callable[[], Awaitable[list[str]]],
 ) -> None:
     """
     verify that the type of the discovered_at column in the discoveredresource table changed

@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from typing import List
 
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SERVER
 from inmanta.server.extensions import ApplicationContext, FeatureManager

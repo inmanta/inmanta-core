@@ -24,9 +24,10 @@ import random
 import time
 import urllib.parse
 import uuid
+from collections.abc import Iterator
 from enum import Enum
 from itertools import chain
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Optional, Union
 
 import pydantic
 import pytest
@@ -156,12 +157,12 @@ async def test_client_files_stat(client):
 
 
 async def test_diff(client):
-    ca = "Hello world\n".encode()
+    ca = b"Hello world\n"
     ha = hash_file(ca)
     result = await client.upload_file(id=ha, content=base64.b64encode(ca).decode("ascii"))
     assert result.code == 200
 
-    cb = "Bye bye world\n".encode()
+    cb = b"Bye bye world\n"
     hb = hash_file(cb)
     result = await client.upload_file(id=hb, content=base64.b64encode(cb).decode("ascii"))
     assert result.code == 200
@@ -199,7 +200,7 @@ async def test_client_files_corrupt(client):
     file_name = os.path.join(file_dir, hash)
 
     with open(file_name, "wb+") as fd:
-        fd.write("Haha!".encode())
+        fd.write(b"Haha!")
 
     opt.server_delete_currupt_files.set("false")
     result = await client.get_file(id=hash)
@@ -223,7 +224,7 @@ async def test_gzip_encoding(server):
     (hash, content, body) = make_random_file(size=1024)
 
     port = opt.get_bind_port()
-    url = "http://localhost:%s/api/v1/file/%s" % (port, hash)
+    url = f"http://localhost:{port}/api/v1/file/{hash}"
 
     zipped, body = protocol.gzipped_json({"content": body})
     assert zipped
@@ -428,7 +429,7 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
             """
 
         @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
-        def test_method2(project: List[Project]) -> ReturnValue[List[Project]]:  # NOQA
+        def test_method2(project: list[Project]) -> ReturnValue[list[Project]]:  # NOQA
             """
             Create a new project
             """
@@ -440,7 +441,7 @@ async def test_pydantic_alias(unused_tcp_port, postgres_db, database_name, async
             return ReturnValue(response=new_project)
 
         @protocol.handle(test_method2)
-        async def test_method2i(self, project: List[Project]) -> ReturnValue[List[Project]]:
+        async def test_method2i(self, project: list[Project]) -> ReturnValue[list[Project]]:
             return ReturnValue(response=project)
 
     rs = Server()
@@ -781,11 +782,11 @@ async def test_list_basemodel_argument(unused_tcp_port, postgres_db, database_na
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
-        def test_method(data: List[Project], data2: List[int]) -> Project:  # NOQA
+        def test_method(data: list[Project], data2: list[int]) -> Project:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: List[Project], data2: List[int]) -> Project:
+        async def test_method(self, data: list[Project], data2: list[int]) -> Project:
             assert len(data) == 1
             assert data[0].name == "test"
             assert len(data2) == 3
@@ -814,11 +815,11 @@ async def test_dict_basemodel_argument(unused_tcp_port, postgres_db, database_na
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
-        def test_method(data: Dict[str, Project], data2: Dict[str, int]) -> Project:  # NOQA
+        def test_method(data: dict[str, Project], data2: dict[str, int]) -> Project:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: Dict[str, Project], data2: Dict[str, int]) -> Project:
+        async def test_method(self, data: dict[str, Project], data2: dict[str, int]) -> Project:
             assert len(data) == 1
             assert data["projectA"].name == "test"
             assert len(data2) == 3
@@ -849,11 +850,11 @@ async def test_dict_with_optional_values(unused_tcp_port, postgres_db, database_
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
-        def test_method(data: Dict[str, Optional[types]]) -> Result:  # NOQA
+        def test_method(data: dict[str, Optional[types]]) -> Result:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: Dict[str, Optional[types]]) -> Result:
+        async def test_method(self, data: dict[str, Optional[types]]) -> Result:
             assert len(data) == 1
             assert "test" in data
             return Result(val=data["test"])
@@ -902,19 +903,19 @@ async def test_dict_and_list_return(unused_tcp_port, postgres_db, database_name,
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=["api"])
-        def test_method(data: Project) -> List[Project]:  # NOQA
+        def test_method(data: Project) -> list[Project]:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: Project) -> List[Project]:  # NOQA
+        async def test_method(self, data: Project) -> list[Project]:  # NOQA
             return [Project(name="test_method")]
 
         @protocol.typedmethod(path="/test2", operation="POST", client_types=["api"])
-        def test_method2(data: Project) -> List[str]:  # NOQA
+        def test_method2(data: Project) -> list[str]:  # NOQA
             pass
 
         @protocol.handle(test_method2)
-        async def test_method2(self, data: Project) -> List[str]:  # NOQA
+        async def test_method2(self, data: Project) -> list[str]:  # NOQA
             return ["test_method"]
 
     rs = Server()
@@ -958,12 +959,12 @@ async def test_method_definition():
             Create a new project
             """
 
-    assert "Type typing.Iterator[str] of argument name can only be generic List, Dict or Literal" in str(e.value)
+    assert "Type collections.abc.Iterator[str] of argument name can only be generic List, Dict or Literal" in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
         @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
-        def test_method3(name: List[object]) -> None:
+        def test_method3(name: list[object]) -> None:
             """
             Create a new project
             """
@@ -976,17 +977,17 @@ async def test_method_definition():
     with pytest.raises(InvalidMethodDefinition) as e:
 
         @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
-        def test_method4(name: Dict[int, str]) -> None:
+        def test_method4(name: dict[int, str]) -> None:
             """
             Create a new project
             """
 
-    assert "Type typing.Dict[int, str] of argument name must be a Dict with str keys and not int" in str(e.value)
+    assert "Type dict[int, str] of argument name must be a Dict with str keys and not int" in str(e.value)
 
     with pytest.raises(InvalidMethodDefinition) as e:
 
         @protocol.typedmethod(path="/test", operation="PUT", client_types=["api"])
-        def test_method5(name: Dict[str, object]) -> None:
+        def test_method5(name: dict[str, object]) -> None:
             """
             Create a new project
             """
@@ -1012,25 +1013,25 @@ async def test_union_types(unused_tcp_port, postgres_db, database_name, async_fi
     configure(unused_tcp_port, database_name, postgres_db.port)
 
     SimpleTypes = Union[float, int, StrictBool, str]  # NOQA
-    AttributeTypes = Union[SimpleTypes, List[SimpleTypes], Dict[str, SimpleTypes]]  # NOQA
+    AttributeTypes = Union[SimpleTypes, list[SimpleTypes], dict[str, SimpleTypes]]  # NOQA
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
-        def test_method(data: SimpleTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
+        def test_method(data: SimpleTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, data: SimpleTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
+        async def test_method(self, data: SimpleTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
             if isinstance(data, list):
                 return data
             return [data]
 
         @protocol.typedmethod(path="/testp", operation="POST", client_types=["api"])
-        def test_methodp(data: AttributeTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
+        def test_methodp(data: AttributeTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
             pass
 
         @protocol.handle(test_methodp)
-        async def test_methodp(self, data: AttributeTypes, version: Optional[int] = None) -> List[SimpleTypes]:  # NOQA
+        async def test_methodp(self, data: AttributeTypes, version: Optional[int] = None) -> list[SimpleTypes]:  # NOQA
             if isinstance(data, list):
                 return data
             return [data]
@@ -1479,13 +1480,13 @@ async def test_tuple_index_out_of_range(unused_tcp_port, postgres_db, database_n
         )
         def test_method(
             tid: uuid.UUID, project: str, include_deleted: bool = False
-        ) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
+        ) -> list[Union[uuid.UUID, Project, bool]]:  # NOQA
             pass
 
         @protocol.handle(test_method)
         async def test_method(
             tid: uuid.UUID, project: Project, include_deleted: bool = False
-        ) -> List[Union[uuid.UUID, Project, bool]]:  # NOQA
+        ) -> list[Union[uuid.UUID, Project, bool]]:  # NOQA
             return [tid, project, include_deleted]
 
     rs = Server()
@@ -1529,7 +1530,7 @@ async def test_multiple_path_params(unused_tcp_port, postgres_db, database_name,
 
 
 async def test_2151_method_header_parameter_in_body(async_finalizer, unused_tcp_port) -> None:
-    async def _id(x: object, dct: Dict[str, str]) -> object:
+    async def _id(x: object, dct: dict[str, str]) -> object:
         return x
 
     @protocol.method(
@@ -1651,14 +1652,14 @@ def test_method_strict_exception() -> None:
 
 async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port) -> None:
     @protocol.typedmethod(path="/zipsingle", operation="POST", client_types=[const.ClientType.api], strict_typing=False)
-    def merge_dicts(one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
+    def merge_dicts(one: dict[str, Any], other: dict[str, int], any_arg: Any) -> dict[str, Any]:
         """
         Merge two dicts.
         """
 
     class TestSlice(ServerSlice):
         @protocol.handle(merge_dicts)
-        async def merge_dicts_impl(self, one: Dict[str, Any], other: Dict[str, int], any_arg: Any) -> Dict[str, Any]:
+        async def merge_dicts_impl(self, one: dict[str, Any], other: dict[str, int], any_arg: Any) -> dict[str, Any]:
             return {**one, **other}
 
     configure(unused_tcp_port, "", "")
@@ -1671,8 +1672,8 @@ async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port) -> Non
 
     client: protocol.Client = protocol.Client("client")
 
-    one: Dict[str, Any] = {"my": {"nested": {"keys": 42}}}
-    other: Dict[str, int] = {"single_level": 42}
+    one: dict[str, Any] = {"my": {"nested": {"keys": 42}}}
+    other: dict[str, int] = {"single_level": 42}
     response: Result = await client.merge_dicts(one, other, None)
     assert response.code == 200
     assert response.result == {"data": {**one, **other}}
@@ -1682,23 +1683,23 @@ async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port) -> Non
     "param_type,param_value,expected_url",
     [
         (
-            Dict[str, str],
+            dict[str, str],
             {"a": "b", "c": "d", ",&?=%": ",&?=%."},
             "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.%2C%26%3F%3D%25=%2C%26%3F%3D%25.",
         ),
         (
-            Dict[str, List[str]],
+            dict[str, list[str]],
             {"a": ["b"], "c": ["d", "e"], "g": ["h"]},
             "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.c=e&filter.g=h",
         ),
         (
-            Dict[str, List[str]],
+            dict[str, list[str]],
             {"a": ["b"], "c": ["d", "e"], ",&?=%": [",&?=%", "f"], ".g.h": ["i"]},
             "/api/v1/test/1/monty?filter.a=b&filter.c=d&filter.c=e"
             "&filter.%2C%26%3F%3D%25=%2C%26%3F%3D%25&filter.%2C%26%3F%3D%25=f&filter..g.h=i",
         ),
         (
-            List[str],
+            list[str],
             [
                 "a ",
                 "b,",
@@ -1707,11 +1708,11 @@ async def test_method_nonstrict_allowed(async_finalizer, unused_tcp_port) -> Non
             "/api/v1/test/1/monty?filter=a+&filter=b%2C&filter=c",
         ),
         (
-            List[str],
+            list[str],
             ["a", "b", ",&?=%", "c", "."],
             "/api/v1/test/1/monty?filter=a&filter=b&filter=%2C%26%3F%3D%25&filter=c&filter=.",
         ),
-        (List[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+&filter=b&filter=c&filter=%2C"),
+        (list[str], ["a ", "b", "c", ","], "/api/v1/test/1/monty?filter=a+&filter=b&filter=c&filter=%2C"),
     ],
 )
 async def test_dict_list_get_roundtrip(
@@ -1751,11 +1752,11 @@ async def test_dict_get_optional(unused_tcp_port, postgres_db, database_name, as
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, filter: Optional[Dict[str, str]] = None) -> str:  # NOQA
+        def test_method(id: str, name: str, filter: Optional[dict[str, str]] = None) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, filter: Optional[Dict[str, str]] = None) -> str:  # NOQA
+        async def test_method(self, id: str, name: str, filter: Optional[dict[str, str]] = None) -> str:  # NOQA
             return ",".join(filter.keys()) if filter is not None else ""
 
     rs = Server()
@@ -1785,11 +1786,11 @@ async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, datab
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, filter: Optional[Dict[str, List[str]]] = None) -> str:  # NOQA
+        def test_method(id: str, name: str, filter: Optional[dict[str, list[str]]] = None) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, filter: Optional[Dict[str, List[str]]] = None) -> str:  # NOQA
+        async def test_method(self, id: str, name: str, filter: Optional[dict[str, list[str]]] = None) -> str:  # NOQA
             return ",".join(filter.keys()) if filter is not None else ""
 
     rs = Server()
@@ -1818,15 +1819,15 @@ async def test_dict_list_nested_get_optional(unused_tcp_port, postgres_db, datab
     "param_type,expected_error_message",
     [
         (
-            Dict[str, Dict[str, str]],
+            dict[str, dict[str, str]],
             "nested dictionaries and union types for dictionary values are not supported for GET requests",
         ),
         (
-            Dict[str, Union[str, List[str]]],
+            dict[str, Union[str, list[str]]],
             "nested dictionaries and union types for dictionary values are not supported for GET requests",
         ),
-        (List[Dict[str, str]], "lists of dictionaries and lists of lists are not supported for GET requests"),
-        (List[List[str]], "lists of dictionaries and lists of lists are not supported for GET requests"),
+        (list[dict[str, str]], "lists of dictionaries and lists of lists are not supported for GET requests"),
+        (list[list[str]], "lists of dictionaries and lists of lists are not supported for GET requests"),
     ],
 )
 async def test_dict_list_get_invalid(
@@ -1853,19 +1854,19 @@ async def test_list_get_optional(unused_tcp_port, postgres_db, database_name, as
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, sort: Optional[List[int]] = None) -> str:  # NOQA
+        def test_method(id: str, name: str, sort: Optional[list[int]] = None) -> str:  # NOQA
             pass
 
         @protocol.typedmethod(path="/test_uuid/<id>", operation="GET", client_types=["api"])
-        def test_method_uuid(id: str, sort: Optional[List[uuid.UUID]] = None) -> str:  # NOQA
+        def test_method_uuid(id: str, sort: Optional[list[uuid.UUID]] = None) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, sort: Optional[List[int]] = None) -> str:  # NOQA
+        async def test_method(self, id: str, name: str, sort: Optional[list[int]] = None) -> str:  # NOQA
             return str(sort) if sort else ""
 
         @protocol.handle(test_method_uuid)
-        async def test_method_uuid(self, id: str, sort: Optional[List[uuid.UUID]] = None) -> str:  # NOQA
+        async def test_method_uuid(self, id: str, sort: Optional[list[uuid.UUID]] = None) -> str:  # NOQA
             return str(sort) if sort else ""
 
     rs = Server()
@@ -1898,12 +1899,12 @@ async def test_dicts_multiple_get(unused_tcp_port, postgres_db, database_name, a
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, filter: Dict[str, List[str]], another_filter: Dict[str, str]) -> str:  # NOQA
+        def test_method(id: str, name: str, filter: dict[str, list[str]], another_filter: dict[str, str]) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
         async def test_method(
-            self, id: str, name: str, filter: Dict[str, List[str]], another_filter: Dict[str, str]
+            self, id: str, name: str, filter: dict[str, list[str]], another_filter: dict[str, str]
         ) -> str:  # NOQA
             return ",".join(chain(filter.keys(), another_filter.keys()))
 
@@ -1931,27 +1932,27 @@ async def test_dict_list_get_by_url(unused_tcp_port, postgres_db, database_name,
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test/<id>/<name>", operation="GET", client_types=["api"])
-        def test_method(id: str, name: str, filter: Dict[str, str]) -> str:  # NOQA
+        def test_method(id: str, name: str, filter: dict[str, str]) -> str:  # NOQA
             pass
 
         @protocol.typedmethod(path="/test_list/<id>", operation="GET", client_types=["api"])
-        def test_method_list(id: str, filter: List[int]) -> str:  # NOQA
+        def test_method_list(id: str, filter: list[int]) -> str:  # NOQA
             pass
 
         @protocol.typedmethod(path="/test_dict_of_lists/<id>", operation="GET", client_types=["api"])
-        def test_method_dict_of_lists(id: str, filter: Dict[str, List[str]]) -> str:  # NOQA
+        def test_method_dict_of_lists(id: str, filter: dict[str, list[str]]) -> str:  # NOQA
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, name: str, filter: Dict[str, str]) -> str:  # NOQA
+        async def test_method(self, id: str, name: str, filter: dict[str, str]) -> str:  # NOQA
             return ",".join(filter.keys())
 
         @protocol.handle(test_method_list)
-        async def test_method_list(self, id: str, filter: List[int]) -> str:  # NOQA
+        async def test_method_list(self, id: str, filter: list[int]) -> str:  # NOQA
             return str(filter)
 
         @protocol.handle(test_method_dict_of_lists)
-        async def test_method_dict_of_lists(self, id: str, filter: Dict[str, List[str]]) -> str:  # NOQA
+        async def test_method_dict_of_lists(self, id: str, filter: dict[str, list[str]]) -> str:  # NOQA
             return ",".join(filter.keys())
 
     rs = Server()
@@ -2023,11 +2024,11 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="GET", client_types=["api"])
-        def test_method(timestamp: datetime.datetime) -> List[datetime.datetime]:
+        def test_method(timestamp: datetime.datetime) -> list[datetime.datetime]:
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, timestamp: datetime.datetime) -> List[datetime.datetime]:
+        async def test_method(self, timestamp: datetime.datetime) -> list[datetime.datetime]:
             assert timestamp.tzinfo is not None
             assert timestamp == now
             return [
@@ -2047,8 +2048,17 @@ async def test_api_datetime_utc(unused_tcp_port, postgres_db, database_name, asy
 
     response: Result = await client.test_method(timestamp=now)
     assert response.code == 200
-    assert all(pydantic.parse_obj_as(datetime.datetime, timestamp) == naive_utc for timestamp in response.result["data"])
 
+    def convert_to_naive_utc(timestamp: str) -> datetime.datetime:
+        datetime_obj = pydantic.parse_obj_as(datetime.datetime, timestamp)
+        if datetime_obj.tzinfo:
+            datetime_obj = datetime_obj.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+        return datetime_obj
+
+    timestamps = [convert_to_naive_utc(timestamp) for timestamp in response.result["data"]]
+
+    assert all(timestamp == naive_utc for timestamp in timestamps)
     response: Result = await client.test_method(timestamp=now.astimezone(datetime.timezone.utc))
     assert response.code == 200
 
@@ -2093,11 +2103,11 @@ async def test_dict_of_list(unused_tcp_port, postgres_db, database_name, async_f
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="GET", client_types=[const.ClientType.api])
-        def test_method(id: str) -> Dict[str, List[APydanticType]]:
+        def test_method(id: str) -> dict[str, list[APydanticType]]:
             pass
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str) -> Dict[str, List[APydanticType]]:
+        async def test_method(self, id: str) -> dict[str, list[APydanticType]]:
             return {id: [APydanticType(attr=1), APydanticType(attr=5)]}
 
     rs = Server()
@@ -2159,13 +2169,13 @@ async def test_kwargs(unused_tcp_port, postgres_db, database_name, async_finaliz
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
-        def test_method(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+        def test_method(id: str, **kwargs: object) -> dict[str, str]:  # NOQA
             """
             Create a new project
             """
 
         @protocol.handle(test_method)
-        async def test_method(self, id: str, **kwargs: object) -> Dict[str, str]:
+        async def test_method(self, id: str, **kwargs: object) -> dict[str, str]:
             return {"name": str(kwargs["name"]), "value": str(kwargs["value"])}
 
     rs = Server()
@@ -2189,7 +2199,7 @@ async def test_get_description_foreach_http_status_code() -> None:
 
     class ProjectServer(ServerSlice):
         @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
-        def test_method1(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+        def test_method1(id: str, **kwargs: object) -> dict[str, str]:  # NOQA
             """
             Create a new project
 
@@ -2199,7 +2209,7 @@ async def test_get_description_foreach_http_status_code() -> None:
             """
 
         @protocol.typedmethod(path="/test", operation="POST", client_types=[ClientType.api], varkw=True)
-        def test_method2(id: str, **kwargs: object) -> Dict[str, str]:  # NOQA
+        def test_method2(id: str, **kwargs: object) -> dict[str, str]:  # NOQA
             """
             Create a new project
 
@@ -2209,14 +2219,14 @@ async def test_get_description_foreach_http_status_code() -> None:
             """
 
     method_properties = protocol.common.MethodProperties.methods["test_method1"][0]
-    response_code_to_description: Dict[int, str] = method_properties.get_description_foreach_http_status_code()
+    response_code_to_description: dict[int, str] = method_properties.get_description_foreach_http_status_code()
     assert len(response_code_to_description) == 3
     assert response_code_to_description[200] == "A new project"
     assert response_code_to_description[404] == "The id was not found."
     assert response_code_to_description[500] == "A server error."
 
     method_properties = protocol.common.MethodProperties.methods["test_method2"][0]
-    response_code_to_description: Dict[int, str] = method_properties.get_description_foreach_http_status_code()
+    response_code_to_description: dict[int, str] = method_properties.get_description_foreach_http_status_code()
     assert len(response_code_to_description) == 3
     assert response_code_to_description[200] == ""
     assert response_code_to_description[404] == ""

@@ -20,7 +20,6 @@ import json
 import uuid
 from collections import defaultdict
 from operator import itemgetter
-from typing import Dict
 from uuid import UUID
 
 import pytest
@@ -30,6 +29,7 @@ from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
 from inmanta.server.config import get_bind_port
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ async def env_with_resources(server, client):
         path: str,
         status: ResourceState,
         version: int,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         agent: str = "internal",
         resource_type: str = "std::File",
         environment: UUID = env.id,
@@ -331,7 +331,7 @@ async def test_resource_history(client, server, env_with_resources):
     for entry in result.result["data"]:
         actual.append(
             {
-                "date": datetime.datetime.strptime(entry["date"], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc),
+                "date": parse_timestamp(entry["date"]),
                 "attributes": entry["attributes"],
             }
         )
@@ -365,7 +365,7 @@ async def test_resource_history(client, server, env_with_resources):
     for entry in result.result["data"]:
         actual.append(
             {
-                "date": datetime.datetime.strptime(entry["date"], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc),
+                "date": parse_timestamp(entry["date"]),
                 "attributes": entry["attributes"],
             }
         )
@@ -418,7 +418,7 @@ async def test_resource_history_paging(server, client, order_by_column, order, e
     assert result.result["links"].get("prev") is None
 
     port = get_bind_port()
-    base_url = "http://localhost:%s" % (port,)
+    base_url = f"http://localhost:{port}"
     http_client = AsyncHTTPClient()
 
     # Test link for next page
@@ -489,7 +489,7 @@ async def test_history_not_continuous_versions(server, client, environment):
         path: str,
         status: ResourceState,
         version: int,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         agent: str = "internal",
         resource_type: str = "std::File",
     ):

@@ -16,7 +16,8 @@
     Contact: code@inmanta.com
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Deque, Dict, Generic, Hashable, List, Optional, Set, TypeVar, Union, cast
+from collections.abc import Hashable, Sequence
+from typing import TYPE_CHECKING, Deque, Generic, List, Literal, Optional, TypeVar, Union, cast
 
 import inmanta.ast.attribute  # noqa: F401 (pyflakes does not recognize partially qualified access ast.attribute)
 from inmanta import ast
@@ -71,12 +72,27 @@ class ResultCollector(Generic[T_contra]):
 
     def receive_result(self, value: T_contra, location: Location) -> bool:
         """
-        Receive a single value for gradual execution. Called once for each value that is part of the result.
+        Receive a single value for gradual execution. Called once for each value that is part of the result. May be `null` or
+        Unknown. Does not distinguish between Unknown as an element of a list and Unknown as a top-level value.
 
         :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
             waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
         """
         raise NotImplementedError()
+
+    def receive_result_flatten(self, value: Union[T_contra, Sequence[T_contra]], location: Location) -> bool:
+        """
+        Receive one or more values for gradual execution. When a list is passed, its values will be passed to receive_result
+        one by one. Otherwise the value itself is passed unmodified.
+
+        :return: Whether this collector is complete, i.e. it does not need to receive any further results and its associated
+            waiter will no longer cause progress. Once this is signalled, this instance should get no further results.
+        """
+        for subvalue in value if isinstance(value, list) else [value]:
+            done: bool = self.receive_result(subvalue, location)
+            if done:
+                return True
+        return False
 
 
 class IPromise:
@@ -101,7 +117,6 @@ class ISetPromise(IPromise, Generic[T]):
         """
         Fulfills this promise by setting the owner's value and notifying the owner of the promise's completion.
         """
-        pass
 
 
 class ProgressionPromise(IPromise):
@@ -143,7 +158,7 @@ class VariableABC(Generic[T_co]):
         """
         raise NotImplementedError()
 
-    def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T_co], location: Location) -> bool:
         """
         Add a listener to report new values to. If the variable already has a value, this is reported immediately. Explicit
         assignments of `null` will not be reported.
@@ -153,8 +168,10 @@ class VariableABC(Generic[T_co]):
 
         :param resultcollector: The collector for the values of this variable.
         :param location: The location associated with this listener.
+        :return: True iff this variable will report values to the listener. Simple variables may not implement the listen
+            capability and will return False. A variable will always return the same value regardless of the parameters.
         """
-        raise NotImplementedError()
+        return False
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
@@ -195,9 +212,9 @@ class WrappedValueVariable(VariableABC[T]):
     def get_value(self) -> T:
         return self.value
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
-        if not isinstance(self.value, NoneValue):
-            resultcollector.receive_result(self.value, location)
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
+        resultcollector.receive_result(self.value, location)
+        return True
 
     def waitfor(self, waiter: "Waiter") -> None:
         waiter.ready(self)
@@ -243,7 +260,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
         variable.
         """
         # plain ResultVariable does not track promises -> simply return
-        pass
 
     def is_ready(self) -> bool:
         return self.hasValue
@@ -291,12 +307,6 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
     def receive_result(self, value: T, location: Location) -> bool:
         return True
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
-        """
-        Add a listener to report new values to, only for lists. Explicit assignments of `null` will not be reported.
-        """
-        pass
-
     def is_multi(self) -> bool:
         return False
 
@@ -320,25 +330,31 @@ class ListElementVariable(ResultVariable[T]):
         super().__init__()
         self.set_value(value, location)
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[True]:
         assert self.value is not None
-        if not isinstance(self.value, NoneValue):
-            resultcollector.receive_result(self.value, location)
+        resultcollector.receive_result(self.value, location)
+        return True
 
 
 class ResultVariableProxy(VariableABC[T]):
     """
     A proxy for a reading from a ResultVariable that implements the VariableABC interface. Allows for assignment between
-    variables without resolving the right hand side at the time of assignment.
+    variables without resolving the right hand side at the time of assignment. Supports a single listener to be registered
+    at construction. This class will ensure that the connected variable's value(s) is (are) reported to the listener, even if
+    the variable itself does not support listeners.
     This class does not support setting values or related operations such as acquiring progression promises.
     """
 
-    __slots__ = ("variable", "_listeners", "_waiters")
+    __slots__ = ("variable", "_listener", "_waiters", "_notify_listeners")
 
-    def __init__(self, variable: Optional[VariableABC[T]] = None) -> None:
+    def __init__(
+        self, variable: Optional[VariableABC[T]] = None, listener: Optional[tuple[ResultCollector[T], Location]] = None
+    ) -> None:
         self.variable: Optional[VariableABC[T]] = variable
-        self._listeners: Optional[list[tuple[ResultCollector[T], Location]]] = []
+        self._listener: Optional[tuple[ResultCollector[T], Location]] = listener
         self._waiters: Optional[list["Waiter"]] = []
+        # are we responsible for notifying listeners ourselves?
+        self._notify_listeners: bool = False
 
     def connect(self, variable: VariableABC[T]) -> None:
         """
@@ -347,13 +363,18 @@ class ResultVariableProxy(VariableABC[T]):
         if self.variable is not None and self.variable != variable:
             raise Exception("Trying to connect a variable to a proxy that is already connected to another variable.")
         self.variable = variable
-        assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
         assert self._waiters is not None  # only set to None after a variable is connected to prevent data leaks
-        for listener in self._listeners:
-            self.variable.listener(*listener)
+        if self._listener is not None:
+            registered_listener: bool = self.variable.listener(*self._listener)
+            if registered_listener:
+                # clear listener to prevent data leaks
+                self._listener = None
+            else:
+                # variable does not support listeners, we'll have to notify the listener ourselves
+                self._notify_listeners = True
         for waiter in self._waiters:
             self.variable.waitfor(waiter)
-        self._listeners = None
+        # clear waiters to prevent data leaks
         self._waiters = None
 
     def is_ready(self) -> bool:
@@ -367,14 +388,21 @@ class ResultVariableProxy(VariableABC[T]):
             raise Exception(
                 "Trying to get value for proxy variable that has not been connected yet. Use `waitfor` to wait for a value."
             )
-        return self.variable.get_value()
+        value: T = self.variable.get_value()
+        if self._notify_listeners:
+            assert self._listener is not None
+            listener, location = self._listener
+            # simple case: single value. Multi-value variables implement their own listener functionality
+            listener.receive_result_flatten(value, location)
+            # clean up: prevent data leaks and ensure listener is only notified once
+            self._listener = None
+            self._notify_listeners = False
+        return value
 
-    def listener(self, resultcollector: ResultCollector[T], location: Location) -> None:
-        if self.variable is None:
-            assert self._listeners is not None  # only set to None after a variable is connected to prevent data leaks
-            self._listeners.append((resultcollector, location))
-        else:
-            self.variable.listener(resultcollector, location)
+    def listener(self, resultcollector: ResultCollector[T], location: Location) -> Literal[False]:
+        # no need for this right now and implementing it greatly complicates the logic of this class
+        # a single listener can be registered at construction time
+        return False
 
     def waitfor(self, waiter: "Waiter") -> None:
         """
@@ -467,8 +495,8 @@ class DelayedResultVariable(ResultVariable[T]):
 
     def __init__(self, queue: "QueueScheduler", value: Optional[T] = None) -> None:
         ResultVariable.__init__(self, value)
-        self.promises: Optional[List[IPromise]] = []
-        self.done_promises: Optional[Set[IPromise]] = set()
+        self.promises: Optional[list[IPromise]] = []
+        self.done_promises: Optional[set[IPromise]] = set()
         self.queued = False
         self.queues = queue
         if self.can_get():
@@ -537,7 +565,7 @@ class DelayedResultVariable(ResultVariable[T]):
         return len(self.waiters)
 
 
-ListValue = Union["Instance", List["Instance"]]
+ListValue = Union["Instance", list["Instance"]]
 
 
 class BaseListVariable(DelayedResultVariable[ListValue]):
@@ -636,7 +664,7 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
         self.set_value(value, location)
         return False
 
-    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> None:
+    def listener(self, resultcollector: ResultCollector["Instance"], location: Location) -> Literal[True]:
         for value in self.value:
             resultcollector.receive_result(value, location)
         if not self.hasValue:
@@ -645,10 +673,11 @@ class BaseListVariable(DelayedResultVariable[ListValue]):
                 # may happen in case of a duplicate assignment, e.g. `x.a = [y.a, y.a]`
                 # consider the new one to have no progress potential because we don't track it separately
                 self._nb_gradual_waiters += 1
-                return
+                return True
             self._listeners[resultcollector] = None
             if resultcollector.pure_gradual():
                 self._nb_gradual_waiters += 1
+        return True
 
     def is_multi(self) -> bool:
         return True
@@ -722,7 +751,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         except ModifiedAfterFreezeException as e:
             if len(self.value) == self.attribute.high:
                 new_exception: CompilerException = RuntimeException(
-                    None, "Exceeded relation arity on attribute '%s' of instance '%s'" % (self.attribute.name, self.myself)
+                    None, f"Exceeded relation arity on attribute '{self.attribute.name}' of instance '{self.myself}'"
                 )
                 new_exception.set_location(location)
                 raise new_exception
@@ -747,7 +776,7 @@ class ListVariable(BaseListVariable, RelationAttributeVariable):
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
 
     def __str__(self) -> str:
-        return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+        return f"ListVariable {self.myself} {self.attribute} = {self.value}"
 
     def get_progress_potential(self) -> int:
         # Ensure that relationships with a relation precedence rule cannot end up in the zerowaiters queue
@@ -818,13 +847,13 @@ class OptionVariable(DelayedResultVariable["Instance"], RelationAttributeVariabl
         return result
 
     def __str__(self) -> str:
-        return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+        return f"OptionVariable {self.myself} {self.attribute} = {self.value}"
 
     def get_progress_potential(self) -> int:
         return super().get_progress_potential() + int(self.attribute.has_relation_precedence_rules())
 
 
-class QueueScheduler(object):
+class QueueScheduler:
     """
     Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
 
@@ -838,8 +867,8 @@ class QueueScheduler(object):
         compiler: "Compiler",
         runqueue: "Deque[Waiter]",
         waitqueue: "PrioritisedDelayedResultVariableQueue",
-        types: Dict[str, Type],
-        allwaiters: "Set[Waiter]",
+        types: dict[str, Type],
+        allwaiters: "set[Waiter]",
     ) -> None:
         self.compiler = compiler
         self.runqueue = runqueue
@@ -856,7 +885,7 @@ class QueueScheduler(object):
     def get_compiler(self) -> "Compiler":
         return self.compiler
 
-    def get_types(self) -> Dict[str, Type]:
+    def get_types(self) -> dict[str, Type]:
         return self.types
 
     def add_to_all(self, item: "Waiter") -> None:
@@ -888,7 +917,7 @@ class DelegateQueueScheduler(QueueScheduler):
     def get_compiler(self) -> "Compiler":
         return self.__delegate.get_compiler()
 
-    def get_types(self) -> Dict[str, Type]:
+    def get_types(self) -> dict[str, Type]:
         return self.__delegate.get_types()
 
     def add_to_all(self, item: "Waiter") -> None:
@@ -904,14 +933,14 @@ class DelegateQueueScheduler(QueueScheduler):
         return DelegateQueueScheduler(self.__delegate, tracer)
 
 
-class Waiter(object):
+class Waiter:
     """
     Waiters represent an executable unit, that can be executed the result variables they depend on have their values.
     """
 
     __slots__ = ("waitcount", "queue", "done", "requires")
 
-    requires: Dict[object, VariableABC]
+    requires: dict[object, VariableABC]
 
     def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
@@ -958,7 +987,7 @@ class ExecutionUnit(Waiter):
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
         result: ResultVariable[object],
-        requires: Dict[object, VariableABC],
+        requires: dict[object, VariableABC],
         expression: "RequiresEmitStatement",
         owner: "Optional[Statement]" = None,
     ):
@@ -1005,7 +1034,7 @@ class HangUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, VariableABC],
+        requires: dict[object, VariableABC],
         target: Optional[ResultVariable],
         resumer: "Resumer",
     ) -> None:
@@ -1039,7 +1068,7 @@ class RawUnit(Waiter):
         self,
         queue_scheduler: QueueScheduler,
         resolver: "Resolver",
-        requires: Dict[object, VariableABC],
+        requires: dict[object, VariableABC],
         resumer: "RawResumer",
         override_exception_location: bool = True,
     ) -> None:
@@ -1081,7 +1110,7 @@ resolution
 Typeorvalue = Union[Type, ResultVariable]
 
 
-class Resolver(object):
+class Resolver:
     __slots__ = ("namespace", "dataflow_graph")
 
     def __init__(self, namespace: Namespace, enable_dataflow_graph: bool = False) -> None:
@@ -1172,7 +1201,7 @@ class ExecutionContext(Resolver):
 
     def __init__(self, block: "BasicBlock", resolver: Resolver):
         self.block = block
-        self.slots: Dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
+        self.slots: dict[str, ResultVariable] = {n: ResultVariable() for n in block.get_variables()}
         self.resolver = resolver
         self.dataflow_graph: Optional[DataflowGraph] = None
         if resolver.dataflow_graph is not None:
@@ -1237,7 +1266,7 @@ class Instance(ExecutionContext):
         # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
-        self.slots: Dict[str, ResultVariable] = {}
+        self.slots: dict[str, ResultVariable] = {}
         for attr_name in mytype.get_all_attribute_names():
             if attr_name in self.slots:
                 # prune duplicates because get_new_result_variable() has side effects
@@ -1263,19 +1292,19 @@ class Instance(ExecutionContext):
             self.slots["self"].set_dataflow_node(self_var_node)
 
         self.sid = id(self)
-        self.implementations: "Set[Implementation]" = set()
+        self.implementations: "set[Implementation]" = set()
 
         # see inmanta.ast.execute.scheduler.QueueScheduler
-        self.trackers: List[Tracker] = []
+        self.trackers: list[Tracker] = []
 
-        self.locations: List[Location] = []
+        self.locations: list[Location] = []
 
     def get_type(self) -> "Entity":
         return self.type
 
     def set_attribute(self, name: str, value: object, location: Location, recur: bool = True) -> None:
         if name not in self.slots:
-            raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
+            raise NotFoundException(None, name, f"cannot set attribute with name {name} on type {str(self.type)}")
         try:
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:
@@ -1285,13 +1314,13 @@ class Instance(ExecutionContext):
         try:
             return self.slots[name]
         except KeyError:
-            raise NotFoundException(None, name, "could not find attribute with name: %s in type %s" % (name, self.type))
+            raise NotFoundException(None, name, f"could not find attribute with name: {name} in type {self.type}")
 
     def __repr__(self) -> str:
-        return "%s %02x" % (self.type, self.sid)
+        return f"{self.type} {self.sid:02x}"
 
     def __str__(self) -> str:
-        return "%s (instantiated at %s)" % (self.type, ",".join([str(location) for location in self.get_locations()]))
+        return "{} (instantiated at {})".format(self.type, ",".join([str(location) for location in self.get_locations()]))
 
     def add_implementation(self, impl: "Implementation") -> bool:
         if impl in self.implementations:
@@ -1299,7 +1328,7 @@ class Instance(ExecutionContext):
         self.implementations.add(impl)
         return True
 
-    def final(self, excns: List[CompilerException]) -> None:
+    def final(self, excns: list[CompilerException]) -> None:
         """
         The object should be complete, freeze all attributes
         """
@@ -1329,7 +1358,7 @@ class Instance(ExecutionContext):
                     else:
                         excns.append(
                             proxy.UnsetException(
-                                "The object %s is not complete: attribute %s (%s) is not set" % (self, k, attr.location),
+                                f"The object {self} is not complete: attribute {k} ({attr.location}) is not set",
                                 self,
                                 attr,
                             )
@@ -1342,9 +1371,9 @@ class Instance(ExecutionContext):
         for n, v in self.slots.items():
             if v.can_get():
                 value = v.value
-                print("%s\t\t%s" % (n, value))
+                print(f"{n}\t\t{value}")
             else:
-                print("BAD: %s\t\t%s" % (n, ", ".join(repr(prom) for prom in v.promises)))
+                print("BAD: {}\t\t{}".format(n, ", ".join(repr(prom) for prom in v.promises)))
 
     def verify_done(self) -> bool:
         for v in self.slots.values():
@@ -1352,5 +1381,5 @@ class Instance(ExecutionContext):
                 return False
         return True
 
-    def get_locations(self) -> List[Location]:
+    def get_locations(self) -> list[Location]:
         return self.locations

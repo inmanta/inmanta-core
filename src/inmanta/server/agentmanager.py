@@ -22,14 +22,15 @@ import sys
 import time
 import uuid
 from asyncio import queues, subprocess
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import Any, Optional, Union, cast
 from uuid import UUID
 
 import asyncpg.connection
 
-from inmanta import const, data, util
+from inmanta import const, data
 from inmanta.agent import config as agent_cfg
 from inmanta.config import Config
 from inmanta.const import AgentAction, AgentStatus
@@ -106,7 +107,7 @@ class SessionAction:
     """
 
     def __init__(
-        self, action_type: SessionActionType, session: protocol.Session, endpoint_names_snapshot: Set[str], timestamp: datetime
+        self, action_type: SessionActionType, session: protocol.Session, endpoint_names_snapshot: set[str], timestamp: datetime
     ):
         self.action_type = action_type
         self.session = session
@@ -136,7 +137,7 @@ class AgentManager(ServerSlice, SessionListener):
     """
 
     def __init__(self, closesessionsonstart: bool = True, fact_back_off: Optional[int] = None) -> None:
-        super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
+        super().__init__(SLICE_AGENT_MANAGER)
 
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
@@ -144,16 +145,16 @@ class AgentManager(ServerSlice, SessionListener):
         # back-off timer for fact requests
         self._fact_resource_block: int = fact_back_off
         # per resource time of last fact request
-        self._fact_resource_block_set: Dict[str, float] = {}
+        self._fact_resource_block_set: dict[str, float] = {}
 
         # session lock
         self.session_lock = asyncio.Lock()
         # all sessions
-        self.sessions: Dict[UUID, protocol.Session] = {}
+        self.sessions: dict[UUID, protocol.Session] = {}
         # live sessions: Sessions to agents which are primary and unpaused
-        self.tid_endpoint_to_session: Dict[Tuple[UUID, str], protocol.Session] = {}
+        self.tid_endpoint_to_session: dict[tuple[UUID, str], protocol.Session] = {}
         # All endpoints associated with a sid
-        self.endpoints_for_sid: Dict[uuid.UUID, Set[str]] = {}
+        self.endpoints_for_sid: dict[uuid.UUID, set[str]] = {}
 
         # This queue ensures that notifications from the SessionManager are processed in the same order
         # in which they arrive in the SessionManager, without blocking the SessionManager.
@@ -161,16 +162,16 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
+    async def get_status(self) -> dict[str, ArgumentTypes]:
         return {
             "resource_facts": len(self._fact_resource_block_set),
             "sessions": len(self.sessions),
         }
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_SESSION_MANAGER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -208,7 +209,7 @@ class AgentManager(ServerSlice, SessionListener):
         """
         Resumes after halting. Unpauses all agents that had been paused by halting.
         """
-        to_unpause: List[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
+        to_unpause: list[str] = await data.Agent.persist_on_resume(env.id, connection=connection)
         await asyncio.gather(*[self._unpause_agent(env, agent, connection=connection) for agent in to_unpause])
 
     @handle(methods_v2.all_agents_action, env="tid")
@@ -341,7 +342,7 @@ class AgentManager(ServerSlice, SessionListener):
             LOGGER.warning("Unknown SessionAction %s", action_type.name)
 
     # Notify from session listener
-    async def new_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
+    async def new_session(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
         """
         The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -354,7 +355,7 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Notify from session listener
-    async def expire(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
+    async def expire(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
         """
         The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -367,7 +368,7 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Notify from session listener
-    async def seen(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
+    async def seen(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
         """
         The _session_listener_actions queue ensures that all SessionActions are executed in the order of arrival.
         """
@@ -380,8 +381,8 @@ class AgentManager(ServerSlice, SessionListener):
         await self._session_listener_actions.put(session_action)
 
     # Seen
-    async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str]) -> None:
-        endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]] = []
+    async def _seen_session(self, session: protocol.Session, endpoint_names_snapshot: set[str]) -> None:
+        endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]] = []
         async with self.session_lock:
             endpoints_in_agent_manager = self.endpoints_for_sid[session.id]
             endpoints_in_session = endpoint_names_snapshot
@@ -401,9 +402,9 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_seen_to_db(
         self,
         session: protocol.Session,
-        endpoints_to_add: Set[str],
-        endpoints_to_remove: Set[str],
-        endpoints_with_new_primary: List[Tuple[str, Optional[uuid.UUID]]],
+        endpoints_to_add: set[str],
+        endpoints_to_remove: set[str],
+        endpoints_with_new_primary: list[tuple[str, Optional[uuid.UUID]]],
     ) -> None:
         """
         Note: This method call is allowed to fail when the database connection is lost.
@@ -417,7 +418,7 @@ class AgentManager(ServerSlice, SessionListener):
                 await data.Agent.update_primary(session.tid, endpoints_with_new_primary, now, connection)
 
     # Session registration
-    async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
+    async def _register_session(self, session: protocol.Session, endpoint_names_snapshot: set[str], now: datetime) -> None:
         """
         This method registers a new session in memory and asynchronously updates the agent
         session log in the database. When the database connection is lost, the get_statuses()
@@ -446,8 +447,8 @@ class AgentManager(ServerSlice, SessionListener):
         self,
         tid: uuid.UUID,
         session: protocol.Session,
-        endpoint_names: Set[str],
-        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
+        endpoint_names: set[str],
+        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
         now: datetime,
     ) -> None:
         """
@@ -460,7 +461,7 @@ class AgentManager(ServerSlice, SessionListener):
                 await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
 
     # Session expiry
-    async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: Set[str], now: datetime) -> None:
+    async def _expire_session(self, session: protocol.Session, endpoint_names_snapshot: set[str], now: datetime) -> None:
         """
         This method expires the given session and update the in-memory session state.
         The in-database session log is updated asynchronously. These database updates
@@ -484,7 +485,7 @@ class AgentManager(ServerSlice, SessionListener):
     async def _log_session_expiry_to_db(
         self,
         tid: uuid.UUID,
-        endpoints_with_new_primary: Sequence[Tuple[str, Optional[uuid.UUID]]],
+        endpoints_with_new_primary: Sequence[tuple[str, Optional[uuid.UUID]]],
         session: protocol.Session,
         now: datetime,
     ) -> None:
@@ -528,8 +529,8 @@ class AgentManager(ServerSlice, SessionListener):
         return new_active_session
 
     async def _ensure_primary_if_not_exists(
-        self, session: protocol.Session, endpoints: Set[str]
-    ) -> Sequence[Tuple[str, uuid.UUID]]:
+        self, session: protocol.Session, endpoints: set[str]
+    ) -> Sequence[tuple[str, uuid.UUID]]:
         """
         Make this session the primary session for the endpoints of this session if no primary exists and the agent is not
         paused.
@@ -552,8 +553,8 @@ class AgentManager(ServerSlice, SessionListener):
         return result
 
     async def _failover_endpoints(
-        self, session: protocol.Session, endpoints: Set[str]
-    ) -> Sequence[Tuple[str, Optional[uuid.UUID]]]:
+        self, session: protocol.Session, endpoints: set[str]
+    ) -> Sequence[tuple[str, Optional[uuid.UUID]]]:
         """
         If the given session is the primary for a given endpoint, failover to a new session.
 
@@ -628,19 +629,19 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return None
 
-    async def are_agents_active(self, tid: uuid.UUID, endpoints: List[str]) -> bool:
+    async def are_agents_active(self, tid: uuid.UUID, endpoints: list[str]) -> bool:
         """
         Return true iff all the given agents are in the up or the paused state.
         """
         return all(active for (_, active) in await self.get_agent_active_status(tid, endpoints))
 
-    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: List[str]) -> List[Tuple[str, bool]]:
+    async def get_agent_active_status(self, tid: uuid.UUID, endpoints: list[str]) -> list[tuple[str, bool]]:
         """
         Return a list of tuples where the first element of the tuple contains the name of an endpoint
         and the second a boolean indicating where there is an active (up or paused) agent for that endpoint.
         """
         all_sids_for_env = [sid for (sid, session) in self.sessions.items() if session.tid == tid]
-        all_active_endpoints_for_env = set(ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid])
+        all_active_endpoints_for_env = {ep for sid in all_sids_for_env for ep in self.endpoints_for_sid[sid]}
         return [(ep, ep in all_active_endpoints_for_env) for ep in endpoints]
 
     async def expire_all_sessions_for_environment(self, env_id: uuid.UUID) -> None:
@@ -716,7 +717,7 @@ class AgentManager(ServerSlice, SessionListener):
         :raises NotFound: The given environment id does not exist!
         :raises BadRequest: Limit parameter can not exceed 1000
         """
-        query: Dict[str, Any] = {}
+        query: dict[str, Any] = {}
         if environment is not None:
             query["environment"] = environment
             env = await data.Environment.get_by_id(environment)
@@ -792,7 +793,10 @@ class AgentManager(ServerSlice, SessionListener):
             **query,
         )
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": util.datetime_utc_isoformat(datetime.now())}
+        return 200, {
+            "agents": [a.to_dict() for a in ags],
+            "servertime": datetime.now().astimezone(),
+        }
 
     @handle(methods.get_state, env="tid")
     async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
@@ -871,7 +875,7 @@ class AgentManager(ServerSlice, SessionListener):
         end: Optional[Union[datetime, bool, str]] = None,
         first_id: Optional[str] = None,
         last_id: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "name.asc",
     ) -> ReturnValue[Sequence[model.Agent]]:
         try:
@@ -910,11 +914,11 @@ class AutostartedAgentManager(ServerSlice):
     """
 
     def __init__(self) -> None:
-        super(AutostartedAgentManager, self).__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
-        self._agent_procs: Dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
+        super().__init__(SLICE_AUTOSTARTED_AGENT_MANAGER)
+        self._agent_procs: dict[UUID, subprocess.Process] = {}  # env uuid -> subprocess.Process
         self.agent_lock = asyncio.Lock()  # Prevent concurrent updates on _agent_procs
 
-    async def get_status(self) -> Dict[str, ArgumentTypes]:
+    async def get_status(self) -> dict[str, ArgumentTypes]:
         return {"processes": len(self._agent_procs)}
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -922,7 +926,7 @@ class AutostartedAgentManager(ServerSlice):
         preserver = server.get_slice(SLICE_SERVER)
         assert isinstance(preserver, Server)
         self._server: Server = preserver
-        self._server_storage: Dict[str, str] = self._server._server_storage
+        self._server_storage: dict[str, str] = self._server._server_storage
 
         agent_manager = server.get_slice(SLICE_AGENT_MANAGER)
         assert isinstance(agent_manager, AgentManager)
@@ -939,10 +943,10 @@ class AutostartedAgentManager(ServerSlice):
     async def stop(self) -> None:
         await super().stop()
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def _start_agents(self) -> None:
@@ -999,7 +1003,7 @@ class AutostartedAgentManager(ServerSlice):
     async def _ensure_agents(
         self,
         env: data.Environment,
-        agents: List[str],
+        agents: list[str],
         restart: bool = False,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
@@ -1014,8 +1018,8 @@ class AutostartedAgentManager(ServerSlice):
         if self._stopping:
             raise ShutdownInProgress()
 
-        agent_map: Dict[str, str] = cast(
-            Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
+        agent_map: dict[str, str] = cast(
+            dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection)
         )  # we know the type of this map
 
         agents = [agent for agent in agents if agent in agent_map]
@@ -1044,15 +1048,15 @@ class AutostartedAgentManager(ServerSlice):
         return False
 
     async def __do_start_agent(
-        self, agents: List[str], env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
+        self, agents: list[str], env: data.Environment, *, connection: Optional[asyncpg.connection.Connection] = None
     ) -> bool:
         """
         Start an agent process for the given agents in the given environment
 
         Note: Always call under agent_lock
         """
-        agent_map: Dict[str, str]
-        agent_map = cast(Dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection))
+        agent_map: dict[str, str]
+        agent_map = cast(dict[str, str], await env.get(data.AUTOSTART_AGENT_MAP, connection=connection))
         config: str
         config = await self._make_agent_config(env, agents, agent_map, connection=connection)
 
@@ -1107,14 +1111,14 @@ class AutostartedAgentManager(ServerSlice):
             A TimeoutError is raised when not all AgentInstances are active and no new AgentInstance
             became active in the last 5 seconds.
             """
-            agent_statuses: Dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, set(agents))
+            agent_statuses: dict[str, Optional[AgentStatus]] = await data.Agent.get_statuses(env.id, set(agents))
             # Only wait for agents that are not paused
-            expected_agents_in_up_state: Set[str] = {
+            expected_agents_in_up_state: set[str] = {
                 agent_name
                 for agent_name, status in agent_statuses.items()
                 if status is not None and status is not AgentStatus.paused
             }
-            actual_agents_in_up_state: Set[str] = set()
+            actual_agents_in_up_state: set[str] = set()
             started = int(time.time())
             last_new_agent_seen = started
             last_log = started
@@ -1155,8 +1159,8 @@ class AutostartedAgentManager(ServerSlice):
     async def _make_agent_config(
         self,
         env: data.Environment,
-        agent_names: List[str],
-        agent_map: Dict[str, str],
+        agent_names: list[str],
+        agent_map: dict[str, str],
         *,
         connection: Optional[asyncpg.connection.Connection],
     ) -> str:
@@ -1242,7 +1246,7 @@ ssl=True
         return config
 
     async def _fork_inmanta(
-        self, args: List[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
+        self, args: list[str], outfile: Optional[str], errfile: Optional[str], cwd: Optional[str] = None
     ) -> subprocess.Process:
         """
         Fork an inmanta process from the same code base as the current code

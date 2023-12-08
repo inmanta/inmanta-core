@@ -24,7 +24,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import abc, defaultdict
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
 
 from tornado import concurrent
 
@@ -51,7 +51,7 @@ T_FUNC = TypeVar("T_FUNC", bound=Callable[..., Any])
 
 
 @stable_api
-class provider(object):  # noqa: N801
+class provider:  # noqa: N801
     """
     A decorator that registers a new handler.
 
@@ -97,7 +97,7 @@ class InvalidOperation(Exception):
 @stable_api
 def cache(
     func: Optional[T_FUNC] = None,
-    ignore: typing.List[str] = [],
+    ignore: list[str] = [],
     timeout: int = 5000,
     for_version: bool = True,
     cache_none: bool = True,
@@ -213,27 +213,27 @@ class HandlerContext(LoggerABC):
     ) -> None:
         self._resource = resource
         self._dry_run = dry_run
-        self._cache: Dict[str, Any] = {}
+        self._cache: dict[str, Any] = {}
 
         self._purged = False
         self._updated = False
         self._created = False
         self._change = const.Change.nochange
 
-        self._changes: Dict[str, AttributeStateChange] = {}
+        self._changes: dict[str, AttributeStateChange] = {}
 
         if action_id is None:
             action_id = uuid.uuid4()
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
-        self._logs: List[data.LogLine] = []
+        self._logs: list[data.LogLine] = []
         self.logger: logging.Logger
         if logger is None:
             self.logger = LOGGER
         else:
             self.logger = logger
 
-        self._facts: List[Dict[str, Any]] = []
+        self._facts: list[dict[str, Any]] = []
 
     def set_fact(self, fact_id: str, value: str) -> None:
         """
@@ -252,7 +252,7 @@ class HandlerContext(LoggerABC):
         self._facts.append(fact)
 
     @property
-    def facts(self) -> List[Dict[str, Any]]:
+    def facts(self) -> list[dict[str, Any]]:
         return self._facts
 
     @property
@@ -264,7 +264,7 @@ class HandlerContext(LoggerABC):
         return self._status
 
     @property
-    def logs(self) -> List[data.LogLine]:
+    def logs(self) -> list[data.LogLine]:
         return self._logs
 
     def set_status(self, status: const.ResourceState) -> None:
@@ -350,23 +350,23 @@ class HandlerContext(LoggerABC):
                 self._changes[fields] = AttributeStateChange()
 
     @overload  # noqa: F811
-    def update_changes(self, changes: Dict[str, AttributeStateChange]) -> None:
+    def update_changes(self, changes: dict[str, AttributeStateChange]) -> None:
         pass
 
     @overload  # noqa: F811
-    def update_changes(self, changes: Dict[str, Dict[str, Optional[SimpleTypes]]]) -> None:
+    def update_changes(self, changes: dict[str, dict[str, Optional[SimpleTypes]]]) -> None:
         pass
 
     @overload  # noqa: F811
-    def update_changes(self, changes: Dict[str, Tuple[SimpleTypes, SimpleTypes]]) -> None:
+    def update_changes(self, changes: dict[str, tuple[SimpleTypes, SimpleTypes]]) -> None:
         pass
 
     def update_changes(  # noqa: F811
         self,
         changes: Union[
-            Dict[str, AttributeStateChange],
-            Dict[str, Dict[str, Optional[SimpleTypes]]],
-            Dict[str, Tuple[SimpleTypes, SimpleTypes]],
+            dict[str, AttributeStateChange],
+            dict[str, dict[str, Optional[SimpleTypes]]],
+            dict[str, tuple[SimpleTypes, SimpleTypes]],
         ],
     ) -> None:
         """
@@ -391,7 +391,7 @@ class HandlerContext(LoggerABC):
                 raise InvalidOperation(f"Reported changes for {attribute} not in a type that is recognized.")
 
     @property
-    def changes(self) -> Dict[str, AttributeStateChange]:
+    def changes(self) -> dict[str, AttributeStateChange]:
         return self._changes
 
     def log_msg(self, level: int, msg: str, args: abc.Sequence[object], kwargs: abc.MutableMapping[str, object]) -> None:
@@ -423,7 +423,7 @@ class HandlerContext(LoggerABC):
 
 
 @stable_api
-class ResourceHandler(object):
+class ResourceHandler:
     """
     A baseclass for classes that handle resources. New handler are registered with the
     :func:`~inmanta.agent.handler.provider` decorator.
@@ -523,7 +523,7 @@ class ResourceHandler(object):
     def close(self) -> None:
         pass
 
-    def _diff(self, current: resources.Resource, desired: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def _diff(self, current: resources.Resource, desired: resources.Resource) -> dict[str, dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
 
@@ -555,7 +555,7 @@ class ResourceHandler(object):
         """
         raise NotImplementedError()
 
-    def list_changes(self, ctx: HandlerContext, resource: resources.Resource) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def list_changes(self, ctx: HandlerContext, resource: resources.Resource) -> dict[str, dict[str, typing.Any]]:
         """
         Returns the changes required to bring the resource on this system in the state described in the resource entry.
         This method calls :func:`~inmanta.agent.handler.ResourceHandler.check_resource`
@@ -568,7 +568,7 @@ class ResourceHandler(object):
         current = self.check_resource(ctx, resource)
         return self._diff(current, resource)
 
-    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: Dict[str, Dict[str, object]]) -> None:
+    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: dict[str, dict[str, object]]) -> None:
         """
         Do the changes required to bring the resource on this system in the state of the given resource.
 
@@ -583,7 +583,7 @@ class ResourceHandler(object):
         self,
         ctx: HandlerContext,
         resource: resources.Resource,
-        requires: Dict[ResourceIdStr, ResourceState],
+        requires: dict[ResourceIdStr, ResourceState],
     ) -> None:
         """
         This method is always be called by the agent, even when one of the requires of the given resource
@@ -614,8 +614,8 @@ class ResourceHandler(object):
             return result.result["data"]
 
         def filter_resources_in_unexpected_state(
-            reqs: Dict[ResourceIdStr, ResourceState]
-        ) -> Dict[ResourceIdStr, ResourceState]:
+            reqs: dict[ResourceIdStr, ResourceState]
+        ) -> dict[ResourceIdStr, ResourceState]:
             """
             Return a sub-dictionary of reqs with only those resources that are in an unexpected state.
             """
@@ -694,7 +694,7 @@ class ResourceHandler(object):
                     exception=f"{e.__class__.__name__}('{e}')",
                 )
 
-    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict[str, object]:
         """
         Override this method to implement fact querying. A queried fact can be reported back in two different ways:
         either via the return value of this method or by adding the fact to the HandlerContext via the
@@ -707,7 +707,7 @@ class ResourceHandler(object):
         """
         return {}
 
-    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> Dict[str, object]:
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict[str, object]:
         """
         This method is called by the agent to query for facts. It runs :func:`~inmanta.agent.handler.ResourceHandler.pre`
         and :func:`~inmanta.agent.handler.ResourceHandler.post`. This method calls
@@ -836,7 +836,7 @@ class CRUDHandler(ResourceHandler):
         """
 
     def update_resource(
-        self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: resources.PurgeableResource
+        self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: resources.PurgeableResource
     ) -> None:
         """
         This method is called by the handler when the resource should be updated.
@@ -851,7 +851,7 @@ class CRUDHandler(ResourceHandler):
 
     def calculate_diff(
         self, ctx: HandlerContext, current: resources.Resource, desired: resources.Resource
-    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    ) -> dict[str, dict[str, typing.Any]]:
         """
         Calculate the diff between the current and desired resource state.
 
@@ -882,7 +882,7 @@ class CRUDHandler(ResourceHandler):
             assert isinstance(desired, resources.PurgeableResource)
             current = desired.clone(purged=False)
             assert isinstance(current, resources.PurgeableResource)
-            changes: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+            changes: dict[str, dict[str, typing.Any]] = {}
             try:
                 ctx.debug("Calling read_resource")
                 self.read_resource(ctx, current)
@@ -953,27 +953,27 @@ class CRUDHandlerGeneric(CRUDHandler, Generic[TPurgeableResource]):
     def delete_resource(self, ctx: HandlerContext, resource: TPurgeableResource) -> None:
         pass
 
-    def update_resource(self, ctx: HandlerContext, changes: Dict[str, Dict[str, Any]], resource: TPurgeableResource) -> None:
+    def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TPurgeableResource) -> None:
         pass
 
     def calculate_diff(
         self, ctx: HandlerContext, current: TPurgeableResource, desired: TPurgeableResource
-    ) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    ) -> dict[str, dict[str, typing.Any]]:
         return super().calculate_diff(ctx, current, desired)
 
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
         super().execute(ctx, resource, dry_run)
 
 
-class Commander(object):
+class Commander:
     """
     This class handles commands
     """
 
-    __command_functions: Dict[str, Dict[str, Type[ResourceHandler]]] = defaultdict(dict)
+    __command_functions: dict[str, dict[str, type[ResourceHandler]]] = defaultdict(dict)
 
     @classmethod
-    def get_handlers(cls) -> Dict[str, Dict[str, Type[ResourceHandler]]]:
+    def get_handlers(cls) -> dict[str, dict[str, type[ResourceHandler]]]:
         return cls.__command_functions
 
     @classmethod
@@ -986,7 +986,7 @@ class Commander(object):
 
     @classmethod
     def _get_instance(
-        cls, handler_class: Type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
+        cls, handler_class: type[ResourceHandler], agent: "inmanta.agent.agent.AgentInstance", io: "IOBase"
     ) -> ResourceHandler:
         new_instance = handler_class(agent, io)
         return new_instance
@@ -1032,7 +1032,7 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource: str, name: str, provider: Type["ResourceHandler"]) -> None:
+    def add_provider(cls, resource: str, name: str, provider: type["ResourceHandler"]) -> None:
         """
         Register a new provider
 
@@ -1046,14 +1046,14 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
+    def get_providers(cls) -> typing.Iterator[tuple[str, type["ResourceHandler"]]]:
         """Return an iterator over resource type, handler definition"""
         for resource_type, handler_map in cls.__command_functions.items():
             for handle_name, handler_class in handler_map.items():
                 yield (resource_type, handler_class)
 
     @classmethod
-    def get_provider_class(cls, resource_type: str, name: str) -> Optional[typing.Type["ResourceHandler"]]:
+    def get_provider_class(cls, resource_type: str, name: str) -> Optional[type["ResourceHandler"]]:
         """
         Return the class of the handler for the given type and with the given name
         """

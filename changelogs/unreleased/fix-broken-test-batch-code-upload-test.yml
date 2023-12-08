@@ -1,0 +1,4 @@
+---
+description: Fix broken `test_batch_code_upload` test, caused by the addition of the `plugins/types.py` file to the std module.
+change-type: patch
+destination-branches: [master, iso6]

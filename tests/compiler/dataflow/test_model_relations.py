@@ -27,7 +27,7 @@ from compiler.dataflow.conftest import DataflowTestHelper
 def test_dataflow_model_relation(
     dataflow_test_helper: DataflowTestHelper, bidirectional: bool, inherit_relation: bool, assign_first: bool
 ) -> None:
-    relation_stmt: str = "%s.b [1] -- B%s" % ("AParent" if inherit_relation else "A", ".a [1]" if bidirectional else "")
+    relation_stmt: str = "{}.b [1] -- B{}".format("AParent" if inherit_relation else "A", ".a [1]" if bidirectional else "")
     dataflow_test_helper.compile(
         """
 entity AParent:
@@ -80,7 +80,7 @@ entity U:
 end
 
 entity V:
-    number n
+    int n
 end
 
 X.u [1] -- U
@@ -117,7 +117,7 @@ entity U:
 end
 
 entity V:
-    number n
+    int n
 end
 
 U.v [1] -- V
@@ -152,9 +152,9 @@ def test_dataflow_model_index(dataflow_test_helper: DataflowTestHelper) -> None:
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
-    number k
-    number l
+    int n
+    int k
+    int l
 end
 
 index A(n)
@@ -186,7 +186,7 @@ def test_dataflow_model_default_attribute(dataflow_test_helper: DataflowTestHelp
     dataflow_test_helper.compile(
         """
 entity A:
-    number n = 42
+    int n = 42
 end
 
 implement A using std::none
@@ -211,7 +211,7 @@ def test_dataflow_model_implementation(dataflow_test_helper: DataflowTestHelper,
     dataflow_test_helper.compile(
         """
 entity A:
-    number n
+    int n
 end
 
 implementation i for A:

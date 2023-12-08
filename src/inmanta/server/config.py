@@ -18,6 +18,7 @@
 
 import logging
 import warnings
+from typing import Optional
 
 from inmanta.config import (
     Config,
@@ -119,6 +120,16 @@ def get_bind_port() -> int:
         return Config.get("server_rest_transport", "port", 8888)
 
 
+server_tz_aware_timestamps = Option(
+    "server",
+    "tz_aware_timestamps",
+    False,
+    "Whether the server should return timezone aware timestamps. "
+    "If False, the server will serialize timestamps in a time zone naive way (in implicit UTC). "
+    "If True, timestamps are serialized as time zone aware objects.",
+    is_bool,
+)
+
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
 server_auth_method = Option("server", "auth_method", None, "The authentication method to use: oidc or database", is_str_opt)
 
@@ -129,6 +140,14 @@ server_ssl_key = Option(
 server_ssl_cert = Option(
     "server", "ssl_cert_file", None, "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt
 )
+
+
+def ssl_enabled():
+    """Is ssl enabled on the server, given the current server config"""
+    ssl_key: Optional[str] = server_ssl_key.get()
+    ssl_cert: Optional[str] = server_ssl_cert.get()
+    return ssl_key is not None and ssl_cert is not None
+
 
 server_ssl_ca_cert = Option(
     "server",

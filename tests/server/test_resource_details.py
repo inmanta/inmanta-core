@@ -17,7 +17,7 @@
 """
 import datetime
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -25,6 +25,7 @@ import pytest
 from inmanta import data
 from inmanta.const import ResourceState
 from inmanta.data.model import ResourceVersionIdStr
+from inmanta.util import parse_timestamp
 
 
 @pytest.fixture
@@ -107,7 +108,7 @@ async def env_with_resources(server, client):
         path: str,
         status: ResourceState,
         version: int,
-        attributes: Dict[str, object],
+        attributes: dict[str, object],
         agent: str = "internal",
         resource_type: str = "std::File",
         environment: UUID = env.id,
@@ -407,13 +408,9 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, multiple_requires)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 2
-    generated_time = datetime.datetime.strptime(result.result["data"]["first_generated_time"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == resources[env.id][multiple_requires][3].last_deploy.astimezone(datetime.timezone.utc)
     await assert_matching_attributes(result.result["data"], resources[env.id][multiple_requires][3])
     assert result.result["data"]["requires_status"] == {
@@ -426,13 +423,9 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, no_requires)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 2
-    generated_time = datetime.datetime.strptime(result.result["data"]["first_generated_time"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[1].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == resources[env.id][no_requires][3].last_deploy.astimezone(datetime.timezone.utc)
     await assert_matching_attributes(result.result["data"], resources[env.id][no_requires][3])
     assert result.result["data"]["requires_status"] == {}
@@ -442,13 +435,9 @@ async def test_resource_details(server, client, env_with_resources):
     result = await client.resource_details(env.id, single_requires)
     assert result.code == 200
     assert result.result["data"]["first_generated_version"] == 4
-    generated_time = datetime.datetime.strptime(result.result["data"]["first_generated_time"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    generated_time = parse_timestamp(result.result["data"]["first_generated_time"])
     assert generated_time == cm_times[3].astimezone(datetime.timezone.utc)
-    deploy_time = datetime.datetime.strptime(result.result["data"]["last_deploy"], "%Y-%m-%dT%H:%M:%S.%f").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    deploy_time = parse_timestamp(result.result["data"]["last_deploy"])
     assert deploy_time == resources[env.id][single_requires][3].last_deploy.astimezone(datetime.timezone.utc)
     await assert_matching_attributes(result.result["data"], resources[env.id][single_requires][3])
     assert result.result["data"]["requires_status"] == {"std::Directory[internal,path=/tmp/dir1]": "deployed"}

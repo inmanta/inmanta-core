@@ -15,10 +15,14 @@
 
     Contact: code@inmanta.com
 """
+import enum
 import logging
 import os
+import re
 import sys
 from argparse import Namespace
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Optional, TextIO
 
 import colorlog
@@ -67,6 +71,21 @@ class Options(Namespace):
     log_file_level: str = "INFO"
     verbose: int = 1
     timed: bool = False
+    keep_logger_names: bool = False
+
+
+class LoggerMode(enum.Enum):
+    """
+    A different log format is used when the compiler/exporter is executed. This enum
+    indicates which mode we are currently executing in.
+        * COMPILER: the compiler is running.
+        * EXPORT: The exporter is running.
+        * OTHER: We are executing neither the compiler nor the exporter (e.g. running the server).
+    """
+
+    COMPILER = "compiler"
+    EXPORTER = "exporter"
+    OTHER = "other"
 
 
 @stable_api
@@ -99,14 +118,82 @@ class InmantaLoggerConfig:
         :param stream: The stream to send log messages to. Default is standard output (sys.stdout).
         """
         self._options_applied = False
+        self._keep_logger_names = False
         self._handler: logging.Handler = logging.StreamHandler(stream=stream)
         self.set_log_level("INFO")
         formatter = self._get_log_formatter_for_stream_handler(timed=False)
         self.set_log_formatter(formatter)
 
+        self._logger_mode = LoggerMode.OTHER
+
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
         logging.root.setLevel(0)
+
+        self._inmanta_plugin_pkg_regex = re.compile(r"^inmanta_plugins\.(?P<module_name>[^.]+)")
+        # Regex that extracts the name of the module from a fully qualified import of a Python
+        # module inside an Inmanta module.
+
+    def wrap_record(self, record: logging.LogRecord) -> logging.LogRecord:
+        """
+        Wrap a log record to perform renaming for specific formatter as determined by the _logger_mode
+
+        This is derived from the way the colorlog.ColoredFormatter works
+        """
+        old_name = record.name
+        new_name = self._get_logger_name_for(old_name)
+        if old_name == new_name:
+            return record
+        attributes = dict(record.__dict__)
+        attributes["name"] = new_name
+        return logging.makeLogRecord(attributes)
+
+    def _get_logger_name_for(self, logger_name: str) -> str:
+        """
+        Returns the logger name that should be used in the log record.
+
+        :attr logger_name: The name of the logger that was used to create the log record.
+        """
+        if not self._keep_logger_names and self._logger_mode in [LoggerMode.COMPILER, LoggerMode.EXPORTER]:
+            if not logger_name.startswith("inmanta"):
+                # This is a log record from a third-party library. Don't adjust the logger name.
+                return logger_name
+            if logger_name == "inmanta.pip":
+                # Log record created by a pip subprocess started by the inmanta.
+                return "pip"
+            match: Optional[re.Match[str]] = self._inmanta_plugin_pkg_regex.match(logger_name)
+            if match:
+                # Log record created by an Inmanta module.
+                return match.groupdict()["module_name"]
+            else:
+                # Log record created by Inmanta code.
+                return self._logger_mode.value
+        else:
+            # Don't modify the logger name
+            return logger_name
+
+    @contextmanager
+    def run_in_logger_mode(self, logger_mode: LoggerMode) -> Iterator[None]:
+        """
+        A contextmanager that can be used to temporarily change the LoggerMode within a code block.
+        This ContextManager updates the InmantaLoggerConfig singleton and is therefore not async- or threadsafe.
+        """
+        prev_logger_mode = self._logger_mode
+        self._logger_mode = logger_mode
+        try:
+            yield
+        finally:
+            self._logger_mode = prev_logger_mode
+
+    @classmethod
+    def get_current_instance(cls) -> "InmantaLoggerConfig":
+        """
+        Obtain the InmantaLoggerConfig singleton. This method assumes that an InmantaLoggerConfig was already initialized
+        using the `get_instance()` method.
+        """
+        if not cls._instance:
+            raise Exception("InmantaLoggerConfig was not yet initialized. Call get_instance() first.")
+        return cls._instance
 
     @classmethod
     @stable_api
@@ -148,15 +235,28 @@ class InmantaLoggerConfig:
         if self._options_applied:
             raise Exception("Options can only be applied once to a handler.")
         self._options_applied = True
+        self._keep_logger_names = options.keep_logger_names
         if options.log_file:
             self.set_logfile_location(options.log_file)
             formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
             self.set_log_formatter(formatter)
             self.set_log_level(options.log_file_level, cli=False)
         else:
-            if options.timed:
-                formatter = self._get_log_formatter_for_stream_handler(timed=True)
-                self.set_log_formatter(formatter)
+            # Use a shorter space padding if we know that we will use short names as the logger name.
+            # Otherwise the log records contains too much white spaces.
+            space_padding_after_logger_name = (
+                15
+                if (
+                    not options.keep_logger_names
+                    and hasattr(options, "func")
+                    and options.func.__name__ in ["compile_project", "export"]
+                )
+                else 25
+            )
+            formatter = self._get_log_formatter_for_stream_handler(
+                timed=options.timed, space_padding_after_logger_name=space_padding_after_logger_name
+            )
+            self.set_log_formatter(formatter)
             self.set_log_level(str(options.verbose))
 
     @stable_api
@@ -214,18 +314,22 @@ class InmantaLoggerConfig:
         """
         return self._handler
 
-    def _get_log_formatter_for_stream_handler(self, timed: bool) -> logging.Formatter:
+    def _get_log_formatter_for_stream_handler(
+        self, timed: bool, space_padding_after_logger_name: int = 25
+    ) -> logging.Formatter:
         log_format = "%(asctime)s " if timed else ""
         if _is_on_tty():
-            log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s%(blue)s%(message)s"
+            log_format += f"%(log_color)s%(name)-{space_padding_after_logger_name}s%(levelname)-8s%(reset)s%(blue)s%(message)s"
             formatter = MultiLineFormatter(
+                self,
                 log_format,
                 reset=True,
                 log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
             )
         else:
-            log_format += "%(name)-25s%(levelname)-8s%(message)s"
+            log_format += f"%(name)-{space_padding_after_logger_name}s%(levelname)-8s%(message)s"
             formatter = MultiLineFormatter(
+                self,
                 log_format,
                 reset=False,
                 no_color=True,
@@ -243,6 +347,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
 
     def __init__(
         self,
+        logger_config: InmantaLoggerConfig,
         fmt: Optional[str] = None,
         *,
         # keep interface minimal: only include fields we actually use
@@ -259,6 +364,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         :param no_color: Boolean indicating whether to disable colors in the output.
         """
         super().__init__(fmt, log_colors=log_colors, reset=reset, no_color=no_color)
+        self._logger_config = logger_config
         self.fmt = fmt
 
     def get_header_length(self, record: logging.LogRecord) -> int:
@@ -277,13 +383,13 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         )
         header = formatter.format(
             logging.LogRecord(
-                name=record.name,
-                level=record.levelno,
-                pathname=record.pathname,
-                lineno=record.lineno,
-                msg="",
-                args=(),
-                exc_info=None,
+                record.name,
+                record.levelno,
+                record.pathname,
+                record.lineno,
+                "",
+                (),
+                None,
             )
         )
         return len(header)
@@ -295,6 +401,7 @@ class MultiLineFormatter(colorlog.ColoredFormatter):
         :param record: The `logging.LogRecord` object to format.
         :return: The formatted log record as a string.
         """
+        record = self._logger_config.wrap_record(record)
         indent: str = " " * self.get_header_length(record)
         head, *tail = super().format(record).splitlines(True)
         return head + "".join(indent + line for line in tail)

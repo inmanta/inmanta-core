@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import Dict
 
 import py.path
 import pytest
@@ -39,7 +38,7 @@ from utils import PipIndex, create_python_package, module_from_template, v1_modu
 def test_module_update_with_install_mode_master(
     tmpdir: py.path.local,
     modules_repo: str,
-    kwargs_update_method: Dict[str, str],
+    kwargs_update_method: dict[str, str],
     mod2_should_be_updated: bool,
     mod8_should_be_updated: bool,
 ) -> None:
@@ -109,7 +108,7 @@ def test_module_update_with_v2_module(
 
     def assert_version_installed(module_name: str, version: str) -> None:
         package_name = ModuleV2Source.get_package_name_for(module_name)
-        installed_packages: Dict[str, Version] = process_env.get_installed_packages()
+        installed_packages: dict[str, Version] = process_env.get_installed_packages()
         assert package_name in installed_packages
         assert str(installed_packages[package_name]) == version
 
@@ -181,6 +180,45 @@ def test_module_update_with_v2_module(
     assert_version_installed(module_name="module1", version="1.2.4")
     assert_version_installed(module_name="module2", version="2.2.0" if install_mode == InstallMode.release else "2.2.1.dev0")
     assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.2")
+
+
+@pytest.mark.parametrize("install_mode", [InstallMode.release, InstallMode.prerelease])
+@pytest.mark.slowtest
+def test_module_update_with_v1_module(
+    tmpdir: py.path.local,
+    modules_dir: str,
+    snippetcompiler_clean,
+    modules_repo: str,
+    install_mode: InstallMode,
+) -> None:
+    """
+    Assert that the ast cache is invalidated after a module is installed. This so that dependencies of
+    installed modules are updated as well.
+
+    Dependency graph:
+
+        -> Inmanta project
+            -> mod13 (v1) -> mod11 (v1)
+    """
+    module_path = os.path.join(tmpdir, "modulepath")
+    os.mkdir(module_path)
+    mod11_dir = clone_repo(modules_repo, "mod11", module_path, tag="3.2.1")
+    mod13_dir = clone_repo(modules_repo, "mod13", module_path, tag="1.2.3")
+
+    snippetcompiler_clean.setup_for_snippet(
+        snippet="""
+        import mod13
+        """,
+        autostd=False,
+        add_to_module_path=[module_path],
+        install_mode=install_mode,
+        install_project=False,
+    )
+    assert ModuleV1(project=None, path=mod13_dir).version == Version("1.2.3")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("3.2.1")
+    ProjectTool().update()
+    assert ModuleV1(project=None, path=mod13_dir).version == Version("1.2.4")
+    assert ModuleV1(project=None, path=mod11_dir).version == Version("4.1.0")
 
 
 @pytest.mark.slowtest

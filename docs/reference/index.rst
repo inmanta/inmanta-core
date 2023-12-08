@@ -17,4 +17,4 @@ Inmanta, please check out the :doc:`../quickstart` guide.
     api
     json
     modules
-    REST API Reference <openapi.html#http://>
+    openapi

@@ -1,5 +1,5 @@
 """
-    Copyright 2022 Inmanta
+    Copyright 2023 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -34,17 +34,18 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
+from collections.abc import Awaitable, Callable, Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import Awaitable, BinaryIO, Callable, Coroutine, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import BinaryIO, Optional, TypeVar, Union
 
 import asyncpg
 from tornado import gen
 
 from crontab import CronTab
-from inmanta import COMPILER_VERSION
+from inmanta import COMPILER_VERSION, const
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType, PrimitiveTypes, ReturnTypes
 
@@ -60,7 +61,7 @@ def get_compiler_version() -> str:
     return COMPILER_VERSION
 
 
-def groupby(mylist: List[T], f: Callable[[T], S]) -> Iterator[Tuple[S, Iterator[T]]]:
+def groupby(mylist: list[T], f: Callable[[T], S]) -> Iterator[tuple[S, Iterator[T]]]:
     return itertools.groupby(sorted(mylist, key=f), f)
 
 
@@ -71,7 +72,7 @@ def ensure_directory_exist(directory: str, *subdirs: str) -> str:
     return directory
 
 
-def is_sub_dict(subdct: Dict[PrimitiveTypes, PrimitiveTypes], dct: Dict[PrimitiveTypes, PrimitiveTypes]) -> bool:
+def is_sub_dict(subdct: dict[PrimitiveTypes, PrimitiveTypes], dct: dict[PrimitiveTypes, PrimitiveTypes]) -> bool:
     return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
 
 
@@ -97,7 +98,7 @@ def hash_file_streaming(file_handle: BinaryIO) -> str:
     return h.hexdigest()
 
 
-def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
+def is_call_ok(result: Union[int, tuple[int, JsonType]]) -> bool:
     if isinstance(result, tuple):
         if len(result) == 2:
             code, reply = result
@@ -209,7 +210,7 @@ class CronSchedule(TaskSchedule):
         try:
             crontab = CronTab(self.cron)
         except ValueError as e:
-            raise ValueError("'%s' is not a valid cron expression: %s" % (self.cron, e))
+            raise ValueError(f"'{self.cron}' is not a valid cron expression: {e}")
         # can not assign directly on frozen dataclass, see dataclass docs
         object.__setattr__(self, "_crontab", crontab)
 
@@ -236,7 +237,7 @@ def is_coroutine(function: object) -> bool:
 
 
 @stable_api
-class Scheduler(object):
+class Scheduler:
     """
     An event scheduler class. Identifies tasks based on an action and a schedule. Considers tasks with the same action and the
     same schedule to be the same. Callers that wish to be able to delete the tasks they add should make sure to use unique
@@ -246,13 +247,13 @@ class Scheduler(object):
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._scheduled: Dict[ScheduledTask, asyncio.TimerHandle] = {}
+        self._scheduled: dict[ScheduledTask, asyncio.TimerHandle] = {}
         self._stopped = False
         # Keep track of all tasks that are currently executing to be
         # able to cancel them when the scheduler is stopped.
-        self._executing_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
+        self._executing_tasks: dict[TaskMethod, list[asyncio.Task[object]]] = defaultdict(list)
         # Keep track of tasks that should be awaited before the scheduler is stopped
-        self._await_tasks: Dict[TaskMethod, List[asyncio.Task[object]]] = defaultdict(list)
+        self._await_tasks: dict[TaskMethod, list[asyncio.Task[object]]] = defaultdict(list)
 
     def _add_to_executing_tasks(self, action: TaskMethod, task: asyncio.Task[object], cancel_on_stop: bool = True) -> None:
         """
@@ -269,7 +270,7 @@ class Scheduler(object):
         Called by the callback function of executing task when the task has finished executing.
         """
 
-        def remove_action_from_task_dict(task_dict: Dict[TaskMethod, List[asyncio.Task[object]]]) -> None:
+        def remove_action_from_task_dict(task_dict: dict[TaskMethod, list[asyncio.Task[object]]]) -> None:
             if action in task_dict:
                 try:
                     task_dict[action].remove(task)
@@ -394,19 +395,36 @@ def get_free_tcp_port() -> str:
         return str(port)
 
 
-def datetime_utc_isoformat(timestamp: datetime.datetime, *, naive_utc: bool = False) -> str:
+def datetime_iso_format(timestamp: datetime.datetime, *, tz_aware: bool = False) -> str:
     """
-    Returns a timestamp ISO string in implicit UTC.
+    Returns a timestamp ISO string. Naive timestamps are assumed to be UTC.
 
     :param timestamp: The timestamp to get the ISO string for.
-    :param naive_utc: Whether to interpret naive timestamps as UTC. By default naive timestamps are assumed to be in local time.
+    :param tz_aware: Whether to return timezone aware timestamps or naive, implicit UTC timestamp.
     """
-    naive_utc_timestamp: datetime.datetime = (
-        timestamp
-        if timestamp.tzinfo is None and naive_utc
-        else timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-    )
-    return naive_utc_timestamp.isoformat(timespec="microseconds")
+
+    def convert_timestamp() -> datetime.datetime:
+        if tz_aware:
+            if timestamp.tzinfo:
+                return timestamp
+            return timestamp.replace(tzinfo=datetime.timezone.utc)
+
+        if timestamp.tzinfo:
+            return timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return timestamp
+
+    return convert_timestamp().isoformat(timespec="microseconds")
+
+
+def parse_timestamp(timestamp: str) -> datetime.datetime:
+    """
+    Parse a timestamp into a timezone aware object. Naive timestamps are assumed to be UTC.
+    """
+    try:
+        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
+    except ValueError:
+        # interpret naive datetimes as UTC
+        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
 
 class JSONSerializable(ABC):
@@ -438,14 +456,15 @@ def internal_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
 
 
 @stable_api
-def api_boundary_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
+def api_boundary_json_encoder(o: object, tz_aware: bool = False) -> Union[ReturnTypes, "JSONSerializable"]:
     """
     A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries. This
     encoder is meant to be used for API boundaries.
+    :param tz_aware: Whether to serialize timestamps as timezone aware objects or as naive implicit UTC.
     """
     if isinstance(o, datetime.datetime):
-        # Accross API boundaries, all naive datetime instances are assumed UTC. Returns ISO timestamp implicitly in UTC.
-        return datetime_utc_isoformat(o, naive_utc=True)
+        # Accross API boundaries, all naive datetime instances are assumed UTC.
+        return datetime_iso_format(o, tz_aware=tz_aware)
 
     return _custom_json_encoder(o)
 
@@ -541,7 +560,7 @@ class StoppedException(Exception):
     """This exception is raised when a background task is added to the taskhandler when it is shutting down."""
 
 
-class TaskHandler(object):
+class TaskHandler:
     """
     This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
     are reported. If stop is invoked, all background tasks are cancelled.
@@ -549,8 +568,8 @@ class TaskHandler(object):
 
     def __init__(self) -> None:
         super().__init__()
-        self._background_tasks: Set[Task] = set()
-        self._await_tasks: Set[Task] = set()
+        self._background_tasks: set[Task] = set()
+        self._await_tasks: set[Task] = set()
         self._stopped = False
 
     def is_stopped(self) -> bool:
@@ -622,14 +641,14 @@ class CycleException(Exception):
                 self.done = True
 
 
-def stable_depth_first(nodes: List[str], edges: Dict[str, List[str]]) -> List[str]:
+def stable_depth_first(nodes: list[str], edges: dict[str, list[str]]) -> list[str]:
     """Creates a linear sequence based on a set of "comes after" edges, same graph yields the same solution,
     independent of order given to this function"""
     nodes = sorted(nodes)
     edges = {k: sorted(v) for k, v in edges.items()}
     out = []
 
-    def dfs(node: str, seen: Set[str] = set()) -> None:
+    def dfs(node: str, seen: set[str] = set()) -> None:
         if node in out:
             return
         if node in seen:
@@ -658,7 +677,7 @@ class NamedSubLock:
         await self.parent.acquire(self.name)
 
     async def __aexit__(
-        self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException], traceback: Optional[TracebackType]
+        self, exc_type: Optional[type[BaseException]], exc_value: Optional[BaseException], traceback: Optional[TracebackType]
     ) -> None:
         await self.parent.release(self.name)
 
@@ -668,8 +687,8 @@ class NamedLock:
 
     def __init__(self) -> None:
         self._master_lock: Lock = Lock()
-        self._named_locks: Dict[str, Lock] = {}
-        self._named_locks_counters: Dict[str, int] = {}
+        self._named_locks: dict[str, Lock] = {}
+        self._named_locks_counters: dict[str, int] = {}
 
     def get(self, name: str) -> NamedSubLock:
         return NamedSubLock(self, name)
@@ -708,7 +727,7 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
         pass
 
 
-async def join_threadpools(threadpools: List[ThreadPoolExecutor]) -> None:
+async def join_threadpools(threadpools: list[ThreadPoolExecutor]) -> None:
     """
     Asynchronously join a set of threadpools
 

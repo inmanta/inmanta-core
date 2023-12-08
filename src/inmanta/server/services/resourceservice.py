@@ -21,7 +21,8 @@ import logging
 import os
 import uuid
 from collections import abc, defaultdict
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union, cast
+from collections.abc import Callable, Sequence
+from typing import Any, Optional, Union, cast
 
 from asyncpg.connection import Connection
 from asyncpg.exceptions import UniqueViolationError
@@ -57,6 +58,7 @@ from inmanta.server import protocol
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, PrimitiveTypes
+from inmanta.util import parse_timestamp
 
 LOGGER = logging.getLogger(__name__)
 
@@ -98,20 +100,20 @@ class ResourceService(protocol.ServerSlice):
     agentmanager_service: "AgentManager"
 
     def __init__(self) -> None:
-        super(ResourceService, self).__init__(SLICE_RESOURCE)
+        super().__init__(SLICE_RESOURCE)
 
-        self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
-        self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
+        self._resource_action_loggers: dict[uuid.UUID, logging.Logger] = {}
+        self._resource_action_handlers: dict[uuid.UUID, logging.Handler] = {}
 
         # Dict: environment_id: (model_version, increment, negative_increment)
-        self._increment_cache: Dict[uuid.UUID, Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]] = {}
+        self._increment_cache: dict[uuid.UUID, Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]] = {}
         # lock to ensure only one inflight request
-        self._increment_cache_locks: Dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
+        self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -226,7 +228,7 @@ class ResourceService(protocol.ServerSlice):
         if status is not None and status:
             return 200, {"status": resv.status}
 
-        actions: List[data.ResourceAction] = []
+        actions: list[data.ResourceAction] = []
         if bool(logs):
             action_name = None
             if log_action is not None:
@@ -244,8 +246,8 @@ class ResourceService(protocol.ServerSlice):
         self,
         environment: data.Environment,
         resource_type: Optional[ResourceType] = None,
-        attributes: Dict[PrimitiveTypes, PrimitiveTypes] = {},
-    ) -> List[Resource]:
+        attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
+    ) -> list[Resource]:
         result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
         return [r.to_dto() for r in result]
 
@@ -254,7 +256,7 @@ class ResourceService(protocol.ServerSlice):
         self, env: data.Environment, agent: str, version: int, sid: uuid.UUID, incremental_deploy: bool
     ) -> Apireturn:
         if not self.agentmanager_service.is_primary(env, sid, agent):
-            return 409, {"message": "This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid)}
+            return 409, {"message": f"This agent is not currently the primary for the endpoint {agent} (sid: {sid})"}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
@@ -322,13 +324,28 @@ class ResourceService(protocol.ServerSlice):
             idr = Id.parse_id(res)
             return idr.get_agent_name() == agent
 
-        # set already done to deployed
-        await self.mark_deployed(env, neg_increment, now, version, filter=on_agent)
+        # This is a bit subtle.
+        # Any resource we consider deployed has to be marked as such.
+        # Otherwise the agent will fail the deployment.
+        # Stale successful deployments can cause resource that were available to be now considered deployed.
+        # We don't do this back propagation on deploy,
+        #   because it is about a lot of resource that need to grab a lock to check if they are stale
+        # We do it here, as we always have.
+        # This method only updates the state for resources that are currently in the available or deploying state.
+        # As such, it should not race with backpropagation on failure.
+        await self.mark_deployed(
+            env,
+            neg_increment,
+            now,
+            version,
+            filter=on_agent,
+            only_update_from_states={const.ResourceState.available, const.ResourceState.deploying},
+        )
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
-        deploy_model: List[Dict[str, Any]] = []
-        resource_ids: List[str] = []
+        deploy_model: list[dict[str, Any]] = []
+        resource_ids: list[str] = []
 
         for rv in resources:
             if rv.resource_id not in increment_ids:
@@ -372,6 +389,7 @@ class ResourceService(protocol.ServerSlice):
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
         connection: Optional[Connection] = None,
+        only_update_from_states: Optional[set[const.ResourceState]] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -387,9 +405,10 @@ class ResourceService(protocol.ServerSlice):
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_utc_isoformat(timestamp),
+            "timestamp": util.datetime_iso_format(timestamp),
             "args": [],
         }
+
         await self.resource_action_update(
             env,
             resources_version_ids,
@@ -405,6 +424,7 @@ class ResourceService(protocol.ServerSlice):
             send_events=False,
             keep_increment_cache=True,
             is_increment_notification=True,
+            only_update_from_states=only_update_from_states,
             connection=connection,
         )
 
@@ -557,8 +577,8 @@ class ResourceService(protocol.ServerSlice):
         resource_id: Id,
         action_id: uuid.UUID,
         status: ResourceState,
-        messages: List[LogLine] = [],
-        changes: Dict[str, AttributeStateChange] = {},
+        messages: list[LogLine] = [],
+        changes: dict[str, AttributeStateChange] = {},
         change: Optional[Change] = None,
         keep_increment_cache: bool = False,
     ) -> None:
@@ -671,7 +691,7 @@ class ResourceService(protocol.ServerSlice):
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
-        waiting_agents = set([(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides])
+        waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
         for agent, resource_id in waiting_agents:
             aclient = self.agentmanager_service.get_agent_client(env.id, agent)
             if aclient is not None:
@@ -734,18 +754,19 @@ class ResourceService(protocol.ServerSlice):
     async def resource_action_update(
         self,
         env: data.Environment,
-        resource_ids: List[ResourceVersionIdStr],
+        resource_ids: list[ResourceVersionIdStr],
         action_id: uuid.UUID,
         action: const.ResourceAction,
         started: datetime.datetime,
         finished: datetime.datetime,
         status: Optional[Union[const.ResourceState, const.DeprecatedResourceState]],
-        messages: List[Dict[str, Any]],
-        changes: Dict[str, Any],
+        messages: list[dict[str, Any]],
+        changes: dict[str, Any],
         change: const.Change,
         send_events: bool,
         keep_increment_cache: bool = False,
         is_increment_notification: bool = False,
+        only_update_from_states: Optional[set[const.ResourceState]] = None,
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
@@ -784,7 +805,7 @@ class ResourceService(protocol.ServerSlice):
             # and needs to be valid
             if status not in VALID_STATES_ON_STATE_UPDATE:
                 error_and_log(
-                    "Status %s is not valid on action %s" % (status, action),
+                    f"Status {status} is not valid on action {action}",
                     resource_ids=resource_ids,
                     action=action,
                     action_id=action_id,
@@ -814,7 +835,7 @@ class ResourceService(protocol.ServerSlice):
 
         assert all(Id.is_resource_version_id(rvid) for rvid in resource_ids)
 
-        resources: List[data.Resource]
+        resources: list[data.Resource]
         async with data.Resource.get_connection(connection) as connection:
             async with connection.transaction():
                 # validate resources
@@ -834,6 +855,12 @@ class ResourceService(protocol.ServerSlice):
                             "Only %s of %s resources found." % (len(resources), len(resource_ids))
                         },
                     )
+
+                if only_update_from_states is not None:
+                    resources = [resource for resource in resources if resource.status in only_update_from_states]
+                    if not resources:
+                        return 200, {"message": "no resources with the given state found"}
+                    resource_ids = [resource.resource_version_id for resource in resources]
 
                 # validate transitions
                 if is_resource_state_update:
@@ -871,13 +898,6 @@ class ResourceService(protocol.ServerSlice):
                                 )
                             },
                         )
-
-                def parse_timestamp(timestamp: str) -> datetime.datetime:
-                    try:
-                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT + "%z")
-                    except ValueError:
-                        # interpret naive datetimes as UTC
-                        return datetime.datetime.strptime(timestamp, const.TIME_ISOFMT).replace(tzinfo=datetime.timezone.utc)
 
                 for msg in messages:
                     # All other data is stored in the database. The msg was already formatted at the client side.
@@ -963,9 +983,9 @@ class ResourceService(protocol.ServerSlice):
 
         if is_resource_state_update and is_resource_action_finished:
             self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
-            waiting_agents = set(
-                [(Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides]
-            )
+            waiting_agents = {
+                (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
+            }
 
             for agent, resource_id in waiting_agents:
                 aclient = self.agentmanager_service.get_agent_client(env.id, agent)
@@ -984,7 +1004,7 @@ class ResourceService(protocol.ServerSlice):
         env: data.Environment,
         resource_id: Id,
         action_id: uuid.UUID,
-    ) -> Dict[ResourceVersionIdStr, const.ResourceState]:
+    ) -> dict[ResourceVersionIdStr, const.ResourceState]:
         resource_id_str = resource_id.resource_version_str()
         async with data.Resource.get_connection() as connection:
             async with connection.transaction():
@@ -1039,7 +1059,7 @@ class ResourceService(protocol.ServerSlice):
         action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
-    ) -> ReturnValue[List[ResourceAction]]:
+    ) -> ReturnValue[list[ResourceAction]]:
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
                 f"Attribute and attribute_value should both be supplied to use them filtering. "
@@ -1112,12 +1132,11 @@ class ResourceService(protocol.ServerSlice):
 
     @handle(methods_v2.get_resource_events, env="tid", resource_id="rvid")
     async def get_resource_events(
-        self,
-        env: data.Environment,
-        resource_id: Id,
-    ) -> Dict[ResourceIdStr, List[ResourceAction]]:
+        self, env: data.Environment, resource_id: Id, exclude_change: Optional[const.Change] = None
+    ) -> dict[ResourceIdStr, list[ResourceAction]]:
         return {
-            k: [ra.to_dto() for ra in v] for k, v in (await data.ResourceAction.get_resource_events(env, resource_id)).items()
+            k: [ra.to_dto() for ra in v]
+            for k, v in (await data.ResourceAction.get_resource_events(env, resource_id, exclude_change)).items()
         }
 
     @handle(methods_v2.resource_did_dependency_change, env="tid", resource_id="rvid")
@@ -1144,7 +1163,7 @@ class ResourceService(protocol.ServerSlice):
         last_id: Optional[ResourceVersionIdStr] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
         deploy_summary: bool = False,
     ) -> ReturnValueWithMeta[Sequence[LatestReleasedResource]]:
@@ -1204,7 +1223,7 @@ class ResourceService(protocol.ServerSlice):
         limit: Optional[int] = None,
         start: Optional[datetime.datetime] = None,
         end: Optional[datetime.datetime] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "timestamp.desc",
     ) -> ReturnValue[Sequence[ResourceLog]]:
         try:
@@ -1224,7 +1243,7 @@ class ResourceService(protocol.ServerSlice):
         last_id: Optional[ResourceVersionIdStr] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "resource_type.desc",
     ) -> ReturnValueWithMeta[Sequence[VersionedResource]]:
         try:

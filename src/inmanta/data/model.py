@@ -19,7 +19,7 @@ import datetime
 import uuid
 from enum import Enum
 from itertools import chain
-from typing import Any, ClassVar, Dict, List, NewType, Optional, Union
+from typing import Any, ClassVar, NewType, Optional, Union
 
 import pydantic
 import pydantic.schema
@@ -107,7 +107,7 @@ class SliceStatus(BaseModel):
     """
 
     name: str
-    status: Dict[str, ArgumentTypes]
+    status: dict[str, ArgumentTypes]
 
 
 class FeatureStatus(BaseModel):
@@ -128,10 +128,10 @@ class StatusResponse(BaseModel):
     product: str
     edition: str
     version: str
-    license: Union[str, Dict[str, SimpleTypes]]
-    extensions: List[ExtensionStatus]
-    slices: List[SliceStatus]
-    features: List[FeatureStatus]
+    license: Union[str, dict[str, SimpleTypes]]
+    extensions: list[ExtensionStatus]
+    slices: list[SliceStatus]
+    features: list[FeatureStatus]
 
 
 @stable_api
@@ -140,7 +140,7 @@ class CompileData(BaseModel):
     Top level structure of compiler data to be exported.
     """
 
-    errors: List[ast_export.Error]
+    errors: list[ast_export.Error]
     """
         All errors occurred while trying to compile.
     """
@@ -156,7 +156,7 @@ class CompileRunBase(BaseModel):
     do_export: bool
     force_update: bool
     metadata: JsonType
-    environment_variables: Dict[str, str]
+    environment_variables: dict[str, str]
 
     partial: bool
     removed_resource_sets: list[str]
@@ -190,7 +190,7 @@ class CompileRunReport(BaseModel):
 
 class CompileDetails(CompileReport):
     compile_data: Optional[CompileData]
-    reports: Optional[List[CompileRunReport]]
+    reports: Optional[list[CompileRunReport]]
 
 
 ResourceVersionIdStr = NewType("ResourceVersionIdStr", str)  # Part of the stable API
@@ -235,7 +235,7 @@ class AttributeStateChange(BaseModel):
         return v
 
 
-EnvSettingType = Union[StrictNonIntBool, StrictInt, StrictFloat, StrictStr, Dict[str, Union[str, int, StrictNonIntBool]]]
+EnvSettingType = Union[StrictNonIntBool, StrictInt, StrictFloat, StrictStr, dict[str, Union[str, int, StrictNonIntBool]]]
 
 
 class Environment(BaseModel):
@@ -250,7 +250,7 @@ class Environment(BaseModel):
     project_id: uuid.UUID
     repo_url: str
     repo_branch: str
-    settings: Dict[str, EnvSettingType]
+    settings: dict[str, EnvSettingType]
     halted: bool
     description: Optional[str]
     icon: Optional[str]
@@ -263,7 +263,7 @@ class Project(BaseModel):
 
     id: uuid.UUID
     name: str
-    environments: List[Environment]
+    environments: list[Environment]
 
 
 class EnvironmentSetting(BaseModel):
@@ -288,12 +288,12 @@ class EnvironmentSetting(BaseModel):
     recompile: bool
     update_model: bool
     agent_restart: bool
-    allowed_values: Optional[List[EnvSettingType]]
+    allowed_values: Optional[list[EnvSettingType]]
 
 
 class EnvironmentSettingsReponse(BaseModel):
-    settings: Dict[str, EnvSettingType]
-    definition: Dict[str, EnvironmentSetting]
+    settings: dict[str, EnvSettingType]
+    definition: dict[str, EnvironmentSetting]
 
 
 class ModelMetadata(BaseModel):
@@ -354,12 +354,12 @@ class Resource(BaseModel):
 class ResourceAction(BaseModel):
     environment: uuid.UUID
     version: int
-    resource_version_ids: List[ResourceVersionIdStr]
+    resource_version_ids: list[ResourceVersionIdStr]
     action_id: uuid.UUID
     action: const.ResourceAction
     started: datetime.datetime
     finished: Optional[datetime.datetime]
-    messages: Optional[List[JsonType]]
+    messages: Optional[list[JsonType]]
     status: Optional[const.ResourceState]
     changes: Optional[JsonType]
     change: Optional[const.Change]
@@ -373,16 +373,16 @@ class ResourceDeploySummary(BaseModel):
     """
 
     total: int
-    by_state: Dict[str, int]
+    by_state: dict[str, int]
 
     @classmethod
-    def create_from_db_result(cls, summary_by_state: Dict[str, int]) -> "ResourceDeploySummary":
+    def create_from_db_result(cls, summary_by_state: dict[str, int]) -> "ResourceDeploySummary":
         full_summary_by_state = cls._ensure_summary_has_all_states(summary_by_state)
         total = cls._count_all_resources(full_summary_by_state)
         return ResourceDeploySummary(by_state=full_summary_by_state, total=total)
 
     @classmethod
-    def _ensure_summary_has_all_states(cls, summary_by_state: Dict[str, int]) -> Dict[str, int]:
+    def _ensure_summary_has_all_states(cls, summary_by_state: dict[str, int]) -> dict[str, int]:
         full_summary = summary_by_state.copy()
         for state in const.ResourceState:
             if state not in summary_by_state.keys() and state != const.ResourceState.dry:
@@ -390,7 +390,7 @@ class ResourceDeploySummary(BaseModel):
         return full_summary
 
     @classmethod
-    def _count_all_resources(cls, summary_by_state: Dict[str, int]) -> int:
+    def _count_all_resources(cls, summary_by_state: dict[str, int]) -> int:
         return sum(resource_count for resource_count in summary_by_state.values())
 
 
@@ -408,7 +408,7 @@ class LogLine(BaseModel):
 
     level: const.LogLevel
     msg: str
-    args: List[Optional[ArgumentTypes]] = []
+    args: list[Optional[ArgumentTypes]] = []
     kwargs: JsonType = {}
     timestamp: datetime.datetime
 
@@ -437,10 +437,10 @@ class VersionedResource(BaseModel):
     resource_id: ResourceIdStr
     resource_version_id: ResourceVersionIdStr
     id_details: ResourceIdDetails
-    requires: List[ResourceVersionIdStr]
+    requires: list[ResourceVersionIdStr]
 
     @property
-    def all_fields(self) -> Dict[str, Any]:
+    def all_fields(self) -> dict[str, Any]:
         return {**self.dict(), **self.id_details.dict()}
 
 
@@ -516,7 +516,7 @@ class ReleasedResourceDetails(ResourceDetails):
     first_generated_time: datetime.datetime
     first_generated_version: int
     status: ReleasedResourceState
-    requires_status: Dict[ResourceIdStr, ReleasedResourceState]
+    requires_status: dict[ResourceIdStr, ReleasedResourceState]
 
 
 class ResourceHistory(BaseModel):
@@ -524,7 +524,7 @@ class ResourceHistory(BaseModel):
     date: datetime.datetime
     attributes: JsonType
     attribute_hash: str
-    requires: List[ResourceIdStr]
+    requires: list[ResourceIdStr]
 
 
 class ResourceLog(LogLine):
@@ -564,7 +564,7 @@ class ResourceDiff(BaseModel):
     """
 
     resource_id: ResourceIdStr
-    attributes: Dict[str, AttributeDiff]
+    attributes: dict[str, AttributeDiff]
     status: ResourceDiffStatus
 
 
@@ -611,7 +611,7 @@ class AgentProcess(BaseModel):
     first_seen: Optional[datetime.datetime]
     last_seen: Optional[datetime.datetime]
     expired: Optional[datetime.datetime]
-    state: Optional[Dict[str, Union[Dict[str, List[str]], Dict[str, str], Dict[str, float], str]]]
+    state: Optional[dict[str, Union[dict[str, list[str]], dict[str, str], dict[str, float], str]]]
 
 
 class DesiredStateLabel(BaseModel):
@@ -623,7 +623,7 @@ class DesiredStateVersion(BaseModel):
     version: int
     date: datetime.datetime
     total: int
-    labels: List[DesiredStateLabel]
+    labels: list[DesiredStateLabel]
     status: const.DesiredStateVersionStatus
 
 
@@ -647,7 +647,7 @@ class DryRun(BaseModel):
 
 class DryRunReport(BaseModel):
     summary: DryRun
-    diff: List[ResourceDiff]
+    diff: list[ResourceDiff]
 
 
 class Notification(BaseModel):
@@ -682,7 +682,7 @@ class Source(BaseModel):
     hash: str
     is_byte_code: bool
     module_name: str
-    requirements: List[str]
+    requirements: list[str]
 
 
 class EnvironmentMetricsResult(BaseModel):
@@ -701,8 +701,8 @@ class EnvironmentMetricsResult(BaseModel):
 
     start: datetime.datetime
     end: datetime.datetime
-    timestamps: List[datetime.datetime]
-    metrics: Dict[str, List[Optional[Union[float, Dict[str, float]]]]]
+    timestamps: list[datetime.datetime]
+    metrics: dict[str, list[Optional[Union[float, dict[str, float]]]]]
 
 
 class AuthMethod(str, Enum):

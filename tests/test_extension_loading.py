@@ -19,9 +19,10 @@ import importlib
 import logging
 import os
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
 from functools import partial
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 import yaml
@@ -47,7 +48,7 @@ from utils import log_contains
 
 @contextmanager
 def splice_extension_in(name: str) -> Generator[Any, Any, None]:
-    """Context manager to all extensions in tests/data/{name}/inmanta_ext/ to the interpreter and unload them again"""
+    """Context manager to load all extensions in tests/data/{name}/inmanta_ext/ to the interpreter and unload them again"""
     oldpath = sys.path
     try:
         sys.path = sys.path + [os.path.join(os.path.dirname(__file__), "data", name)]

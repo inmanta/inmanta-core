@@ -15,8 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from builtins import str
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from inmanta.types import JsonType
 
@@ -27,7 +26,7 @@ from inmanta.types import JsonType
 """
 
 
-class Location(object):
+class Location:
     """
     Position in the source
 
@@ -57,7 +56,7 @@ class Location(object):
         return Location(**ctx)
 
 
-class Attribute(object):
+class Attribute:
     """
     Attribute defined on an entity
 
@@ -111,15 +110,15 @@ class Attribute(object):
         )
 
     @staticmethod
-    def from_list(lst: List[JsonType]) -> Dict[str, "Attribute"]:
+    def from_list(lst: list[JsonType]) -> dict[str, "Attribute"]:
         return {n: Attribute.from_dict(x) for n, x in lst.items()}
 
 
-class Value(object):
+class Value:
     """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue`"""
 
     @staticmethod
-    def from_list(lst: List[JsonType]) -> List["Value"]:
+    def from_list(lst: list[JsonType]) -> list["Value"]:
         return [Value.from_dict(x) for x in lst]
 
     @staticmethod
@@ -179,7 +178,7 @@ class ReferenceValue(Value):
         return ReferenceValue(**ctx)
 
 
-class Relation(object):
+class Relation:
     """
     A relation between two entities.
 
@@ -194,12 +193,12 @@ class Relation(object):
     def __init__(
         self,
         mytype: str,
-        multi: Tuple[int, Optional[int]],
+        multi: tuple[int, Optional[int]],
         reverse: str,
         comment: str,
         location: Location,
-        source_annotations: List[Value],
-        target_annotations: List[Value],
+        source_annotations: list[Value],
+        target_annotations: list[Value],
     ) -> None:
         self.type = mytype
         lower = multi[0]
@@ -255,11 +254,11 @@ class Relation(object):
         )
 
     @staticmethod
-    def from_list(lst: JsonType) -> Dict[str, "Relation"]:
+    def from_list(lst: JsonType) -> dict[str, "Relation"]:
         return {n: Relation.from_dict(x) for n, x in lst.items()}
 
 
-class Entity(object):
+class Entity:
     """
     An entity type
 
@@ -270,7 +269,7 @@ class Entity(object):
     """
 
     def __init__(
-        self, parents: List[str], attributes: Dict[str, Attribute], relations: Dict[str, Relation], location: Location
+        self, parents: list[str], attributes: dict[str, Attribute], relations: dict[str, Relation], location: Location
     ) -> None:
         self.parents = parents
         self.attributes = attributes

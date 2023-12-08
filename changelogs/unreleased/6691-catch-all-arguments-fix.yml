@@ -1,0 +1,3 @@
+change-type: patch
+description: Fix bugs introduced in https://github.com/inmanta/inmanta-core/pull/6808
+destination-branches: [iso6]

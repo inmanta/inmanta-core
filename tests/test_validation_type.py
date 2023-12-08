@@ -15,12 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import contextlib
 from typing import Optional
 
 import pydantic
 import pytest
 
-from inmanta.validation_type import validate_type
+from inmanta.validation_type import regex_string, validate_type
 
 
 @pytest.mark.parametrize(
@@ -58,3 +59,19 @@ def test_type_validation(attr_type: str, value: str, validation_parameters: dict
     except pydantic.ValidationError as e:
         validation_error = e
     assert (validation_error is None) is is_valid, validation_error
+
+
+@pytest.mark.parametrize(
+    "regex, value, is_valid",
+    [
+        ("^abc.*", "abc", True),
+        ("^abc.*", "abcd", True),
+        ("^abc.*", "xabc", False),
+        ("^xabc.*", "xabc", True),
+        ("^abc.*", "ab", False),
+        (".*", object(), False),
+    ],
+)
+def test_regex_string(regex: str, value: object, is_valid: bool) -> None:
+    with contextlib.nullcontext() if is_valid else pytest.raises(pydantic.ValidationError):
+        pydantic.parse_obj_as(regex_string(regex), value)
