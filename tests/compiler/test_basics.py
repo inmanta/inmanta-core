@@ -168,7 +168,26 @@ def test_bad_var(snippetcompiler):
         """
         a=b
 """,
-        "variable b not found (reported in a = b ({dir}/main.cf:2))",
+        "variable b not found (reported in a = b ({dir}/main.cf:2:11))",
+    )
+
+def test_var_not_found_in_implement(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+end
+
+implementation test for Test:
+    std::print("This is test {{n}}")
+    #std::print(f"This is test {n}")
+end
+
+implement Test using test
+
+Test()
+""",
+        r'variable n not found (reported in std::print(Format(This is test {{{{n}}}})) '
+         '({dir}/main.cf:6:32))'
     )
 
 

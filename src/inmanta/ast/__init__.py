@@ -632,23 +632,30 @@ class RuntimeException(CompilerException):
         self.stmt = None
         if stmt is not None:
             self.set_location(stmt.get_location())
-            self.stmt = stmt
+            self.stmt = [stmt]
 
-    def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
+    def set_statement(self, stmt: "Locatable", replace: bool = True, extend: bool= False) -> None:
         LOGGER.debug(f"RuntimeException SET {stmt=} at {stmt.get_location()}")
         # breakpoint()
         for cause in self.get_causes():
             if isinstance(cause, RuntimeException):
                 cause.set_statement(stmt, replace)
-
-        if replace or self.stmt is None:
-            self.set_location(stmt.get_location())
-            self.stmt = stmt
+        if extend:
+            if not self.stmt:
+                self.stmt = []
+            self.stmt.append(stmt)
+        else:
+            if replace or self.stmt is None:
+                self.set_location(stmt.get_location())
+                self.stmt = [stmt]
 
     def format(self) -> str:
         """Make a string representation of this particular exception"""
         if self.stmt is not None:
-            return f"{self.get_message()} (reported in {self.stmt} ({self.get_location()}))"
+            return (
+                f"{self.get_message()}\n" +
+                '\n'.join(f"(reported in {str(stm)}) ({stm.get_location()}))" for stm in self.stmt)
+            )
         return super().format()
 
 

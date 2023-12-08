@@ -50,6 +50,8 @@ if TYPE_CHECKING:
     from inmanta.execute.scheduler import PrioritisedDelayedResultVariableQueue
 
 
+# from inmanta.ast.statements.generator import SubConstructor
+
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 T_contra = TypeVar("T_contra", contravariant=True)
@@ -1018,7 +1020,10 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except RuntimeException as e:
-            e.set_statement(self.owner, replace=False)
+            # replace = True
+            # if isinstance(self.owner, SubConstructor):
+            replace=False
+            e.set_statement(self.owner, extend=True)
             # e.location = self.owner.location
             raise e
 
@@ -1142,14 +1147,12 @@ class Resolver:
 
     def get_dataflow_node(self, name: str) -> "dataflow.AssignableNodeReference":
         try:
-            # LOGGER.log("get_dataflow_node")
             result_variable: Typeorvalue = self.lookup(name)
             assert isinstance(result_variable, ResultVariable)
             return result_variable.get_dataflow_node()
         except NotFoundException:
             # This block is only executed if the model contains a reference to an undefined variable.
             # Since we don't know in which scope it should be defined, we assume top scope.
-            LOGGER.log("get_dataflow_node NOT FOUND")
             root_graph: Optional[DataflowGraph] = self.get_root_resolver().dataflow_graph
             assert root_graph is not None
             return root_graph.get_own_variable(name)
