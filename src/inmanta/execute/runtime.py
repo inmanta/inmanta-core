@@ -1022,9 +1022,12 @@ class ExecutionUnit(Waiter):
         except RuntimeException as e:
             # replace = True
             # if isinstance(self.owner, SubConstructor):
-            replace=False
-            e.set_statement(self.owner, extend=True)
-            # e.location = self.owner.location
+            # replace=False
+            # e.set_statement(self.owner, extend=True)
+            #
+            if not e._frozen:
+                e.set_statement(self.owner)
+                e.set_location(self.owner.location)
             raise e
 
     def __repr__(self) -> str:
@@ -1236,7 +1239,9 @@ class ExecutionContext(Resolver):
         if name in self.slots:
             return self.slots[name]
         else:
-            raise NotFoundException(full_location, name, f"variable {name} not found" )
+            e =  NotFoundException(full_location, name, f"variable {name} not found" )
+            # e.freeze()
+            raise e
 
     def emit(self, queue: QueueScheduler) -> None:
         self.block.emit(self, queue)

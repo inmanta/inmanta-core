@@ -391,7 +391,9 @@ class Namespace(Namespaced):
                 else:
                     raise TypeNotFoundException(typ, ns)
             else:
-                raise TypeNotFoundException(typ, self)
+                e = TypeNotFoundException(typ, self)
+                e.freeze()
+                raise e
         elif name in self.primitives:
             if name == "number":
                 warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
@@ -561,10 +563,19 @@ class CompilerException(Exception, export.Exportable):
         self.msg = msg
         # store root namespace so error reporters can inspect the compiler state
         self.root_ns: Optional[Namespace] = None
+        self._frozen: bool = False
+
+    def freeze(self):
+        self._frozen = True
 
     def set_location(self, location: Location) -> None:
         if self.location is None:
             self.location = location
+        else:
+            if self._frozen:
+                return
+            else:
+                self.location = location
 
     def get_message(self) -> str:
         return self.msg
@@ -632,7 +643,7 @@ class RuntimeException(CompilerException):
         self.stmt = None
         if stmt is not None:
             self.set_location(stmt.get_location())
-            self.stmt = [stmt]
+            self.stmt = stmt
 
     def set_statement(self, stmt: "Locatable", replace: bool = True, extend: bool= False) -> None:
         LOGGER.debug(f"RuntimeException SET {stmt=} at {stmt.get_location()}")
@@ -640,21 +651,19 @@ class RuntimeException(CompilerException):
         for cause in self.get_causes():
             if isinstance(cause, RuntimeException):
                 cause.set_statement(stmt, replace)
-        if extend:
-            if not self.stmt:
-                self.stmt = []
-            self.stmt.append(stmt)
-        else:
-            if replace or self.stmt is None:
-                self.set_location(stmt.get_location())
-                self.stmt = [stmt]
+        if self._frozen:
+            # Exception can no longer be modified
+            return
+
+        if replace or self.stmt is None:
+            self.set_location(stmt.get_location())
+            self.stmt = stmt
 
     def format(self) -> str:
         """Make a string representation of this particular exception"""
         if self.stmt is not None:
             return (
-                f"{self.get_message()}\n" +
-                '\n'.join(f"(reported in {str(stm)}) ({stm.get_location()}))" for stm in self.stmt)
+                f"{self.get_message()} (reported in {str(self.stmt)} ({self.get_location()}))"
             )
         return super().format()
 

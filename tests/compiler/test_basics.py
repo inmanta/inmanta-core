@@ -190,6 +190,53 @@ Test()
          '({dir}/main.cf:6:32))'
     )
 
+def test_var_not_found_in_implement_2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A: end
+
+implementation a for A:
+    x = y
+end
+
+
+implement A using a
+
+
+A()
+""",
+    r'variable y not found (reported in x = y ({dir}/main.cf:5:9))'
+    )
+
+
+def test_var_not_found_nested_case(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity A:
+end
+
+A.x [1] -- B                # 5
+
+entity B:
+end
+
+implementation a for A:     # 10
+    x
+end
+
+implementation b for B:
+    std::print(u)           # 15
+end
+
+implement A using a
+implement B using b
+
+
+A(x=B())
+""",
+    r'variable u not found (reported in std::print(u) ({dir}/main.cf:15:16))'
+    )
+
 
 def test_bad_type(snippetcompiler):
     snippetcompiler.setup_for_error(
