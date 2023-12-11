@@ -365,7 +365,7 @@ class Assign(AssignStatement):
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
-        target = resolver.lookup(str(self.name), full_location=self.name)
+        target = resolver.lookup(str(self.name), location=self.name.get_location())
         assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value, owner=self)

@@ -27,7 +27,6 @@ from inmanta.ast import (
     CompilerException,
     DoubleSetException,
     Locatable,
-    LocatableString,
     Location,
     ModifiedAfterFreezeException,
     Namespace,
@@ -1122,9 +1121,7 @@ class Resolver:
         self.namespace = namespace
         self.dataflow_graph: Optional[DataflowGraph] = DataflowGraph(self) if enable_dataflow_graph else None
 
-    def lookup(
-        self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None
-    ) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, location: Optional[Location] = None) -> Typeorvalue:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
         if root is not None:
@@ -1132,7 +1129,7 @@ class Resolver:
         else:
             ns = self.namespace
 
-        return ns.lookup(name, full_location)
+        return ns.lookup(name, location)
 
     def get_root_resolver(self) -> "Resolver":
         return self
@@ -1172,12 +1169,10 @@ class VariableResolver(Resolver):
             DataflowGraph(self, parent=self.parent.dataflow_graph) if self.parent.dataflow_graph is not None else None
         )
 
-    def lookup(
-        self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None
-    ) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, location: Optional[Location] = None) -> Typeorvalue:
         if root is None and name == self.name:
             return self.variable
-        return self.parent.lookup(name, root, full_location)
+        return self.parent.lookup(name, root, location)
 
     def get_root_resolver(self) -> "Resolver":
         return self.parent.get_root_resolver()
@@ -1193,12 +1188,10 @@ class NamespaceResolver(Resolver):
         if parent.dataflow_graph is not None:
             self.dataflow_graph = DataflowGraph(self, parent.dataflow_graph)
 
-    def lookup(
-        self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None
-    ) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, location: Optional[Location] = None) -> Typeorvalue:
         if root is not None:
-            return self.parent.lookup(name, root, full_location)
-        return self.parent.lookup(name, self.root, full_location)
+            return self.parent.lookup(name, root, location)
+        return self.parent.lookup(name, self.root, location)
 
     def for_namespace(self, namespace: Namespace) -> "Resolver":
         return NamespaceResolver(self, namespace)
@@ -1221,20 +1214,18 @@ class ExecutionContext(Resolver):
                 node_ref: dataflow.AssignableNodeReference = dataflow.AssignableNode(name).reference()
                 var.set_dataflow_node(node_ref)
 
-    def lookup(
-        self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None
-    ) -> Typeorvalue:
+    def lookup(self, name: str, root: Optional[Namespace] = None, location: Optional[Location] = None) -> Typeorvalue:
         if "::" in name:
-            return self.resolver.lookup(name, root, full_location)
+            return self.resolver.lookup(name, root, location)
         if name in self.slots:
             return self.slots[name]
-        return self.resolver.lookup(name, root, full_location)
+        return self.resolver.lookup(name, root, location)
 
-    def direct_lookup(self, name: str, full_location: Optional[LocatableString] = None) -> ResultVariable:
+    def direct_lookup(self, name: str, location: Optional[Location] = None) -> ResultVariable:
         if name in self.slots:
             return self.slots[name]
         else:
-            raise NotFoundException(full_location, name, f"variable {name} not found")
+            raise NotFoundException(None, name, f"variable {name} not found", location)
 
     def emit(self, queue: QueueScheduler) -> None:
         self.block.emit(self, queue)

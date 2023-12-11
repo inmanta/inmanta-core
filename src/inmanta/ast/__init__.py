@@ -367,9 +367,9 @@ class Namespace(Namespaced):
             raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
         return self.visible_namespaces[name]
 
-    def lookup(self, name: str, full_location: Optional[LocatableString] = None) -> "Union[Type, ResultVariable]":
+    def lookup(self, name: str, location: Optional[Location] = None) -> "Union[Type, ResultVariable]":
         if "::" not in name:
-            return self.get_scope().direct_lookup(name, full_location)
+            return self.get_scope().direct_lookup(name, location)
         parts = name.rsplit("::", 1)
         return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
@@ -617,12 +617,14 @@ class CompilerException(Exception, export.Exportable):
 class RuntimeException(CompilerException):
     """Baseclass for exceptions raised by the compiler after parsing is complete."""
 
-    def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, location: Optional[Location] = None) -> None:
         CompilerException.__init__(self, msg)
         self.stmt = None
         if stmt is not None:
             self.set_location(stmt.get_location())
             self.stmt = stmt
+        if location is not None:
+            self.location = location
 
     def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
         for cause in self.get_causes():
@@ -859,10 +861,12 @@ class CycleException(TypingException):
 
 
 class NotFoundException(RuntimeException):
-    def __init__(self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]" = None) -> None:
+    def __init__(
+        self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]" = None, location: Optional[Location] = None
+    ) -> None:
         if msg is None:
             msg = "could not find value %s" % name
-        RuntimeException.__init__(self, stmt, msg)
+        RuntimeException.__init__(self, stmt, msg, location)
         self.name = name
 
     def importantance(self) -> int:

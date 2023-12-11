@@ -87,7 +87,7 @@ class Reference(ExpressionStatement):
     ) -> dict[object, VariableABC]:
         requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
-        requires[self.name] = resolver.lookup(self.full_name, full_location=self.locatable_name)
+        requires[self.name] = resolver.lookup(self.full_name, location=self.locatable_name.get_location())
         return requires
 
     def requires_emit_gradual(
