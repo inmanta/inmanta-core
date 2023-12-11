@@ -373,10 +373,9 @@ class Namespace(Namespaced):
 
     def lookup(self, name: str, full_location: Optional[LocatableString] = None) -> "Union[Type, ResultVariable]":
         LOGGER.debug(f"ast__init__ lookup for {str(name)} {full_location=}")
-        var_name = str(name)
-        if "::" not in var_name:
+        if "::" not in name:
             return self.get_scope().direct_lookup(name, full_location)
-        parts = var_name.rsplit("::", 1)
+        parts = name.rsplit("::", 1)
         return self.lookup_namespace(parts[0]).target.get_scope().direct_lookup(parts[1])
 
     def get_type(self, typ: LocatableString) -> "Type":
