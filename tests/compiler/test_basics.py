@@ -180,7 +180,6 @@ end
 
 implementation test for Test:
     std::print("This is test {{n}}")
-    #std::print(f"This is test {n}")
 end
 
 implement Test using test

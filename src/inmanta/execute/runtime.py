@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 from abc import abstractmethod
 from collections.abc import Hashable, Sequence
 from typing import TYPE_CHECKING, Deque, Generic, List, Literal, Optional, TypeVar, Union, cast

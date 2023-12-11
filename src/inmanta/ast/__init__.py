@@ -385,8 +385,7 @@ class Namespace(Namespaced):
                 else:
                     raise TypeNotFoundException(typ, ns)
             else:
-                e = TypeNotFoundException(typ, self)
-                raise e
+                raise TypeNotFoundException(typ, self)
         elif name in self.primitives:
             if name == "number":
                 warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
@@ -638,7 +637,7 @@ class RuntimeException(CompilerException):
     def format(self) -> str:
         """Make a string representation of this particular exception"""
         if self.stmt is not None:
-            return f"{self.get_message()} (reported in {str(self.stmt)} ({self.get_location()}))"
+            return f"{self.get_message()} (reported in {self.stmt} ({self.get_location()}))"
         return super().format()
 
 
