@@ -386,7 +386,6 @@ class Namespace(Namespaced):
                     raise TypeNotFoundException(typ, ns)
             else:
                 e = TypeNotFoundException(typ, self)
-                e.freeze()
                 raise e
         elif name in self.primitives:
             if name == "number":
@@ -555,10 +554,6 @@ class CompilerException(Exception, export.Exportable):
         self.msg = msg
         # store root namespace so error reporters can inspect the compiler state
         self.root_ns: Optional[Namespace] = None
-        self._frozen: bool = False
-
-    def freeze(self):
-        self._frozen = True
 
     def set_location(self, location: Location) -> None:
         if self.location is None:
@@ -629,7 +624,7 @@ class RuntimeException(CompilerException):
             self.set_location(stmt.get_location())
             self.stmt = stmt
 
-    def set_statement(self, stmt: "Locatable", replace: bool = True, extend: bool= False) -> None:
+    def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
         for cause in self.get_causes():
             if isinstance(cause, RuntimeException):
                 cause.set_statement(stmt, replace)
@@ -641,9 +636,7 @@ class RuntimeException(CompilerException):
     def format(self) -> str:
         """Make a string representation of this particular exception"""
         if self.stmt is not None:
-            return (
-                f"{self.get_message()} (reported in {str(self.stmt)} ({self.get_location()}))"
-            )
+            return f"{self.get_message()} (reported in {str(self.stmt)} ({self.get_location()}))"
         return super().format()
 
 

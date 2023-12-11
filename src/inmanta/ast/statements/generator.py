@@ -127,7 +127,6 @@ class SubConstructor(RequiresEmitStatement):
             requires.update(self.implements.constraint.requires_emit(resv, queue))
             return requires
         except NotFoundException as e:
-            LOGGER.debug("SUBCONST EXCPETION")
             e.set_statement(self.implements)
             raise e
 
@@ -162,12 +161,6 @@ class SubConstructor(RequiresEmitStatement):
                 # generate a subscope/namespace for each loop
                 xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
                 xc.emit(myqueue)
-                # try:
-                #     xc.emit(myqueue)
-                # except RuntimeException as e:
-                #     e.set_statement(self.implements)
-                #     e.freeze()
-                #     raise e
 
         return None
 

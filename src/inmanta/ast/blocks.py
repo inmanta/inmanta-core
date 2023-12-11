@@ -99,7 +99,6 @@ class BasicBlock:
         ]
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        # breakpoint()
         for s in self.__stmts:
             try:
                 s.emit(resolver, queue)

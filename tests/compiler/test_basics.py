@@ -171,6 +171,7 @@ def test_bad_var(snippetcompiler):
         "variable b not found (reported in a = b ({dir}/main.cf:2:11))",
     )
 
+
 def test_var_not_found_in_implement(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
@@ -186,9 +187,9 @@ implement Test using test
 
 Test()
 """,
-        r'variable n not found (reported in std::print(Format(This is test {{{{n}}}})) '
-         '({dir}/main.cf:6:32))'
+        r"variable n not found (reported in std::print(Format(This is test {{{{n}}}})) " "({dir}/main.cf:6:32))",
     )
+
 
 def test_var_not_found_in_implement_2(snippetcompiler):
     snippetcompiler.setup_for_error(
@@ -205,7 +206,7 @@ implement A using a
 
 A()
 """,
-    r'variable y not found (reported in x = y ({dir}/main.cf:5:9))'
+        r"variable y not found (reported in x = y ({dir}/main.cf:5:9))",
     )
 
 
@@ -234,7 +235,7 @@ implement B using b
 
 A(x=B())
 """,
-    r'variable u not found (reported in std::print(u) ({dir}/main.cf:15:16))'
+        r"variable u not found (reported in std::print(u) ({dir}/main.cf:15:16))",
     )
 
 

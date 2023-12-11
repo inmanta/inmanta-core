@@ -178,7 +178,9 @@ def test_bad_map_lookup(snippetcompiler):
         "key a not found in dict, options are [c] (reported in c = b['a'] ({dir}/main.cf:3))",
     )
 
+
 # ("key a not found in dict, options are [c] (reported in b['a'] '(/tmp/tmpz6kvhsye/main.cf:3))')
+
 
 def test_1168_const_dict(snippetcompiler):
     snippetcompiler.setup_for_snippet(

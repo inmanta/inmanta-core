@@ -87,7 +87,6 @@ class Reference(ExpressionStatement):
     ) -> dict[object, VariableABC]:
         requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
-        LOGGER.debug(f"Reference requires_emit {self.full_name=} {str(self.locatable_name.location)=}")
         requires[self.name] = resolver.lookup(self.full_name, full_location=self.locatable_name)
         return requires
 
