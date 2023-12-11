@@ -650,9 +650,9 @@ class RuntimeException(CompilerException):
         for cause in self.get_causes():
             if isinstance(cause, RuntimeException):
                 cause.set_statement(stmt, replace)
-        if self._frozen:
-            # Exception can no longer be modified
-            return
+        # if self._frozen:
+        #     # Exception can no longer be modified
+        #     return
 
         if replace or self.stmt is None:
             self.set_location(stmt.get_location())

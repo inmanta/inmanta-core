@@ -1020,15 +1020,11 @@ class ExecutionUnit(Waiter):
         try:
             self._unsafe_execute()
         except NotFoundException as e:
+            # In case of a NotFoundException, keep all the info of the exception as is
             raise e
         except RuntimeException as e:
-            # replace = True
-            # if isinstance(self.owner, SubConstructor):
-            # replace=False
-            # e.set_statement(self.owner, extend=True)
-            #
             e.set_statement(self.owner)
-            e.set_location(self.owner.location)
+            e.location = self.owner.location
             raise e
 
     def __repr__(self) -> str:
