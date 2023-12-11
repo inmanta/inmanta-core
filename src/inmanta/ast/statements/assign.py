@@ -564,7 +564,8 @@ class FormattedString(ReferenceStatement):
 
     def __repr__(self) -> str:
         return "Format(%s)" % self._format_string
-
+    def __str__(self) -> str:
+        return self._format_string
 
 class StringFormat(FormattedString):
     """
