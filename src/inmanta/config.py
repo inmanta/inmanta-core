@@ -27,7 +27,7 @@ import uuid
 import warnings
 from collections import abc, defaultdict
 from configparser import ConfigParser, Interpolation, SectionProxy
-from typing import Callable, Dict, Generic, List, Optional, TypeVar, Union, overload
+from typing import Callable, Generic, Optional, TypeVar, Union, overload
 from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend
@@ -51,16 +51,16 @@ def _get_from_env(section: str, name: str) -> Optional[str]:
 class LenientConfigParser(ConfigParser):
     def optionxform(self, name: str) -> str:
         name = _normalize_name(name)
-        return super(LenientConfigParser, self).optionxform(name)
+        return super().optionxform(name)
 
 
-class Config(object):
+class Config:
     __instance: Optional[ConfigParser] = None
     _config_dir: Optional[str] = None  # The directory this config was loaded from
-    __config_definition: Dict[str, Dict[str, "Option"]] = defaultdict(lambda: {})
+    __config_definition: dict[str, dict[str, "Option"]] = defaultdict(dict)
 
     @classmethod
-    def get_config_options(cls) -> Dict[str, Dict[str, "Option"]]:
+    def get_config_options(cls) -> dict[str, dict[str, "Option"]]:
         return cls.__config_definition
 
     @classmethod
@@ -74,7 +74,7 @@ class Config(object):
         Load the configuration file
         """
 
-        cfg_files_in_config_dir: List[str]
+        cfg_files_in_config_dir: list[str]
         if config_dir and os.path.isdir(config_dir):
             cfg_files_in_config_dir = sorted(
                 [os.path.join(config_dir, f) for f in os.listdir(config_dir) if f.endswith(".cfg")]
@@ -82,10 +82,10 @@ class Config(object):
         else:
             cfg_files_in_config_dir = []
 
-        local_dot_inmanta_cfg_files: List[str] = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
+        local_dot_inmanta_cfg_files: list[str] = [os.path.expanduser("~/.inmanta.cfg"), ".inmanta", ".inmanta.cfg"]
 
         # Files with a higher index in the list, override config options defined by files with a lower index
-        files: List[str]
+        files: list[str]
         if min_c_config_file is not None:
             files = [main_cfg_file] + cfg_files_in_config_dir + local_dot_inmanta_cfg_files + [min_c_config_file]
         else:
@@ -180,7 +180,7 @@ class Config(object):
             # raise Exception("Config section %s not defined" % (section))
             return None
         if name not in cls.__config_definition[section]:
-            LOGGER.warning("Config name %s not defined in section %s" % (name, section))
+            LOGGER.warning("Config name %s not defined in section %s", name, section)
             # raise Exception("Config name %s not defined in section %s" % (name, section))
             return None
         opt = cls.__config_definition[section][name]
@@ -230,12 +230,12 @@ def is_bool(value: Union[bool, str]) -> bool:
     return boolean_states[value.lower()]
 
 
-def is_list(value: str) -> List[str]:
+def is_list(value: str) -> list[str]:
     """List of comma-separated values"""
     return [] if value == "" else [x.strip() for x in value.split(",")]
 
 
-def is_map(map_in: str) -> Dict[str, str]:
+def is_map(map_in: str) -> dict[str, str]:
     """List of comma-separated key=value pairs"""
     map_out = {}
     if map_in is not None:
@@ -325,7 +325,7 @@ class Option(Generic[T]):
             has_new_option = cfg.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
                 warnings.warn(
-                    "Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
+                    f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
                     category=DeprecationWarning,
                 )
                 return self.predecessor_option.get()
@@ -410,7 +410,7 @@ feature_file_config = Option("config", "feature-file", None, "The loacation of t
 ###############################
 # Transport Config
 ###############################
-class TransportConfig(object):
+class TransportConfig:
     """
     A class to register the config options for Client classes
     """
@@ -447,13 +447,13 @@ cmdline_rest_transport = TransportConfig("cmdline")
 AUTH_JWT_PREFIX = "auth_jwt_"
 
 
-class AuthJWTConfig(object):
+class AuthJWTConfig:
     """
     Auth JWT configuration manager
     """
 
-    sections: Dict[str, "AuthJWTConfig"] = {}
-    issuers: Dict[str, "AuthJWTConfig"] = {}
+    sections: dict[str, "AuthJWTConfig"] = {}
+    issuers: dict[str, "AuthJWTConfig"] = {}
 
     validate_cert: bool
 
@@ -463,7 +463,7 @@ class AuthJWTConfig(object):
         cls.issuers = {}
 
     @classmethod
-    def list(cls) -> List[str]:
+    def list(cls) -> list[str]:
         """
         Return a list of all defined auth jwt configurations. This method will load new sections if they were added
         since the last invocation.
@@ -545,7 +545,7 @@ class AuthJWTConfig(object):
         elif self.algo.lower() == "rs256":
             self.validate_rs265()
         else:
-            raise ValueError("Algorithm %s in %s is not support " % (self.algo, self.section))
+            raise ValueError(f"Algorithm {self.algo} in {self.section} is not support ")
 
     def validate_generic(self) -> None:
         """
@@ -562,7 +562,7 @@ class AuthJWTConfig(object):
         self.client_types = is_list(self._config["client_types"])
         for ct in self.client_types:
             if ct not in [client_type for client_type in const.ClientType]:
-                raise ValueError("invalid client_type %s in %s" % (ct, self.section))
+                raise ValueError(f"invalid client_type {ct} in {self.section}")
 
         if "expire" in self._config:
             self.expire = is_int(self._config["expire"])
@@ -584,7 +584,7 @@ class AuthJWTConfig(object):
         Validate and parse HS256 algorithm configuration
         """
         if "key" not in self._config:
-            raise ValueError("key is required in %s for algorithm %s" % (self.section, self.algo))
+            raise ValueError(f"key is required in {self.section} for algorithm {self.algo}")
 
         self.key = base64.urlsafe_b64decode((self._config["key"] + "==").encode("ascii"))
         if len(self.key) < 32:
@@ -631,12 +631,13 @@ class AuthJWTConfig(object):
             # HTTPError is raised for non-200 responses; the response
             # can be found in e.response.
             raise ValueError(
-                "Unable to load key data for %s using the provided jwks_uri. Got error: %s" % (self.section, e.response)
+                "Unable to load key data for %s using the provided jwks_uri %s. Got error: %s"
+                % (self.section, self.jwks_uri, e.reason)
             )
         except Exception as e:
             # Other errors are possible, such as IOError.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))
 
-        self.keys: Dict[str, str] = {}
+        self.keys: dict[str, str] = {}
         for key in key_data["keys"]:
             self.keys[key["kid"]] = self._load_public_key(key["e"], key["n"])

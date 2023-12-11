@@ -297,13 +297,16 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
     snippetcompiler.setup_for_snippet(
         textwrap.dedent(
             """
-            entity A: end
+            entity A:
+                string? name = null
+            end
+            A.opt [0:1] -- A
             A.others [0:] -- A
             implement A using std::none
 
             # gradual execution of iterable
-            a = A()
-            b = A(others=[chained for chained in [other for other in a.others]])
+            a = A(name="a")
+            b = A(name="b", others=[chained for chained in [other for other in a.others]])
             a.others += A()
             if b.others is defined:
                 # this seems like bad practice, but it should work as long as the list comprehension is executed gradually.
@@ -311,28 +314,112 @@ def test_list_comprehension_gradual(snippetcompiler) -> None:
             end
 
             # gradual execution of guard
-            x = A()
+            x = A(name="x")
             # again bad practice but asserts gradual execution of the `is defined`
-            y = A(others=[A(), c.others])
-            c = A(others=[candidate for candidate in [x, y] if candidate.others is defined])
+            y = A(name="y", others=[A(), c.others])
+            c = A(name="c", others=[candidate for candidate in [x, y] if candidate.others is defined])
 
             # gradual execution with nested lists in the iterable
-            u = A()
-            v = A(others=[candidate for candidate in [a, [b, c, [x, y, u], u, x], y]])
+            u = A(name="u")
+            v = A(name="v", others=[candidate for candidate in [a, [b, c, [x, y, u], u, x], y]])
             if v.others is defined:
                 # again bad practice but asserts gradual execution of the `is defined`
                 v.others += A()
             end
 
-            count = 2
-            count = std::count(a.others)
-            count = std::count(b.others)
+            # gradual execution with nested for
+            w = A(
+                name="w",
+                others=[
+                    o
+                    for base in v.others
+                    for o in base.others
+                ]
+            )
+            if w.others is defined:
+                # again bad practice but asserts gradual execution of the `is defined`
+                w.others += A()
+            end
+
+            # verify that a constructor expression does not block gradual execution,
+            # which would result in a list modified after freeze
+            dd = A(name="dd", others=[A(), A()])
+            d = A(
+                name="d",
+                others=[
+                    A()
+                    for _ in dd.others
+                ],
+            )
+
+            # verify that attribute references report values correctly and gradually,
+            # both for explicit attribute references and implicit self
+            entity E extends A: end
+            f = A()
+            g = A()
+            h = A()
+            i = A()
+            j = A()
+            k = A()
+            implementation e for E:
+                # implicit relation access (Reference) for optional
+                for x in [opt for _ in [1, 2, 3]]:
+                    # verify that optional relation reference correctly reports to for loop's result collector
+                    f.others += x
+                end
+                # explicit relation access through self (AttributeReference) for optional
+                for x in [self.opt for _ in [1, 2, 3]]:
+                    # verify that optional relation reference correctly reports to for loop's result collector
+                    g.others += x
+                end
+
+                # implicit relation access (Reference) for list relation
+                ha = A()
+                for x in [others for _ in [1, 2, 3]]:
+                    h.others += x
+                    # this only works if the for loop receives its values gradually from the list comprehension
+                    self.others += ha
+                end
+                # explicit relation access through self (AttributeReference) for list relation
+                ia = A()
+                for x in [self.others for _ in [1, 2, 3]]:
+                    i.others += x
+                    # this only works if the for loop receives its values gradually from the list comprehension
+                    self.others += ia
+                end
+            end
+            implement E using e
+            e = E()
+            e.opt = A()
+            e.others = [A()]
+
+            ##############
+            # assertions #
+            ##############
+
+            a_count = 2
+            a_count = std::count(a.others)
+            a_count = std::count(b.others)
 
             c_count = 1
             c_count = std::count(c.others)
 
             v_count = 7
             v_count = std::count(v.others)
+
+            w_count = 5  # a/b's 2 children, c's 1 child, y's 1 extra child, w's 1 extra child
+            w_count = std::count(w.others)
+
+            d_count = 2
+            d_count = std::count(d.others)
+
+            f_count = 1
+            f_count = std::count(f.others)
+            f_count = std::count(g.others)
+
+            h_count = 3  # initial value + ha + ia
+            h_count = std::count(h.others)
+            h_count = std::count(i.others)
             """.strip(
                 "\n"
             )
@@ -520,9 +607,15 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
             ## unknown iterable makes result unknown
             l1 = [x for x in unknown]
 
-            ## unknown in iterable becomes unknown in result
+            ## unknown in iterable becomes unknown in result, value expression is not executed
             l2 = [x for x in [1, 2, unknown]]
+            ## value expression not executed: one of the major motivations for this is that it may lead to "known" values
+            ## as a result of an unknown
+            l21 = [[1, 2, 3] for x in [1, 2, unknown]]
             l3 = [x for x in [1, unknown, 3] if true]
+            l31 = [1 for x in [1, unknown, 3] if true]
+            ## guard expression can filter out unknowns
+            l32 = [x for x in [1, unknown, 3] if not std::is_unknown(x)]
 
             ## unknown in guard expression becomes unknown in result
             l4 = [x for x in [1, 2, 3] if x > 1 or unknown]
@@ -549,37 +642,119 @@ def test_list_comprehension_unknown(snippetcompiler) -> None:
                 if x == 2 or unknown
             ]
 
+            # verify unknowns in gradual execution
+            entity Value:
+                int n
+            end
+            entity Collector: end
+            Collector.values [0:] -- Value
+            implement Value using std::none
+            implement Collector using std::none
+
+            # gradual with CreateList as source -> ListLiteral.listener code path
+            c1 = Collector(
+                values=[
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
+                    for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
+                ]
+            )
+            # same with guard
+            c11 = Collector(
+                values=[
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
+                    for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
+                    if x > 1
+                ]
+            )
+            # same with guard that filters unknown
+            c12 = Collector(
+                values=[
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
+                    for x in [tests::unknown(), tests::unknown(), 1, 2, 3]
+                    if not std::is_unknown(x)
+                ]
+            )
+            # gradual with Reference as source -> ExpressionStatement.execute code path
+            c2 = Collector(
+                values=[
+                    # unknowns should not be passed to value expression
+                    Value(n=x)
+                    for x in l2
+                ]
+            )
+            # gradual with AttributeReference as source -> ResultVariableProxy code path
+            c3_helper = Collector(values=[Value(n=1), tests::unknown()])
+            c3 = Collector(
+                values=[
+                    x
+                    for x in c3_helper.values
+                ]
+            )
+            l10 = std::select(std::key_sort(tests::convert_unknowns(c1.values, Value(n=-1)), "n"), "n")
+            l101 = std::select(std::key_sort(tests::convert_unknowns(c11.values, Value(n=-1)), "n"), "n")
+            l102 = std::select(std::key_sort(tests::convert_unknowns(c12.values, Value(n=-1)), "n"), "n")
+            l11 = std::select(std::key_sort(tests::convert_unknowns(c2.values, Value(n=-1)), "n"), "n")
+            l12 = std::select(std::key_sort(tests::convert_unknowns(c3.values, Value(n=-1)), "n"), "n")
+
             assert = true
-            assert = tests::is_uknown(l1)
-            assert = not tests::is_uknown(l2)
-            assert = not tests::is_uknown(l3)
-            assert = not tests::is_uknown(l4)
-            assert = not tests::is_uknown(l5)
-            assert = not tests::is_uknown(l6)
+            assert = std::is_unknown(l1)
+            assert = not std::is_unknown(l2)
+            assert = not std::is_unknown(l21)
+            assert = not std::is_unknown(l3)
+            assert = not std::is_unknown(l31)
+            assert = not std::is_unknown(l32)
+            assert = not std::is_unknown(l4)
+            assert = not std::is_unknown(l5)
+            assert = not std::is_unknown(l6)
+            assert = not std::is_unknown(l7)
+            assert = not std::is_unknown(l8)
+            assert = not std::is_unknown(l9)
+            assert = not std::is_unknown(l10)
+            assert = not std::is_unknown(l11)
+            assert = not std::is_unknown(l12)
 
             l2_unknowns = [1, 2, "unknown"]
-            l2_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l2]
+            l2_unknowns = tests::convert_unknowns(l2, "unknown")
+
+            l21_unknowns = [1, 2, 3, 1, 2, 3, "unknown"]
+            l21_unknowns = tests::convert_unknowns(l21, "unknown")
 
             l3_unknowns = [1, "unknown", 3]
-            l3_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l3]
+            l3_unknowns = tests::convert_unknowns(l3, "unknown")
+
+            l31_unknowns = [1, "unknown", 1]
+            l31_unknowns = tests::convert_unknowns(l31, "unknown")
+
+            l32 = [1, 3]
 
             l4_unknowns = ["unknown", 2, 3]
-            l4_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l4]
+            l4_unknowns = tests::convert_unknowns(l4, "unknown")
 
             l5_unknowns = [1, "unknown", "unknown"]
-            l5_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l5]
+            l5_unknowns = tests::convert_unknowns(l5, "unknown")
 
             l6_unknowns = ["unknown", 2, "unknown"]
-            l6_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l6]
+            l6_unknowns = tests::convert_unknowns(l6, "unknown")
 
             l7_unknowns = ["unknown", "unknown", "unknown", 1, 2, 3, "unknown", "unknown", "unknown"]
-            l7_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l7]
+            l7_unknowns = tests::convert_unknowns(l7, "unknown")
 
             l8_unknowns = ["unknown", 1, "unknown", "unknown", 2, "unknown", "unknown", 3, "unknown"]
-            l8_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l8]
+            l8_unknowns = tests::convert_unknowns(l8, "unknown")
 
             l9_unknowns = ["unknown", "unknown", "unknown", 1, 2, 3, "unknown", "unknown", "unknown"]
-            l9_unknowns = [tests::is_uknown(element) ? "unknown" : element for element in l9]
+            l9_unknowns = tests::convert_unknowns(l9, "unknown")
+
+            l10 = [-1, -1, 1, 2, 3]
+            l101 = [-1, -1, 2, 3]
+            l102 = [1, 2, 3]
+
+            l11 = [-1, 1, 2]
+
+            l12 = [-1, 1]
             """.strip(
                 "\n"
             )

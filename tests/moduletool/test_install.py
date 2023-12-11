@@ -15,16 +15,16 @@
 
     Contact: code@inmanta.com
 """
-import argparse
 import logging
 import os
 import re
 import shutil
 import subprocess
+from collections.abc import Iterator
 from datetime import datetime
 from importlib.abc import Loader
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Optional
 
 import py
 import pytest
@@ -33,8 +33,9 @@ from pkg_resources import Requirement
 
 from inmanta import compiler, const, env, loader, module
 from inmanta.ast import CompilerException
+from inmanta.command import CLIException
 from inmanta.config import Config
-from inmanta.env import CommandRunner, ConflictingRequirements
+from inmanta.env import CommandRunner, ConflictingRequirements, PipConfig
 from inmanta.module import InmantaModuleRequirement, InstallMode, ModuleLoadingException, ModuleNotFoundException
 from inmanta.moduletool import DummyProject, ModuleConverter, ModuleTool, ProjectTool
 from moduletool.common import BadModProvider, install_project
@@ -44,17 +45,26 @@ from utils import LogSequence, PipIndex, log_contains, module_from_template
 LOGGER = logging.getLogger(__name__)
 
 
-def run_module_install(module_path: str, editable: bool, set_path_argument: bool) -> None:
+def run_module_install(module_path: str, editable: bool = False) -> None:
     """
     Install the Inmanta module (v2) into the active environment using the `inmanta module install` command.
 
     :param module_path: Path to the inmanta module
     :param editable: Install the module in editable mode (pip install -e).
-    :param set_path_argument: If true provide the module_path via the path argument, otherwise the module path is set via cwd.
     """
-    if not set_path_argument:
-        os.chdir(module_path)
-    ModuleTool().execute("install", argparse.Namespace(editable=editable, path=module_path if set_path_argument else None))
+    if editable:
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=module_path, editable=True)],
+            config=PipConfig(use_system_config=True),
+        )
+    else:
+        mod_artifact_path = ModuleTool().build(path=module_path)
+        env.process_env.install_for_config(
+            requirements=[],
+            paths=[env.LocalPackagePath(path=mod_artifact_path)],
+            config=PipConfig(use_system_config=True),
+        )
 
 
 def test_bad_checkout(git_modules_dir, modules_repo):
@@ -206,23 +216,24 @@ def test_dev_checkout(git_modules_dir, modules_repo):
 
 
 @pytest.mark.parametrize_any("editable", [True, False])
-@pytest.mark.parametrize_any("set_path_argument", [True, False])
-def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bool, set_path_argument: bool) -> None:
+def test_module_install(tmpdir, snippetcompiler_clean, modules_v2_dir: str, editable: bool) -> None:
     """
-    Install a simple v2 module with the `inmanta module install` command. Make sure the command works with all possible values
-    for its options.
+    Make sure it is possible to install a module in both non-editable and editable mode
     """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
 
-    module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    source_module_path: str = os.path.join(modules_v2_dir, "minimalv2module")
+    module_path: str = os.path.join(tmpdir, "minimalv2module")
+    shutil.copytree(source_module_path, module_path)
+
     python_module_name: str = "inmanta-module-minimalv2module"
 
     def is_installed(name: str, only_editable: bool = False) -> bool:
         return name in env.process_env.get_installed_packages(only_editable=only_editable)
 
     assert not is_installed(python_module_name)
-    run_module_install(module_path, editable, set_path_argument)
+    run_module_install(module_path, editable)
     assert is_installed(python_module_name, True) == editable
     if not editable:
         assert is_installed(python_module_name, False)
@@ -231,7 +242,7 @@ def test_module_install(snippetcompiler_clean, modules_v2_dir: str, editable: bo
 @pytest.mark.slowtest
 def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetcompiler_clean, modules_v2_dir: str) -> None:
     """
-    Verify that the module tool's install command raises an appropriate exception when a module has conflicting dependencies.
+    Verify that installing a module raises an appropriate exception when a module has conflicting dependencies.
     """
     # activate snippetcompiler's venv
     snippetcompiler_clean.setup_for_snippet("")
@@ -259,10 +270,13 @@ def test_module_install_conflicting_requirements(tmpdir: py.path.local, snippetc
         new_requirements=[InmantaModuleRequirement.parse(name) for name in ("modone", "modtwo")],
     )
 
-    with pytest.raises(module.InvalidModuleException) as exc_info:
-        run_module_install(module_path, False, True)
-    assert isinstance(exc_info.value.__cause__, ConflictingRequirements)
-    assert "caused by:" in exc_info.value.format_trace()
+    with pytest.raises(ConflictingRequirements) as exc_info:
+        run_module_install(module_path, False)
+    assert (
+        "ERROR: Cannot install inmanta-module-modone==1.2.3 and "
+        "inmanta-module-modtwo==1.2.3 because these package versions "
+        "have conflicting dependencies."
+    ) in exc_info.value.format_trace()
 
 
 @pytest.mark.parametrize_any("dev", [True, False])
@@ -290,7 +304,7 @@ def test_module_install_version(
         new_version=module_version,
     )
     os.chdir(project.path)
-    ModuleTool().install(editable=True, path=module_path)
+    run_module_install(module_path)
 
     # check version
     mod: module.Module = ModuleTool().get_module(module_name)
@@ -324,7 +338,7 @@ def test_module_install_reinstall(
         )
 
     # install module
-    ModuleTool().install(editable=False, path=module_path)
+    run_module_install(module_path)
 
     assert not any(new_files_exist())
 
@@ -334,7 +348,7 @@ def test_module_install_reinstall(
     open(os.path.join(model_dir, "newmod.cf"), "w").close()
     open(os.path.join(module_path, const.PLUGINS_PACKAGE, module_name, "newmod.py"), "w").close()
     module_from_template(module_path, new_version=version.Version("2.0.0"), in_place=True)
-    ModuleTool().install(editable=False, path=module_path)
+    run_module_install(module_path)
 
     assert all(new_files_exist())
 
@@ -363,7 +377,7 @@ def test_3322_module_install_deep_data_files(tmpdir: py.path.local, snippetcompi
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    ModuleTool().install(editable=False, path=module_path)
+    run_module_install(module_path)
 
     assert os.path.exists(
         os.path.join(
@@ -407,7 +421,7 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
     snippetcompiler_clean.setup_for_snippet("")
 
     # install module: non-editable mode
-    ModuleTool().install(editable=False, path=module_path)
+    run_module_install(module_path)
     assert model_file_installed()
 
     # remove model file and reinstall
@@ -417,8 +431,22 @@ def test_3322_module_install_preinstall_cleanup(tmpdir: py.path.local, snippetco
         new_version=version.Version("2.0.0"),
         in_place=True,
     )
-    ModuleTool().install(editable=False, path=module_path)
+    run_module_install(module_path)
     assert not model_file_installed()
+
+
+def test_module_install_exception() -> None:
+    """
+    Verify that the "inmanta module install" commands raises an exception
+    """
+
+    with pytest.raises(
+        CLIException,
+        match="The 'inmanta module install' command is no longer supported. For editable mode "
+        "installation, use 'pip install -e .'. For a regular installation, first run 'inmanta module "
+        "build' and then 'pip install ./dist/<dist-package>'.",
+    ):
+        ModuleTool().execute("install", [])
 
 
 def test_project_install_logs(
@@ -464,20 +492,20 @@ def test_project_install_logs(
 def test_project_install(
     local_module_package_index: str,
     snippetcompiler_clean,
-    install_module_names: List[str],
-    module_dependencies: List[str],
+    install_module_names: list[str],
+    module_dependencies: list[str],
 ) -> None:
     """
     Install a simple inmanta project with `inmanta project install`. Make sure both v1 and v2 modules are installed
     as expected.
     """
-    fq_mod_names: List[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
+    fq_mod_names: list[str] = [f"inmanta_plugins.{mod}" for mod in chain(install_module_names, module_dependencies)]
 
     # set up project and modules
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "\n".join(f"import {mod}" for mod in ["std", *install_module_names]),
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         # We add tornado, as there is a code path in update for the case where the project has python requires
         python_requires=["tornado"]
         + [Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in install_module_names],
@@ -492,7 +520,7 @@ def test_project_install(
     ProjectTool().execute("install", [])
 
     for fq_mod_name in fq_mod_names:
-        module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
@@ -553,7 +581,7 @@ def test_project_install_preinstalled(
     )
 
     def assert_module_install() -> None:
-        module_info: Optional[Tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
+        module_info: Optional[tuple[Optional[str], Loader]] = env.process_env.get_module_file(fq_mod_name)
         env_module_file, module_loader = module_info
         assert not isinstance(module_loader, loader.PluginModuleLoader)
         assert env_module_file is not None
@@ -644,7 +672,8 @@ def test_project_install_modules_cache_invalid(
         autostd=False,
         install_project=False,
         add_to_module_path=[libs_dir],
-        python_package_sources=[index.url, local_module_package_index],
+        index_url=index.url,
+        extra_index_url=[local_module_package_index],
         # make sure main module gets installed, pulling in newest version of dependency module
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(main_module))],
     )
@@ -695,7 +724,7 @@ def test_project_install_incompatible_versions(
     v1mod1_path: str = os.path.join(v1_modules_path, "v1mod1")
     shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod1_path)
     with open(os.path.join(v1mod1_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
-        config: Dict[str, object] = yaml.safe_load(fh)
+        config: dict[str, object] = yaml.safe_load(fh)
         config["name"] = "v1mod1"
         config["version"] = str(current_version)
         fh.seek(0)
@@ -703,7 +732,7 @@ def test_project_install_incompatible_versions(
     v1mod2_path: str = os.path.join(v1_modules_path, "v1mod2")
     shutil.copytree(os.path.join(modules_dir, "minimalv1module"), v1mod2_path)
     with open(os.path.join(v1mod2_path, module.ModuleV1.MODULE_FILE), "r+") as fh:
-        config: Dict[str, object] = yaml.safe_load(fh)
+        config: dict[str, object] = yaml.safe_load(fh)
         config["name"] = "v1mod2"
         config["requires"] = [str(req_v1_on_v2), str(req_v1_on_v1)]
         fh.seek(0)
@@ -730,7 +759,7 @@ def test_project_install_incompatible_versions(
         autostd=autostd,
         install_project=False,
         add_to_module_path=[v1_modules_path],
-        python_package_sources=[index.url],
+        index_url=index.url,
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for(v2_mod_name))],
     )
 
@@ -803,7 +832,7 @@ def test_project_install_incompatible_dependencies(
         """,
         autostd=False,
         install_project=False,
-        python_package_sources=[index.url],
+        index_url=index.url,
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
             for metadata in [v2mod2, v2mod3]
@@ -885,7 +914,7 @@ def test_install_from_index_dont_leak_pip_index(
         autostd=False,
         install_project=False,
         # Installing a V2 module requires a python package source.
-        python_package_sources=["unknown"],
+        index_url="unknown",
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
             for metadata in [v2mod1]
@@ -925,12 +954,16 @@ def test_install_with_use_config(
         publish_index=index,
     )
 
-    pip_config_file = os.path.join(tmpdir, "pip.conf")
-    with open(pip_config_file, "w+", encoding="utf-8") as f:
+    pip_config_file = tmpdir / "pip.conf"
+    with pip_config_file.open("w+", encoding="utf-8") as f:
         f.write("[global]\n")
         f.write("timeout = 60\n")
         f.write("index-url = file://" + index.url + "\n")
-    monkeypatch.setenv("PIP_CONFIG_FILE", pip_config_file)
+    monkeypatch.setenv("PIP_CONFIG_FILE", str(pip_config_file))
+    LOGGER.info("Setting PIP_CONFIG_FILE to %s", str(pip_config_file))
+
+    # If we don't unset PIP_INDEX_URL, it will override the config file
+    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
 
     # set up project
     snippetcompiler_clean.setup_for_snippet(
@@ -940,7 +973,7 @@ def test_install_with_use_config(
         autostd=False,
         install_project=False,
         # Installing a V2 module requires a python package source if use_config_file is not True
-        python_package_sources=[index.url] if not use_pip_config else None,
+        index_url=index.url if not use_pip_config else None,
         use_pip_config_file=use_pip_config,
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
@@ -995,6 +1028,9 @@ def test_install_with_use_config_extra_index(
         f.write("index-url = file://" + index.url + "\n")
     monkeypatch.setenv("PIP_CONFIG_FILE", pip_config_file)
 
+    # If we don't unset PIP_INDEX_URL, it will override the config file
+    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
+
     # set up project
     snippetcompiler_clean.setup_for_snippet(
         """
@@ -1004,7 +1040,7 @@ def test_install_with_use_config_extra_index(
         autostd=False,
         install_project=False,
         # Installing a V2 module requires a python package source if use_config_file is not True
-        python_package_sources=[index2.url],
+        extra_index_url=[index2.url],
         use_pip_config_file=True,
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(module.ModuleV2.get_name_from_metadata(metadata)))
@@ -1052,48 +1088,6 @@ def test_install_with_use_config_but_PIP_CONFIG_FILE_not_set(
     assert tmpvenv_active_inherit.are_installed(requirements=["inmanta-module-dummy-module"])
 
 
-@pytest.mark.parametrize_any("install_mode", [None, InstallMode.release, InstallMode.prerelease, InstallMode.master])
-def test_project_install_with_install_mode(
-    tmpdir: py.path.local, modules_v2_dir: str, snippetcompiler_clean, install_mode: Optional[str]
-) -> None:
-    """
-    Test whether the `inmanta module install` command takes into account the `install_mode` configured on the inmanta project.
-    """
-    index: PipIndex = PipIndex(artifact_dir=os.path.join(str(tmpdir), ".custom-index"))
-
-    module_template_path: str = os.path.join(modules_v2_dir, "elaboratev2module")
-    module_name: str = "mod"
-    package_name: str = module.ModuleV2Source.get_package_name_for(module_name)
-    for module_version in ["1.0.0", "1.0.1.dev0"]:
-        module_from_template(
-            module_template_path,
-            os.path.join(str(tmpdir), f"mod-{module_version}"),
-            new_name=module_name,
-            new_version=version.Version(module_version),
-            publish_index=index,
-        )
-
-    # set up project
-    snippetcompiler_clean.setup_for_snippet(
-        f"import {module_name}",
-        autostd=False,
-        python_package_sources=[index.url],
-        python_requires=[Requirement.parse(package_name)],
-        install_mode=install_mode,
-    )
-
-    os.chdir(module.Project.get().path)
-    ProjectTool().execute("install", [])
-
-    if install_mode is None or install_mode == InstallMode.release:
-        expected_version = version.Version("1.0.0")
-    else:
-        expected_version = version.Version("1.0.1.dev0")
-    installed_packages: Dict[str, version.Version] = env.process_env.get_installed_packages()
-    assert package_name in installed_packages
-    assert installed_packages[package_name] == expected_version
-
-
 @pytest.mark.slowtest
 def test_moduletool_list(
     capsys, tmpdir: py.path.local, local_module_package_index: str, snippetcompiler_clean, modules_v2_dir: str
@@ -1133,7 +1127,7 @@ import custom_mod_two
         """.strip(),
         python_package_sources=[local_module_package_index],
         project_requires=[
-            module.InmantaModuleRequirement.parse("std~=4.1.7,<4.1.8"),
+            module.InmantaModuleRequirement.parse("std~=4.3.3,<4.3.4"),
             module.InmantaModuleRequirement.parse("custom_mod_one>0"),
         ],
         python_requires=[
@@ -1155,7 +1149,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 1.0.0          | >0,<999,~=1.0  | yes     |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.1.7          | 4.1.7          | yes     |
+| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -1181,7 +1175,7 @@ import custom_mod_two
 +================+======+==========+================+================+=========+
 | custom_mod_one | v2   | no       | 2.0.0          | >0,<999,~=1.0  | no      |
 | custom_mod_two | v2   | yes      | 1.0.0          | *              | yes     |
-| std            | v1   | yes      | 4.1.7          | 4.1.7          | yes     |
+| std            | v1   | yes      | 4.3.3          | 4.3.3          | yes     |
 +----------------+------+----------+----------------+----------------+---------+
     """.strip()
     )
@@ -1234,11 +1228,11 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
     project: module.Project = snippetcompiler_clean.setup_for_snippet(
         "\n".join(f"import {mod}" for mod in ["std", v2_module]),
         autostd=False,
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
         python_requires=v2_requirements,
         install_project=False,
         project_requires=[
-            module.InmantaModuleRequirement.parse("std==4.1.7"),
+            module.InmantaModuleRequirement.parse("std==4.2.1"),
         ],
     )
 
@@ -1253,7 +1247,7 @@ def test_module_install_logging(local_module_package_index: str, snippetcompiler
         ("Successfully installed module minimalv2module (v2) version 1.2.3", logging.DEBUG),
         ("Installing module std (v1)", logging.DEBUG),
         (
-            """Successfully installed module std (v1) version 4.1.7 in %s from %s"""
+            """Successfully installed module std (v1) version 4.2.1 in %s from %s"""
             % (os.path.join(project.downloadpath, "std"), "https://github.com/inmanta/std"),
             logging.DEBUG,
         ),
@@ -1275,9 +1269,9 @@ def test_real_time_logging(caplog):
     """
     caplog.set_level(logging.DEBUG)
 
-    cmd: List[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
+    cmd: list[str] = ["sh -c 'echo one && sleep 1 && echo two'"]
     return_code: int
-    output: List[str]
+    output: list[str]
     return_code, output = CommandRunner(LOGGER).run_command_and_stream_output(cmd, shell=True)
     assert return_code == 0
 
@@ -1332,7 +1326,8 @@ def test_pip_output(local_module_package_index: str, snippetcompiler_clean, capl
         import {module.ModuleV2.get_name_from_metadata(modtwo)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=v2_requirements,
         install_project=True,
     )
@@ -1407,7 +1402,8 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             import {module.ModuleV2.get_name_from_metadata(parent_module)}
             """,
             autostd=False,
-            python_package_sources=[local_module_package_index, index.url],
+            index_url=local_module_package_index,
+            extra_index_url=[index.url],
             python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
             install_project=True,
         )
@@ -1438,7 +1434,8 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
             import {module.ModuleV2.get_name_from_metadata(parent_module)}
             """,
             autostd=False,
-            python_package_sources=[local_module_package_index, index.url],
+            index_url=local_module_package_index,
+            extra_index_url=[index.url],
             python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
             install_project=True,
         )
@@ -1470,7 +1467,8 @@ def test_no_matching_distribution(local_module_package_index: str, snippetcompil
         import {module.ModuleV2.get_name_from_metadata(parent_module)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("parent_module"))],
         install_project=True,
     )
@@ -1538,7 +1536,8 @@ def test_version_snapshot(local_module_package_index: str, snippetcompiler_clean
         import {module.ModuleV2.get_name_from_metadata(module_b)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_b"))],
         install_project=True,
     )
@@ -1563,7 +1562,8 @@ Modules versions after installation:
         import {module.ModuleV2.get_name_from_metadata(module_c)}
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[Requirement.parse(module.ModuleV2Source.get_package_name_for("module_c"))],
         install_project=True,
     )
@@ -1632,7 +1632,8 @@ def test_constraints_logging_v2(modules_v2_dir, tmpdir, caplog, snippetcompiler_
         import module_b
         """,
         autostd=False,
-        python_package_sources=[local_module_package_index, index.url],
+        index_url=local_module_package_index,
+        extra_index_url=[index.url],
         python_requires=[
             Requirement.parse(module.ModuleV2Source.get_package_name_for(mod)) for mod in ["module_b", "module_a"]
         ],
@@ -1670,15 +1671,15 @@ def test_constraints_logging_v1(caplog, snippetcompiler_clean, local_module_pack
         project_requires=[
             module.InmantaModuleRequirement.parse("std>0.0"),
             module.InmantaModuleRequirement.parse("std>=0.0"),
-            module.InmantaModuleRequirement.parse("std==4.1.7"),
+            module.InmantaModuleRequirement.parse("std==4.2.1"),
             module.InmantaModuleRequirement.parse("std<=100.0.0"),
             module.InmantaModuleRequirement.parse("std<100.0.0"),
         ],
-        python_package_sources=[local_module_package_index],
+        index_url=local_module_package_index,
     )
     log_contains(
         caplog,
         "inmanta.module",
         logging.DEBUG,
-        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.1.7 std<=100.0.0 std<100.0.0)",
+        "Installing module std (v1) (with constraints std>0.0 std>=0.0 std==4.2.1 std<=100.0.0 std<100.0.0)",
     )

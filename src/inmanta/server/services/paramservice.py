@@ -18,9 +18,10 @@
 import datetime
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
+from collections.abc import Sequence
+from typing import Any, Optional, Union, cast
 
-from inmanta import data, util
+from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import InvalidSort
 from inmanta.data.dataview import FactsView, ParameterView
@@ -46,15 +47,15 @@ class ParameterService(protocol.ServerSlice):
     agentmanager: AgentManager
 
     def __init__(self) -> None:
-        super(ParameterService, self).__init__(SLICE_PARAM)
+        super().__init__(SLICE_PARAM)
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
 
-    def get_dependencies(self) -> List[str]:
+    def get_dependencies(self) -> list[str]:
         return [SLICE_SERVER, SLICE_DATABASE, SLICE_AGENT_MANAGER]
 
-    def get_depended_by(self) -> List[str]:
+    def get_depended_by(self) -> list[str]:
         return [SLICE_TRANSPORT]
 
     async def prestart(self, server: protocol.Server) -> None:
@@ -224,10 +225,10 @@ class ParameterService(protocol.ServerSlice):
         return attach_warnings(200, {"parameter": params[0]}, warnings)
 
     @handle(methods.set_parameters, env="tid")
-    async def set_parameters(self, env: data.Environment, parameters: List[Dict[str, Any]]) -> Apireturn:
+    async def set_parameters(self, env: data.Environment, parameters: list[dict[str, Any]]) -> Apireturn:
         recompile = False
 
-        params: List[Tuple[str, ResourceIdStr]] = []
+        params: list[tuple[str, ResourceIdStr]] = []
         for param in parameters:
             name: str = param["id"]
             source = param["source"]
@@ -274,20 +275,20 @@ class ParameterService(protocol.ServerSlice):
         return attach_warnings(200, None, warnings)
 
     @handle(methods.list_params, env="tid")
-    async def list_params(self, env: data.Environment, query: Dict[str, str]) -> Apireturn:
+    async def list_params(self, env: data.Environment, query: dict[str, str]) -> Apireturn:
         params = await data.Parameter.list_parameters(env.id, **query)
         return (
             200,
             {
                 "parameters": params,
                 "expire": self._fact_expire,
-                # Return datetime in UTC without explicit timezone offset
-                "now": util.datetime_utc_isoformat(datetime.datetime.now()),
+                # Serialization happens in the RESTHandler's json encoder
+                "now": datetime.datetime.now().astimezone(),
             },
         )
 
     @handle(methods_v2.get_facts, env="tid")
-    async def get_facts(self, env: data.Environment, rid: ResourceIdStr) -> List[Fact]:
+    async def get_facts(self, env: data.Environment, rid: ResourceIdStr) -> list[Fact]:
         params = await data.Parameter.get_list(environment=env.id, resource_id=rid, order_by_column="name")
         dtos = [param.as_fact() for param in params]
         return dtos
@@ -308,7 +309,7 @@ class ParameterService(protocol.ServerSlice):
         last_id: Optional[uuid.UUID] = None,
         start: Optional[Union[datetime.datetime, str]] = None,
         end: Optional[Union[datetime.datetime, str]] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "name.asc",
     ) -> ReturnValue[Sequence[Parameter]]:
         try:
@@ -336,7 +337,7 @@ class ParameterService(protocol.ServerSlice):
         last_id: Optional[uuid.UUID] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        filter: Optional[Dict[str, List[str]]] = None,
+        filter: Optional[dict[str, list[str]]] = None,
         sort: str = "name.asc",
     ) -> ReturnValue[Sequence[Fact]]:
         try:

@@ -143,4 +143,4 @@ f4.requires = f1
         snippetcompiler.do_export()
 
     cyclenames = [r.id.resource_str() for r in e.value.cycle]
-    assert set(cyclenames) == set(["std::File[Test,path=/f3]", "std::File[Test,path=/f2]", "std::File[Test,path=/f1]"])
+    assert set(cyclenames) == {"std::File[Test,path=/f3]", "std::File[Test,path=/f2]", "std::File[Test,path=/f1]"}

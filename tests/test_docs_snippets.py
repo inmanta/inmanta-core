@@ -139,14 +139,14 @@ async def test_docs_snippets_unmanaged_resources_basic(
     assert result.code == 200
 
     cf_file_path = os.path.join(os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/basic_example.cf")
-    with open(cf_file_path, "r") as fh:
+    with open(cf_file_path) as fh:
         cf_file_content = fh.read()
 
     attributes_discovered_resources = [{"host": "localhost", "interface_name": "eth0", "ip_address": "10.10.10.10"}]
     init_py_path = os.path.join(
         os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/basic_example_handler.py"
     )
-    with open(init_py_path, "r") as fh:
+    with open(init_py_path) as fh:
         init_py_content = fh.read()
     init_py_content = init_py_content.replace("raise NotImplementedError()", f"return {attributes_discovered_resources}")
 
@@ -168,7 +168,7 @@ async def test_docs_snippets_unmanaged_resources_basic(
         my_module::InterfaceDiscovery(host=host)
         """
     )
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)])
+    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await _wait_until_deployment_finishes(client, environment, version=1)
@@ -195,7 +195,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     cf_file_path = os.path.join(
         os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/shared_attributes_example.cf"
     )
-    with open(cf_file_path, "r") as fh:
+    with open(cf_file_path) as fh:
         cf_file_content = fh.read()
 
     attributes_discovered_resources = [
@@ -205,7 +205,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
     init_py_path = os.path.join(
         os.path.dirname(__file__), "../docs/model_developers/unmanaged_resources/shared_attributes_example_handler.py"
     )
-    with open(init_py_path, "r") as fh:
+    with open(init_py_path) as fh:
         init_py_content = fh.read()
     init_py_content = init_py_content.replace("raise NotImplementedError()", "pass", 6)
     init_py_content = init_py_content.replace("raise NotImplementedError()", f"return {attributes_discovered_resources}")
@@ -229,7 +229,7 @@ async def test_docs_snippets_unmanaged_resources_shared_attributes(
         my_module::InterfaceDiscovery(name_filter="eth[1-9]", host=host, credentials=credentials)
         """
     )
-    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)])
+    snippetcompiler.setup_for_snippet(model, add_to_module_path=[str(tmpdir)], use_pip_config_file=True)
     version, _ = await snippetcompiler.do_export_and_deploy()
 
     await _wait_until_deployment_finishes(client, environment, version=1)

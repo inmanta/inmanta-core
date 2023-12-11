@@ -21,7 +21,7 @@ import typing
 from collections import abc
 from itertools import chain
 from string import Formatter
-from typing import Dict, Optional, Tuple, TypeVar
+from typing import Optional, TypeVar
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
@@ -82,7 +82,7 @@ class CreateList(ReferenceStatement):
 
     __slots__ = ("items",)
 
-    def __init__(self, items: typing.List[ExpressionStatement]) -> None:
+    def __init__(self, items: list[ExpressionStatement]) -> None:
         ReferenceStatement.__init__(self, items)
         self.items = items
 
@@ -90,14 +90,15 @@ class CreateList(ReferenceStatement):
         for item in self.items:
             # pass on lhs_attribute to children
             item.normalize(lhs_attribute=lhs_attribute)
+            self.anchors.extend(item.get_anchors())
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: Optional[ResultCollector]
-    ) -> typing.Dict[object, VariableABC]:
+    ) -> dict[object, VariableABC]:
         if resultcollector is None:
             return self.requires_emit(resolver, queue)
 
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # if we are in gradual mode, transform to a list of assignments instead of assignment of a list
         # to get more accurate gradual execution
@@ -123,12 +124,10 @@ class CreateList(ReferenceStatement):
         requires[self] = temp
         return requires
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Create this list
         """
-        super().execute(requires, resolver, queue)
-
         # gradual case, everything is in placeholder
         if self in requires:
             return requires[self]
@@ -153,7 +152,7 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
-    def as_constant(self) -> typing.List[object]:
+    def as_constant(self) -> list[object]:
         return [item.as_constant() for item in self.items]
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -169,7 +168,7 @@ class CreateList(ReferenceStatement):
 class CreateDict(ReferenceStatement):
     __slots__ = ("items",)
 
-    def __init__(self, items: typing.List[typing.Tuple[str, ReferenceStatement]]) -> None:
+    def __init__(self, items: list[tuple[str, ReferenceStatement]]) -> None:
         ReferenceStatement.__init__(self, [x[1] for x in items])
         self.items = items
         seen = {}  # type: typing.Dict[str,ReferenceStatement]
@@ -187,11 +186,10 @@ class CreateDict(ReferenceStatement):
 
         return qlist
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Create this list
         """
-        super().execute(requires, resolver, queue)
         qlist = {}
 
         for i in range(len(self.items)):
@@ -200,7 +198,7 @@ class CreateDict(ReferenceStatement):
 
         return qlist
 
-    def as_constant(self) -> typing.Dict[str, object]:
+    def as_constant(self) -> dict[str, object]:
         return {k: v.as_constant() for k, v in self.items}
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -228,6 +226,9 @@ class SetAttribute(AssignStatement, Resumer):
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # register this assignment as left hand side to the value on the right hand side
         self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
+        self.anchors.extend(self.rhs.get_anchors())
+        if self.lhs is not None:
+            self.anchors.extend(self.lhs.get_anchors())
 
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks
@@ -245,13 +246,11 @@ class SetAttribute(AssignStatement, Resumer):
         # This class still implements custom attribute resolution, rather than using the new VariableReferenceHook mechanism
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
-    def resume(
-        self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
-    ) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         if not isinstance(instance, Instance):
             raise TypingException(
-                self, "The object at %s is not an Entity but a %s with value %s" % (self.instance, type(instance), instance)
+                self, f"The object at {self.instance} is not an Entity but a {type(instance)} with value {instance}"
             )
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
@@ -270,10 +269,10 @@ class SetAttribute(AssignStatement, Resumer):
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 
     def pretty_print(self) -> str:
-        return "%s.%s = %s" % (self.instance.pretty_print(), self.attribute_name, self.value.pretty_print())
+        return f"{self.instance.pretty_print()}.{self.attribute_name} = {self.value.pretty_print()}"
 
     def __str__(self) -> str:
-        return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
+        return f"{str(self.instance)}.{self.attribute_name} = {str(self.value)}"
 
 
 class GradualSetAttributeHelper(ResultCollector[T]):
@@ -310,7 +309,7 @@ class SetAttributeHelper(ExecutionUnit):
         queue_scheduler: QueueScheduler,
         resolver: Resolver,
         result: ResultVariable,
-        requires: typing.Dict[object, ResultVariable],
+        requires: dict[object, ResultVariable],
         expression: ExpressionStatement,
         stmt: Statement,
         instance: Instance,
@@ -378,7 +377,7 @@ class Assign(AssignStatement):
         return f"{self.name} = {self.value.pretty_print()}"
 
     def __repr__(self) -> str:
-        return "Assign(%s, %s)" % (self.name, self.value)
+        return f"Assign({self.name}, {self.value})"
 
     def __str__(self) -> str:
         return f"{self.name} = {self.value}"
@@ -392,13 +391,12 @@ class MapLookup(ReferenceStatement):
     __slots__ = ("themap", "key", "location")
 
     def __init__(self, themap: ExpressionStatement, key: ExpressionStatement):
-        super(MapLookup, self).__init__([themap, key])
+        super().__init__([themap, key])
         self.themap = themap
         self.key = key
         self.location = themap.get_location().merge(key.location)
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         mapv = self.themap.execute(requires, resolver, queue)
         if isinstance(mapv, Unknown):
             return Unknown(self)
@@ -412,7 +410,7 @@ class MapLookup(ReferenceStatement):
             raise TypingException(self, "dict keys must be string, %s is not a string" % keyv)
 
         if keyv not in mapv:
-            raise KeyException(self, "key %s not found in dict, options are [%s]" % (keyv, ",".join(mapv.keys())))
+            raise KeyException(self, "key {} not found in dict, options are [{}]".format(keyv, ",".join(mapv.keys())))
 
         return mapv[keyv]
 
@@ -420,7 +418,7 @@ class MapLookup(ReferenceStatement):
         return dataflow.NodeStub("MapLookup.get_node() placeholder for %s" % self).reference()
 
     def __repr__(self) -> str:
-        return "%s[%s]" % (repr(self.themap), repr(self.key))
+        return f"{repr(self.themap)}[{repr(self.key)}]"
 
 
 class IndexLookup(ReferenceStatement, Resumer):
@@ -433,21 +431,21 @@ class IndexLookup(ReferenceStatement, Resumer):
     def __init__(
         self,
         index_type: LocatableString,
-        query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
-        wrapped_query: typing.List["WrappedKwargs"],
+        query: list[tuple[LocatableString, ExpressionStatement]],
+        wrapped_query: list["WrappedKwargs"],
     ) -> None:
         ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), wrapped_query)))
         self.index_type = index_type
-        self.anchors.append(TypeReferenceAnchor(index_type.namespace, index_type))
         self.query = [(str(n), e) for n, e in query]
-        self.wrapped_query: typing.List["WrappedKwargs"] = wrapped_query
+        self.wrapped_query: list["WrappedKwargs"] = wrapped_query
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
+        self.anchors.append(TypeReferenceAnchor(self.index_type.namespace, self.index_type))
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)
@@ -455,9 +453,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         requires[self] = temp
         return requires
 
-    def resume(
-        self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
-    ) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         self.type.lookup_index(
             list(
                 chain(
@@ -469,8 +465,7 @@ class IndexLookup(ReferenceStatement, Resumer):
             target,
         )
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
@@ -480,7 +475,7 @@ class IndexLookup(ReferenceStatement, Resumer):
         """
         The representation of this statement
         """
-        return "%s[%s]" % (self.index_type, ",".join([repr(x) for x in chain([self.query], self.wrapped_query)]))
+        return "{}[{}]".format(self.index_type, ",".join([repr(x) for x in chain([self.query], self.wrapped_query)]))
 
 
 class ShortIndexLookup(IndexLookup):
@@ -497,23 +492,21 @@ class ShortIndexLookup(IndexLookup):
         self,
         rootobject: ExpressionStatement,
         relation: LocatableString,
-        query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]],
-        wrapped_query: typing.List["WrappedKwargs"],
+        query: list[tuple[LocatableString, ExpressionStatement]],
+        wrapped_query: list["WrappedKwargs"],
     ):
         ReferenceStatement.__init__(self, list(chain((v for (_, v) in query), [rootobject], wrapped_query)))
         self.rootobject = rootobject
         self.relation = str(relation)
-        self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
-        self.wrapped_querypart: typing.List["WrappedKwargs"] = wrapped_query
+        self.querypart: list[tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
+        self.wrapped_querypart: list["WrappedKwargs"] = wrapped_query
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         # currently there is no way to get the type of an expression prior to evaluation
         self.type = None
 
-    def resume(
-        self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable
-    ) -> None:
+    def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
         root_object = self.rootobject.execute(requires, resolver, queue)
 
         if not isinstance(root_object, Instance):
@@ -548,7 +541,7 @@ class ShortIndexLookup(IndexLookup):
         """
         The representation of this statement
         """
-        return "%s.%s[%s]" % (
+        return "{}.{}[{}]".format(
             self.rootobject,
             self.relation,
             ",".join(repr(part) for part in chain([self.querypart], self.wrapped_querypart)),
@@ -560,7 +553,7 @@ class FormattedString(ReferenceStatement):
     This class is an abstraction around a string containing references to variables.
     """
 
-    __slots__ = ("_format_string", "_variables")
+    __slots__ = ("_format_string",)
 
     def __init__(self, format_string: str, variables: abc.Sequence["Reference"]) -> None:
         super().__init__(variables)
@@ -578,14 +571,13 @@ class StringFormat(FormattedString):
     Create a new string by doing a string interpolation
     """
 
-    __slots__ = ()
+    __slots__ = ("_variables",)
 
-    def __init__(self, format_string: str, variables: abc.Sequence[Tuple["Reference", str]]) -> None:
+    def __init__(self, format_string: str, variables: abc.Sequence[tuple["Reference", str]]) -> None:
         super().__init__(format_string, [k for (k, _) in variables])
         self._variables = variables
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)
@@ -603,7 +595,7 @@ class FStringFormatter(Formatter):
     def __init__(self) -> None:
         Formatter.__init__(self)
 
-    def get_field(self, key: str, args: abc.Sequence[object], kwds: abc.Mapping[str, object]) -> Tuple[object, str]:
+    def get_field(self, key: str, args: abc.Sequence[object], kwds: abc.Mapping[str, object]) -> tuple[object, str]:
         """
         Overrides Formatter.get_field. Composite variable names are expected to be resolved at this point and can be
         retrieved by their full name.
@@ -614,30 +606,35 @@ class FStringFormatter(Formatter):
 class StringFormatV2(FormattedString):
     """
     Create a new string by using python build in formatting
+
     """
 
-    __slots__ = ()
+    __slots__ = ("_variables",)
 
-    def __init__(self, format_string: str, variables: abc.Sequence[typing.Tuple["Reference", str]]) -> None:
+    def __init__(self, format_string: str, variables: abc.Sequence[tuple["Reference", str]]) -> None:
+        """
+        :param format_string: The string on which to perform substitution
+        :param variables: Sequence of tuples each holding a normalized reference (i.e. stripped of eventual whitespaces ) to a
+         variable to substitute in the format_string and the raw full name of this variable (i.e. including potential
+         whitespaces).
+        """
         only_refs: abc.Sequence["Reference"] = [k for (k, _) in variables]
         super().__init__(format_string, only_refs)
-        self._variables = only_refs
+        self._variables: abc.Mapping[Reference, str] = {ref: full_name for (ref, full_name) in variables}
 
-    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         formatter: FStringFormatter = FStringFormatter()
 
         # We can't cache the formatter because it has no ability to cache the parsed string
 
         kwargs = {}
-        for _var in self._variables:
+        for _var, full_name in self._variables.items():
             value = _var.execute(requires, resolver, queue)
             if isinstance(value, Unknown):
                 return Unknown(self)
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
-
-            kwargs[_var.full_name] = value
+            kwargs[full_name] = value
 
         result_string = formatter.vformat(self._format_string, args=[], kwargs=kwargs)
 

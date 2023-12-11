@@ -100,6 +100,14 @@ async def test_resource_sets_via_put_version(server, client, environment, client
     expected_resource_sets = {**resource_sets, "test::Resource[agent1,key=key4]": None}
     assert resource_sets_from_db == expected_resource_sets
 
+    # also assert pip config can be None on put_version
+    pip_config_result = await client.get_pip_config(
+        tid=environment,
+        version=version,
+    )
+    assert pip_config_result.code == 200
+    assert pip_config_result.result["data"] is None
+
 
 async def test_put_partial_version_allocation(server, client, environment, clienthelper) -> None:
     """
@@ -185,6 +193,11 @@ async def test_put_partial_version_allocation(server, client, environment, clien
         model = await data.ConfigurationModel.get_version(environment, version)
         assert model is not None
         assert model.partial_base == version - 1
+
+    # also assert pip config can be None on put_partial
+    pip_config_result = await client.get_pip_config(tid=environment, version=full_version + 2)
+    assert pip_config_result.code == 200
+    assert pip_config_result.result["data"] is None
 
 
 async def test_put_partial_replace_resource_set(server, client, environment, clienthelper):
@@ -1191,7 +1204,7 @@ async def test_put_partial_removed_rs_in_rs(server, client, environment, clienth
     }
 
 
-async def test_put_partial_with_resource_state_set(server, client, environment, clienthelper) -> None:
+async def test_put_partial_with_resource_state_set(server, client, environment, clienthelper, agent) -> None:
     """
     Test whether the put_partial() endpoint correctly merges the resource states of two resource sets.
     """
@@ -1217,8 +1230,6 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
     }
     resource_states = {
         "test::Resource[agent1,key=key1]": const.ResourceState.undefined,
-        "test::Resource[agent1,key=key2]": const.ResourceState.deploying,
-        "test::Resource[agent1,key=key3]": const.ResourceState.deployed,
         "test::Resource[agent1,key=key4]": const.ResourceState.available,
         "test::Resource[agent1,key=key5]": const.ResourceState.undefined,
     }
@@ -1232,7 +1243,31 @@ async def test_put_partial_with_resource_state_set(server, client, environment, 
         compiler_version=get_compiler_version(),
         resource_sets=resource_sets,
     )
-    assert result.code == 200
+    assert result.code == 200, result.result
+
+    # set key2 to deploying
+    result = await agent._client.resource_deploy_start(
+        tid=environment, rvid=f"test::Resource[agent1,key=key2],v={version}", action_id=uuid.uuid4()
+    )
+    assert result.code == 200, result.result
+
+    # Set key 3 to deployed
+
+    action_id = uuid.uuid4()
+    result = await agent._client.resource_deploy_start(
+        tid=environment, rvid=f"test::Resource[agent1,key=key3],v={version}", action_id=action_id
+    )
+    assert result.code == 200, result.result
+    result = await agent._client.resource_deploy_done(
+        tid=environment,
+        rvid=f"test::Resource[agent1,key=key3],v={version}",
+        action_id=action_id,
+        status=const.ResourceState.deployed,
+        messages=[],
+        changes={},
+        change=const.Change.nochange,
+    )
+    assert result.code == 200, result.result
 
     # Partial compile
     resources_partial = [

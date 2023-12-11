@@ -24,7 +24,7 @@ import time
 import uuid
 from collections import abc
 from datetime import timezone
-from typing import Dict, List, Optional, Type, cast
+from typing import Optional, cast
 
 import asyncpg
 import pytest
@@ -110,7 +110,7 @@ async def test_db_schema_enum_consistency(init_dataclasses_and_load_schema) -> N
     """
     Verify that enumeration fields defined in data document objects match values defined in the db schema.
     """
-    all_db_document_classes: abc.Set[Type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
+    all_db_document_classes: abc.Set[type[data.BaseDocument]] = utils.get_all_subclasses(data.BaseDocument) - {
         data.BaseDocument
     }
     for cls in all_db_document_classes:
@@ -348,7 +348,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
-    await env.delete_cascade(only_content=True)
+    await env.clear()
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
@@ -398,7 +398,7 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    async def assert_setting_in_db(expected_autostart_agent_map: Dict[str, object]) -> None:
+    async def assert_setting_in_db(expected_autostart_agent_map: dict[str, object]) -> None:
         """
         Verify that the state of the setting.autostart_agent_map setting in the database matches the given
         expected_autostart_agent_map dictionary.
@@ -420,33 +420,6 @@ async def test_population_settings_dict_on_get_of_setting(init_dataclasses_and_l
     # Make sure that get for autostart_agent_map on env_obj2 object doesn't override setting with default value.
     assert await env_obj2.get(data.AUTOSTART_AGENT_MAP) == autostart_agent_map
     assert assert_setting_in_db(autostart_agent_map)
-
-
-async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
-    project = data.Project(name="proj")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    for deprecated_option, new_option, old_value, new_value in [
-        (data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL, 22, "23"),
-        (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 22, 23),
-    ]:
-        await env.set(deprecated_option, old_value)
-        caplog.clear()
-        assert (await env.get(new_option)) == old_value
-        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) in caplog.text
-
-        await env.set(new_option, new_value)
-        caplog.clear()
-        assert (await env.get(new_option)) == new_value
-        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
-
-        await env.unset(deprecated_option)
-        caplog.clear()
-        assert (await env.get(new_option)) == new_value
-        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
 
 async def test_agent_process(init_dataclasses_and_load_schema):
@@ -517,7 +490,7 @@ async def test_agentprocess_cleanup(init_dataclasses_and_load_schema, postgresql
     now = datetime.datetime.now()
 
     async def insert_agent_proc_and_instances(
-        env_id: uuid.UUID, hostname: str, expired_proc: Optional[datetime.datetime], expired_instances: List[datetime.datetime]
+        env_id: uuid.UUID, hostname: str, expired_proc: Optional[datetime.datetime], expired_instances: list[datetime.datetime]
     ) -> None:
         agent_proc = data.AgentProcess(hostname=hostname, environment=env_id, expired=expired_proc, sid=uuid.uuid4())
         await agent_proc.insert()
@@ -751,7 +724,7 @@ async def test_pause_all_agent_in_environment(init_dataclasses_and_load_schema):
     await data.Agent(environment=env2.id, name="agent3", last_failover=datetime.datetime.now(), paused=False).insert()
     agents_in_env1 = ["agent1", "agent2"]
 
-    async def assert_paused(env_paused_map: Dict[uuid.UUID, bool]) -> None:
+    async def assert_paused(env_paused_map: dict[uuid.UUID, bool]) -> None:
         for env_id, paused in env_paused_map.items():
             agents = await data.Agent.get_list(environment=env_id)
             assert all([a.paused == paused for a in agents])
@@ -1745,7 +1718,7 @@ async def test_get_resource_type_count_for_latest_version(init_dataclasses_and_l
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    async def assert_expected_count(expected_report: Dict[str, int]):
+    async def assert_expected_count(expected_report: dict[str, int]):
         # Checks the expected_report against the actual one
         report = await data.Resource.get_resource_type_count_for_latest_version(env.id)
         assert report == expected_report
@@ -3074,7 +3047,7 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     async def assert_last_non_deploying_state(
         environment: uuid.UUID,
         resource_version_id: ResourceVersionIdStr,
-        expected_states: Dict[ResourceVersionIdStr, const.ResourceState],
+        expected_states: dict[ResourceVersionIdStr, const.ResourceState],
     ) -> None:
         rvid_to_resource_state = await data.Resource.get_last_non_deploying_state_for_dependencies(
             environment=environment, resource_version_id=Id.parse_id(resource_version_id)

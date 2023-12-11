@@ -25,7 +25,7 @@ import sys
 import zipfile
 from importlib.machinery import ModuleSpec
 from types import ModuleType
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 from pytest import MonkeyPatch
@@ -173,8 +173,8 @@ def test_build_v2_module_incomplete_package_data(tmpdir, modules_v2_dir: str, ca
 
     # Rewrite the MANIFEST.in file
     manifest_file: str = os.path.join(module_copy_dir, "MANIFEST.in")
-    lines: List[str]
-    with open(manifest_file, "r") as fd:
+    lines: list[str]
+    with open(manifest_file) as fd:
         lines = fd.read().splitlines()
     with open(manifest_file, "w") as fd:
         fd.write("\n".join(line for line in lines if "/model" not in line))
