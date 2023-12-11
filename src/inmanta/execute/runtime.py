@@ -1128,10 +1128,6 @@ class Resolver:
     def lookup(self, name: str, root: Optional[Namespace] = None, full_location: Optional[LocatableString] = None) -> Typeorvalue:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
-        LOGGER.debug(f"runtime.py lookup for {str(name)}")
-        LOGGER.debug(f"runtime.py {root=}")
-        LOGGER.debug(f"runtime.py {self.namespace=}")
-        LOGGER.debug(f"runtime.py {full_location=}")
         if root is not None:
             ns = root
         else:
@@ -1236,8 +1232,7 @@ class ExecutionContext(Resolver):
         if name in self.slots:
             return self.slots[name]
         else:
-            e =  NotFoundException(full_location, name, f"variable {name} not found" )
-            # e.freeze()
+            e = NotFoundException(full_location, name, f"variable {name} not found" )
             raise e
 
     def emit(self, queue: QueueScheduler) -> None:
