@@ -570,11 +570,11 @@ class CompilerException(Exception, export.Exportable):
     def set_location(self, location: Location) -> None:
         if self.location is None:
             self.location = location
-        else:
-            if self._frozen:
-                return
-            else:
-                self.location = location
+        # else:
+        #     if self._frozen:
+        #         return
+        #     else:
+        #         self.location = location
 
     def get_message(self) -> str:
         return self.msg

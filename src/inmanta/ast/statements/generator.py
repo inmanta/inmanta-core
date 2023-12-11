@@ -161,12 +161,13 @@ class SubConstructor(RequiresEmitStatement):
             if instance.add_implementation(impl):
                 # generate a subscope/namespace for each loop
                 xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
-                try:
-                    xc.emit(myqueue)
-                except RuntimeException as e:
-                    e.set_statement(self.implements)
-                    e.freeze()
-                    raise e
+                xc.emit(myqueue)
+                # try:
+                #     xc.emit(myqueue)
+                # except RuntimeException as e:
+                #     e.set_statement(self.implements)
+                #     e.freeze()
+                #     raise e
 
         return None
 
