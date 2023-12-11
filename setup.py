@@ -34,7 +34,7 @@ requires = [
     "setuptools",
     "texttable~=1.0",
     "tornado~=6.0",
-    "typing-extensions~=4.8.0",
+    "typing-extensions>=4.8,<4.10",
     # lower bound because of ilevkivskyi/typing_inspect#100
     "typing_inspect~=0.9",
     "ruamel.yaml~=0.17",
