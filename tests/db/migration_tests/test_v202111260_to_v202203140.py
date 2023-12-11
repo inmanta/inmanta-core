@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import AsyncIterator, Awaitable, Callable, List
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 import pytest
 from asyncpg import Connection
@@ -33,7 +33,7 @@ async def migrate_v202111260_to_v202203140(
     Returns a callable that performs a v202111260 database restore and migrates to v202203140.
     """
     # Get old tables
-    with open(os.path.join(os.path.dirname(__file__), "dumps/v202111260.sql"), "r") as fh:
+    with open(os.path.join(os.path.dirname(__file__), "dumps/v202111260.sql")) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
 
     ibl = InmantaBootloader()
@@ -46,7 +46,7 @@ async def migrate_v202111260_to_v202203140(
 @pytest.mark.slowtest
 async def test_added_notification_table(
     migrate_v202111260_to_v202203140: Callable[[], Awaitable[None]],
-    get_tables_in_db: Callable[[], Awaitable[List[str]]],
+    get_tables_in_db: Callable[[], Awaitable[list[str]]],
 ) -> None:
     """
     Test whether the notification table was added

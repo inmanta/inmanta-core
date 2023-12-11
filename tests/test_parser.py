@@ -18,7 +18,6 @@
 import logging
 import re
 import warnings
-from typing import List
 
 import pytest
 
@@ -141,7 +140,7 @@ entity Test extends Foo, foo::sub::Bar:
     \"\"\"
     string hello
     bool bar = true
-    number? ten=5
+    int? ten=5
 end
 """
         % documentation
@@ -427,7 +426,7 @@ implement Test using parents  \""" testc \"""
     "implementations",
     [["parents", "std::none"], ["std::none", "parents"], ["i1", "parents", "i2"], ["std::none"], ["i1", "i2"]],
 )
-def test_implements_parent_in_list(implementations: List[str]):
+def test_implements_parent_in_list(implementations: list[str]):
     statements = parse_code(
         """
 implement Test using %s
@@ -604,7 +603,7 @@ index File(host, path)
     stmt = statements[0]
     assert isinstance(stmt, DefineIndex)
     assert str(stmt.type) == "File"
-    assert stmt.attributes == ["host", "path"]
+    assert [str(a) for a in stmt.attributes] == ["host", "path"]
 
 
 def test_ctr():

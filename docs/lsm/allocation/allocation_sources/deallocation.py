@@ -6,7 +6,7 @@
     :license: Inmanta EULA
 """
 import os
-from typing import Optional, Tuple
+from typing import Optional
 from uuid import UUID
 
 import psycopg2
@@ -104,7 +104,7 @@ class PGAllocationResource(PurgeableResource):
 @provider("vlan_assignment::PGAllocation", name="pgallocation")
 class PGAllocation(CRUDHandler[PGAllocationResource]):
     def __init__(self, *args, **kwargs):
-        super(PGAllocation, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._allocator = PGServiceIdAllocator(attribute="vlan_id")
 
     def pre(self, ctx: handler.HandlerContext, resource: PGAllocationResource) -> None:

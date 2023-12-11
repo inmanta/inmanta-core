@@ -20,7 +20,7 @@
 
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from inmanta import const, data, resources
 from inmanta.data import model
@@ -59,7 +59,7 @@ async def convert_resource_version_id(rvid: model.ResourceVersionIdStr, metadata
         raise exceptions.BadRequest(f"Invalid resource version id: {rvid}")
 
 
-ENV_OPTS: Dict[str, ArgOption] = {
+ENV_OPTS: dict[str, ArgOption] = {
     "tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)
 }
 AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
@@ -73,21 +73,26 @@ def create_project(name: str, project_id: uuid.UUID = None):
     Create a new project
 
     :param name: The name of the project
-    :param project_id: A unique uuid, when it is not provided the server generates one
+    :param project_id: Optional. A unique uuid, when it is not provided the server generates one
     """
 
 
 @method(path="/project/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_project(id: uuid.UUID, name: str):
     """
-    Modify the given project
+    Modify the given project.
+
+    :param id: The id of the project to modify.
+    :param name: The new name for the project.
     """
 
 
 @method(path="/project/<id>", operation="DELETE", client_types=[const.ClientType.api])
 def delete_project(id: uuid.UUID):
     """
-    Delete the given project and all related data
+    Delete the given project and all related data.
+
+    :param id: The id of the project to be deleted.
     """
 
 
@@ -101,7 +106,9 @@ def list_projects():
 @method(path="/project/<id>", operation="GET", client_types=[const.ClientType.api])
 def get_project(id: uuid.UUID):
     """
-    Get a project and a list of the ids of all environments
+    Get a project and a list of the ids of all environments.
+
+    :param id: The id of the project to retrieve.
     """
 
 
@@ -114,22 +121,24 @@ def create_environment(
     Create a new environment
 
     :param project_id: The id of the project this environment belongs to
-    :param name: The name of the environment
-    :param repository: The url (in git form) of the repository
-    :param branch: The name of the branch in the repository
-    :param environment_id: A unique environment id, if none an id is allocated by the server
+    :param name: The name of the environment.
+    :param repository: Optional. The URL of the repository.
+    :param branch: Optional. The name of the branch in the repository.
+    :param environment_id: Optional. A unique environment id, if none an id is allocated by the server.
     """
 
 
 @method(path="/environment/<id>", operation="POST", client_types=[const.ClientType.api])
 def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch: str = None):
     """
-    Modify the given environment
+    Modify the given environment.
 
-    :param id: The id of the environment
-    :param name: The name of the environment
-    :param repository: The url (in git form) of the repository
-    :param branch: The name of the branch in the repository
+    :param id: The id of the environment to modify.
+    :param name: The new name for the environment.
+    :param repository: Optional. The URL of the repository.
+    :param branch: Optional. The name of the branch in the repository.
+
+    If 'repository' or 'branch' is provided as None, the corresponding attribute of the environment remains unchanged.
     """
 
 
@@ -138,7 +147,7 @@ def delete_environment(id: uuid.UUID):
     """
     Delete the given environment and all related data.
 
-    :param id: The uuid of the environment.
+    :param id: The id of the environment to be deleted.
 
     :raises NotFound: The given environment doesn't exist.
     :raises Forbidden: The given environment is protected.
@@ -160,11 +169,13 @@ def list_environments():
 )
 def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     """
-    Get an environment and all versions associated
+    Get an environment and all versions associated.
 
-    :param id: The id of the environment to return
-    :param versions: Include this many available version for this environment.
-    :param resources: Include this many available resources for this environment.
+    :param id: The id of the environment to return.
+    :param versions: Optional. If provided and greater than 0, include this many of the most recent versions for this
+                     environment, ordered in descending order of their version number.
+                     If not provided or 0, no version information is included.
+    :param resources: Optional. If provided and greater than 0, include a summary of the resources in the environment.
     """
 
 
@@ -183,6 +194,8 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
 def list_settings(tid: uuid.UUID):
     """
     List the settings in the current environment ordered by name alphabetically.
+
+    :param tid: The id of the environment to list settings for.
     """
 
 
@@ -196,7 +209,11 @@ def list_settings(tid: uuid.UUID):
 )
 def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType]):
     """
-    Set a value
+    Set a value for a setting.
+
+    :param tid: The id of the environment.
+    :param id: The id of the setting to set.
+    :param value: The value to set for the setting.
     """
 
 
@@ -210,7 +227,10 @@ def set_setting(tid: uuid.UUID, id: str, value: Union[PrimitiveTypes, JsonType])
 )
 def get_setting(tid: uuid.UUID, id: str):
     """
-    Get a value
+    Get the value of a setting.
+
+    :param tid: The id of the environment.
+    :param id: The id of the setting to retrieve.
     """
 
 
@@ -224,7 +244,11 @@ def get_setting(tid: uuid.UUID, id: str):
 )
 def delete_setting(tid: uuid.UUID, id: str):
     """
-    Delete a value
+    Restore the given setting to its default value.
+
+    :param tid: The id of the environment from which the setting is to be deleted.
+    :param id: The key of the setting to delete.
+
     """
 
 
@@ -239,13 +263,12 @@ def delete_setting(tid: uuid.UUID, id: str):
 )
 def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
-    Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
-    environment.
+    Create or get a new token for the given client types.
 
-    :param tid: The environment id
-    :param client_types: The client types for which this token is valid (api, agent, compiler)
-    :param idempotent: The token should be idempotent, such tokens do not have an expire or issued at set so their
-                       value will not change.
+    :param tid: The environment id.
+    :param client_types: The client types for which this token is valid (api, agent, compiler).
+    :param idempotent: Optional. The token should be idempotent, meaning it does not have an expire or issued at set,
+                       so its value will not change.
     """
 
 
@@ -280,9 +303,12 @@ def decomission_environment(id: uuid.UUID, metadata: dict = None):
 )
 def clear_environment(id: uuid.UUID):
     """
-    Clear all data from this environment.
+    Clears an environment by removing most of its associated data.
+    This method deletes various components associated with the specified environment from the database,
+    including agents, compile data, parameters, notifications, code, resources, and configuration models.
+    However, it retains the entry in the Environment table itself and settings are kept.
 
-    :param id: The uuid of the environment.
+    :param id: The id of the environment to be cleared.
 
     :raises NotFound: The given environment doesn't exist.
     :raises Forbidden: The given environment is protected.
@@ -307,7 +333,7 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
     :param tid: The environment this node and its agents belongs to
     :param endpoint_names: The names of the endpoints on this node
     :param nodename: The name of the node from which the heart beat comes
-    :param no_hang: don't use this call for long polling, but for connectivity check
+    :param no_hang: Optional. don't use this call for long polling, but for connectivity check
 
     also registered as API method, because it is called with an invalid SID the first time
     """
@@ -392,7 +418,7 @@ def stat_files(files: list):
     """
     Check which files exist in the given list
 
-    :param files: A list of file id to check
+    :param files: A list of file ids to check
     :return: A list of files that do not exist.
     """
 
@@ -417,13 +443,14 @@ def get_resource(
 
     :param tid: The id of the environment this resource belongs to
     :param id: Get the resource with the given resource version id
-    :param logs: Include the logs in the response
-    :param status: Only return the status of the resource
-    :param log_action: The log action to include, leave empty/none for all actions. Valid actions are one of
+    :param logs: Optional. Include the logs in the response
+    :param status: Optional. Only return the status of the resource
+    :param log_action: Optional. The log action to include, leave empty/none for all actions. Valid actions are one of
                       the action strings in const.ResourceAction
-    :param log_limit: Limit the number of logs included in the response, up to a maximum of 1000.
+    :param log_limit: Optional. Limit the number of logs included in the response, up to a maximum of 1000.
                       To retrieve more entries, use  /api/v2/resource_actions
                       (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
+                      If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -434,12 +461,12 @@ def get_resources_for_agent(
     """
     Return the most recent state for the resources associated with agent, or the version requested
 
-    :param tid: The id of the environment this resource belongs to
-    :param agent: The agent
-    :param sid: Session id of the agent (transparently added by agent client)
-    :param version: The version to retrieve. If none, the latest available version is returned. With a specific version
-                    that version is returned, even if it has not been released yet.
-    :param incremental_deploy: Indicates whether the server should only return the resources that changed since the
+    :param tid: The environment ID this resource belongs to.
+    :param agent: The agent name.
+    :param sid: Optional. Session id of the agent (transparently added by agent client).
+    :param version: Optional. The version to retrieve. If none, the latest available version is returned. With a specific
+                    version that version is returned, even if it has not been released yet.
+    :param incremental_deploy: Optional. Indicates whether the server should only return the resources that changed since the
                                previous deployment.
     """
 
@@ -465,16 +492,16 @@ def resource_action_update(
     :param resource_ids: The resource with the given resource_version_id id from the agent
     :param action_id: A unique id to indicate the resource action that has be updated
     :param action: The action performed
-    :param started: The timestamp when this action was started. When this action (action_id) has not been saved yet,
+    :param started: Optional. The timestamp when this action was started. When this action (action_id) has not been saved yet,
                     started has to be defined.
-    :param finished: The timestamp when this action was finished. Afterwards, no changes with the same action_id
+    :param finished: Optional. The timestamp when this action was finished. Afterwards, no changes with the same action_id
                     can be stored. The status field also has to be set.
-    :param status: The current status of the resource (if known)
-    :param messages: A list of log entries to add to this entry.
-    :param change:s A dict of changes to this resource. The key of this dict indicates the attributes/fields that
+    :param status: Optional. The current status of the resource (if known)
+    :param messages: Optional. A list of log entries to add to this entry.
+    :param changes: Optional. A dict of changes to this resource. The key of this dict indicates the attributes/fields that
                    have been changed. The value contains the new value and/or the original value.
-    :param change: The result of the changes
-    :param send_events: [DEPRECATED] The value of this field is not used anymore.
+    :param change: Optional. The result of the changes
+    :param send_events: Optional. [DEPRECATED] The value of this field is not used anymore.
     """
 
 
@@ -487,8 +514,9 @@ def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     Returns a list of all available versions, ordered by version number, descending
 
     :param tid: The id of the environment
-    :param start: Optional, parameter to control the amount of results that are returned. 0 is the latest version.
-    :param limit: Optional, parameter to control the amount of results returned, up to a maximum of 1000.
+    :param start: Optional. parameter to control the amount of results that are returned. 0 is the latest version.
+    :param limit: Optional. parameter to control the amount of results returned, up to a maximum of 1000.
+                  If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -499,12 +527,13 @@ def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: 
 
     :param tid: The id of the environment
     :param id: The id of the version to retrieve
-    :param include_logs: If true, a log of all operations on all resources is included
-    :param log_filter: Filter log to only include actions of the specified type
-    :param limit: The maximal number of actions to return per resource (starting from the latest),
+    :param include_logs: Optional. If true, a log of all operations on all resources is included
+    :param log_filter: Optional. Filter log to only include actions of the specified type
+    :param limit: Optional. The maximal number of actions to return per resource (starting from the latest),
                     up to a maximum of 1000.
                     To retrieve more entries, use /api/v2/resource_actions
                     (:func:`~inmanta.protocol.methods_v2.get_resource_actions`)
+                    If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -527,7 +556,7 @@ def put_version(
     unknowns: list = None,
     version_info: dict = None,
     compiler_version: str = None,
-    resource_sets: Dict[model.ResourceIdStr, Optional[str]] = {},
+    resource_sets: dict[model.ResourceIdStr, Optional[str]] = {},
 ):
     """
     Store a new version of the configuration model
@@ -539,10 +568,10 @@ def put_version(
     :param resources: A list of all resources in the configuration model (deployable)
     :param resource_state: A dictionary with the initial const.ResourceState per resource id. The ResourceState should be set
                            to undefined when the resource depends on an unknown or available when it doesn't.
-    :param unknowns: A list of unknown parameters that caused the model to be incomplete
-    :param version_info: Module version information
-    :param compiler_version: version of the compiler, if not provided, this call will return an error
-    :param resource_sets: a dictionary describing which resource belongs to which resource set
+    :param unknowns: Optional. A list of unknown parameters that caused the model to be incomplete
+    :param version_info: Optional. Module version information
+    :param compiler_version: Optional. version of the compiler, if not provided, this call will return an error
+    :param resource_sets: Optional. a dictionary describing which resource belongs to which resource set
     """
 
 
@@ -556,7 +585,7 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_m
     :param tid: The id of the environment
     :param id: The version of the CM to deploy
     :param push: Notify all agents to deploy the version
-    :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy when
+    :param agent_trigger_method: Optional. Indicates whether the agents should perform a full or an incremental deploy when
                                 push is true.
 
      :return: Returns the following status codes:
@@ -600,7 +629,7 @@ def dryrun_list(tid: uuid.UUID, version: int = None):
     Get the list of dry runs for an environment. The results are sorted by dry run id.
 
     :param tid: The id of the environment
-    :param version: Only for this version
+    :param version: Optional. Only for this version
     """
 
 
@@ -653,6 +682,9 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
 def notify_change_get(id: uuid.UUID, update: bool = True):
     """
     Simplified GET version of the POST method
+
+    :param id: The id of the environment.
+    :param update: Optional. Indicates whether to update the model code and modules. Defaults to true.
     """
 
 
@@ -667,8 +699,8 @@ def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     Notify the server that the repository of the environment with the given id, has changed.
 
     :param id: The id of the environment
-    :param update: Update the model code and modules. Default value is true
-    :param metadata: The metadata that indicates the source of the compilation trigger.
+    :param update: Optional. Update the model code and modules. Default value is true
+    :param metadata: Optional. The metadata that indicates the source of the compilation trigger.
     """
 
 
@@ -696,7 +728,7 @@ def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
 
     :param tid: The id of the environment
     :param id: The name of the parameter
-    :param resource_id: Optionally, scope the parameter to resource (fact),
+    :param resource_id: Optional. scope the parameter to resource (fact),
                         if the resource id should not contain a version, the latest version is used
     :return: Returns the following status codes:
             200: The parameter content is returned
@@ -727,11 +759,11 @@ def set_param(
 
     :param tid: The id of the environment
     :param id: The name of the parameter
-    :param resource_id: Optionally, scope the parameter to resource (fact)
     :param source: The source of the parameter.
     :param value: The value of the parameter
-    :param metadata: metadata about the parameter
-    :param recompile: Whether to trigger a recompile
+    :param resource_id: Optional. Scope the parameter to resource (fact)
+    :param metadata: Optional. Metadata about the parameter
+    :param recompile: Optional. Whether to trigger a recompile
     """
 
 
@@ -747,7 +779,7 @@ def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
 
     :param tid: The id of the environment
     :param id: The name of the parameter
-    :param resource_id: The resource id of the parameter
+    :param resource_id: Optional. The resource id of the parameter
     """
 
 
@@ -759,7 +791,7 @@ def list_params(tid: uuid.UUID, query: dict = {}):
     List/query parameters in this environment. The results are ordered alphabetically by parameter name.
 
     :param tid: The id of the environment
-    :param query: A query to match against metadata
+    :param query: Optional. A query to match against metadata
     """
 
 
@@ -804,21 +836,27 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 @method(path="/code/<id>", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=[const.ClientType.agent])
 def get_code(tid: uuid.UUID, id: int, resource: str):
     """
-    Get the code for a given version of the configuration model
+    Retrieve the source code associated with a specific version of a configuration model for a given resource in an environment.
 
-    :param tid: The environment the code belongs to
-    :param id: The id (version) of the configuration model
+    :param tid: The id of the environment to which the code belongs.
+    :param id: The version number of the configuration model.
+    :param resource: The identifier of the resource. This should be a resource ID, not a resource version ID.
     """
 
 
 @method(path="/codebatched/<id>", operation="PUT", arg_options=ENV_OPTS, client_types=[const.ClientType.compiler])
 def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     """
-    Upload the supporting code to the server
+    Upload batches of code for various resources associated with a specific version of a configuration model in an environment.
 
-    :param tid: The environment the code belongs to
-    :param id: The id (version) of the configuration model
-    :param resource: a dict mapping resources to dicts mapping file names to file hashes
+    :param tid: The id of the environment to which the code belongs.
+    :param id: The version number of the configuration model.
+    :param resources: A dictionary where each key is a string representing a resource type.
+                  For each resource type, the value is a dictionary. This nested dictionary's keys are file names,
+                  and each key maps to a tuple. This tuple contains three elements: the file name, the module name,
+                  and a list of requirements.
+
+    The endpoint validates that all provided file references are valid and checks for conflicts with existing code entries.
     """
 
 
@@ -826,9 +864,14 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
 
 
 @method(path="/filediff", client_types=[const.ClientType.api])
-def diff(a: str, b: str):
+def diff(file_id_1: str, file_id_2: str):
     """
     Returns the diff of the files with the two given ids
+
+    :param file_id_1: The identifier of the first file.
+    :param file_id_2: The identifier of the second file.
+
+    :return: A string representing the diff between the two files.
     """
 
 
@@ -841,9 +884,10 @@ def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     Return compile reports newer then start
 
     :param tid: The id of the environment to get a report from
-    :param start: Reports after start
-    :param end: Reports before end
-    :param limit: Maximum number of results, up to a maximum of 1000
+    :param start: Optional. Reports after start
+    :param end: Optional. Reports before end
+    :param limit: Optional. Maximum number of results, up to a maximum of 1000
+                  If None, a default limit (set to 1000) is applied.
     """
 
 
@@ -866,11 +910,12 @@ def list_agent_processes(
     """
     Return a list of all nodes and the agents for these nodes
 
-    :param environment: An optional environment. If set, only the agents that belong to this environment are returned
-    :param expired: Optional, also show expired processes, otherwise only living processes are shown.
-    :param start: Agent processes after start (sorted by sid in ASC)
-    :param end: Agent processes before end (sorted by sid in ASC)
-    :param limit: Maximum number of results, up to a maximum of 1000
+    :param environment: Optional. An optional environment. If set, only the agents that belong to this environment are returned
+    :param expired: Optional. if true show expired processes, otherwise only living processes are shown. True by default
+    :param start: Optional. Agent processes after start (sorted by sid in ASC)
+    :param end: Optional. Agent processes before end (sorted by sid in ASC)
+    :param limit: Optional. Maximum number of results, up to a maximum of 1000
+                  If None, a default limit (set to 1000) is applied.
 
     :raises BadRequest: limit parameter can not exceed 1000
     :raises NotFound: The given environment id does not exist!
@@ -907,9 +952,10 @@ def list_agents(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     List all agent for an environment
 
     :param tid: The environment the agents are defined in
-    :param start: Agent after start (sorted by name in ASC)
-    :param end: Agent before end (sorted by name in ASC)
-    :param limit: Maximum number of results, up to a maximum of 1000
+    :param start: Optional. Agent after start (sorted by name in ASC)
+    :param end: Optional. Agent before end (sorted by name in ASC)
+    :param limit: Optional. Maximum number of results, up to a maximum of 1000.
+                  If None, a default limit (set to 1000) is applied.
 
     :raises BadRequest: limit parameter can not exceed 1000
     :raises NotFound: The given environment id does not exist!
@@ -935,6 +981,9 @@ def get_status():
 def set_state(agent: str, enabled: bool):
     """
     Set the state of the agent.
+
+    :param agent: The name of the agent.
+    :param enabled: A boolean value indicating whether the agent should be paused (enabled=False) or unpaused (enabled=True).
     """
 
 
@@ -952,7 +1001,9 @@ def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
 # Methods to send event to the server
 
 
-@method(path="/event/<id>", operation="PUT", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/event/<id>", operation="PUT", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[], reply=False
+)
 def resource_event(
     tid: uuid.UUID, id: str, resource: str, send_events: bool, state: const.ResourceState, change: const.Change, changes={}
 ):
@@ -965,7 +1016,7 @@ def resource_event(
     :param send_events: [DEPRECATED] The value of this field is not used anymore.
     :param state: State the resource acquired (deployed, skipped, canceled)
     :param change: The change that was made to the resource
-    :param changes: The changes made to the resource
+    :param changes: Optional. The changes made to the resource
     """
 
 
@@ -976,6 +1027,10 @@ def resource_event(
 def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
     Get the state for this agent.
+
+    :param tid: The id of the environment.
+    :param sid: The session ID associated with this agent.
+    :param agent: The name of the agent.
 
     :return: A map with key enabled and value a boolean.
     """
@@ -996,7 +1051,12 @@ def get_server_status() -> model.StatusResponse:
     api_version=1,
     envelope_key="queue",
 )
-def get_compile_queue(tid: uuid.UUID) -> List[model.CompileRun]:
+def get_compile_queue(tid: uuid.UUID) -> list[model.CompileRun]:
     """
     Get the current compiler queue on the server, ordered by increasing `requested` timestamp.
+
+    :param tid: The id of the environment for which to retrieve the compile queue.
+
+    :return: A list of CompileRun objects representing the current state of the compiler queue,
+             with each entry detailing a specific compile run.
     """

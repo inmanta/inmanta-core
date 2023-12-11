@@ -1,0 +1,8 @@
+description: 'Compiler: fixed bugs in some operators when "Unknown" values are passed: `==`, `!=`, `not`, `in` and `is defined` now properly propagate unknowns.'
+change-type: patch
+issue-nr: 6033
+sections:
+  bugfix: "{{description}}"
+destination-branches:
+  - master
+  - iso6

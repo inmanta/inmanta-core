@@ -142,7 +142,7 @@ def test_context_manager():
 
 
 def test_multi_threaded():
-    class Spy(object):
+    class Spy:
         def __init__(self):
             self.created = 0
             self.deleted = 0
@@ -291,7 +291,7 @@ def test_get_or_else_none():
         called.append("x")
         return param
 
-    class Sequencer(object):
+    class Sequencer:
         def __init__(self, sequence):
             self.seq = sequence
             self.count = 0
@@ -340,7 +340,7 @@ def test_decorator():
 
     xcache = AgentCache()
 
-    class DT(object):
+    class DT:
         def __init__(self, cache):
             self.cache = cache
             self.count = 0

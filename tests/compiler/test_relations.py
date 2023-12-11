@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import pytest
 
@@ -166,7 +166,7 @@ def test_m_to_n(snippetcompiler):
         """
 entity LogFile:
   string name
-  number members
+  int members
 end
 
 implement LogFile using std::none
@@ -650,7 +650,7 @@ a.ns = null
         (("a.others = null", "a.others = [A(), A()]"), False),
     ],
 )
-def test_relation_null_multiple_assignments(snippetcompiler, statements: Tuple[str, str], valid: bool) -> None:
+def test_relation_null_multiple_assignments(snippetcompiler, statements: tuple[str, str], valid: bool) -> None:
     snippetcompiler.setup_for_snippet(
         f"""
 entity A:

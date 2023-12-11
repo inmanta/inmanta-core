@@ -24,7 +24,8 @@ import shutil
 import subprocess
 import sys
 import warnings
-from typing import Iterator, Optional, Type
+from collections.abc import Iterator
+from typing import Optional
 
 import py
 import pytest
@@ -144,7 +145,7 @@ def test_get_module_metadata_file_not_found(tmp_working_dir: py.path.local):
 
 
 @pytest.mark.parametrize("module_type", [module.ModuleV1, module.ModuleV2])
-def test_rewrite(tmpdir, module_type: Type[module.Module]):
+def test_rewrite(tmpdir, module_type: type[module.Module]):
     v1: bool = module_type.GENERATION == module.ModuleGeneration.V1
     module_path = tmpdir.join("mod").mkdir()
     model = module_path.join("model").mkdir()
@@ -298,7 +299,7 @@ def test_module_corruption(git_modules_dir: str, modules_repo: str, tmpdir):
     projectyml = os.path.join(proj, "project.yml")
     assert os.path.exists(projectyml)
 
-    with open(projectyml, "r", encoding="utf-8") as fh:
+    with open(projectyml, encoding="utf-8") as fh:
         pyml = yaml.safe_load(fh)
 
     pyml["requires"] = ["mod10 == 3.5"]

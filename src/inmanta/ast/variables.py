@@ -18,7 +18,7 @@
 
 import logging
 from collections import abc
-from typing import Dict, Generic, List, Optional, TypeVar
+from typing import Generic, Optional, TypeVar, Union
 
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import LocatableString, Location, NotFoundException, OptionalValueException, Range, RuntimeException
@@ -41,8 +41,9 @@ from inmanta.execute.runtime import (
     ResultVariable,
     ResultVariableProxy,
     VariableABC,
+    WrappedValueVariable,
 )
-from inmanta.execute.util import NoneValue
+from inmanta.execute.util import NoneValue, Unknown
 from inmanta.parser import ParserException
 from inmanta.stable_api import stable_api
 
@@ -78,28 +79,30 @@ class Reference(ExpressionStatement):
                 e.set_statement(self)
                 raise
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return [self.full_name]
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
-    ) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = super().requires_emit(resolver, queue)
+    ) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
         # FIXME: may be done more efficient?
         requires[self.name] = resolver.lookup(self.full_name)
         return requires
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector, *, propagate_unset: bool = False
-    ) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
-        var: ResultVariable = resolver.lookup(self.full_name)
-        var.listener(resultcollector, self.location)
-        requires[self.name] = var
-        return requires
+    ) -> dict[object, VariableABC]:
+        result: dict[object, VariableABC] = self.requires_emit(resolver, queue, propagate_unset=propagate_unset)
+        var: VariableABC = result[self.name]
+        assert isinstance(var, ResultVariable)
+        listener_registered: bool = var.listener(resultcollector, self.location)
+        if not listener_registered:
+            # pass on resultcollector for explicit reporting in execute
+            result[(self, ResultCollector)] = WrappedValueVariable(resultcollector)
+        return result
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -164,13 +167,11 @@ class VariableReader(VariableResumer, Generic[T]):
     Optionally subscribes a result collector to intermediate values.
     """
 
-    __slots__ = ("owner", "target", "resultcollector")
+    __slots__ = ("target",)
 
-    def __init__(self, owner: Statement, target: ResultVariableProxy[T], resultcollector: Optional[ResultCollector[T]]) -> None:
+    def __init__(self, target: ResultVariableProxy[T]) -> None:
         super().__init__()
-        self.owner: Statement = owner
         self.target: ResultVariableProxy[T] = target
-        self.resultcollector: Optional[ResultCollector[T]] = resultcollector
 
     def variable_resume(
         self,
@@ -178,8 +179,6 @@ class VariableReader(VariableResumer, Generic[T]):
         resolver: Resolver,
         queue_scheduler: QueueScheduler,
     ) -> None:
-        if self.resultcollector:
-            variable.listener(self.resultcollector, self.owner.location)
         self.target.connect(variable)
 
 
@@ -204,6 +203,9 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
         Gradually receive an assignment to the referenced variable. Sets the target variable to True because to receive a single
         value implies that the variable is defined.
         """
+        if isinstance(value, Unknown):
+            # value may or may not be defined, nothing can be decided yet
+            return False
         self.target.set_value(True, self.owner.location)
         return True
 
@@ -221,17 +223,24 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
             # wait for variable completeness in case no value comes in at all
             RawUnit(queue_scheduler, resolver, {self: variable}, self, override_exception_location=False)
 
-    def resume(self, requires: Dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         self.target.set_value(self._target_value(requires[self]), self.owner.location)
 
-    def _target_value(self, variable: VariableABC[object]) -> bool:
+    def _target_value(self, variable: VariableABC[object]) -> Union[bool, Unknown]:
         """
         Returns the target value based on the attribute variable's value or absence of a value.
         """
         try:
             value = variable.get_value()
+            if isinstance(value, Unknown):
+                return Unknown(self)
             if isinstance(value, list):
-                return len(value) != 0
+                if len(value) == 0:
+                    return False
+                elif all(isinstance(v, Unknown) for v in value):
+                    return Unknown(self)
+                else:
+                    return True
             elif isinstance(value, NoneValue):
                 return False
             return True
@@ -241,7 +250,7 @@ class IsDefinedGradual(VariableResumer, RawResumer, ResultCollector[object]):
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
 
@@ -262,7 +271,7 @@ class AttributeReference(Reference):
             attribute.end,
         )
         reference: LocatableString = LocatableString(
-            "%s.%s" % (instance.full_name, attribute), range, instance.locatable_name.lexpos, instance.namespace
+            f"{instance.full_name}.{attribute}", range, instance.locatable_name.lexpos, instance.namespace
         )
         Reference.__init__(self, reference)
         self.attribute = attribute
@@ -270,12 +279,12 @@ class AttributeReference(Reference):
         # a reference to the instance
         self.instance = instance
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return self.instance.requires()
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
-    ) -> Dict[object, VariableABC]:
+    ) -> dict[object, VariableABC]:
         return self.requires_emit_gradual(resolver, queue, None, propagate_unset=propagate_unset)
 
     def requires_emit_gradual(
@@ -285,15 +294,17 @@ class AttributeReference(Reference):
         resultcollector: Optional[ResultCollector],
         *,
         propagate_unset: bool = False,
-    ) -> Dict[object, VariableABC]:
-        requires: Dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
+    ) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
 
         # The tricky one!
 
-        # introduce temp variable to contain the eventual result of this stmt
-        temp = ResultVariableProxy()
+        # introduce proxy variable to point to the eventual result of this stmt
+        proxy: ResultVariableProxy[object] = ResultVariableProxy(
+            listener=(resultcollector, self.location) if resultcollector is not None else None,
+        )
         # construct waiter
-        reader: VariableReader = VariableReader(owner=self, target=temp, resultcollector=resultcollector)
+        reader: VariableReader = VariableReader(target=proxy)
         hook: VariableReferenceHook = VariableReferenceHook(
             self.instance,
             str(self.attribute),
@@ -303,12 +314,11 @@ class AttributeReference(Reference):
         self.copy_location(hook)
         hook.schedule(resolver, queue)
         # wait for the attribute value
-        requires[self] = temp
+        requires[self] = proxy
 
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        ExpressionStatement.execute(self, requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 
@@ -331,4 +341,4 @@ class AttributeReference(Reference):
         return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
 
     def __repr__(self) -> str:
-        return "%s.%s" % (repr(self.instance), str(self.attribute))
+        return f"{repr(self.instance)}.{str(self.attribute)}"

@@ -21,7 +21,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from re import sub
-from typing import Any, Dict, List
+from typing import Any
 from uuid import UUID, uuid4
 
 import utils
@@ -36,7 +36,7 @@ from inmanta.util import get_compiler_version
 from utils import assert_no_warning
 
 
-class MultiVersionSetup(object):
+class MultiVersionSetup:
     """
     create scenarios by describing the history of a resource, from newest to oldest state
 
@@ -56,13 +56,13 @@ class MultiVersionSetup(object):
 
     def __init__(self):
         self.firstversion: int = 100
-        self.versions: List[List[Dict[str, Any]]] = [[] for _ in range(100)]
-        self.states: Dict[str, ResourceState] = {}
-        self.states_per_version: Dict[int, Dict[str, ResourceState]] = defaultdict(dict)
-        self.results: Dict[str, List[str]] = defaultdict(lambda: [])
+        self.versions: list[list[dict[str, Any]]] = [[] for _ in range(100)]
+        self.states: dict[str, ResourceState] = {}
+        self.states_per_version: dict[int, dict[str, ResourceState]] = defaultdict(dict)
+        self.results: dict[str, list[str]] = defaultdict(list)
         self.sid = uuid4()
 
-    def get_version(self, v: int) -> List[Dict[str, Any]]:
+    def get_version(self, v: int) -> list[dict[str, Any]]:
         return self.versions[v]
 
     def expand_code(self, code: str) -> ResourceState:
@@ -93,7 +93,7 @@ class MultiVersionSetup(object):
         assert False, f"Unknown code {code}"
 
     def make_resource(
-        self, name: str, value: str, version: int, agent: str = "agent1", requires: List[str] = [], send_event: bool = False
+        self, name: str, value: str, version: int, agent: str = "agent1", requires: list[str] = [], send_event: bool = False
     ) -> str:
         """
         requires: list of resource identifiers
@@ -113,7 +113,7 @@ class MultiVersionSetup(object):
         self, name: str, scenario: str, increment: bool, agent="agent1", requires=[], send_event: bool = False
     ) -> str:
         v = self.firstversion
-        rid = "test::Resource[%s,key=%s]" % (agent, name)
+        rid = f"test::Resource[{agent},key={name}]"
 
         if increment:
             self.results[agent].append(rid)

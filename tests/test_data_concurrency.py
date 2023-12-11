@@ -26,7 +26,7 @@ import asyncio
 import datetime
 import uuid
 from collections import abc
-from typing import Optional, Type, TypeVar
+from typing import Optional, TypeVar
 
 import asyncpg
 import pytest
@@ -39,7 +39,7 @@ from inmanta.protocol.common import Result
 def slowdown_queries(
     monkeypatch,
     *,
-    cls: Type[data.BaseDocument] = data.BaseDocument,
+    cls: type[data.BaseDocument] = data.BaseDocument,
     query_funcs: Optional[abc.Collection[str]] = None,
     delay: float = 1,
 ) -> None:

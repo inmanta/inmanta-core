@@ -26,6 +26,14 @@ from inmanta.types import PrimitiveTypes
 
 
 @stable_api
+def regex_string(regex: str) -> object:
+    """
+    Returns a pydantic-compatible string type that validates values with the given Python regex.
+    """
+    return pydantic.constr(regex=regex)
+
+
+@stable_api
 def validate_type(
     fq_type_name: str, value: PrimitiveTypes, validation_parameters: Optional[abc.Mapping[str, object]] = None
 ) -> None:

@@ -22,8 +22,9 @@ import itertools
 import logging
 import uuid
 from collections import abc
+from collections.abc import Iterator
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import inmanta.ast.entity
 import inmanta.ast.type as inmanta_type
@@ -86,7 +87,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class SubConstructor(ExpressionStatement):
+class SubConstructor(RequiresEmitStatement):
     """
     This statement selects an implementation for a given object and
     imports the statements
@@ -119,8 +120,8 @@ class SubConstructor(ExpressionStatement):
         #     if promise.get_root_variable() not in injected_variables
         # ]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
-        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         try:
             resv = resolver.for_namespace(self.implements.constraint.namespace)
             requires.update(self.implements.constraint.requires_emit(resv, queue))
@@ -129,7 +130,7 @@ class SubConstructor(ExpressionStatement):
             e.set_statement(self.implements)
             raise e
 
-    def execute(self, requires: Dict[object, object], instance: Instance, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], instance: Instance, queue: QueueScheduler) -> object:
         """
         Evaluate this statement
         """
@@ -164,7 +165,7 @@ class SubConstructor(ExpressionStatement):
         return None
 
     def pretty_print(self) -> str:
-        return "implement %s using %s when %s" % (
+        return "implement {} using {} when {}".format(
             self.type,
             ",".join(i.name for i in self.implements.implementations),
             self.implements.constraint.pretty_print(),
@@ -187,6 +188,9 @@ class GradualFor(ResultCollector[object]):
         self.seen: set[int] = set()
 
     def receive_result(self, value: object, location: Location) -> bool:
+        if isinstance(value, Unknown):
+            # skip unknowns
+            return False
         if id(value) in self.seen:
             return False
         self.seen.add(id(value))
@@ -214,8 +218,6 @@ class For(RequiresEmitStatement):
         self.loop_var = str(loop_var)
         self.loop_var_loc = loop_var.get_location()
         self.module = module
-        self.anchors.extend(module.get_anchors())
-        self.anchors.extend(variable.get_anchors())
 
     def __repr__(self) -> str:
         return "For(%s)" % self.loop_var
@@ -224,6 +226,8 @@ class For(RequiresEmitStatement):
         self.base.normalize()
         # self.loop_var.normalize(resolver)
         self.module.normalize()
+        self.anchors.extend(self.base.get_anchors())
+        self.anchors.extend(self.module.get_anchors())
         self.module.add_var(self.loop_var, self)
         self._own_eager_promises = self.module.get_eager_promises()
 
@@ -231,7 +235,7 @@ class For(RequiresEmitStatement):
         return chain(super().get_all_eager_promises(), self.base.get_all_eager_promises())
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
-        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
 
         # pass context via requires!
         helper = GradualFor(self, resolver, queue)
@@ -241,26 +245,17 @@ class For(RequiresEmitStatement):
 
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Evaluate this statement.
         """
         super().execute(requires, resolver, queue)
         var = self.base.execute(requires, resolver, queue)
 
-        if isinstance(var, Unknown):
-            return None
-
-        if not isinstance(var, list):
+        if not isinstance(var, (list, Unknown)):
             raise TypingException(self, "A for loop can only be applied to lists and relations")
 
-        helper = requires[self]
-        assert isinstance(helper, GradualFor)
-
-        for loop_var in var:
-            # generate a subscope/namespace for each loop
-            helper.receive_result(loop_var, self.location)
-
+        # we're done here: base's execute has reported results to helper
         return None
 
     def nested_blocks(self) -> Iterator["BasicBlock"]:
@@ -286,6 +281,12 @@ class ListComprehension(RawResumer, ExpressionStatement):
         self.loop_var: LocatableString = loop_var
         self.iterable: ExpressionStatement = iterable
         self.guard: Optional[ExpressionStatement] = guard
+
+    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
+        self.value_expression.normalize(lhs_attribute=lhs_attribute)
+        self.iterable.normalize()
+        if self.guard is not None:
+            self.guard.normalize()
         self.anchors.extend(
             itertools.chain(
                 self.value_expression.get_anchors(),
@@ -293,12 +294,6 @@ class ListComprehension(RawResumer, ExpressionStatement):
                 (self.guard.get_anchors() if self.guard is not None else ()),
             )
         )
-
-    def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
-        self.value_expression.normalize(lhs_attribute=lhs_attribute)
-        self.iterable.normalize()
-        if self.guard is not None:
-            self.guard.normalize()
 
     def requires(self) -> list[str]:
         # exclude loop var, unless it shadows an occurrence in iterable
@@ -373,8 +368,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         else:
             collector_helper.complete(iterable, resolver, queue)
 
-    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # at this point the resumer signalled the helper we were done and the helper waited for all value expressions
         # => just fetch the result
         return requires[self]
@@ -419,7 +413,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         return [result for element in iterable if (result := process(element)) is not None]
 
     def pretty_print(self) -> str:
-        return "[%s for %s in %s%s]" % (
+        return "[{} for {} in {}{}]".format(
             self.value_expression.pretty_print(),
             self.loop_var,
             self.iterable.pretty_print(),
@@ -430,7 +424,7 @@ class ListComprehension(RawResumer, ExpressionStatement):
         return self.pretty_print()
 
     def __repr__(self) -> str:
-        return "ListComprehension(value_expression=%s, loop_var=%s, iterable=%s, guard=%s)" % (
+        return "ListComprehension(value_expression={}, loop_var={}, iterable={}, guard={})".format(
             repr(self.value_expression),
             repr(self.loop_var),
             repr(self.iterable),
@@ -438,11 +432,30 @@ class ListComprehension(RawResumer, ExpressionStatement):
         )
 
 
-LIST_COMPREHENSION_GUARDED = object()
-"""
-Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
-expression for an element should not be executed because the element was filtered by the guard.
-"""
+class ListComprehensionGuard(Literal):
+    """
+    Representation of the else expression for a list comprehension guard. This statement is an expression in the sense that
+    it behaves like one but its return value represents that a subexpression should be filtered out rather than an actual
+    DSL-compatible value. This special value must always be caught by the statement that creates the guard. This expression
+    must never be exposed directly in the DSL.
+    """
+
+    __slots__ = ()
+
+    GUARD = object()
+    """
+    Artificial value used in the else branch of the list comprehension guard's conditional expression. Indicates that the value
+    expression for an element should not be executed because the element was filtered by the guard.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(self.GUARD)
+
+    def requires_emit_gradual(
+        self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
+    ) -> dict[object, VariableABC[object]]:
+        # this statement represents the absence of a result => don't pass on resultcollector
+        return self.requires_emit(resolver, queue)
 
 
 class ListComprehensionCollector(RawResumer, ResultCollector[object]):
@@ -501,16 +514,24 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         result_variable: ResultVariable[object] = ResultVariable()
         self._results.append(result_variable)
 
+        # propagate unknowns without executing value expression while still allowing to filter them out with the guard
+        value_expression: ExpressionStatement
+        if isinstance(value, Unknown):
+            value_expression = Literal(value)
+            self.statement.copy_location(value_expression)
+        else:
+            value_expression = self.statement.value_expression
+
         # execute the value expression and the guard
         guarded_expression: ExpressionStatement
         if self.statement.guard is None:
-            guarded_expression = self.statement.value_expression
+            guarded_expression = value_expression
         else:
-            else_expression: ExpressionStatement = Literal(LIST_COMPREHENSION_GUARDED)
+            else_expression: ExpressionStatement = ListComprehensionGuard()
             guarded_expression = ConditionalExpression(
                 condition=self.statement.guard,
-                if_expression=self.statement.value_expression,
-                else_expression=Literal(LIST_COMPREHENSION_GUARDED),
+                if_expression=value_expression,
+                else_expression=else_expression,
             )
             self.statement.copy_location(else_expression)
             self.statement.copy_location(guarded_expression)
@@ -535,7 +556,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Set the final result to be an unknown. No elements should be gradually received in this case.
         Mutually exclusive with `complete`.
         """
-        if self._results:
+        if self._results and not all(isinstance(result, Unknown) for result in self._results):
             raise InvalidCompilerState(
                 self, "list comprehension helper got set_unknown after some (known) elements where received"
             )
@@ -547,8 +568,9 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
         Mutually exclusive with `set_unknown`.
         """
         if self._results:
-            # We should only have received previous results in gradual mode, if the
             if self.lhs is None:
+                # We should only have received previous results in gradual mode, if any gradual results were received in
+                # non-gradual mode, this indicates a bug in the compiler, likely in this class
                 raise InvalidCompilerState(self, "list comprehension helper received gradual results in non-gradual mode")
             if len(self._results) != len(all_values):
                 raise InvalidCompilerState(self, "list comprehension helper received some but not all values gradually")
@@ -561,7 +583,7 @@ class ListComprehensionCollector(RawResumer, ResultCollector[object]):
     def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
         def get(variable: VariableABC[object]) -> Optional[abc.Sequence[object]]:
             value: object = variable.get_value()
-            return None if value is LIST_COMPREHENSION_GUARDED else value if isinstance(value, list) else [value]
+            return None if value is ListComprehensionGuard.GUARD else value if isinstance(value, list) else [value]
 
         # collect all element value expressions' results and write them to the final result variable
         self.final_result.set_value(
@@ -584,9 +606,6 @@ class If(RequiresEmitStatement):
         self.condition: ExpressionStatement = condition
         self.if_branch: BasicBlock = if_branch
         self.else_branch: BasicBlock = else_branch
-        self.anchors.extend(condition.get_anchors())
-        self.anchors.extend(if_branch.get_anchors())
-        self.anchors.extend(else_branch.get_anchors())
 
     def __repr__(self) -> str:
         return "If"
@@ -595,17 +614,20 @@ class If(RequiresEmitStatement):
         self.condition.normalize()
         self.if_branch.normalize()
         self.else_branch.normalize()
+        self.anchors.extend(self.condition.get_anchors())
+        self.anchors.extend(self.if_branch.get_anchors())
+        self.anchors.extend(self.else_branch.get_anchors())
         self._own_eager_promises = [*self.if_branch.get_eager_promises(), *self.else_branch.get_eager_promises()]
 
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
-        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         requires.update(self.condition.requires_emit(resolver, queue))
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
         Evaluate this statement.
         """
@@ -644,15 +666,15 @@ class ConditionalExpression(ExpressionStatement):
         self.condition: ExpressionStatement = condition
         self.if_expression: ExpressionStatement = if_expression
         self.else_expression: ExpressionStatement = else_expression
-        self.anchors.extend(condition.get_anchors())
-        self.anchors.extend(if_expression.get_anchors())
-        self.anchors.extend(else_expression.get_anchors())
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.condition.normalize()
         # pass on lhs_attribute to branches
         self.if_expression.normalize(lhs_attribute=lhs_attribute)
         self.else_expression.normalize(lhs_attribute=lhs_attribute)
+        self.anchors.extend(self.condition.get_anchors())
+        self.anchors.extend(self.if_expression.get_anchors())
+        self.anchors.extend(self.else_expression.get_anchors())
         self._own_eager_promises = [
             *self.if_expression.get_all_eager_promises(),
             *self.else_expression.get_all_eager_promises(),
@@ -661,13 +683,13 @@ class ConditionalExpression(ExpressionStatement):
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.condition.get_all_eager_promises())
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
     ) -> dict[object, VariableABC[object]]:
-        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
 
         # This ResultVariable will receive the result of this expression
         result: ResultVariable[object] = ResultVariable()
@@ -686,8 +708,7 @@ class ConditionalExpression(ExpressionStatement):
     ) -> dict[object, VariableABC[object]]:
         return self.requires_emit(resolver, queue, lhs=resultcollector)
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
@@ -701,14 +722,14 @@ class ConditionalExpression(ExpressionStatement):
         return (self.if_expression if condition_value else self.else_expression).execute_direct(requires)
 
     def pretty_print(self) -> str:
-        return "%s ? %s : %s" % (
+        return "{} ? {} : {}".format(
             self.condition.pretty_print(),
             self.if_expression.pretty_print(),
             self.else_expression.pretty_print(),
         )
 
     def __repr__(self) -> str:
-        return "%s ? %s : %s" % (self.condition, self.if_expression, self.else_expression)
+        return f"{self.condition} ? {self.if_expression} : {self.else_expression}"
 
 
 class ConditionalExpressionResumer(RawResumer):
@@ -723,7 +744,7 @@ class ConditionalExpressionResumer(RawResumer):
         self.result: ResultVariable = result
         self.lhs: Optional[ResultCollector[object]] = lhs
 
-    def resume(self, requires: Dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
+    def resume(self, requires: dict[object, VariableABC[object]], resolver: Resolver, queue: QueueScheduler) -> None:
         if self.condition_value is None:
             condition_value: object = self.expression.condition.execute(
                 {k: v.get_value() for k, v in requires.items()}, resolver, queue
@@ -768,7 +789,7 @@ class IndexAttributeMissingInConstructorException(TypingException):
         if not unset_attributes:
             raise Exception("Argument `unset_attributes` should contain at least one element")
         error_message = self._get_error_message(entity, unset_attributes)
-        super(IndexAttributeMissingInConstructorException, self).__init__(stmt, error_message)
+        super().__init__(stmt, error_message)
 
     def _get_error_message(self, entity: "Entity", unset_attributes: abc.Sequence[str]) -> str:
         exc_message = "Invalid Constructor call:"
@@ -808,19 +829,18 @@ class Constructor(ExpressionStatement):
     def __init__(
         self,
         class_type: LocatableString,
-        attributes: List[Tuple[LocatableString, ExpressionStatement]],
-        wrapped_kwargs: List["WrappedKwargs"],
+        attributes: list[tuple[LocatableString, ExpressionStatement]],
+        wrapped_kwargs: list["WrappedKwargs"],
         location: Location,
         namespace: Namespace,
     ) -> None:
         super().__init__()
         self.class_type = class_type
-        self.__attributes = {}  # type: Dict[str,ExpressionStatement]
-        self.__attribute_locations: Dict[str, LocatableString] = {}
-        self.__wrapped_kwarg_attributes: List[WrappedKwargs] = wrapped_kwargs
+        self.__attributes: dict[str, ExpressionStatement] = {}
+        self.__attribute_locations: dict[str, LocatableString] = {}
+        self.__wrapped_kwarg_attributes: list[WrappedKwargs] = wrapped_kwargs
         self.location = location
         self.namespace = namespace
-        self.anchors.append(TypeReferenceAnchor(namespace, class_type))
         for a in attributes:
             self.add_attribute(a[0], a[1])
         self.type: Optional["Entity"] = None
@@ -830,15 +850,15 @@ class Constructor(ExpressionStatement):
         self._lhs_attribute: Optional[AttributeAssignmentLHS] = None
         self._required_dynamic_args: list[str] = []  # index attributes required from kwargs or lhs_attribute
 
-        self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
-        self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
+        self._direct_attributes: dict[str, ExpressionStatement] = {}
+        self._indirect_attributes: dict[str, ExpressionStatement] = {}
 
     def pretty_print(self) -> str:
-        return "%s(%s)" % (
+        return "{}({})".format(
             self.class_type,
             ",".join(
                 chain(
-                    ("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items()),
+                    (f"{k}={v.pretty_print()}" for k, v in self.attributes.items()),
                     ("**%s" % kwargs.pretty_print() for kwargs in self.wrapped_kwargs),
                 )
             ),
@@ -849,21 +869,20 @@ class Constructor(ExpressionStatement):
         for k, v in self.__attributes.items():
             attr = self.type.get_attribute(k)
             if attr is None:
-                raise TypingException(
-                    self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
-                )
+                raise TypingException(self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}")
             type_hint = attr.get_type().get_base_type()
             # don't notify the rhs for index attributes because it won't be able to resolve the reference
             # (index attributes need to be resolved before the instance can be constructed)
             v.normalize(
                 lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
             )
+            self.anchors.extend(v.anchors)
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.type = self._resolve_type(lhs_attribute)
-
+        self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.class_type))
         inindex: abc.MutableSet[str] = set()
 
         all_attributes = dict(self.type.get_default_values())
@@ -893,9 +912,7 @@ class Constructor(ExpressionStatement):
         for k, v in all_attributes.items():
             attribute = self.type.get_attribute(k)
             if attribute is None:
-                raise TypingException(
-                    self.__attribute_locations[k], "no attribute %s on type %s" % (k, self.type.get_full_name())
-                )
+                raise TypingException(self.__attribute_locations[k], f"no attribute {k} on type {self.type.get_full_name()}")
             if k not in inindex:
                 self._indirect_attributes[k] = v
             else:
@@ -969,14 +986,14 @@ class Constructor(ExpressionStatement):
             *(subexpr.get_all_eager_promises() for subexpr in chain(self.attributes.values(), self.wrapped_kwargs)),
         )
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
         out.extend(req for kwargs in self.__wrapped_kwarg_attributes for req in kwargs.requires())
         out.extend(req for (k, v) in self.get_default_values().items() for req in v.requires())
         return out
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
-        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         # direct
         direct = [x for x in self._direct_attributes.items()]
 
@@ -1004,7 +1021,7 @@ class Constructor(ExpressionStatement):
         return requires
 
     def _collect_required_dynamic_arguments(
-        self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler
+        self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler
     ) -> abc.Mapping[str, object]:
         """
         Part of the execute flow: returns values for kwargs and the inverse relation derived from the lhs for which this
@@ -1019,11 +1036,11 @@ class Constructor(ExpressionStatement):
             for k, v in kwargs.execute(requires, resolver, queue):
                 if k in self.attributes or k in kwarg_attrs:
                     raise RuntimeException(
-                        self, "The attribute %s is set twice in the constructor call of %s." % (k, self.class_type)
+                        self, f"The attribute {k} is set twice in the constructor call of {self.class_type}."
                     )
                 attribute = type_class.get_attribute(k)
                 if attribute is None:
-                    raise TypingException(self, "no attribute %s on type %s" % (k, type_class.get_full_name()))
+                    raise TypingException(self, f"no attribute {k} on type {type_class.get_full_name()}")
                 kwarg_attrs[k] = v
 
         lhs_inverse_assignment: Optional[tuple[str, object]] = None
@@ -1061,12 +1078,11 @@ class Constructor(ExpressionStatement):
             raise IndexAttributeMissingInConstructorException(self, type_class, missing_attrs)
         return late_args
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> Instance:
         """
         Evaluate this statement.
         """
         LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
-        super().execute(requires, resolver, queue)
 
         # the type to construct
         type_class = self.type
@@ -1077,19 +1093,19 @@ class Constructor(ExpressionStatement):
 
         # Schedule all direct attributes for direct execution. The kwarg keys and the direct_attributes keys are disjoint
         # because a RuntimeException is raised above when they are not.
-        direct_attributes: Dict[str, object] = {
+        direct_attributes: dict[str, object] = {
             k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()
         }
         direct_attributes.update(late_args)
 
         # Override defaults with kwargs. The kwarg keys and the indirect_attributes keys are disjoint because a RuntimeException
         # is raised above when they are not.
-        indirect_attributes: Dict[str, ExpressionStatement] = {
+        indirect_attributes: dict[str, ExpressionStatement] = {
             k: v for k, v in self._indirect_attributes.items() if k not in late_args
         }
 
         # check if the instance already exists in the index (if there is one)
-        instances: List[Instance] = []
+        instances: list[Instance] = []
         # register any potential index collision
         collisions: abc.MutableMapping[tuple[str, ...], Instance] = {}
         for index in type_class.get_indices():
@@ -1173,17 +1189,15 @@ class Constructor(ExpressionStatement):
             self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
             self.anchors.extend(value.get_anchors())
         else:
-            raise RuntimeException(
-                self, "The attribute %s in the constructor call of %s is already set." % (name, self.class_type)
-            )
+            raise RuntimeException(self, f"The attribute {name} in the constructor call of {self.class_type} is already set.")
 
-    def get_attributes(self) -> Dict[str, ExpressionStatement]:
+    def get_attributes(self) -> dict[str, ExpressionStatement]:
         """
         Get the attribtues that are set for this constructor call
         """
         return self.__attributes
 
-    def get_wrapped_kwargs(self) -> List["WrappedKwargs"]:
+    def get_wrapped_kwargs(self) -> list["WrappedKwargs"]:
         """
         Get the wrapped kwargs that are set for this constructor call
         """
@@ -1236,18 +1250,17 @@ class WrappedKwargs(ExpressionStatement):
     def get_all_eager_promises(self) -> Iterator["StaticEagerPromise"]:
         return chain(super().get_all_eager_promises(), self.dictionary.get_all_eager_promises())
 
-    def requires(self) -> List[str]:
+    def requires(self) -> list[str]:
         return self.dictionary.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, VariableABC[object]]:
-        requires: Dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
         requires.update(self.dictionary.requires_emit(resolver, queue))
         return requires
 
-    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> List[Tuple[str, object]]:
-        super().execute(requires, resolver, queue)
+    def _resolve(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler) -> list[tuple[str, object]]:
         dct: object = self.dictionary.execute(requires, resolver, queue)
-        if not isinstance(dct, Dict):
+        if not isinstance(dct, dict):
             raise TypingException(self, "The ** operator can only be applied to dictionaries")
         return list(dct.items())
 

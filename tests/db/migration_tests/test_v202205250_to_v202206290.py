@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import os
-from typing import Awaitable, Callable, List
+from collections.abc import Awaitable, Callable
 
 import pytest
 
@@ -26,8 +26,8 @@ import pytest
 async def test_added_resource_set_column(
     migrate_db_from: Callable[[], Awaitable[None]],
     postgresql_client,
-    get_columns_in_db_table: Callable[[str], Awaitable[List[str]]],
-    get_custom_postgresql_types: Callable[[], Awaitable[List[str]]],
+    get_columns_in_db_table: Callable[[str], Awaitable[list[str]]],
+    get_custom_postgresql_types: Callable[[], Awaitable[list[str]]],
 ) -> None:
     """
     Test the database migration script that adds the `resource_set` column to the database.
