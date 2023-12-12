@@ -332,20 +332,23 @@ class ResourceService(protocol.ServerSlice):
             idr = Id.parse_id(res)
             return idr.get_agent_name() == agent
 
-        # This is a bit subtle
-        # Any resource we consider deployed has to be marked as such
-        # Otherwise the agent will fail the deployment
-        # Stale successful deployments can cause resource that were available to be now considered deployed
+        # This is a bit subtle.
+        # Any resource we consider deployed has to be marked as such.
+        # Otherwise the agent will fail the deployment.
+        # Stale successful deployments can cause resource that were available to be now considered deployed.
         # We don't do this back propagation on deploy,
         #   because it is about a lot of resource that need to grab a lock to check if they are stale
         # We do it here, as we always have.
-        # BUT because we race with other code paths that update resource state, we need to grab the lock
-        async with data.Resource.get_connection() as connection:
-            async with connection.transaction():
-                # lock out release version and deploy_done
-                await env.acquire_release_version_lock(connection=connection)
-                # set already done to deployed
-                await self.mark_deployed(env, neg_increment, now, version, filter=on_agent)
+        # This method only updates the state for resources that are currently in the available or deploying state.
+        # As such, it should not race with backpropagation on failure.
+        await self.mark_deployed(
+            env,
+            neg_increment,
+            now,
+            version,
+            filter=on_agent,
+            only_update_from_states={const.ResourceState.available, const.ResourceState.deploying},
+        )
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
@@ -394,6 +397,7 @@ class ResourceService(protocol.ServerSlice):
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
         connection: Optional[Connection] = None,
+        only_update_from_states: Optional[set[const.ResourceState]] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -428,6 +432,7 @@ class ResourceService(protocol.ServerSlice):
             send_events=False,
             keep_increment_cache=True,
             is_increment_notification=True,
+            only_update_from_states=only_update_from_states,
             connection=connection,
         )
 
@@ -771,6 +776,7 @@ class ResourceService(protocol.ServerSlice):
         send_events: bool,
         keep_increment_cache: bool = False,
         is_increment_notification: bool = False,
+        only_update_from_states: Optional[set[const.ResourceState]] = None,
         *,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
@@ -859,6 +865,12 @@ class ResourceService(protocol.ServerSlice):
                             "Only %s of %s resources found." % (len(resources), len(resource_ids))
                         },
                     )
+
+                if only_update_from_states is not None:
+                    resources = [resource for resource in resources if resource.status in only_update_from_states]
+                    if not resources:
+                        return 200, {"message": "no resources with the given state found"}
+                    resource_ids = [resource.resource_version_id for resource in resources]
 
                 # validate transitions
                 if is_resource_state_update:
