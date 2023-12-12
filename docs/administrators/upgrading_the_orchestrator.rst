@@ -4,6 +4,58 @@
 Upgrading the orchestrator
 --------------------------
 
+Upgrading the orchestrator can be done either in-place or by setting up a new orchestrator next to the old one
+and migrating the state from the old to the new instance. The sections below describe the upgrade procedure
+for each of both situations. These procedures can be used for major and non-major version upgrades.
+
+.. note::
+
+    Make sure to read the new version's changelog for any version specific upgrade notes, before
+    proceeding with any of the upgrade procedures mentioned below.
+
+Upgrading the orchestrator in-place
+###################################
+
+This section describes how to upgrade an orchestrator in-place.
+
+.. note::
+    **Pre-requisite**
+
+    - Before upgrading the orchestrator to a new major version, make sure the old orchestrator is at the latest version available within its major.
+    - Upgrades should be done one major version at a time. Upgrading from major
+      version :code:`X` to major version :code:`X+2`, should be done by upgrading from :code:`X` to :code:`X+1` and then from :code:`X+1` to :code:`X+2`.
+
+
+1. Halt all environments (by pressing the ``STOP`` button in the web-console for each environment).
+2. Create a backup of the database:
+
+.. code-block:: bash
+
+    pg_dump -U <db_user> -W -h <host> <db_name> > <db_dump_file>
+
+3. Replace the content of the ``/etc/yum.repos.d/inmanta.repo`` file with the content for the new ISO version.
+   This information can be obtained from the :ref:`installation documentation page<install-server>` for the
+   new ISO version.
+4. Upgrade the Inmanta server. The orchestrator will automatically restart when the upgrade has finished.
+   It might take some time before the orchestrator goes up, as some database migrations will be done.
+
+.. code-block:: bash
+
+    yum update inmanta-service-orchestrator-server
+
+5. When accessing the web console, all the environments will be visible, and still halted.
+6. One environment at a time:
+
+   a. In the **Desired State** page of the environment, click ``Update project & recompile``, accessible via the
+   dropdown of the ``Recompile`` button. (``/console/desiredstate?env=<your-env-id>``).
+
+   b. Resume the environment by pressing the green ``Resume`` button in the bottom left corner of the console.
+
+   .. warning::
+
+       Make sure the compilation has finished and was successful before moving on to the next steps.
+
+
 Upgrading by migrating from one orchestrator to another orchestrator
 #######################################################################
 
@@ -40,7 +92,7 @@ _________
 
 
 2. **[Old Orchestrator]** Halt all environments (by pressing the ``STOP`` button in the web-console for each environment).
-3. **[Old Orchestrator]** Stop the server:
+3. **[Old Orchestrator]** Stop and disable the server:
 
 .. code-block:: bash
 
@@ -82,7 +134,7 @@ _________
 
 .. code-block:: bash
 
-    cat <db_dump_file> | psql -U <db_user> -W -h <host> <db_name>
+    psql -U <db_user> -W -h <host> -f <db_dump_file> <db_name>
 
 
 8. **[New Orchestrator]** Start the orchestrator service, it might take some time before the orchestrator goes up, as some database migration will be done:
