@@ -35,7 +35,7 @@ This setup has a number of properties:
   queries continue to be served until the database pool is exhausted.
 
 For almost all types of deployments it provides a good trade-off between setup and operational complexity and the availability
-and durability guarantees. If both durability and higher availability are required, a setup with at least databases is required.
+and durability guarantees. If both durability and higher availability are required, a setup with at least 3 databases is required.
 This is out of scope for this documentation. Please contact support for assistance on this topic.
 
 Prerequisites
