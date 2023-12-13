@@ -332,7 +332,7 @@ class SetAttributeHelper(ExecutionUnit):
             e.location = self.stmt.location
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
         except RuntimeException as e:
-            e.set_statement(self.stmt, False)
+            e.set_statement(self.stmt)
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
 
     def __str__(self) -> str:

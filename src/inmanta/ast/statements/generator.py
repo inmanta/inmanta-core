@@ -141,9 +141,9 @@ class SubConstructor(RequiresEmitStatement):
         assert isinstance(instance, Instance)
         condition = self.implements.constraint.execute(requires, instance, queue)
         try:
-            inmanta_type.Bool().validate(condition)
+            inmanta_type.Bool().validate(condition, self)
         except RuntimeException as e:
-            e.set_statement(self.implements)
+            # e.set_statement(self.implements)
             e.msg = (
                 "Invalid value `%s`: the condition for a conditional implementation can only be a boolean expression"
                 % condition

@@ -625,19 +625,29 @@ class RuntimeException(CompilerException):
         if location is not None:
             self.location = location
 
+
+
     def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
         for cause in self.get_causes():
             if isinstance(cause, RuntimeException):
                 cause.set_statement(stmt, replace)
 
         if replace or self.stmt is None:
-            try:
-                if self.location.lnr == stmt.location.lnr:
-                    self.set_location(stmt.get_location())
-                    self.stmt = stmt
-            except AttributeError:
-                self.set_location(stmt.get_location())
-                self.stmt = stmt
+            self.set_location(stmt.get_location())
+            self.stmt = stmt
+    # def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
+    #     for cause in self.get_causes():
+    #         if isinstance(cause, RuntimeException):
+    #             cause.set_statement(stmt, replace)
+    #
+    #     if replace or self.stmt is None:
+    #         try:
+    #             if self.location.lnr == stmt.location.lnr:
+    #                 self.set_location(stmt.get_location())
+    #                 self.stmt = stmt
+    #         except AttributeError:
+    #             self.set_location(stmt.get_location())
+    #             self.stmt = stmt
 
     def format(self) -> str:
         """Make a string representation of this particular exception"""

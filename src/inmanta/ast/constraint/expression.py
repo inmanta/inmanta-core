@@ -360,7 +360,7 @@ class Not(UnaryOperator):
         @see Operator#_op
         """
         try:
-            Bool().validate(arg)
+            Bool().validate(arg, self)
         except RuntimeException as e:
             e.set_statement(self)
             e.msg = f"Invalid value `{arg}`: `{self.get_op()}` expects a boolean"

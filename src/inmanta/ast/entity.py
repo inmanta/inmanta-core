@@ -96,7 +96,7 @@ class Entity(NamedType, WithComment):
             if attribute.default is not None:
                 default_type: Type = attribute.type.get_type(self.namespace)
                 try:
-                    default_type.validate(attribute.default.as_constant())
+                    default_type.validate(attribute.default.as_constant(), attribute)
                 except RuntimeException as exception:
                     if exception.stmt is None or isinstance(exception.stmt, Type):
                         exception.set_statement(attribute)
@@ -311,7 +311,7 @@ class Entity(NamedType, WithComment):
         """
         return (not strict and subclass_candidate == self) or subclass_candidate.is_parent(self)
 
-    def validate(self, value: object) -> bool:
+    def validate(self, value: object, stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value
         """
@@ -319,11 +319,11 @@ class Entity(NamedType, WithComment):
             return True
 
         if not isinstance(value, Instance):
-            raise RuntimeException(None, f"Invalid type for value '{value}', should be type {self}")
+            raise RuntimeException(stmt, f"Invalid type for value '{value}', should be type {self}")
 
         value_definition = value.type
         if not (value_definition is self or self.is_subclass(value_definition)):
-            raise RuntimeException(None, f"Invalid class type for {value}, should be {self}")
+            raise RuntimeException(stmt, f"Invalid class type for {value}, should be {self}")
 
         return True
 

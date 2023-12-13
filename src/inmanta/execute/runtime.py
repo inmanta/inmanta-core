@@ -33,6 +33,7 @@ from inmanta.ast import (
     OptionalValueException,
     RuntimeException,
 )
+
 from inmanta.ast.type import Type
 from inmanta.execute import dataflow, proxy
 from inmanta.execute.dataflow import DataflowGraph
@@ -282,7 +283,7 @@ class ResultVariable(VariableABC[T], ResultCollector[T], ISetPromise[T]):
             else:
                 return
         if not isinstance(value, Unknown) and self.type is not None:
-            self.type.validate(value)
+            self.type.validate(value, self.type)
         self.value = value
         self.location = location
         self.hasValue = True
@@ -1014,13 +1015,18 @@ class ExecutionUnit(Waiter):
     def execute(self) -> None:
         try:
             self._unsafe_execute()
-        except NotFoundException as e:
-            # In case of a NotFoundException, keep all the info of the exception as is
-            raise e
-        except RuntimeException as e:
-            e.set_statement(self.owner)
-            e.location = self.owner.location
-            raise e
+        # except NotFoundException as e:
+        #     # In case of a NotFoundException, keep all the info of the exception as is
+        #     raise e
+        except RuntimeException as exception:
+            if exception.stmt is None or isinstance(exception.stmt, (Instance, inmanta.ast.statements.assign.MapLookup)):
+                exception.set_statement(self.owner)
+                exception.location = self.owner.location
+
+            raise exception
+
+
+
 
     def __repr__(self) -> str:
         return repr(self.expression)

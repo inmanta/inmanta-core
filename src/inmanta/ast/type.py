@@ -88,7 +88,7 @@ class Type(Locatable):
     types that are not relations. Instances of subclasses represent a type in the Inmanta language.
     """
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints associated with this type. Returns true iff
         validation succeeds, otherwise raises a :py:class:`inmanta.ast.RuntimeException`.
@@ -160,11 +160,11 @@ class NullableType(Type):
         Type.__init__(self)
         self.element_type: Type = element_type
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object] , stmt: Optional[Locatable]= None) -> bool:
         if isinstance(value, NoneValue):
             return True
 
-        return self.element_type.validate(value)
+        return self.element_type.validate(value, stmt)
 
     def _wrap_type_string(self, string: str) -> str:
         return "%s?" % string
@@ -248,7 +248,7 @@ class Number(Primitive):
             return int(value)
         return super().cast(value)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -257,7 +257,7 @@ class Number(Primitive):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(stmt, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True  # allow this function to be called from a lambda function
 
@@ -285,7 +285,7 @@ class Float(Primitive):
         Primitive.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [float]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -294,7 +294,7 @@ class Float(Primitive):
             return True
 
         if not isinstance(value, float):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(stmt, f"Invalid value '{value}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
 
     def is_primitive(self) -> bool:
@@ -320,7 +320,7 @@ class Integer(Number):
         Number.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [int]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object],stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -329,7 +329,7 @@ class Integer(Number):
             return True
 
         if not isinstance(value, numbers.Integral):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(stmt, f"Invalid value '{value}', expected {self.type_string()}")
         return True  # allow this function to be called from a lambda function
 
     def type_string(self) -> str:
@@ -346,7 +346,7 @@ class Bool(Primitive):
         Primitive.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [bool]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -355,7 +355,7 @@ class Bool(Primitive):
             return True
         if isinstance(value, bool):
             return True
-        raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
+        raise RuntimeException(stmt, "Invalid value '%s', expected Bool" % value)
 
     def cast(self, value: Optional[object]) -> object:
         return super().cast(value if not isinstance(value, NoneValue) else None)
@@ -383,7 +383,7 @@ class String(Primitive):
         Primitive.__init__(self)
         self.try_cast_functions: Sequence[Callable[[Optional[object]], object]] = [str]
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -391,7 +391,7 @@ class String(Primitive):
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
-            raise RuntimeException(None, "Invalid value '%s', expected String" % value)
+            raise RuntimeException(stmt, "Invalid value '%s', expected String" % value)
 
         return True
 
@@ -424,7 +424,7 @@ class List(Type):
     def __init__(self):
         Type.__init__(self)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         if value is None:
             return True
 
@@ -432,7 +432,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(stmt, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
@@ -457,13 +457,13 @@ class TypedList(List):
     def normalize(self) -> None:
         self.element_type.normalize()
 
-    def validate(self, value: Optional[object]) -> bool:
-        if not List.validate(self, value):
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
+        if not List.validate(self, value, stmt):
             return False
 
         assert isinstance(value, list)
         for element in value:
-            if not self.element_type.validate(element):
+            if not self.element_type.validate(element, stmt):
                 return False
 
         return True
@@ -528,7 +528,7 @@ class Dict(Type):
     def __init__(self) -> None:
         Type.__init__(self)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraints
         associated with this type
@@ -540,7 +540,7 @@ class Dict(Type):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
+            raise RuntimeException(stmt, "Invalid value '%s', expected dict" % value)
 
         return True
 
@@ -567,13 +567,13 @@ class TypedDict(Dict):
     def normalize(self) -> None:
         self.element_type.normalize()
 
-    def validate(self, value: Optional[object]) -> bool:
-        if not Dict.validate(self, value):
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
+        if not Dict.validate(self, value, stmt):
             return False
 
         assert isinstance(value, dict)
         for element in value.values():
-            self.element_type.validate(element)
+            self.element_type.validate(element, stmt)
 
         return True
 
@@ -613,14 +613,14 @@ class Union(Type):
         Type.__init__(self)
         self.types: PythonList[Type] = types
 
-    def validate(self, value: object) -> bool:
+    def validate(self, value: object, stmt: Optional[Locatable]= None) -> bool:
         for typ in self.types:
             try:
-                if typ.validate(value):
+                if typ.validate(value, stmt):
                     return True
             except RuntimeException:
                 pass
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self}")
+        raise RuntimeException(stmt, f"Invalid value '{value}', expected {self}")
 
     def type_string_internal(self) -> str:
         return "Union[%s]" % ",".join(t.type_string_internal() for t in self.types)
@@ -678,7 +678,7 @@ class ConstraintType(NamedType):
 
     constraint = property(get_constraint, set_constraint)
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         """
         Validate the given value to check if it satisfies the constraint and
         the basetype.
@@ -692,7 +692,7 @@ class ConstraintType(NamedType):
         assert self._constraint is not None
         if not self._constraint(value):
             raise RuntimeException(
-                self, f"Invalid value {repr(value)}, does not match constraint `{self.expression.pretty_print()}`"
+                stmt, f"Invalid value {repr(value)}, does not match constraint `{self.expression.pretty_print()}`"
             )
 
         return True

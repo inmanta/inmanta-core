@@ -34,7 +34,7 @@ from inmanta.ast import (
     Range,
     RuntimeException,
     TypeNotFoundException,
-    WithComment,
+    WithComment, Locatable,
 )
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
@@ -197,11 +197,11 @@ class Null(inmanta_type.Type):
     accept null as an argument or return value.
     """
 
-    def validate(self, value: Optional[object]) -> bool:
+    def validate(self, value: Optional[object], stmt: Optional[Locatable]= None) -> bool:
         if isinstance(value, NoneValue):
             return True
 
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise RuntimeException(stmt, f"Invalid value '{value}', expected {self.type_string()}")
 
     def type_string(self) -> str:
         return "null"

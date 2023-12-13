@@ -513,12 +513,12 @@ def test_1435_instance_in_list(snippetcompiler):
 entity A:
 end
 implement A using std::none
-
+                                            # 5
 entity ListContainer:
     list lst
 end
 
-implement ListContainer using std::none
+implement ListContainer using std::none     # 10
 
 x = ListContainer()
 x.lst = [x]
