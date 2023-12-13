@@ -11,17 +11,32 @@ This page describes how to deploy an Inmanta server in a HA setup and how to per
 
     .. note::
 
-        This guide assumes the default PosgreSQL included with RHEL is installed. It probably also works with the version from the postgres project,
-        however the paths to the data directory and the name of the service will contain the installed version.
+        This guide assumes the default PosgreSQL included with RHEL is installed. It probably also works with the version from
+        the postgres project, however the paths to the data directory and the name of the service will contain the installed
+        version.
 
 
 Setup a HA PostgreSQL cluster
 #############################
 
 The Inmanta server stores its state in a PostgreSQL database. As such, the PostgreSQL database should be deployed in a high
-available setup, to ensure the availability of the Inmanta server. This page describes how to setup a two node PosgreSQL cluster, consisting of a master node and a warm standby. The master
-node performs synchronous replication to the standby node. When the master node fails, the standby can be promoted to the new
-master node by performing a manual action.
+available setup, to ensure the durability of the state of the Inmanta Orchestrator. This page describes how to setup a two node
+PosgreSQL cluster, consisting of a master node and a warm standby. The master node performs synchronous replication to the
+standby node. When the master node fails, the standby can be promoted to the new master node by performing a manual action.
+
+This setup has a number of properties:
+
+* It ensure durability by only returning operations like API calls when both database instances has confirmed that the
+  changes have been stored on disk.
+* It is possible to use a tool such as pgpool to loadbalance read-only database queries to the standby node. However, this is
+  out of scope of this manual.
+* It does not provide any additionaly availability, it even slighly reduces it: both database servers need to be up and
+  responsive to process write queries. If the standby node is down, the master node will block on any write query. Read
+  queries continue to be served until the database pool is exhausted.
+
+For almost all types of deployments it provides a good trade-off between setup and operational complexity and the availability
+and durability guarantees. If both durability and higher availability are required, a setup with at least 3 databases is required.
+This is out of scope for this documentation. Please contact support for assistance on this topic.
 
 Prerequisites
 -------------
@@ -60,8 +75,10 @@ Login on the master node and perform the following changes in the ``/var/lib/pgs
 
 Execute the commands mentioned below on the master node. These commands do two thing:
 
-* They create a replication user with replication and login privileges. The standby node will  use this user to connect to the master node.
-* They create a new replication slot, named *replication*. This replication slot will make  sure that sufficient data is retained on the master node to synchronize the standby node with the master node.
+* They create a replication user with replication and login privileges. The standby node will  use this user to connect to the
+  master node.
+* They create a new replication slot, named *replication*. This replication slot will make  sure that sufficient data is
+  retained on the master node to synchronize the standby node with the master node.
 
 .. code-block:: sh
 
@@ -93,11 +110,11 @@ Restart the ``postgresql`` service to activate the configuration changes.
 Configure the standby node
 --------------------------
 
-The standby gets configured by creating a backup of the master node and restoring it on the standby node. The commands
-mentioned below create a backup in the ``/tmp/backup`` directory. This command will prompt for the password of the replication user. By setting
-the ``-R`` option, a ``standby.signal`` and a ``postgresql.auto.conf`` file will be added to the backup. The presence of the former
-will make the PostgreSQL server start as a standby. The latter contains replication-specific configuration settings. Those will
-be processed after the ``postgresql.conf`` file is processed.
+The standby gets configured by creating a backup of the master node and restoring it on the standby node. The commands mentioned
+below create a backup in the ``/tmp/backup`` directory. This command will prompt for the password of the replication user. By
+setting the ``-R`` option, a ``standby.signal`` and a ``postgresql.auto.conf`` file will be added to the backup. The presence of
+the former will make the PostgreSQL server start as a standby. The latter contains replication-specific configuration settings.
+Those will be processed after the ``postgresql.conf`` file is processed.
 
 .. code-block:: sh
 
@@ -124,6 +141,13 @@ service on the standby node.
   $ sudo systemctl start postgresql
   $ sudo systemctl enable postgresql
 
+
+Monitoring
+----------
+
+This setup requires both database to be up to be up and functional. It is highly recommended to monitor this the availability of
+the database and the replication status. For most monitoring systems (such as nagios/icinga or promotheus/alertmanager) there
+are plugins avilable to do this in an efficient manner.
 
 Failover PostgreSQL
 ###################
