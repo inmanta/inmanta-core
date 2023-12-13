@@ -1069,7 +1069,7 @@ class ResourceService(protocol.ServerSlice):
         action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
-        exclude_nochange: bool = False,
+        exclude_changes: Optional[Sequence[Change]] = None,
     ) -> ReturnValue[list[ResourceAction]]:
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
@@ -1103,7 +1103,7 @@ class ResourceService(protocol.ServerSlice):
             action_id=action_id,
             first_timestamp=first_timestamp,
             last_timestamp=last_timestamp,
-            exclude_nochange=exclude_nochange,
+            exclude_changes=exclude_changes,
         )
         resource_action_dtos = [resource_action.to_dto() for resource_action in resource_actions]
         links = {}

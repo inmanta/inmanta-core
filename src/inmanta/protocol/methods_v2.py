@@ -19,6 +19,7 @@
 """
 import datetime
 import uuid
+from collections.abc import Sequence
 from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
@@ -521,7 +522,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
-    exclude_nochange: bool = False,
+    exclude_changes: Optional[Sequence[Change]] = None,
 ) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
@@ -540,8 +541,8 @@ def get_resource_actions(
     :param last_timestamp: Limit the results to resource actions that started earlier
             than the value of this parameter (exclusive).
             Only the first_timestamp or last_timestamp parameter should be supplied
-    :param exclude_nochange: If set to True, only return ResourceActions where the change type is different from nochange.
-    :return: the list of matching Resource Actions in a descending order according to the 'started' timestamp.
+    :param exclude_changes: only return ResourceActions where the change type is different from the one in this list.
+    :return: the list of matching Resource Actions in descending order according to the 'started' timestamp.
             If a limit was specified, also return the links to the next and previous pages.
             The "next" page always refers to the actions that started earlier,
             while the "prev" page refers to actions that started later.
