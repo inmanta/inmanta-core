@@ -631,8 +631,13 @@ class RuntimeException(CompilerException):
                 cause.set_statement(stmt, replace)
 
         if replace or self.stmt is None:
-            self.set_location(stmt.get_location())
-            self.stmt = stmt
+            try:
+                if self.location.lnr == stmt.location.lnr:
+                    self.set_location(stmt.get_location())
+                    self.stmt = stmt
+            except AttributeError:
+                self.set_location(stmt.get_location())
+                self.stmt = stmt
 
     def format(self) -> str:
         """Make a string representation of this particular exception"""
