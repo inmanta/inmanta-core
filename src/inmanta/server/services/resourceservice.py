@@ -1069,8 +1069,16 @@ class ResourceService(protocol.ServerSlice):
         action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
-        exclude_changes: Optional[Sequence[Change]] = None,
+        exclude_changes: Optional[list[str]] = None,
     ) -> ReturnValue[list[ResourceAction]]:
+        if exclude_changes is None:
+            exclude_changes = []
+        else:
+            # Validate each string in exclude_changes
+            for change in exclude_changes:
+                if change not in (item.value for item in Change):
+                    raise BadRequest(f"Invalid change value in exclude_changes: {change}")
+
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
                 f"Attribute and attribute_value should both be supplied to use them filtering. "
