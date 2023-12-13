@@ -209,11 +209,11 @@ Install the software
 
     Replace ``<token>`` with the token provided with your license.
 
-    Use yum to install the software:
+    Use dnf to install the software:
 
     .. code-block:: sh
 
-        sudo yum install -y inmanta-service-orchestrator-server
+        sudo dnf install -y inmanta-service-orchestrator-server
 
 
     This command installs the software and all of its dependencies.
