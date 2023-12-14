@@ -880,12 +880,6 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     action_id = uuid.uuid4()
     now = datetime.now().astimezone()
     result = await aclient.resource_action_update(
-        environment, resource_ids_nochange, action_id, "deploy", now, status=const.ResourceState.deploying
-    )
-    assert result.code == 200
-
-    action_id = uuid.uuid4()
-    result = await aclient.resource_action_update(
         environment,
         resource_ids_created,
         action_id,
@@ -893,6 +887,12 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
         now,
         status=const.ResourceState.deploying,
         change=const.Change.created,
+    )
+    assert result.code == 200
+
+    action_id = uuid.uuid4()
+    result = await aclient.resource_action_update(
+        environment, resource_ids_nochange, action_id, "deploy", now, status=const.ResourceState.deploying
     )
     assert result.code == 200
 
