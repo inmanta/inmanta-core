@@ -175,7 +175,7 @@ def test_bad_map_lookup(snippetcompiler):
         b = {"c" : 3}
         c=b["a"]
         """,
-        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))",  # we lose surrounding context "c ="
+        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))",
     )
 
 

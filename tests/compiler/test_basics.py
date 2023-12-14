@@ -659,8 +659,7 @@ end
 implement Test using test
 Test()
 """,
-        r"variable n not found (reported in Format(This is test {{{{n}}}}) "
-        "({dir}/main.cf:5))",  # we lose surrounding context "std::print" + pos in line
+        r"variable n not found (reported in Format(This is test {{{{n}}}}) ({dir}/main.cf:5))",
     )
 
 
@@ -674,7 +673,7 @@ end
 implement A using a
 A()
 """,
-        r"variable y not found (reported in x = y ({dir}/main.cf:4))",  # we lose the position here ":9"
+        r"variable y not found (reported in x = y ({dir}/main.cf:4))",
     )
 
 
@@ -696,5 +695,5 @@ implement A using a
 implement B using b
 A(x=B())
 """,
-        r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",  # we lose position in line too
+        r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",
     )
