@@ -940,6 +940,11 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     assert result.code == 200
     assert len(result.result["data"]) == 0
 
+    exclude_changes = ["error"]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 400
+    assert "'error' is not a valid Change" in result.result["message"]
+
 
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
     """Test querying resource actions via the API, including the pagination links."""
