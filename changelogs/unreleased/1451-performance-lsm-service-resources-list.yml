@@ -1,0 +1,5 @@
+description: Improve the performance of the lsm_services_resources_list by reusing the same connection
+issue-nr: 1451
+issue-repo: inmanta-lsm
+change-type: patch
+destination-branches: [master, iso7, iso6]

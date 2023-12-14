@@ -222,6 +222,7 @@ class ResourceService(protocol.ServerSlice):
         status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
+        connection: Optional[Connection] = None,
     ) -> Apireturn:
         # Validate resource version id
         try:
@@ -243,7 +244,7 @@ class ResourceService(protocol.ServerSlice):
                 action_name = log_action.name
 
             actions = await data.ResourceAction.get_log(
-                environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit
+                environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit, connection=connection
             )
 
         return 200, {"resource": resv, "logs": actions}
@@ -255,8 +256,11 @@ class ResourceService(protocol.ServerSlice):
         environment: data.Environment,
         resource_type: Optional[ResourceType] = None,
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
+        connection: Optional[Connection] = None,
     ) -> list[Resource]:
-        result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
+        result = await data.Resource.get_resources_in_latest_version(
+            environment.id, resource_type, attributes, connection=connection
+        )
         return [r.to_dto() for r in result]
 
     @handle(methods.get_resources_for_agent, env="tid")
