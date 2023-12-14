@@ -873,8 +873,8 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    resource_ids_nochange = [x["id"] for x in resources if x["id"] != rvid_r1_v1]
-    resource_ids_created = [x["id"] for x in resources if x["id"] == rvid_r1_v1]
+    resource_ids_nochange = [x["id"] for x in resources[0:-1]]
+    resource_ids_created = [resources[-1]["id"]]
 
     # Start the deploy
     action_id = uuid.uuid4()
