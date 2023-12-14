@@ -222,8 +222,11 @@ class CallArguments:
             if arg in self._message:
                 # Argument is parameter in body of path of HTTP request
                 if typing_inspect.is_optional_type(arg_type) and self._properties.operation == "GET":
-                    # Convert Optional[SomeType] to SomeType for get requests
-                    arg_type = more_itertools.one(arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None))
+                    # Convert Optional[List[SomeType]] to List[SomeType] for get requests
+                    arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
+                    if len(arg_types) == 1 and typing_inspect.get_origin(arg_types[0]) is list:
+                        arg_type = arg_types[0]
+
                 if (
                     arg_type
                     and self._properties.operation == "GET"
