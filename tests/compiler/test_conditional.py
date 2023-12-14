@@ -464,7 +464,7 @@ str = "some_string"
 if not str:
 end
         """,
-        "Invalid value `some_string`: `not` expects a boolean (reported in If ({dir}/main.cf:3))",
+        "Invalid value `some_string`: `not` expects a boolean (reported in Not(str) ({dir}/main.cf:3))",
     )
 
 

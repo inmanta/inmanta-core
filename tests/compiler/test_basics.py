@@ -647,6 +647,7 @@ def get_one() -> "int":
                 assert "Plugin 'test_module::custom_name' is deprecated." in str(warning.message)
         assert has_warning
 
+
 def test_var_not_found_in_implement(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
@@ -658,7 +659,8 @@ end
 implement Test using test
 Test()
 """,
-        r"variable n not found (reported in std::print(Format(This is test {{{{n}}}})) " "({dir}/main.cf:6:32))",
+        r"variable n not found (reported in Format(This is test {{{{n}}}}) "
+        "({dir}/main.cf:5))",  # we lose surrounding context "std::print" + pos in line
     )
 
 
@@ -672,7 +674,7 @@ end
 implement A using a
 A()
 """,
-        r"variable y not found (reported in x = y ({dir}/main.cf:5:9))",
+        r"variable y not found (reported in x = y ({dir}/main.cf:4))",  # we lose the position here ":9"
     )
 
 
@@ -694,5 +696,5 @@ implement A using a
 implement B using b
 A(x=B())
 """,
-        r"variable u not found (reported in std::print(u) ({dir}/main.cf:15:16))",
+        r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",  # we lose position in line too
     )
