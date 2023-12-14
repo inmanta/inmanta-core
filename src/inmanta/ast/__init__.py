@@ -554,8 +554,8 @@ class CompilerException(Exception, export.Exportable):
         # store root namespace so error reporters can inspect the compiler state
         self.root_ns: Optional[Namespace] = None
 
-    def set_location(self, location: Location) -> None:
-        if self.location is None:
+    def set_location(self, location: Location, replace_location: bool = False) -> None:
+        if self.location is None or replace_location:
             self.location = location
 
     def get_message(self) -> str:
@@ -623,13 +623,13 @@ class RuntimeException(CompilerException):
             self.set_location(stmt.get_location())
             self.stmt = stmt
 
-    def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
+    def set_statement(self, stmt: "Locatable", replace: bool = True, replace_location: bool = False) -> None:
         for cause in self.get_causes():
             if isinstance(cause, RuntimeException):
                 cause.set_statement(stmt, replace)
 
         if replace or self.stmt is None:
-            self.set_location(stmt.get_location())
+            self.set_location(stmt.get_location(), replace_location)
             self.stmt = stmt
 
     def format(self) -> str:
