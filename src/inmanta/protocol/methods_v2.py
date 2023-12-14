@@ -19,7 +19,6 @@
 """
 import datetime
 import uuid
-from collections.abc import Sequence
 from typing import Literal, Optional, Union
 
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
