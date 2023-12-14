@@ -1069,7 +1069,7 @@ class ResourceService(protocol.ServerSlice):
         action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
-        exclude_changes: Optional[list[str]] = None,
+        exclude_changes: Optional[list[Change]] = None,
     ) -> ReturnValue[list[ResourceAction]]:
         if exclude_changes is None:
             exclude_changes = []

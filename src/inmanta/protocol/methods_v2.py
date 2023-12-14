@@ -541,10 +541,11 @@ def get_resource_actions(
             than the value of this parameter (exclusive).
             Only the first_timestamp or last_timestamp parameter should be supplied
     :param exclude_changes: only return ResourceActions where the change type is different from the one in this list.
-    :return: the list of matching Resource Actions in descending order according to the 'started' timestamp.
-            If a limit was specified, also return the links to the next and previous pages.
-            The "next" page always refers to the actions that started earlier,
-            while the "prev" page refers to actions that started later.
+    :return: The list of matching Resource Actions.
+            The order is ascending if first_timestamp is provided, otherwise descending.
+            If a limit is specified, also return links to the next and previous pages.
+            The "next" page refers to actions that started earlier, while the "prev" page refers to actions that started later.
+
 
     :raises BadRequest: When the supplied parameters are not valid.
 

@@ -4213,7 +4213,7 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
         resource_id: Optional[ResourceIdStr] = None,
-        exclude_changes: list[const.Change] = [],
+        exclude_changes: Optional[list[const.Change]] = None,
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
