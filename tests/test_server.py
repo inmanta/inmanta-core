@@ -841,6 +841,25 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
             }
         )
 
+    #  adding a resource action with its change field set to "created" to test the get_resource_actions
+    #  filtering on resources with changes
+
+    rvid_r1_v1 = "std::File[agent1,path=/etc/file1],v=1"
+    resources.append(
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": rvid_r1_v1,
+            "owner": "root",
+            "path": "/tmp/file200",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        }
+    )
+
     res = await client.put_version(
         tid=environment,
         version=version,
@@ -854,38 +873,28 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    resource_ids = [x["id"] for x in resources]
+    resource_ids_nochange = [x["id"] for x in resources if x["id"] != rvid_r1_v1]
+    resource_ids_created = [x["id"] for x in resources if x["id"] == rvid_r1_v1]
 
     # Start the deploy
     action_id = uuid.uuid4()
     now = datetime.now().astimezone()
     result = await aclient.resource_action_update(
-        environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
+        environment, resource_ids_nochange, action_id, "deploy", now, status=const.ResourceState.deploying
     )
     assert result.code == 200
 
-    #  adding a resource action with its change field set to "created" to test the get_resource_actions
-    #  filtering on resources with changes
-    rvid_r1_v1 = "std::File[agent1,path=/etc/file1],v=1"
-    await data.Resource.new(
-        environment=uuid.UUID(environment),
-        status=const.ResourceState.available,
-        resource_version_id=rvid_r1_v1,
-        attributes={"purge_on_delete": False, "purged": True, "requires": []},
-    ).insert()
-
-    later_action_id = uuid.uuid4()
-    start_time = datetime.now()
-    resource_action = data.ResourceAction(
-        environment=uuid.UUID(environment),
-        version=1,
-        resource_version_ids=[rvid_r1_v1],
-        action_id=later_action_id,
-        action=const.ResourceAction.deploy,
-        started=start_time,
+    action_id = uuid.uuid4()
+    result = await aclient.resource_action_update(
+        environment,
+        resource_ids_created,
+        action_id,
+        "deploy",
+        now,
+        status=const.ResourceState.deploying,
         change=const.Change.created,
     )
-    await resource_action.insert()
+    assert result.code == 200
 
     # Get the status from a resource
     result = await client.get_resource_actions(tid=environment)
@@ -920,6 +929,16 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 200
     assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
+
+    exclude_changes = []
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 3
+
+    exclude_changes = [const.Change.nochange.value, const.Change.created.value]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
 
 
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):
