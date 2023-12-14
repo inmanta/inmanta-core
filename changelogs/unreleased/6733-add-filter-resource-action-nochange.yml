@@ -1,7 +1,7 @@
 description: Add a filter to the resource action endpoint to only select resource actions that have a change
 issue-nr: 6733
 change-type: minor
-destination-branches: [master, iso7, iso6]
+destination-branches: [master, iso7]
 sections:
   minor-improvement: "{{description}}"
 
