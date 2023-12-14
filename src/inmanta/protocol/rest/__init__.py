@@ -221,27 +221,35 @@ class CallArguments:
             arg_type: Optional[type[object]] = self._argspec.annotations.get(arg)
             if arg in self._message:
                 # Argument is parameter in body of path of HTTP request
-                if typing_inspect.is_optional_type(arg_type) and self._properties.operation == "GET":
-                    # Convert Optional[List[SomeType]] to List[SomeType] for get requests
-                    arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
-                    if len(arg_types) == 1 and typing_inspect.get_origin(arg_types[0]) is list:
-                        arg_type = arg_types[0]
+                if self._properties.operation == "GET":
+                    # Check if the argument type is an Optional type (e.g., Optional[List[SomeType]])
+                    if typing_inspect.is_optional_type(arg_type):
+                        # Extract non-None types from the Optional type
+                        non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
 
-                if (
-                    arg_type
-                    and self._properties.operation == "GET"
-                    and typing_inspect.is_generic_type(arg_type)
-                    and issubclass(typing_inspect.get_origin(arg_type), list)
-                    and not isinstance(self._message[arg], list)
-                    and len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
-                    and isinstance(self._message[arg], typing_inspect.get_args(arg_type)[0])
-                ):
-                    # If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
-                    # specific request provides a list with one element, urllib doesn't parse it as a list.
-                    # Map it here explicitly to a list.
-                    value = [self._message[arg]]
+                        # If there's only one type and it's a list, simplify the type to just the list type
+                        if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
+                            arg_type = non_none_arg_types[0]
+
+                    # Check if the argument type is a generic list and the request data doesn't match the expected list type
+                    is_generic_list = (
+                        arg_type
+                        and typing_inspect.is_generic_type(arg_type)
+                        and issubclass(typing_inspect.get_origin(arg_type), list)
+                    )
+                    is_single_element_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1 and isinstance(
+                        self._message[arg], typing_inspect.get_args(arg_type)[0]
+                    )
+                    is_not_list = not isinstance(self._message[arg], list)
+
+                    if is_generic_list and is_not_list and is_single_element_list:
+                        # Handle edge case where a single element is not parsed as a list
+                        value = [self._message[arg]]
+                    else:
+                        value = self._message[arg]
                 else:
                     value = self._message[arg]
+
                 all_fields.remove(arg)
             elif arg_type and self._properties.operation == "GET" and self._is_dict_or_optional_dict(arg_type):
                 # Argument is dictionary-based expression in query parameters of GET operation
