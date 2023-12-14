@@ -22,6 +22,7 @@ import uuid
 from collections.abc import Mapping, MutableMapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
 
+import more_itertools
 import pydantic
 import typing_inspect
 from tornado import escape

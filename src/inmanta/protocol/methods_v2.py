@@ -521,7 +521,7 @@ def get_resource_actions(
     action_id: Optional[uuid.UUID] = None,
     first_timestamp: Optional[datetime.datetime] = None,
     last_timestamp: Optional[datetime.datetime] = None,
-    exclude_changes: Optional[list[str]] = None,
+    exclude_changes: Optional[list[Change]] = None,
 ) -> ReturnValue[list[model.ResourceAction]]:
     """
     Return resource actions matching the search criteria.
