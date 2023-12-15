@@ -41,7 +41,7 @@ This section describes how to upgrade an orchestrator in-place.
 
 .. code-block:: bash
 
-    yum update inmanta-service-orchestrator-server
+    dnf update inmanta-service-orchestrator-server
 
 5. When accessing the web console, all the environments will be visible, and still halted.
 6. One environment at a time:
