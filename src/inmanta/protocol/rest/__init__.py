@@ -191,24 +191,40 @@ class CallArguments:
             raise e
 
     @staticmethod
-    def _is_generic_list(arg_type: Optional[Type[object]]) -> bool:
+    def is_list_or_optional_list(arg_type: Optional[Type[object]]) -> bool:
         """
-        Determine if the argument type is a generic list.
+        Checks if the provided type is a list or an optional list.
         """
-        return arg_type and typing_inspect.is_generic_type(arg_type) and issubclass(typing_inspect.get_origin(arg_type), list)
+        # Check if the type is directly a list
+        if get_origin(arg_type) in {list, List}:
+            return True
+
+        # Check if the type is Optional and contains a list
+        if typing_inspect.is_optional_type(arg_type):
+            # Extract types within Optional
+            inner_types = get_args(arg_type)
+            # Check if any of the inner types is a list
+            return any(get_origin(inner_type) in {list, List} for inner_type in inner_types)
+
+        return False
 
     @staticmethod
-    def _get_list_from_optional_list(arg_type: Optional[Type[object]]) -> Optional[Type[object]]:
+    def transform_optional_list_to_list(arg_type: Optional[Type[object]]) -> Optional[Type[object]]:
         """
-        transform an optional list in a list if needed
+        Transforms an optional list type into a list type. If the provided type is not an optional list,
+        it returns the original type.
         """
         if typing_inspect.is_optional_type(arg_type):
-            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
-            if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
-                return non_none_arg_types[0]
+            # Extract types within Optional
+            inner_types = get_args(arg_type)
+            # Find and return the list type within the inner types
+            for inner_type in inner_types:
+                if get_origin(inner_type) in {list, List}:
+                    return inner_type
         return arg_type
 
-    def _is_enum_type(self, arg_type: Optional[Type[object]]) -> bool:
+    @staticmethod
+    def _is_enum_type(arg_type: Optional[Type[object]]) -> bool:
         """
         Determine if the provided type is an enumeration.
         """
@@ -235,13 +251,6 @@ class CallArguments:
         elif isinstance(value, Enum):
             return value.value
         return None
-
-    @staticmethod
-    def _get_arg_type_element(arg_type: Optional[Type[object]]) -> Optional[Type[object]]:
-        """
-        Retrieve the element type of a generic list argument type.
-        """
-        return typing_inspect.get_args(arg_type)[0] if arg_type else None
 
     @staticmethod
     def _handle_generic_list(message_arg: object, enum_value: Optional[object], is_enum: bool) -> object:
@@ -293,8 +302,8 @@ class CallArguments:
                 message_arg = self._message[arg]
 
                 if self._properties.operation == "GET":
-                    arg_type_not_optional = self._get_list_from_optional_list(arg_type)
-                    if self._is_generic_list(arg_type_not_optional):
+                    if self.is_list_or_optional_list(arg_type):
+                        arg_type_not_optional = self.transform_optional_list_to_list(arg_type)
                         # Update the argument type for optional lists.
                         arg_type_actual = get_args(arg_type_not_optional)[0]
                         # Check if the argument type is an enum and get the enum value if applicable.
