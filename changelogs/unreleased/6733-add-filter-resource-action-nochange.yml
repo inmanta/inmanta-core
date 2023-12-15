@@ -1,4 +1,4 @@
-description: Add a filter to the resource action endpoint to only select resource actions that have a change
+description: Add a filter argument to the resource action endpoint to filter out resource actions with specific changes 
 issue-nr: 6733
 change-type: patch
 destination-branches: [master, iso7, iso6]
