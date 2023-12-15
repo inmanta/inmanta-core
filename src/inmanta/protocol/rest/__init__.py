@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union,
 
 import pydantic
 import typing_inspect
+from more_itertools import one
 from tornado import escape
 
 from inmanta import const, util
@@ -199,12 +200,10 @@ class CallArguments:
         if get_origin(arg_type) in {list, List}:
             return True
 
-        # Check if the type is Optional and contains a list
+        # Check if the type is Optional and contains exactly one list type
         if typing_inspect.is_optional_type(arg_type):
-            # Extract types within Optional
-            inner_types = get_args(arg_type)
-            # Check if any of the inner types is a list
-            return any(get_origin(inner_type) in {list, List} for inner_type in inner_types)
+            inner_type = one(arg for arg in get_args(arg_type) if arg is not type(None))
+            return get_origin(inner_type) in {list, List}
 
         return False
 
