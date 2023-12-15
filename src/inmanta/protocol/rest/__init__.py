@@ -21,7 +21,7 @@ import logging
 import uuid
 from collections.abc import Mapping, MutableMapping
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast, get_args, get_origin  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast, get_args, get_origin  # noqa: F401
 
 import pydantic
 import typing_inspect
@@ -192,7 +192,7 @@ class CallArguments:
             raise e
 
     @staticmethod
-    def is_list_or_optional_list(arg_type: Optional[Type[object]]) -> bool:
+    def is_list_or_optional_list(arg_type: Optional[type[object]]) -> bool:
         """
         Checks if the provided type is a list or an optional list.
         """
@@ -208,7 +208,7 @@ class CallArguments:
         return False
 
     @staticmethod
-    def transform_optional_list_to_list(arg_type: Optional[Type[object]]) -> Optional[Type[object]]:
+    def transform_optional_list_to_list(arg_type: Optional[type[object]]) -> Optional[type[object]]:
         """
         Transforms an optional list type into a list type. If the provided type is not an optional list,
         it returns the original type.
@@ -223,13 +223,13 @@ class CallArguments:
         return arg_type
 
     @staticmethod
-    def _is_enum_type(arg_type: Optional[Type[object]]) -> bool:
+    def _is_enum_type(arg_type: Optional[type[object]]) -> bool:
         """
         Determine if the provided type is an enumeration.
         """
         return arg_type is not None and issubclass(arg_type, Enum)
 
-    def _get_enum_value(self, arg_type: Type[Enum], value: object) -> Optional[object]:
+    def _get_enum_value(self, arg_type: type[Enum], value: object) -> Optional[object]:
         """
         Gets the enum values from the value if it matches an enum member.
         Processes both individual values and lists of values.
@@ -240,7 +240,7 @@ class CallArguments:
             return self._convert_to_enum_value(arg_type, value)
 
     @staticmethod
-    def _convert_to_enum_value(arg_type: Type[Enum], value: object) -> Optional[object]:
+    def _convert_to_enum_value(arg_type: type[Enum], value: object) -> Optional[object]:
         """
         Converts a single value to its corresponding enum value if it's a valid enum member.
         """
@@ -296,7 +296,7 @@ class CallArguments:
         call_args = {}
 
         for i, arg in enumerate(args):
-            arg_type: Optional[Type[object]] = self._argspec.annotations.get(arg)
+            arg_type: Optional[type[object]] = self._argspec.annotations.get(arg)
             if arg in self._message:
                 message_arg = self._message[arg]
 
