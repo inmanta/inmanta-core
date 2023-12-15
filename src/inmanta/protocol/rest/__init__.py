@@ -244,9 +244,7 @@ class CallArguments:
         return typing_inspect.get_args(arg_type)[0] if arg_type else None
 
     @staticmethod
-    def _handle_generic_list(
-        arg_type_element: Optional[Type[object]], message_arg: object, enum_value: Optional[object], is_enum: bool
-    ) -> object:
+    def _handle_generic_list(message_arg: object, enum_value: Optional[object], is_enum: bool) -> object:
         """
         Handle the processing especially regarding whether the argument is a list or an enum.
         If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
@@ -303,7 +301,7 @@ class CallArguments:
                         is_enum = self._is_enum_type(arg_type_actual)
                         enum_value = self._get_enum_value(arg_type_actual, message_arg) if is_enum else None
 
-                        value = self._handle_generic_list(arg_type_actual, message_arg, enum_value, is_enum)
+                        value = self._handle_generic_list(message_arg, enum_value, is_enum)
                     else:
                         value = message_arg
                 else:
