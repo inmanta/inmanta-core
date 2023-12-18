@@ -230,23 +230,22 @@ class ResourceService(protocol.ServerSlice):
         except ValueError:
             return 400, {"message": f"{resource_id} is not a valid resource version id"}
 
-        async with data.ResourceAction.get_connection(connection) as con:
-            resv = await data.Resource.get(env.id, resource_id, con)
-            if resv is None:
-                return 404, {"message": "The resource with the given id does not exist in the given environment"}
+        resv = await data.Resource.get(env.id, resource_id)
+        if resv is None:
+            return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
-            if status is not None and status:
-                return 200, {"status": resv.status}
+        if status is not None and status:
+            return 200, {"status": resv.status}
 
-            actions: list[data.ResourceAction] = []
-            if bool(logs):
-                action_name = None
-                if log_action is not None:
-                    action_name = log_action.name
+        actions: list[data.ResourceAction] = []
+        if bool(logs):
+            action_name = None
+            if log_action is not None:
+                action_name = log_action.name
 
-                actions = await data.ResourceAction.get_log(
-                    environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit, connection=con
-                )
+            actions = await data.ResourceAction.get_log(
+                environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit
+            )
 
             return 200, {"resource": resv, "logs": actions}
 
