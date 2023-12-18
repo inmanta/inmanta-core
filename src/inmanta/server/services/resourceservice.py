@@ -247,7 +247,7 @@ class ResourceService(protocol.ServerSlice):
                 environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit
             )
 
-            return 200, {"resource": resv, "logs": actions}
+        return 200, {"resource": resv, "logs": actions}
 
     # This endpoint doesn't have a method associated yet.
     # Intended for use by other slices
@@ -258,9 +258,7 @@ class ResourceService(protocol.ServerSlice):
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
         connection: Optional[Connection] = None,
     ) -> list[Resource]:
-        result = await data.Resource.get_resources_in_latest_version(
-            environment.id, resource_type, attributes, connection=connection
-        )
+        result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
         return [r.to_dto() for r in result]
 
     @handle(methods.get_resources_for_agent, env="tid")
