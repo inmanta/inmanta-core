@@ -230,7 +230,7 @@ class ResourceService(protocol.ServerSlice):
         except ValueError:
             return 400, {"message": f"{resource_id} is not a valid resource version id"}
 
-        resv = await data.Resource.get(env.id, resource_id)
+        resv = await data.Resource.get(env.id, resource_id, connection)
         if resv is None:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
