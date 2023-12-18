@@ -255,7 +255,6 @@ class ResourceService(protocol.ServerSlice):
         environment: data.Environment,
         resource_type: Optional[ResourceType] = None,
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
-        connection: Optional[Connection] = None,
     ) -> list[Resource]:
         result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
         return [r.to_dto() for r in result]
