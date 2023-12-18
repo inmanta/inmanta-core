@@ -844,7 +844,7 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     #  adding a resource action with its change field set to "created" to test the get_resource_actions
     #  filtering on resources with changes
 
-    rvid_r1_v1 = f"std::File[agent1,path=/etc/file1],v={version}"
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file200],v={version}"
     resources.append(
         {
             "group": "root",
@@ -925,29 +925,25 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     assert result.code == 200
     assert len(result.result["data"]) == 3
 
-    exclude_changes = [const.Change.nochange]
+    exclude_changes = [const.Change.nochange.value, const.Change.created.value]
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 200
-    assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
-
-    exclude_changes = ["nochange"]
-    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
-    assert result.code == 200
-    assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
+    assert len(result.result["data"]) == 0
 
     exclude_changes = []
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 200
     assert len(result.result["data"]) == 3
 
-    exclude_changes = [const.Change.nochange, const.Change.created]
+    exclude_changes = [const.Change.nochange.value]
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 200
-    assert len(result.result["data"]) == 0
+    assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
 
-    exclude_changes = ["test"]
+    exclude_changes = ["error"]
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 400
+    assert "Failed to validate argument" in result.result["message"]
 
 
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):

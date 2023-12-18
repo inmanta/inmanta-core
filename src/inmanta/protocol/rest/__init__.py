@@ -20,12 +20,10 @@ import json
 import logging
 import uuid
 from collections.abc import Mapping, MutableMapping
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast, get_args, get_origin  # noqa: F401
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
 import typing_inspect
-from more_itertools import one
 from tornado import escape
 
 from inmanta import const, util
@@ -191,83 +189,6 @@ class CallArguments:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
-    @staticmethod
-    def is_list_or_optional_list(arg_type: Optional[type[object]]) -> bool:
-        """
-        Checks if the provided type is a list or an optional list.
-        """
-        # Check if the type is directly a list
-        if get_origin(arg_type) in {list, List}:
-            return True
-
-        # Check if the type is Optional and contains exactly one list type
-        if typing_inspect.is_optional_type(arg_type):
-            inner_type = one(arg for arg in get_args(arg_type) if arg is not type(None))
-            return get_origin(inner_type) in {list, List}
-
-        return False
-
-    @staticmethod
-    def transform_optional_list_to_list(arg_type: Optional[type[object]]) -> Optional[type[object]]:
-        """
-        Transforms an optional list type into a list type. If the provided type is not an optional list,
-        it returns the original type.
-        """
-        if typing_inspect.is_optional_type(arg_type):
-            # Extract types within Optional
-            inner_types = get_args(arg_type)
-            # Find and return the list type within the inner types
-            for inner_type in inner_types:
-                if get_origin(inner_type) in {list, List}:
-                    return inner_type
-        return arg_type
-
-    @staticmethod
-    def _is_enum_type(arg_type: Optional[type[object]]) -> bool:
-        """
-        Determine if the provided type is an enumeration.
-        """
-        return arg_type is not None and issubclass(arg_type, Enum)
-
-    def _get_enum_value(self, arg_type: type[Enum], value: object) -> Optional[object]:
-        """
-        Gets the enum values from the value if it matches an enum member.
-        Processes both individual values and lists of values.
-        """
-        if isinstance(value, list):
-            return [self._convert_to_enum_value(arg_type, item) for item in value]
-        else:
-            return self._convert_to_enum_value(arg_type, value)
-
-    @staticmethod
-    def _convert_to_enum_value(arg_type: type[Enum], value: object) -> Optional[object]:
-        """
-        Converts a single value to its corresponding enum value if it's a valid enum member.
-        """
-        if isinstance(value, str):
-            enum_member_name = value.split(".")[-1] if "." in value else value
-            return next((e.value for e in arg_type if e.name == enum_member_name), None)
-        elif isinstance(value, Enum):
-            return value.value
-        return None
-
-    @staticmethod
-    def _handle_generic_list(message_arg: object, enum_value: Optional[object], is_enum: bool) -> object:
-        """
-        Handle the processing especially regarding whether the argument is a list or an enum.
-        If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
-        specific request provides a list with one element, urllib doesn't parse it as a list.
-        Map it here explicitly to a list.
-        """
-        if isinstance(message_arg, list):
-            if is_enum and enum_value is not None:
-                return enum_value
-            return message_arg
-        elif is_enum and enum_value is not None:
-            return [enum_value]
-        else:
-            return [message_arg]
-
     async def process(self) -> None:
         """
         Process the message
@@ -301,15 +222,26 @@ class CallArguments:
                 message_arg = self._message[arg]
 
                 if self._properties.operation == "GET":
-                    if self.is_list_or_optional_list(arg_type):
-                        arg_type_not_optional = self.transform_optional_list_to_list(arg_type)
-                        # Update the argument type for optional lists.
-                        arg_type_actual = get_args(arg_type_not_optional)[0]
-                        # Check if the argument type is an enum and get the enum value if applicable.
-                        is_enum = self._is_enum_type(arg_type_actual)
-                        enum_value = self._get_enum_value(arg_type_actual, message_arg) if is_enum else None
+                    # Check if the argument type is an Optional type (e.g., Optional[List[SomeType]])
+                    if typing_inspect.is_optional_type(arg_type):
+                        # Extract non-None types from the Optional type
+                        non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
 
-                        value = self._handle_generic_list(message_arg, enum_value, is_enum)
+                        # If there's only one type and it's a list, simplify the type to just the list type
+                        if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
+                            arg_type = non_none_arg_types[0]
+
+                    is_generic_list = (
+                        arg_type
+                        and typing_inspect.is_generic_type(arg_type)
+                        and issubclass(typing_inspect.get_origin(arg_type), list)
+                    )
+                    is_single_element_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+                    is_not_list = not isinstance(self._message[arg], list)
+
+                    if is_generic_list and is_not_list and is_single_element_list:
+                        # Handle edge case where a single element is not parsed as a list
+                        value = [self._message[arg]]
                     else:
                         value = message_arg
                 else:
