@@ -231,16 +231,19 @@ class CallArguments:
                         if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
                             arg_type = non_none_arg_types[0]
 
+                    # todo
                     is_generic_list = (
-                        arg_type
-                        and typing_inspect.is_generic_type(arg_type)
-                        and issubclass(typing_inspect.get_origin(arg_type), list)
+                        arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
                     )
+                    # todo
                     is_single_element_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+                    # todo
                     is_not_list = not isinstance(self._message[arg], list)
 
                     if is_generic_list and is_not_list and is_single_element_list:
-                        # Handle edge case where a single element is not parsed as a list
+                        # If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
+                        # specific request provides a list with one element, urllib doesn't parse it as a list.
+                        # Map it here explicitly to a list.
                         value = [self._message[arg]]
                     else:
                         value = message_arg
