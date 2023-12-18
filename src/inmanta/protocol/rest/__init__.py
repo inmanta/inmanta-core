@@ -231,13 +231,13 @@ class CallArguments:
                         if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
                             arg_type = non_none_arg_types[0]
 
-                    # todo
+                    # Check if the argument type is a generic list
                     is_generic_list = (
                         arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
                     )
-                    # todo
+                    # Check if the list type has exactly one element type
                     is_single_element_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
-                    # todo
+                    # Check if the argument value itself is not a list
                     is_not_list = not isinstance(self._message[arg], list)
 
                     if is_generic_list and is_not_list and is_single_element_list:
