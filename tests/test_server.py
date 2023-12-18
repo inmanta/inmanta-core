@@ -925,20 +925,20 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     assert result.code == 200
     assert len(result.result["data"]) == 3
 
-    exclude_changes = [const.Change.nochange]
+    exclude_changes = [const.Change.nochange, const.Change.created]
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 200
-    assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
+    assert len(result.result["data"]) == 0  # only one of the 3 resource_actions has change != nochange
 
     exclude_changes = []
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 200
     assert len(result.result["data"]) == 3
 
-    exclude_changes = [const.Change.nochange, const.Change.created]
+    exclude_changes = [const.Change.nochange]
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
     assert result.code == 200
-    assert len(result.result["data"]) == 0
+    assert len(result.result["data"]) == 1
 
     exclude_changes = ["error"]
     result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
