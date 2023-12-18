@@ -273,28 +273,6 @@ class CallArguments:
             call_args[arg] = value
 
         # validate types
-        print(self._properties.argument_validator.schema_json())
-        # {"$defs": {"Change": {"enum": ["nochange", "created", "purged", "updated"], "title": "Change", "type": "string"}},
-        #  "properties": {"tid": {"default": null, "format": "uuid", "title": "Tid", "type": "string"},
-        #                 "resource_type": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null,
-        #                                   "title": "Resource Type"},
-        #                 "agent": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Agent"},
-        #                 "attribute": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Attribute"},
-        #                 "attribute_value": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null,
-        #                                     "title": "Attribute Value"},
-        #                 "log_severity": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null,
-        #                                  "title": "Log Severity"},
-        #                 "limit": {"anyOf": [{"type": "integer"}, {"type": "null"}], "default": 0, "title": "Limit"},
-        #                 "action_id": {"anyOf": [{"format": "uuid", "type": "string"}, {"type": "null"}], "default": null,
-        #                               "title": "Action Id"},
-        #                 "first_timestamp": {"anyOf": [{"format": "date-time", "type": "string"}, {"type": "null"}],
-        #                                     "default": null, "title": "First Timestamp"},
-        #                 "last_timestamp": {"anyOf": [{"format": "date-time", "type": "string"}, {"type": "null"}],
-        #                                    "default": null, "title": "Last Timestamp"},
-        #                 "exclude_changes": {"anyOf": [{"items": {"$ref": "#/$defs/Change"}, "type": "array"}, {"type": "null"}],
-        #                                     "default": null, "title": "Exclude Changes"}},
-        #  "title": "get_resource_actions_arguments", "type": "object"}
-
         call_args = self._properties.validate_arguments(call_args)
 
         for arg, value in call_args.items():
