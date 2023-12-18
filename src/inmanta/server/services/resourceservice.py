@@ -222,7 +222,6 @@ class ResourceService(protocol.ServerSlice):
         status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
-        connection: Optional[Connection] = None,
     ) -> Apireturn:
         # Validate resource version id
         try:
