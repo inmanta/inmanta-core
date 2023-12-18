@@ -1073,13 +1073,6 @@ class ResourceService(protocol.ServerSlice):
     ) -> ReturnValue[list[ResourceAction]]:
         if exclude_changes is None:
             exclude_changes = []
-        else:
-            try:
-                # Convert strings to Change enum
-                exclude_changes = [Change(change) for change in exclude_changes]
-            except ValueError as e:
-                # If conversion fails, raise BadRequest
-                raise BadRequest(f"Invalid change value in exclude_changes: {str(e)}")
 
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
