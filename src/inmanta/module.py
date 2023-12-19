@@ -2958,18 +2958,19 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """Generate a list of all python files"""
-        files: dict[str, str] = {}
+        """Generate a list of all Python files using os.walk."""
+        files = {}
 
-        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.pyc"), recursive=True):
-            # Filter out pyc files in the default cache dir. Only support our compiled pyc files.
-            if "__pycache__" not in file_name:
-                files[file_name[:-3]] = file_name
+        for root, _, file_names in os.walk(plugin_dir):
+            for file_name in file_names:
+                if file_name.endswith(".py") or file_name.endswith(".pyc"):
+                    full_path = os.path.join(root, file_name)
 
-        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
-            # store the python source file if we do not have a python file
-            if file_name[:-2] not in files:
-                files[file_name[:-2]] = file_name
+                    # Filter out .pyc files in the default cache dir and prioritize .py files
+                    if "__pycache__" not in full_path:
+                        base_name = full_path.rsplit(".", maxsplit=1)[0]
+                        if base_name not in files or file_name.endswith(".py"):
+                            files[base_name] = full_path
 
         return list(files.values())
 
