@@ -193,7 +193,7 @@ class CallArguments:
     def _handle_get_request_arg(arg_type: Optional[Type[object]], arg_value: object) -> object:
         """
         Handles processing of arguments for GET requests, especially for list types encoded as URL query parameters.
-        Maps single element lists provided as query parameters to actual lists.
+        If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the specific request provides a list with one element, urllib doesn't parse it as a list. Map it here explicitly to a list.
         """
         if typing_inspect.is_optional_type(arg_type):
             non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
