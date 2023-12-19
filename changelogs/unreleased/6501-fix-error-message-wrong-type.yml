@@ -1,4 +1,0 @@
-description: Fix a wrong error message when using a wrong type in the inmanta language.
-issue-nr: 6501
-change-type: patch
-destination-branches: [master, iso7, iso6]
