@@ -225,7 +225,7 @@ class CallArguments:
                 if arg_type and self._properties.operation == "GET":
                     # Check if the argument type is an Optional type (e.g., Optional[List[SomeType]])
                     if typing_inspect.is_optional_type(arg_type):
-                        # Extract non-None types from the Optional type
+                        # typing_inspect.get_args(Optiona[<type>]) return a tuple (Type, NoneType). Extract the non-None type.
                         non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
 
                         # If there's only one type and it's a list, simplify the type to just the list type
