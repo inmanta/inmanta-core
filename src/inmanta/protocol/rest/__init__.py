@@ -201,7 +201,7 @@ class CallArguments:
                 arg_type = non_none_arg_types[0]
 
         is_generic_list = arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
-        is_single_element_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+        is_single_type_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
         is_not_list = not isinstance(message_arg, list)
 
         if is_generic_list and is_not_list and is_single_element_list:
