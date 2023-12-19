@@ -190,7 +190,7 @@ class CallArguments:
             raise e
 
     @staticmethod
-    def _handle_get_request_arg(arg_type: Optional[Type[object]], message_arg: object) -> object:
+    def _handle_get_request_arg(arg_type: Optional[Type[object]], arg_value: object) -> object:
         """
         Handles processing of arguments for GET requests, especially for list types encoded as URL query parameters.
         Maps single element lists provided as query parameters to actual lists.
