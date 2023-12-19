@@ -189,6 +189,38 @@ class CallArguments:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
+    @staticmethod
+    def _handle_get_request_arg(arg_type: Optional[Type[object]], message_arg: object) -> object:
+        """
+        Handles processing of arguments for GET requests, especially for list types encoded as URL query parameters.
+        Maps single element lists provided as query parameters to actual lists.
+        """
+        if typing_inspect.is_optional_type(arg_type):
+            non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
+            if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
+                arg_type = non_none_arg_types[0]
+
+        is_generic_list = arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
+        is_single_element_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
+        is_not_list = not isinstance(message_arg, list)
+
+        if is_generic_list and is_not_list and is_single_element_list:
+            return [message_arg]
+        return message_arg
+
+    def _validate_argument_consistency(self, args):
+        """
+        Validates the consistency of arguments, ensuring they are not passed both as a header and a non-header value.
+        """
+        for arg in args:
+            if arg in self._message and self._is_header_param(arg) and self._is_header_param_provided(arg):
+                message_value = self._message[arg]
+                header_value = self._get_header_value_for(arg)
+                if message_value != header_value:
+                    raise exceptions.BadRequest(
+                        f"Argument {arg} has inconsistent values (header={header_value}; non-header={message_value})."
+                    )
+
     async def process(self) -> None:
         """
         Process the message
@@ -203,16 +235,7 @@ class CallArguments:
         if self._argspec.defaults is not None:
             defaults_start = len(args) - len(self._argspec.defaults)
 
-        # Make sure that an argument is not passed both using the header and a non-header value with a different value
-        for arg in args:
-            if arg in self._message and self._is_header_param(arg) and self._is_header_param_provided(arg):
-                message_value = self._message[arg]
-                header_value = self._get_header_value_for(arg)
-                if message_value != header_value:
-                    raise exceptions.BadRequest(
-                        f"Value for argument {arg} was provided via a header and a non-header argument, but both values"
-                        f" don't match (header={header_value}; non-header={message_value})"
-                    )
+        self._validate_argument_consistency(args)
 
         call_args = {}
 
@@ -223,29 +246,7 @@ class CallArguments:
                 value = self._message[arg]
 
                 if arg_type and self._properties.operation == "GET":
-                    # Check if the argument type is an Optional type (e.g., Optional[List[SomeType]])
-                    if typing_inspect.is_optional_type(arg_type):
-                        # typing_inspect.get_args(Optiona[<type>]) return a tuple (Type, NoneType). Extract the non-None type.
-                        non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
-
-                        # If there's only one type and it's a list, simplify the type to just the list type
-                        if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
-                            arg_type = non_none_arg_types[0]
-
-                    # Check if the argument type is a generic list
-                    is_generic_list = (
-                        arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
-                    )
-                    # Check if the list type has exactly one element type
-                    is_single_element_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
-                    # Check if the argument value itself is not a list
-                    is_not_list = not isinstance(self._message[arg], list)
-
-                    if is_generic_list and is_not_list and is_single_element_list:
-                        # If a GET endpoint has a parameter of type list that is encoded as a URL query parameter and the
-                        # specific request provides a list with one element, urllib doesn't parse it as a list.
-                        # Map it here explicitly to a list.
-                        value = [self._message[arg]]
+                    value = self._handle_get_request_arg(arg_type, value)
 
                 all_fields.remove(arg)
 
