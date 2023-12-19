@@ -525,7 +525,7 @@ class Implementation(NamedType):
         try:
             self.statements.normalize()
         except CompilerException as e:
-            e.set_location(self.location)
+            e.set_location(self.location, False)
             raise
 
     def get_full_name(self) -> str:

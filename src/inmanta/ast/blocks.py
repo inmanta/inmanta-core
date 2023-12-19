@@ -71,7 +71,7 @@ class BasicBlock:
             try:
                 s.normalize()
             except TypeNotFoundException as e:
-                e.set_statement(s)
+                e.set_statement(s, False)
                 raise e
         # not used yet
         # self.requires = set([require for s in self.__stmts for require in s.requires()])
@@ -103,7 +103,7 @@ class BasicBlock:
             try:
                 s.emit(resolver, queue)
             except RuntimeException as e:
-                e.set_statement(s)
+                e.set_statement(s, False)
                 raise e
 
     def warn_shadowed_variables(self) -> None:
