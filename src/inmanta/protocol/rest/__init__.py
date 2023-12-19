@@ -219,9 +219,10 @@ class CallArguments:
         for i, arg in enumerate(args):
             arg_type: Optional[type[object]] = self._argspec.annotations.get(arg)
             if arg in self._message:
-                message_arg = self._message[arg]
+                # Argument is parameter in body of path of HTTP request
+                value = self._message[arg]
 
-                if self._properties.operation == "GET":
+                if arg_type and self._properties.operation == "GET":
                     # Check if the argument type is an Optional type (e.g., Optional[List[SomeType]])
                     if typing_inspect.is_optional_type(arg_type):
                         # Extract non-None types from the Optional type
@@ -245,10 +246,6 @@ class CallArguments:
                         # specific request provides a list with one element, urllib doesn't parse it as a list.
                         # Map it here explicitly to a list.
                         value = [self._message[arg]]
-                    else:
-                        value = message_arg
-                else:
-                    value = message_arg
 
                 all_fields.remove(arg)
 
