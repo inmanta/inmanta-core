@@ -798,7 +798,7 @@ class OptionalValueException(RuntimeException):
 
     def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
         RuntimeException.__init__(
-            self, instance, f"Optional variable accessed that has no value (attribute `{attribute}` of `{instance}`)"
+            self, None, f"Optional variable accessed that has no value (attribute `{attribute}` of `{instance}`)"
         )
         self.instance = instance
         self.attribute = attribute
