@@ -202,11 +202,11 @@ class CallArguments:
 
         is_generic_list = arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
         is_single_type_list = len(typing_inspect.get_args(arg_type, evaluate=True)) == 1
-        arg_value_is_not_list = not isinstance(message_arg, list)
+        arg_value_is_not_list = not isinstance(arg_value, list)
 
-        if is_generic_list and is_not_list and is_single_element_list:
-            return [message_arg]
-        return message_arg
+        if is_generic_list and is_single_type_list and arg_value_is_not_list:
+            return [arg_value]
+        return arg_value
 
     def _validate_argument_consistency(self, args):
         """
@@ -218,7 +218,8 @@ class CallArguments:
                 header_value = self._get_header_value_for(arg)
                 if message_value != header_value:
                     raise exceptions.BadRequest(
-                        f"Argument {arg} has inconsistent values (header={header_value}; non-header={message_value})."
+                        f"Value for argument {arg} was provided via a header and a non-header argument, but both values"
+                        f" don't match (header={header_value}; non-header={message_value})"
                     )
 
     async def process(self) -> None:
