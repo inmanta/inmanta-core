@@ -184,7 +184,7 @@ Test1(a=3)
         """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)` """
         """(reported in Construct(Test1) ({dir}/main.cf:6))
 caused by:
-  Invalid value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6))""",
+  Invalid value '3', expected string (reported in Construct(Test1) ({dir}/main.cf:6))""",
     )
 
 
@@ -204,7 +204,7 @@ t1.a=3
 """,
         """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` (reported in t1.a = 3 ({dir}/main.cf:11))
 caused by:
-  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))""",  # noqa: E501
+  Invalid value '3', expected string (reported in t1.a = 3 ({dir}/main.cf:11))""",  # noqa: E501
     )
 
 
