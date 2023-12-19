@@ -4079,7 +4079,12 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     async def get_log(
-        cls, environment: uuid.UUID, resource_version_id: m.ResourceVersionIdStr, action: Optional[str] = None, limit: int = 0
+        cls,
+        environment: uuid.UUID,
+        resource_version_id: m.ResourceVersionIdStr,
+        action: Optional[str] = None,
+        limit: int = 0,
+        connection: Optional[Connection] = None,
     ) -> list["ResourceAction"]:
         query = """
         SELECT ra.* FROM public.resourceaction as ra
@@ -4096,7 +4101,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        async with cls.get_connection() as con:
+        async with cls.get_connection(connection) as con:
             async with con.transaction():
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
