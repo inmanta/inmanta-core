@@ -222,6 +222,7 @@ class ResourceService(protocol.ServerSlice):
         status: bool,
         log_action: const.ResourceAction,
         log_limit: int,
+        connection: Optional[Connection] = None,
     ) -> Apireturn:
         # Validate resource version id
         try:
@@ -229,24 +230,25 @@ class ResourceService(protocol.ServerSlice):
         except ValueError:
             return 400, {"message": f"{resource_id} is not a valid resource version id"}
 
-        resv = await data.Resource.get(env.id, resource_id)
-        if resv is None:
-            return 404, {"message": "The resource with the given id does not exist in the given environment"}
+        async with data.ResourceAction.get_connection(connection) as con:
+            resv = await data.Resource.get(env.id, resource_id, con)
+            if resv is None:
+                return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
-        if status is not None and status:
-            return 200, {"status": resv.status}
+            if status is not None and status:
+                return 200, {"status": resv.status}
 
-        actions: list[data.ResourceAction] = []
-        if bool(logs):
-            action_name = None
-            if log_action is not None:
-                action_name = log_action.name
+            actions: list[data.ResourceAction] = []
+            if bool(logs):
+                action_name = None
+                if log_action is not None:
+                    action_name = log_action.name
 
-            actions = await data.ResourceAction.get_log(
-                environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit
-            )
+                actions = await data.ResourceAction.get_log(
+                    environment=env.id, resource_version_id=resource_id, action=action_name, limit=log_limit, connection=con
+                )
 
-        return 200, {"resource": resv, "logs": actions}
+            return 200, {"resource": resv, "logs": actions}
 
     # This endpoint doesn't have a method associated yet.
     # Intended for use by other slices
@@ -255,8 +257,11 @@ class ResourceService(protocol.ServerSlice):
         environment: data.Environment,
         resource_type: Optional[ResourceType] = None,
         attributes: dict[PrimitiveTypes, PrimitiveTypes] = {},
+        connection: Optional[Connection] = None,
     ) -> list[Resource]:
-        result = await data.Resource.get_resources_in_latest_version(environment.id, resource_type, attributes)
+        result = await data.Resource.get_resources_in_latest_version(
+            environment.id, resource_type, attributes, connection=connection
+        )
         return [r.to_dto() for r in result]
 
     @handle(methods.get_resources_for_agent, env="tid")
