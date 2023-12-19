@@ -355,7 +355,7 @@ class Bool(Primitive):
             return True
         if isinstance(value, bool):
             return True
-        raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
+        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def cast(self, value: Optional[object]) -> object:
         return super().cast(value if not isinstance(value, NoneValue) else None)
@@ -391,7 +391,7 @@ class String(Primitive):
         if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
-            raise RuntimeException(None, "Invalid value '%s', expected String" % value)
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
@@ -540,7 +540,7 @@ class Dict(Type):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
