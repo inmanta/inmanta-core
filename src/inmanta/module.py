@@ -2966,17 +2966,10 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         files = {}
 
-        for root, dirs, file_names in os.walk(plugin_dir):
-            # Skip the 'model' folder and its subdirectories
-            if "model" in dirs:
-                dirs.remove("model")
-
+        for root, _, file_names in os.walk(plugin_dir):
             for file_name in file_names:
                 if file_name.endswith(".py") or file_name.endswith(".pyc"):
                     full_path = os.path.join(root, file_name)
-
-                    if os.path.basename(root) == "model":
-                        continue
 
                     # Filter out .pyc files in the default cache dir and prioritize .py files
                     if "__pycache__" not in full_path:
