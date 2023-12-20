@@ -2961,15 +2961,17 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """Generate a list of all python files"""
         files: dict[str, str] = {}
 
-        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.pyc"), recursive=True):
-            # Filter out pyc files in the default cache dir. Only support our compiled pyc files.
-            if "__pycache__" not in file_name:
-                files[file_name[:-3]] = file_name
+        for dirpath, dirnames, filenames in os.walk(plugin_dir):
+            for filename in filenames:
+                if filename.endswith(".py") or filename.endswith(".pyc"):
+                    file_path = os.path.join(dirpath, filename)
 
-        for file_name in glob.iglob(os.path.join(plugin_dir, "**", "*.py"), recursive=True):
-            # store the python source file if we do not have a python file
-            if file_name[:-2] not in files:
-                files[file_name[:-2]] = file_name
+                    # Filter out pyc files in the default cache dir.
+                    if "__pycache__" not in file_path:
+                        # Store the python source file if we do not have a compiled file
+                        base_file_path = file_path[:-1] if filename.endswith(".pyc") else file_path[:-3]
+                        if base_file_path not in files:
+                            files[base_file_path] = file_path
 
         return list(files.values())
 
