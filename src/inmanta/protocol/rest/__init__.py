@@ -198,7 +198,7 @@ class CallArguments:
         """
         if typing_inspect.is_optional_type(arg_type):
             non_none_arg_types = [arg for arg in typing_inspect.get_args(arg_type) if arg is not type(None)]
-            if len(non_none_arg_types) == 1 and typing_inspect.get_origin(non_none_arg_types[0]) is list:
+            if len(non_none_arg_types) == 1:
                 arg_type = non_none_arg_types[0]
 
         is_generic_list = arg_type and typing_inspect.is_generic_type(arg_type) and typing_inspect.get_origin(arg_type) is list
