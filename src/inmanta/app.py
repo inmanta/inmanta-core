@@ -946,7 +946,18 @@ def app() -> None:
                 print(helpmsg)
 
     try:
-        options.func(options)
+        if options.profile:
+            import cProfile
+            import pstats
+
+            cProfile.runctx("options.func(options)", globals(), {"options": options}, "run.profile")
+            p = pstats.Stats("run.profile")
+            p.strip_dirs().sort_stats("time").print_stats(20)
+        else:
+            t1 = time.time()
+            options.func(options)
+            LOGGER.debug("The entire compile command took %0.03f seconds", time.time() - t1)
+
     except ShowUsageException as e:
         print(e.args[0], file=sys.stderr)
         parser.print_usage()
