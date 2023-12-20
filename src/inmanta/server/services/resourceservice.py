@@ -1074,7 +1074,11 @@ class ResourceService(protocol.ServerSlice):
         action_id: Optional[uuid.UUID] = None,
         first_timestamp: Optional[datetime.datetime] = None,
         last_timestamp: Optional[datetime.datetime] = None,
+        exclude_changes: Optional[list[Change]] = None,
     ) -> ReturnValue[list[ResourceAction]]:
+        if exclude_changes is None:
+            exclude_changes = []
+
         if (attribute and not attribute_value) or (not attribute and attribute_value):
             raise BadRequest(
                 f"Attribute and attribute_value should both be supplied to use them filtering. "
@@ -1107,6 +1111,7 @@ class ResourceService(protocol.ServerSlice):
             action_id=action_id,
             first_timestamp=first_timestamp,
             last_timestamp=last_timestamp,
+            exclude_changes=exclude_changes,
         )
         resource_action_dtos = [resource_action.to_dto() for resource_action in resource_actions]
         links = {}
