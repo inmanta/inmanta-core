@@ -2778,6 +2778,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
+        self._dir_cache = {}  # cache containing all the filepaths present in a dir
 
     @classmethod
     @abstractmethod
@@ -2958,22 +2959,42 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """Generate a list of all python files"""
+        """Generate a list of all python files, with caching to avoid duplicate walks."""
+        # Return from cache if already exists
+        if plugin_dir in self._dir_cache:
+            return self._dir_cache[plugin_dir]
+
         files: dict[str, str] = {}
 
         for dirpath, dirnames, filenames in os.walk(plugin_dir):
+            # Skip this directory if it's already cached
+            if dirpath in self._dir_cache:
+                cached_files = self._dir_cache[dirpath]
+                for file in cached_files:
+                    base_file_path = file[:-1] if file.endswith(".pyc") else file[:-3]
+                    files[base_file_path] = file
+                continue
+
+            current_path_files = []
+
             for filename in filenames:
                 if filename.endswith(".py") or filename.endswith(".pyc"):
                     file_path = os.path.join(dirpath, filename)
 
                     # Filter out pyc files in the default cache dir.
                     if "__pycache__" not in file_path:
-                        # Store the python source file if we do not have a compiled file
                         base_file_path = file_path[:-1] if filename.endswith(".pyc") else file_path[:-3]
                         if base_file_path not in files:
                             files[base_file_path] = file_path
+                            current_path_files.append(file_path)
 
-        return list(files.values())
+            # Update the cache for the current directory
+            self._dir_cache[dirpath] = current_path_files
+
+        # Store the final result for the root directory
+        self._dir_cache[plugin_dir] = list(files.values())
+
+        return self._dir_cache[plugin_dir]
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
         """
