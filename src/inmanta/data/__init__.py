@@ -4248,6 +4248,7 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
         resource_id: Optional[ResourceIdStr] = None,
+        exclude_changes: Optional[list[const.Change]] = None,
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
@@ -4312,6 +4313,14 @@ class ResourceAction(BaseDocument):
             query += f" AND started < ${parameter_index}"
             values.append(cls._get_value(last_timestamp))
             parameter_index += 1
+
+        if exclude_changes:
+            # Create a string with placeholders for each item in exclude_changes
+            exclude_placeholders = ", ".join([f"${parameter_index + i}" for i in range(len(exclude_changes))])
+            query += f" AND ra.change NOT IN ({exclude_placeholders})"
+            values.extend([cls._get_value(change) for change in exclude_changes])
+            parameter_index += len(exclude_changes)
+
         if first_timestamp:
             query += " ORDER BY started, action_id"
         else:
