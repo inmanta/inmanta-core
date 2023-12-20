@@ -209,7 +209,7 @@ class MultiVersionSetup:
             Id.parse_id(resource["id"]).resource_str()
             for resource in self.versions[version]
             if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]
-        } == set(pos).union(set(neg))
+        } == set(pos).union(set(neg)), version
 
         allresources = {}
 
@@ -350,7 +350,7 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
 
         setup = MultiVersionSetup()
 
-        setup.add_resource("R1", "A1 A1 V1 D1", True)
+        setup.add_resource("R1", "A1 A1 V1 D1", False)  # one version missing is now ignored
         setup.add_resource("R2", "A1 E1 D1", True)
         setup.add_resource("R3", "A1 E1 E1 A1", True)
         setup.add_resource("R4", "A1 D1", False)

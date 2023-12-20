@@ -4332,12 +4332,20 @@ class ResourceAction(BaseDocument):
         async with cls.get_connection() as connection:
             # Step 1: Get the resource
             # also check we are currently deploying
+
             resource: Optional[Resource] = await Resource.get_one(
                 environment=env.id, resource_id=resource_id_str, model=resource_id.version, connection=connection
             )
+
             if resource is None:
                 raise NotFound(f"Resource with id {resource_version_id_str} was not found in environment {env.id}")
 
+            resource_state: Optional[ResourcePersistentState] = await ResourcePersistentState.get_one(
+                environment=env.id, resource_id=resource_id_str, connection=connection
+            )
+            assert resource_state is not None  # resource state must exist if resource exists
+
+            # TODO: perhaps status on share state can be used
             if resource.status != const.ResourceState.deploying:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
@@ -4346,7 +4354,7 @@ class ResourceAction(BaseDocument):
 
             # Step 2:
             # find the interval between the current deploy (now) and the previous successful deploy
-            last_deploy_start = resource.last_success
+            last_deploy_start = resource_state.last_success
 
             # Step 3: get the relevant resource actions
             # Do it in one query for all dependencies
@@ -4402,6 +4410,29 @@ class ResourceAction(BaseDocument):
         )
 
 
+class ResourcePersistentState(BaseDocument):
+    @classmethod
+    def table_name(cls) -> str:
+        # TODO is this a good name?
+        return "resource_persistent_state"
+
+    __primary_key__ = ("environment", "resource_id")
+
+    environment: uuid.UUID
+
+    # ID related
+    resource_id: m.ResourceIdStr
+    last_deployed_attribute_hash: Optional[str] = None
+
+    # Field based on content from the resource actions
+    last_deploy: Optional[datetime.datetime] = None
+    last_success: Optional[datetime.datetime] = None
+    last_produced_events: Optional[datetime.datetime] = None
+
+    # status
+    last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
+
+
 @stable_api
 class Resource(BaseDocument):
     """
@@ -4432,14 +4463,18 @@ class Resource(BaseDocument):
     agent: str
 
     # Field based on content from the resource actions
+    # TODO: remove
     last_deploy: Optional[datetime.datetime] = None
+    # TODO: remove
     last_success: Optional[datetime.datetime] = None
+    # TODO: remove
     last_produced_events: Optional[datetime.datetime] = None
 
     # State related
     attributes: dict[str, object] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
+    # TODO: remove!
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
     resource_set: Optional[str] = None
 
@@ -4485,11 +4520,11 @@ class Resource(BaseDocument):
         """
         if not resource_version_id.is_resource_version_id_obj():
             raise Exception("Argument resource_version_id is not a resource_version_id")
+        version = resource_version_id.version
         query = """
-            SELECT r1.resource_id, r1.model, r1.last_non_deploying_status
-            FROM resource AS r1
+            SELECT r1.resource_id, r1.last_non_deploying_status
+            FROM resource_persistent_state AS r1
             WHERE r1.environment=$1
-                  AND r1.model=$2
                   AND (
                       SELECT (r2.attributes->'requires')::jsonb
                       FROM resource AS r2
@@ -4498,30 +4533,11 @@ class Resource(BaseDocument):
         """
         values = [
             cls._get_value(environment),
-            cls._get_value(resource_version_id.version),
+            cls._get_value(version),
             resource_version_id.resource_str(),
         ]
         result = await cls._fetch_query(query, *values, connection=connection)
-        return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
-
-    @classmethod
-    async def update_last_produced_events_if_newer(
-        cls,
-        environment: uuid.UUID,
-        resource_id: ResourceIdStr,
-        version: int,
-        last_produced_events: datetime.datetime,
-        *,
-        connection: Optional[Connection] = None,
-    ) -> None:
-        query = f"""
-                UPDATE {cls.table_name()} as resource
-                SET
-                    last_produced_events = GREATEST($4, last_produced_events)
-                WHERE resource.model=$2
-                AND resource.environment=$1
-                AND resource.resource_id=$3  """
-        await cls._execute_query(query, environment, version, resource_id, last_produced_events, connection=connection)
+        return {r["resource_id"] + ",v=" + str(version): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     def make_hash(self) -> None:
         character = json.dumps(
@@ -4661,6 +4677,7 @@ class Resource(BaseDocument):
         This method generates a report of all resources in the given environment,
         with their latest version and when they are last deployed.
         """
+        # TODO phase 2
         query_resource_ids = f"""
                 SELECT DISTINCT resource_id
                 FROM {Resource.table_name()}
@@ -4756,6 +4773,30 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
+    async def get_resources_for_version_raw_with_persistent_state(
+        cls,
+        environment: uuid.UUID,
+        version: int,
+        projection: Optional[list[str]],
+        projection_presistent: Optional[list[str]],
+        *,
+        connection: Optional[Connection] = None,
+    ) -> list[dict[str, object]]:
+        def collect_projection(projection: Optional[list[str]], prefix: str) -> str:
+            if not projection:
+                return f"{prefix}.*"
+            else:
+                return ",".join(f"{prefix}.{field}" for field in projection)
+
+        query = f"SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')} FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"
+        resource_records = await cls._fetch_query(query, environment, version, connection=connection)
+        resources = [dict(record) for record in resource_records]
+        for res in resources:
+            if "attributes" in res:
+                res["attributes"] = json.loads(res["attributes"])
+        return resources
+
+    @classmethod
     async def get_latest_version(cls, environment: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional["Resource"]:
         resources = await cls.get_list(
             order_by_column="model", order="DESC", limit=1, environment=environment, resource_id=resource_id
@@ -4831,6 +4872,7 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
+        # TODO phase 2
         status_subquery = """
         (CASE WHEN
             (SELECT resource.model < MAX(configurationmodel.version)
@@ -5029,59 +5071,16 @@ class Resource(BaseDocument):
             result = await con.fetch(query, environment, version, resource_sets)
             return {record["resource_id"]: cls(from_postgres=True, **record) for record in result}
 
-    @classmethod
-    async def copy_last_success(
-        cls,
-        environment: uuid.UUID,
-        from_version: int,
-        to_version: int,
-        *,
-        connection: Optional[Connection] = None,
-    ) -> None:
-        query = f"""
-        UPDATE {cls.table_name()} as new_resource
-        SET
-            last_success = (
-                SELECT last_success from {cls.table_name()} as old_resource
-                WHERE old_resource.model=$3
-                AND old_resource.environment=$2
-                AND old_resource.resource_id=new_resource.resource_id
-            )
-        WHERE new_resource.model=$1
-        AND new_resource.environment=$2
-        AND new_resource.last_success is null"""
-        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
-
-    @classmethod
-    async def copy_last_produced_events(
-        cls,
-        environment: uuid.UUID,
-        from_version: int,
-        to_version: int,
-        *,
-        connection: Optional[Connection] = None,
-    ) -> None:
-        """
-        Copy the value of last_produced events for every resource in the to_version from the from_version
-        """
-        query = f"""
-           UPDATE {cls.table_name()} as new_resource
-           SET
-               last_produced_events = (
-                   SELECT old_resource.last_produced_events
-                   FROM {cls.table_name()} as old_resource
-                   WHERE old_resource.model=$3
-                   AND old_resource.environment=$2
-                   AND old_resource.resource_id=new_resource.resource_id
-               )
-           WHERE new_resource.model=$1
-           AND new_resource.environment=$2
-           AND new_resource.last_produced_events is null"""
-        await cls._execute_query(query, to_version, environment, from_version, connection=connection)
-
     async def insert(self, connection: Optional[asyncpg.connection.Connection] = None) -> None:
         self.make_hash()
         await super().insert(connection=connection)
+        # TODO: On conflict or is not exists or just make every update an upsert?
+        await self._execute_query(
+            """INSERT INTO resource_persistent_state(environment, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING""",
+            self.environment,
+            self.resource_id,
+            connection=connection,
+        )
 
     @classmethod
     async def insert_many(
@@ -5089,6 +5088,14 @@ class Resource(BaseDocument):
     ) -> None:
         for doc in documents:
             doc.make_hash()
+        # TODO performance?
+        for doc in documents:
+            await cls._execute_query(
+                """INSERT INTO resource_persistent_state(environment, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING""",
+                doc.environment,
+                doc.resource_id,
+                connection=connection,
+            )
         await super().insert_many(documents, connection=connection)
 
     async def update(self, connection: Optional[asyncpg.connection.Connection] = None, **kwargs: object) -> None:
@@ -5138,6 +5145,31 @@ class Resource(BaseDocument):
             resource_id_value=self.resource_id_value,
             resource_set=self.resource_set,
         )
+
+    async def update_persistent_state(
+        self,
+        last_deploy: Optional[datetime.datetime] = None,
+        last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
+        last_success: Optional[datetime.datetime] = None,
+        last_produced_events: Optional[datetime.datetime] = None,
+        last_deployed_attribute_hash: Optional[str] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        """Update the data in the resource_persistent_state table"""
+        # TODO: link with instance is weak
+        args = ArgumentCollector(2)
+
+        invalues = {
+            "last_deploy": last_deploy,
+            "last_non_deploying_status": last_non_deploying_status,
+            "last_success": last_success,
+            "last_produced_events": last_produced_events,
+            "last_deployed_attribute_hash": last_deployed_attribute_hash,
+        }
+        query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
+        query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
+
+        await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)
 
 
 @stable_api
@@ -5647,11 +5679,26 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
         """
-        projection_a = ["resource_id", "status", "attribute_hash", "attributes", "last_success", "last_produced_events"]
+        # TODO status field to state!
+        # Depends on deploying
+        projection_a_resource = [
+            "resource_id",
+            "attribute_hash",
+            "attributes",
+            "status",
+        ]
+        projection_a_state = [
+            "last_success",
+            "last_produced_events",
+            "last_deployed_attribute_hash",
+            "last_non_deploying_status",
+        ]
         projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
-        resources = await Resource.get_resources_for_version_raw(environment, version, projection_a, connection=connection)
+        resources = await Resource.get_resources_for_version_raw_with_persistent_state(
+            environment, version, projection_a_resource, projection_a_state, connection=connection
+        )
 
         # to increment
         increment: list[abc.Mapping[str, object]] = []
@@ -5664,6 +5711,12 @@ class ConfigurationModel(BaseDocument):
         next: list[abc.Mapping[str, object]] = []
         for resource in work:
             in_increment = False
+            status = resource["last_non_deploying_status"]
+            if status in [const.ResourceState.failed.name, ResourceState.skipped.name]:
+                # Shortcut on easy includes
+                increment.append(resource)
+                continue
+            # Now outstanding events
             last_success = resource["last_success"] or DATETIME_MIN_UTC
             attributes = resource["attributes"]
             assert isinstance(attributes, dict)  # mypy
@@ -5681,10 +5734,19 @@ class ConfigurationModel(BaseDocument):
                 ):
                     in_increment = True
                     break
+
             if in_increment:
                 increment.append(resource)
             else:
-                next.append(resource)
+                # If no events, shortcut on known good
+                if (
+                    status == const.ResourceState.deployed.name
+                    and resource["attribute_hash"] == resource["last_deployed_attribute_hash"]
+                ):
+                    # Shortcut on easy good ones
+                    not_increment.append(resource)
+                else:
+                    next.append(resource)
         work = next
 
         # get versions
@@ -6193,6 +6255,7 @@ _classes = [
     Agent,
     Resource,
     ResourceAction,
+    ResourcePersistentState,
     ConfigurationModel,
     Code,
     Parameter,

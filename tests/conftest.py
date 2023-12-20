@@ -147,7 +147,10 @@ from inmanta.db.util import postgres_get_custom_types as postgress_get_custom_ty
 
 logger = logging.getLogger(__name__)
 
-TABLES_TO_KEEP = [x.table_name() for x in data._classes] + ["resourceaction_resource"]  # Join table
+TABLES_TO_KEEP = [x.table_name() for x in data._classes] + [
+    "resourceaction_resource",
+    "resource_persistent_state",
+]  # Join table
 
 # Save the cwd as early as possible to prevent that it gets overridden by another fixture
 # before it's saved.
@@ -262,7 +265,7 @@ def postgres_db(request: pytest.FixtureRequest):
             sublogger = logging.getLogger("pytest.postgresql.deadlock")
             for line in fh:
                 sublogger.warning("%s", line)
-        os.remove(pg_logfile)
+        # os.remove(pg_logfile)
         assert not has_deadlock
 
 
@@ -599,9 +602,9 @@ def restore_cwd():
 @pytest.fixture(scope="function")
 def no_agent_backoff(inmanta_config: ConfigParser) -> None:
     old_backoff = agent_cfg.agent_get_resource_backoff.get()
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value="0")
+    agent_cfg.agent_get_resource_backoff.set("0")
     yield
-    inmanta_config.set(section="config", option="agent-get-resource-backoff", value=str(old_backoff))
+    agent_cfg.agent_get_resource_backoff.set(str(old_backoff))
 
 
 @pytest.fixture()

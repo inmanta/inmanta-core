@@ -540,7 +540,12 @@ class ResourceService(protocol.ServerSlice):
                 await resource.update_fields(
                     last_deploy=timestamp,
                     status=status,
+                    connection=connection,
+                )
+                await resource.update_persistent_state(
+                    last_deploy=timestamp,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
+                    attribute_hash=resource.attribute_hash,
                     connection=connection,
                 )
 
@@ -682,12 +687,17 @@ class ResourceService(protocol.ServerSlice):
                 if change != Change.nochange:
                     # We are producing an event
                     extra_fields["last_produced_events"] = finished
-                    propagate_last_produced_events = True
 
                 await resource.update_fields(
                     last_deploy=finished,
                     status=status,
+                    **extra_fields,
+                    connection=connection,
+                )
+                await resource.update_persistent_state(
+                    last_deploy=finished,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
+                    last_deployed_attribute_hash=resource.attribute_hash,
                     **extra_fields,
                     connection=connection,
                 )
@@ -699,10 +709,10 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-                propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
-                await self.propagate_resource_state_if_stale(
-                    connection, env, [resource_id], finished, status, propagate_last_produced_events, propagate_deploy_state
-                )
+                # propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
+                # await self.propagate_resource_state_if_stale(
+                #     connection, env, [resource_id], finished, status, propagate_last_produced_events, propagate_deploy_state
+                # )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
@@ -721,49 +731,6 @@ class ResourceService(protocol.ServerSlice):
                     change=change,
                     changes=changes_with_rvid,
                 )
-
-    async def propagate_resource_state_if_stale(
-        self,
-        connection: Connection,
-        env: data.Environment,
-        resource_ids: list[Id],
-        last_produced_events: datetime.datetime,
-        deploy_state: ResourceState,
-        propagate_last_produced_events: bool,
-        propagate_deploy_state: bool,
-    ) -> None:
-        if propagate_deploy_state or propagate_last_produced_events:
-            # lock out release version
-            await env.acquire_release_version_lock(connection=connection)
-            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
-
-            for resource_id in resource_ids:
-                if latest_version is not None and latest_version > resource_id.version:
-                    # we are stale, forward propagate our status
-                    # this is required because:
-                    # upon release of the newer version our old status may have been copied over into the new version
-                    # (by the increment calculation)
-                    # the new version may thus hide this failure
-                    # issue #6475
-                    # the release_version_lock above ensure we can not race with release itself
-                    # this is at the end of the transaction to not block release too long
-                    # and vice versa
-                    if propagate_deploy_state:
-                        await self._update_deploy_state(
-                            env,
-                            resource_id.resource_str(),
-                            last_produced_events,
-                            latest_version,
-                            deploy_state,
-                            f"update on stale version {resource_id.version}",
-                            fail_on_error=False,
-                            connection=connection,
-                            can_overwrite_available=False,
-                        )
-                    if propagate_last_produced_events:
-                        await data.Resource.update_last_produced_events_if_newer(
-                            env.id, resource_id.resource_str(), latest_version, last_produced_events, connection=connection
-                        )
 
     @handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
@@ -801,6 +768,7 @@ class ResourceService(protocol.ServerSlice):
             else:
                 raise BadRequest(f"Unsupported deprecated resources state {status.value}")
 
+        # TODO: get rid of this?
         status = convert_legacy_state(status)
 
         # can update resource state
@@ -939,7 +907,10 @@ class ResourceService(protocol.ServerSlice):
                 )
 
                 async def update_fields_resource(
-                    resource: data.Resource, connection: Optional[Connection] = None, **kwargs: object
+                    resource: data.Resource,
+                    connection: Optional[Connection] = None,
+                    attribute_hash: Optional[str] = None,
+                    **kwargs: object,
                 ) -> None:
                     """
                     This method ensures that the `last_non_deploying_status` field in the database
@@ -948,6 +919,15 @@ class ResourceService(protocol.ServerSlice):
                     if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
                         kwargs["last_non_deploying_status"] = const.NonDeployingResourceState(kwargs["status"])
                     await resource.update_fields(**kwargs, connection=connection)
+                    if is_increment_notification:
+                        # TODO: UGLY!!!
+                        if "last_deployed" in kwargs:
+                            del kwargs["last_deployed"]
+                    if "status" in kwargs:
+                        del kwargs["status"]
+                    await resource.update_persistent_state(
+                        **kwargs, last_deployed_attribute_hash=attribute_hash, connection=connection
+                    )
 
                 if is_resource_state_update:
                     # transient resource update
@@ -965,15 +945,15 @@ class ResourceService(protocol.ServerSlice):
 
                         propagate_last_produced_events = change != Change.nochange
 
-                        await self.propagate_resource_state_if_stale(
-                            connection,
-                            env,
-                            [Id.parse_id(res) for res in resource_ids],
-                            finished,
-                            status,  # mypy can't figure out this is never None here
-                            propagate_last_produced_events,
-                            status == ResourceState.failed or status == ResourceState.skipped,
-                        )
+                        # await self.propagate_resource_state_if_stale(
+                        #     connection,
+                        #     env,
+                        #     [Id.parse_id(res) for res in resource_ids],
+                        #     finished,
+                        #     status,  # mypy can't figure out this is never None here
+                        #     propagate_last_produced_events,
+                        #     status == ResourceState.failed or status == ResourceState.skipped,
+                        # )
 
                         model_version = None
                         for res in resources:
@@ -983,7 +963,12 @@ class ResourceService(protocol.ServerSlice):
                             if propagate_last_produced_events:
                                 extra_fields["last_produced_events"] = finished
                             await update_fields_resource(
-                                res, last_deploy=finished, status=status, **extra_fields, connection=connection
+                                res,
+                                last_deploy=finished,
+                                status=status,
+                                **extra_fields,
+                                attribute_hash=res.attribute_hash,
+                                connection=connection,
                             )
                             model_version = res.model
 
@@ -1053,6 +1038,7 @@ class ResourceService(protocol.ServerSlice):
                 except UniqueViolationError:
                     raise Conflict(message=f"A resource action with id {action_id} already exists.")
 
+                # TODO we are asymetric here, deploying it not set on persistent state
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
             self.clear_env_cache(env)

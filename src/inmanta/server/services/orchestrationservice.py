@@ -1095,6 +1095,7 @@ class OrchestrationService(protocol.ServerSlice):
                 now = datetime.datetime.now().astimezone()
 
                 if undep:
+                    # TODO: get rid of r_a_u ?
                     undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
                     # not checking error conditions
                     await self.resource_service.resource_action_update(
@@ -1114,6 +1115,7 @@ class OrchestrationService(protocol.ServerSlice):
 
                     skippable = model.get_skipped_for_undeployable()
                     if skippable:
+                        # TODO: get rid of r_a_u ?
                         skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
                         # not checking error conditions
                         await self.resource_service.resource_action_update(
@@ -1132,12 +1134,13 @@ class OrchestrationService(protocol.ServerSlice):
                         )
 
                 if latest_version:
+                    # TODO cleanup phase 1?
                     # Set the updated field:
                     # BE VERY CAREFUL
                     # All state copied here has a race with stale deploy
                     # This is handled in propagate_resource_state_if_stale
-                    await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
-                    await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
+                    # await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
+                    # await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
 
                     increments: tuple[
                         abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]
