@@ -17,6 +17,7 @@
 """
 
 import configparser
+import glob
 import importlib
 import itertools
 import logging
@@ -2958,26 +2959,18 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """Generate a list of all Python files using os.walk with directory traversal caching."""
-        if plugin_dir in self._dir_traversal_cache:
-            # Return the cached result for this directory
-            return self._dir_traversal_cache[plugin_dir]
+        """Generate a list of all Python files using os.walk with caching."""
+        # Check the cache first
+        if plugin_dir in self._plugin_file_cache:
+            return self._plugin_file_cache[plugin_dir]
 
-        files = []
+        files = {}
 
         for root, dirs, file_names in os.walk(plugin_dir):
-            # Process cached directories
-            for d in dirs[:]:
-                full_dir_path = os.path.join(root, d)
-                if full_dir_path in self._dir_traversal_cache:
-                    files.extend(self._dir_traversal_cache[full_dir_path])
-                    dirs.remove(d)  # Remove from dirs to skip traversal
-
             # Skip the 'model' folder and its subdirectories
             if "model" in dirs:
                 dirs.remove("model")
 
-            new_files = []
             for file_name in file_names:
                 if file_name.endswith(".py") or file_name.endswith(".pyc"):
                     full_path = os.path.join(root, file_name)
@@ -2985,14 +2978,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                     if os.path.basename(root) == "model":
                         continue
 
+                    # Filter out .pyc files in the default cache dir and prioritize .py files
                     if "__pycache__" not in full_path:
-                        new_files.append(full_path)
+                        base_name = full_path.rsplit(".", maxsplit=1)[0]
+                        if base_name not in files or file_name.endswith(".py"):
+                            files[base_name] = full_path
 
-            # Cache the new files found in this directory
-            self._dir_traversal_cache[root] = new_files
-            files.extend(new_files)
-
-        return files
+        # Cache and return the results
+        self._plugin_file_cache[plugin_dir] = list(files.values())
+        return self._plugin_file_cache[plugin_dir]
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
         """
