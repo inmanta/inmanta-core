@@ -83,13 +83,6 @@ This folder contains a project.yml, which looks like this:
     modulepath: libs
     downloadpath: libs
     install_mode: release
-    # The repo block is for ISO6, inmanta-core<=10.0
-    # This example requires licensed modules,
-    # replace <token> with inmanta access token you received with your license
-    repo:
-      - type: package
-        url: https://packages.inmanta.com/<token>/inmanta-service-orchestrator-6-stable/python/simple/
-    # The pip block is for ISO7 and up, inmanta-core>10.0
     # This example requires licensed modules,
     # replace <token> with inmanta access token you received with your license
     pip:
