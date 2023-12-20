@@ -60,11 +60,16 @@ This folder contains a **project.yml**, which looks like this:
     copyright: 2022 Inmanta
     modulepath: libs
     downloadpath: libs
+    # The repo block is for ISO6, inmanta-core<=10.0
     repo:
-    - type: package
+      - type: package
         url: https://packages.inmanta.com/public/quickstart/python/simple/
-    install_mode: release
-    requires:
+    # The pip block is for ISO7 and up, inmanta-core>10.0
+    pip:
+      index_url: url: https://packages.inmanta.com/public/quickstart/python/simple/
+
+
+
 
 
 - The ``modulepath`` setting defines that modules will be stored in ``libs`` directory.
