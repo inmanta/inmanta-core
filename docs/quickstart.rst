@@ -62,7 +62,7 @@ This folder contains a **project.yml**, which looks like this:
     downloadpath: libs
     # The repo block is for ISO6, inmanta-core<=10.0
     repo:
-    - type: package
+      - type: package
         url: https://packages.inmanta.com/public/quickstart/python/simple/
     # The pip block is for ISO7 and up, inmanta-core>10.0
     pip:
