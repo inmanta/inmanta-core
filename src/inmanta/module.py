@@ -2778,7 +2778,6 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
-        self._plugin_file_cache: dict[str, list[str]] = {}  # Cache for the plugin files
 
     @classmethod
     @abstractmethod
@@ -2959,11 +2958,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """Generate a list of all Python files using os.walk with caching."""
-        # Check the cache first
-        if plugin_dir in self._plugin_file_cache:
-            return self._plugin_file_cache[plugin_dir]
-
+        """Generate a list of all Python files using os.walk."""
         files = {}
 
         for root, _, file_names in os.walk(plugin_dir):
@@ -2977,9 +2972,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
                         if base_name not in files or file_name.endswith(".py"):
                             files[base_name] = full_path
 
-        # Cache and return the results
-        self._plugin_file_cache[plugin_dir] = list(files.values())
-        return self._plugin_file_cache[plugin_dir]
+        return list(files.values())
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
         """
