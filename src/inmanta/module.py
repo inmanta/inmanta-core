@@ -2959,41 +2959,53 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """Generate a list of all python files, with caching to avoid duplicate walks."""
-        # Return from cache if already exists
+        """
+        Generate a list of all Python files in the given plugin directory.
+        This method prioritizes .pyc files over .py files and uses caching to avoid duplicate directory walks.
+        """
+        # Return cached results if this directory has been processed before
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
+        # Dictionary to hold the final list of Python files.
+        # The key is the file path without the extension, which makes it easy to replace .py with .pyc
+        # for the same module, if both are present.
         files: dict[str, str] = {}
 
         for dirpath, dirnames, filenames in os.walk(plugin_dir):
-            # Skip this directory if it's already cached
+            # If the current directory is already in the cache, use the cached results and skip further processing
             if dirpath in self._dir_cache:
                 cached_files = self._dir_cache[dirpath]
                 for file in cached_files:
-                    base_file_path = file[:-1] if file.endswith(".pyc") else file[:-3]
-                    files[base_file_path] = file
+                    file_path = os.path.splitext(file)[0]
+                    files[file_path] = file
                 continue
 
+            # List to hold files found in the current path
             current_path_files = []
 
             for filename in filenames:
-                if filename.endswith(".py") or filename.endswith(".pyc"):
-                    file_path = os.path.join(dirpath, filename)
+                file_path = os.path.join(dirpath, filename)
 
-                    # Filter out pyc files in the default cache dir.
-                    if "__pycache__" not in file_path:
-                        base_file_path = file_path[:-1] if filename.endswith(".pyc") else file_path[:-3]
-                        if base_file_path not in files:
-                            files[base_file_path] = file_path
-                            current_path_files.append(file_path)
+                # Skip files in the default cache directory
+                if "__pycache__" in file_path:
+                    continue
 
-            # Update the cache for the current directory
+                base_file_path = os.path.splitext(file_path)[0]
+
+                # Prioritize .pyc files over .py files
+                if file_path.endswith(".pyc"):
+                    files[base_file_path] = file_path
+                    current_path_files.append(file_path)
+                elif file_path.endswith(".py") and base_file_path not in files:
+                    files[base_file_path] = file_path
+                    current_path_files.append(file_path)
+
+            # Update the cache with files found in the current directory
             self._dir_cache[dirpath] = current_path_files
 
-        # Store the final result for the root directory
+        # Cache the final list of files for the root directory and return it
         self._dir_cache[plugin_dir] = list(files.values())
-
         return self._dir_cache[plugin_dir]
 
     def get_plugin_files(self) -> Iterator[tuple[Path, ModuleName]]:
