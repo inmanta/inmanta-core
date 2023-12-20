@@ -209,7 +209,7 @@ class MultiVersionSetup:
             Id.parse_id(resource["id"]).resource_str()
             for resource in self.versions[version]
             if self.states[resource["id"]] not in [ResourceState.skipped_for_undefined, ResourceState.undefined]
-        } == set(pos).union(set(neg)), version
+        } == set(pos).union(set(neg))
 
         allresources = {}
 

@@ -412,6 +412,11 @@ class ResourceService(protocol.ServerSlice):
         :param version: Version of the resources to consider.
         :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
         """
+        # TODO: can we get rid of mark deployed now????
+        # Looks feasible on the path for local dependencies, with start deploy
+        # what about CAD's?
+        # what about the dashboard?
+
         resources_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
         ]
@@ -709,11 +714,6 @@ class ResourceService(protocol.ServerSlice):
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
 
-                # propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
-                # await self.propagate_resource_state_if_stale(
-                #     connection, env, [resource_id], finished, status, propagate_last_produced_events, propagate_deploy_state
-                # )
-
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
         waiting_agents = {(Id.parse_id(prov).get_agent_name(), resource.resource_version_id) for prov in resource.provides}
@@ -945,16 +945,6 @@ class ResourceService(protocol.ServerSlice):
 
                         propagate_last_produced_events = change != Change.nochange
 
-                        # await self.propagate_resource_state_if_stale(
-                        #     connection,
-                        #     env,
-                        #     [Id.parse_id(res) for res in resource_ids],
-                        #     finished,
-                        #     status,  # mypy can't figure out this is never None here
-                        #     propagate_last_produced_events,
-                        #     status == ResourceState.failed or status == ResourceState.skipped,
-                        # )
-
                         model_version = None
                         for res in resources:
                             extra_fields = {}
@@ -1038,7 +1028,6 @@ class ResourceService(protocol.ServerSlice):
                 except UniqueViolationError:
                     raise Conflict(message=f"A resource action with id {action_id} already exists.")
 
-                # TODO we are asymetric here, deploying it not set on persistent state
                 await resource.update_fields(connection=connection, status=const.ResourceState.deploying)
 
             self.clear_env_cache(env)
