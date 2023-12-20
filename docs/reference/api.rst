@@ -321,10 +321,6 @@ Data
 .. autoclass:: inmanta.data.model.BaseModel
     :show-inheritance:
 
-    .. autoclass:: inmanta.data.model::BaseModel.Config
-        :members:
-        :undoc-members:
-
 .. autodata:: inmanta.data.model.ResourceIdStr
 
 .. autodata:: inmanta.data.model.ResourceVersionIdStr
