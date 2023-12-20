@@ -44,7 +44,6 @@ An example ``project.yml`` could be:
   repo:
       - url: https://github.com/inmanta/
         type: git
-  install_mode: release
   requires:
   pip:
       index-url: https://pypi.org/simple

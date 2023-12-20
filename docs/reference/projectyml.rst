@@ -31,7 +31,6 @@ The code snippet below provides an example of a complete ``project.yml`` file:
     copyright: Inmanta (2021)
     modulepath: libs
     downloadpath: libs
-    install_mode: release
     repo:
       - url: https://github.com/inmanta/
         type: git
