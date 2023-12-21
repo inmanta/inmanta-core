@@ -4345,7 +4345,6 @@ class ResourceAction(BaseDocument):
             )
             assert resource_state is not None  # resource state must exist if resource exists
 
-            # TODO: perhaps status on share state can be used
             if resource.status != const.ResourceState.deploying:
                 raise BadRequest(
                     "Fetching resource events only makes sense when the resource is currently deploying. Current deploy state"
@@ -5677,7 +5676,6 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
         """
-        # TODO status field to state!
         # Depends on deploying
         projection_a_resource = [
             "resource_id",
