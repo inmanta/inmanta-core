@@ -1,0 +1,4 @@
+description: "Optimize the '_list_python_files' function for packaged V2 modules"
+change-type: patch
+issue-nr: 4799
+destination-branches: [iso6]
