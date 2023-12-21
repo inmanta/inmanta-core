@@ -4463,19 +4463,14 @@ class Resource(BaseDocument):
     agent: str
 
     # Field based on content from the resource actions
-    # TODO: remove
+    # TODO: remove, used in get_resource_details
     last_deploy: Optional[datetime.datetime] = None
-    # TODO: remove
-    last_success: Optional[datetime.datetime] = None
-    # TODO: remove
-    last_produced_events: Optional[datetime.datetime] = None
 
     # State related
     attributes: dict[str, object] = {}
     attribute_hash: Optional[str]
     status: const.ResourceState = const.ResourceState.available
-    # TODO: remove!
-    last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
+
     resource_set: Optional[str] = None
 
     # internal field to handle cross agent dependencies
@@ -4865,14 +4860,15 @@ class Resource(BaseDocument):
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
             status=new_resource_state,
-            last_non_deploying_status=const.NonDeployingResourceState[new_resource_state.name],
             resource_set=self.resource_set,
             provides=self.provides,
         )
 
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
-        # TODO phase 2
+        # TODO: we could replace the scan query with a join if we write the last released version to the shared state
+        # we could similarly get rid of first_generated
+
         status_subquery = """
         (CASE WHEN
             (SELECT resource.model < MAX(configurationmodel.version)
@@ -5167,6 +5163,8 @@ class Resource(BaseDocument):
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
+        if not query_parts:
+            return
         query = f"UPDATE public.resource_persistent_state SET {','.join(query_parts)} WHERE environment=$1 and resource_id=$2"
 
         await self._execute_query(query, self.environment, self.resource_id, *args.args, connection=connection)

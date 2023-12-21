@@ -447,6 +447,7 @@ class OrchestrationService(protocol.ServerSlice):
         log_filter: Optional[str] = None,
         limit: Optional[int] = 0,
     ) -> Apireturn:
+        # TODO: output changes slightly
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}

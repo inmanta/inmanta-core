@@ -224,6 +224,7 @@ class ResourceService(protocol.ServerSlice):
         log_limit: int,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
+        # TODO: this output will slightly change
         # Validate resource version id
         try:
             Id.parse_resource_version_id(resource_id)
@@ -696,7 +697,6 @@ class ResourceService(protocol.ServerSlice):
                 await resource.update_fields(
                     last_deploy=finished,
                     status=status,
-                    **extra_fields,
                     connection=connection,
                 )
                 await resource.update_persistent_state(
@@ -906,34 +906,11 @@ class ResourceService(protocol.ServerSlice):
                     connection=connection,
                 )
 
-                async def update_fields_resource(
-                    resource: data.Resource,
-                    connection: Optional[Connection] = None,
-                    attribute_hash: Optional[str] = None,
-                    **kwargs: object,
-                ) -> None:
-                    """
-                    This method ensures that the `last_non_deploying_status` field in the database
-                    is updated correctly when the `status` field of a resource is updated.
-                    """
-                    if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
-                        kwargs["last_non_deploying_status"] = const.NonDeployingResourceState(kwargs["status"])
-                    await resource.update_fields(**kwargs, connection=connection)
-                    if is_increment_notification:
-                        # TODO: UGLY!!!
-                        if "last_deployed" in kwargs:
-                            del kwargs["last_deployed"]
-                    if "status" in kwargs:
-                        del kwargs["status"]
-                    await resource.update_persistent_state(
-                        **kwargs, last_deployed_attribute_hash=attribute_hash, connection=connection
-                    )
-
                 if is_resource_state_update:
                     # transient resource update
                     if not is_resource_action_finished:
                         for res in resources:
-                            await update_fields_resource(res, status=status, connection=connection)
+                            await res.update_fields(status=status, connection=connection)
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
                         return 200
@@ -943,23 +920,29 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        propagate_last_produced_events = change != Change.nochange
-
                         model_version = None
                         for res in resources:
-                            extra_fields = {}
-                            if status == ResourceState.deployed and not is_increment_notification:
-                                extra_fields["last_success"] = resource_action.started
-                            if propagate_last_produced_events:
-                                extra_fields["last_produced_events"] = finished
-                            await update_fields_resource(
-                                res,
+                            await res.update_fields(
                                 last_deploy=finished,
                                 status=status,
-                                **extra_fields,
-                                attribute_hash=res.attribute_hash,
                                 connection=connection,
                             )
+                            extra_fields = {}
+
+                            if change is not None and change != Change.nochange:
+                                extra_fields["last_produced_events"] = finished
+
+                            if not is_increment_notification:
+                                if status == ResourceState.deployed:
+                                    extra_fields["last_success"] = resource_action.started
+                                if status != ResourceState.deploying:
+                                    extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
+                                extra_fields["last_deploy"] = finished
+
+                            await res.update_persistent_state(
+                                **extra_fields, last_deployed_attribute_hash=res.attribute_hash, connection=connection
+                            )
+
                             model_version = res.model
 
                             if (
