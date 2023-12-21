@@ -2961,27 +2961,28 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     def _list_python_files(self, plugin_dir: str) -> list[str]:
         """
         Generate a list of all Python files in the given plugin directory.
-        This method prioritizes .pyc files over .py files and uses caching to avoid duplicate directory walks.
+        This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
+        and only considers directories that are Python packages.
         """
         # Return cached results if this directory has been processed before
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
-        # Dictionary to hold the final list of Python files.
-        # The key is the file path without the extension, which makes it easy to replace .py with .pyc
-        # for the same module, if both are present.
         files: dict[str, str] = {}
 
         for dirpath, dirnames, filenames in os.walk(plugin_dir):
-            # If the current directory is already in the cache, use the cached results and skip further processing
+            # Skip non-package directories (those without an __init__.py or __init__.pyc file)
+            if not any(fname for fname in filenames if fname in ["__init__.py", "__init__.pyc"]):
+                continue
+
+            # Skip this directory if it's already in the cache
             if dirpath in self._dir_cache:
                 cached_files = self._dir_cache[dirpath]
                 for file in cached_files:
-                    file_path = os.path.splitext(file)[0]
-                    files[file_path] = file
+                    base_file_path = os.path.splitext(file)[0]
+                    files[base_file_path] = file
                 continue
 
-            # List to hold files found in the current path
             current_path_files = []
 
             for filename in filenames:
