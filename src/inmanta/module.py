@@ -17,7 +17,6 @@
 """
 
 import configparser
-import glob
 import importlib
 import itertools
 import logging
