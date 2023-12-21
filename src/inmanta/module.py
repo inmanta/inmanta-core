@@ -2778,7 +2778,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
-        self._dir_cache = {}  # cache containing all the filepaths present in a dir
+        self._dir_cache: Dict[str, list[str]] = {}  # Cache containing all the filepaths present in a dir
 
     @classmethod
     @abstractmethod
