@@ -947,7 +947,6 @@ def app() -> None:
 
     try:
         options.func(options)
-
     except ShowUsageException as e:
         print(e.args[0], file=sys.stderr)
         parser.print_usage()
