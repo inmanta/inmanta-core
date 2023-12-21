@@ -4782,7 +4782,11 @@ class Resource(BaseDocument):
             else:
                 return ",".join(f"{prefix}.{field}" for field in projection)
 
-        query = f"SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')} FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"
+        query = f"""
+        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')}
+            FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
+            WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"""
+
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:

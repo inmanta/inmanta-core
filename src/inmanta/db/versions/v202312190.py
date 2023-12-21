@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
     last_success timestamp with time zone,
     last_produced_events timestamp with time zone,
     last_deployed_attribute_hash character varying,
-    last_non_deploying_status public.non_deploying_resource_state DEFAULT 'available'::public.non_deploying_resource_state NOT NULL,
+    last_non_deploying_status public.non_deploying_resource_state
+        DEFAULT 'available'::public.non_deploying_resource_state NOT NULL,
     PRIMARY KEY(environment, resource_id)
 );
 

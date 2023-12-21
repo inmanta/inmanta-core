@@ -687,7 +687,6 @@ class ResourceService(protocol.ServerSlice):
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
 
-                propagate_last_produced_events = False
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
                 if change != Change.nochange:
