@@ -83,8 +83,8 @@ class FunctionCall(ReferenceStatement):
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
-        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         func = self.namespace.get_type(self.name)
+        self.anchors = [TypeReferenceAnchor(self.namespace, self.name)]
         if isinstance(func, InmantaType.Primitive):
             self.function = Cast(self, func)
         elif isinstance(func, plugins.Plugin):
