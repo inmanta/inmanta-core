@@ -285,21 +285,14 @@ class TypeAnchor(Anchor):
         return AnchorTarget(location=location, docstring=docstring)
 
 
-class AttributeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: LocatableString, attribute: str) -> None:
+class AttributeAnchor(Anchor):
+    def __init__(self, range: Range, attribute: "Attribute") -> None:
         Anchor.__init__(self, range=range)
-        self.namespace = namespace
-        self.type = type
         self.attribute = attribute
 
     def resolve(self) -> Optional[AnchorTarget]:
-        instancetype = self.namespace.get_type(self.type)
-        # type check impossible atm due to import loop
-        # assert isinstance(instancetype, Entity)
-        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
-        assert entity_attribute is not None
-        location = entity_attribute.get_location()
-        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        location = self.attribute.get_location()
+        docstring = self.attribute.comment if isinstance(self.attribute, WithComment) else None
         if not location:
             return None
         return AnchorTarget(location=location, docstring=docstring)

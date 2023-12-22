@@ -31,7 +31,7 @@ import inmanta.ast.type as inmanta_type
 import inmanta.execute.dataflow as dataflow
 from inmanta.ast import (
     AmbiguousTypeException,
-    AttributeReferenceAnchor,
+    AttributeAnchor,
     DuplicateException,
     InvalidCompilerState,
     Locatable,
@@ -875,7 +875,9 @@ class Constructor(ExpressionStatement):
             v.normalize(
                 lhs_attribute=AttributeAssignmentLHS(self._self_ref, k, type_hint) if k not in index_attributes else None
             )
-            self.anchors.extend(v.anchors)
+            self.anchors.extend(v.get_anchors())
+            self.anchors.append(AttributeAnchor(self.__attribute_locations[k].get_location(), attr))
+
         for wrapped_kwargs in self.wrapped_kwargs:
             wrapped_kwargs.normalize()
 
@@ -1185,8 +1187,6 @@ class Constructor(ExpressionStatement):
         if name not in self.__attributes:
             self.__attributes[name] = value
             self.__attribute_locations[name] = lname
-            self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
-            self.anchors.extend(value.get_anchors())
         else:
             raise RuntimeException(self, f"The attribute {name} in the constructor call of {self.class_type} is already set.")
 

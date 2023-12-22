@@ -24,7 +24,7 @@ from typing import Optional
 
 from inmanta.ast import (
     Anchor,
-    AttributeReferenceAnchor,
+    AttributeAnchor,
     CompilerException,
     CompilerRuntimeWarning,
     DuplicateException,
@@ -618,9 +618,7 @@ class DefineIndex(DefinitionStatement):
                 )
             else:
                 rattribute = entity_type.get_attribute(str_attribute)
-                self.anchors.append(
-                    AttributeReferenceAnchor(attribute.get_location(), self.type.namespace, self.type, str_attribute)
-                )
+                self.anchors.append(AttributeAnchor(attribute.get_location(), rattribute))
                 assert rattribute is not None  # Make mypy happy
                 if rattribute.is_optional():
                     raise IndexException(
