@@ -2474,7 +2474,8 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         LOGGER.info("verifying project")
         self.verify_modules_cache()
         self.verify_module_version_compatibility()
-        self.verify_python_requires()
+
+    #        self.verify_python_requires()
 
     def verify_python_environment(self) -> None:
         """

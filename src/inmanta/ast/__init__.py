@@ -264,6 +264,27 @@ class TypeReferenceAnchor(Anchor):
         return AnchorTarget(location=location, docstring=docstring)
 
 
+class TypeAnchor(Anchor):
+    """Reference to a resolved type"""
+
+    def __init__(self, reference: LocatableString, type: "Type") -> None:
+        """
+        :param reference: the location we are referencing from
+        :param type: the type that is being referenced
+        """
+        Anchor.__init__(self, range=reference.get_location())
+        self.type = type
+        self.type.get_location()
+
+    def resolve(self) -> Optional[AnchorTarget]:
+        t = self.type
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
+
+
 class AttributeReferenceAnchor(Anchor):
     def __init__(self, range: Range, namespace: "Namespace", type: LocatableString, attribute: str) -> None:
         Anchor.__init__(self, range=range)

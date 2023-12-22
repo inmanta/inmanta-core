@@ -346,3 +346,37 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
     range_target = Range(target_path, 1, 8, 1, 12)
 
     assert (range_source, range_target) in anchormap
+
+
+def test_constructor_renamed_namespace(snippetcompiler):
+    """
+    Test that the anchor for a constructor with `import a as b` work
+    """
+
+    module: str = "tests"
+    target_path = os.path.join(os.path.dirname(__file__), "data", "modules", module, "model", "subpack", "submod.cf")
+
+    snippetcompiler.setup_for_snippet(
+        """
+    import mod1
+    import tests::subpack::submod as t
+    entity A:
+    end
+
+    A.mytest [1] -- t::Test [1]
+
+    A(mytest = t::Test())
+    """,
+        autostd=False,
+    )
+
+    compiler = Compiler()
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+
+    anchormap = sched.anchormap(compiler, statements, blocks)
+    assert len(anchormap) == 5
+    range_source = Range(os.path.join(snippetcompiler.project_dir, "main.cf"), 9, 16, 9, 23)
+    range_target = Range(target_path, 1, 8, 1, 12)
+
+    assert (range_source, range_target) in anchormap

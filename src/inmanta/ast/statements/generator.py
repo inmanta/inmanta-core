@@ -41,8 +41,8 @@ from inmanta.ast import (
     NotFoundException,
     Range,
     RuntimeException,
+    TypeAnchor,
     TypeNotFoundException,
-    TypeReferenceAnchor,
     TypingException,
 )
 from inmanta.ast.attribute import Attribute, RelationAttribute
@@ -881,7 +881,7 @@ class Constructor(ExpressionStatement):
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         self.type = self._resolve_type(lhs_attribute)
-        self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.class_type))
+        self.anchors.append(TypeAnchor(self.class_type, self.type))
         inindex: abc.MutableSet[str] = set()
 
         all_attributes = dict(self.type.get_default_values())
