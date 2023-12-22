@@ -264,21 +264,35 @@ class TypeReferenceAnchor(Anchor):
         return AnchorTarget(location=location, docstring=docstring)
 
 
-class AttributeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: LocatableString, attribute: str) -> None:
-        Anchor.__init__(self, range=range)
-        self.namespace = namespace
+class TypeAnchor(Anchor):
+    """Reference to a resolved type"""
+
+    def __init__(self, reference: LocatableString, type: "Type") -> None:
+        """
+        :param reference: the location we are referencing from
+        :param type: the type that is being referenced
+        """
+        Anchor.__init__(self, range=reference.get_location())
         self.type = type
+        self.type.get_location()
+
+    def resolve(self) -> Optional[AnchorTarget]:
+        t = self.type
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
+
+
+class AttributeAnchor(Anchor):
+    def __init__(self, range: Range, attribute: "Attribute") -> None:
+        Anchor.__init__(self, range=range)
         self.attribute = attribute
 
     def resolve(self) -> Optional[AnchorTarget]:
-        instancetype = self.namespace.get_type(self.type)
-        # type check impossible atm due to import loop
-        # assert isinstance(instancetype, Entity)
-        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
-        assert entity_attribute is not None
-        location = entity_attribute.get_location()
-        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        location = self.attribute.get_location()
+        docstring = self.attribute.comment if isinstance(self.attribute, WithComment) else None
         if not location:
             return None
         return AnchorTarget(location=location, docstring=docstring)
