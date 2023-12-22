@@ -24,7 +24,7 @@ from typing import Optional
 
 from inmanta.ast import (
     Anchor,
-    AttributeReferenceAnchor,
+    AttributeAnchor,
     CompilerException,
     CompilerRuntimeWarning,
     DuplicateException,
@@ -36,6 +36,7 @@ from inmanta.ast import (
     NotFoundException,
     Range,
     RuntimeException,
+    TypeAnchor,
     TypeNotFoundException,
     TypeReferenceAnchor,
     TypingException,
@@ -289,7 +290,7 @@ class DefineImplementation(TypeDefinitionStatement):
         """
         try:
             cls = self.namespace.get_type(self.entity)
-            self.anchors = [TypeReferenceAnchor(self.namespace, self.entity)]
+            self.anchors = [TypeAnchor(self.entity, cls)]
             if not isinstance(cls, Entity):
                 raise TypingException(self, f"Implementation can only be define for an Entity, but {self.entity} is a {cls}")
             self.type.set_type(cls)
@@ -372,7 +373,7 @@ class DefineImplement(DefinitionStatement):
                 raise TypingException(
                     self, f"Implementation can only be define for an Entity, but {self.entity} is a {entity_type}"
                 )
-            self.anchors.append(TypeReferenceAnchor(self.entity.namespace, self.entity))
+            self.anchors.append(TypeAnchor(self.entity, entity_type))
 
             # If one implements statement has parent declared, set to true
             entity_type.implements_inherits |= self.inherit
@@ -400,7 +401,7 @@ class DefineImplement(DefinitionStatement):
                     )
 
                 # add it
-                self.anchors.append(TypeReferenceAnchor(_impl.namespace, _impl))
+                self.anchors.append(TypeAnchor(_impl, impl_obj))
                 implement.implementations.append(impl_obj)
 
             entity_type.add_implement(implement)
@@ -475,7 +476,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
-        self.anchors.append(TypeReferenceAnchor(self.namespace, self.basetype))
+        self.anchors.append(TypeAnchor(self.basetype, basetype))
 
         constraint_type = self.type
 
@@ -609,7 +610,7 @@ class DefineIndex(DefinitionStatement):
         """
         entity_type = self.namespace.get_type(self.type)
         assert isinstance(entity_type, Entity), "%s is not an entity" % entity_type
-        self.anchors.append(TypeReferenceAnchor(self.type.namespace, self.type))
+        self.anchors.append(TypeAnchor(self.type, entity_type))
 
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:
@@ -622,9 +623,7 @@ class DefineIndex(DefinitionStatement):
                 )
             else:
                 rattribute = entity_type.get_attribute(str_attribute)
-                self.anchors.append(
-                    AttributeReferenceAnchor(attribute.get_location(), self.type.namespace, self.type, str_attribute)
-                )
+                self.anchors.append(AttributeAnchor(attribute.get_location(), rattribute))
                 assert rattribute is not None  # Make mypy happy
                 if rattribute.is_optional():
                     raise IndexException(
