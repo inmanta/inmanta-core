@@ -350,7 +350,7 @@ def test_constructor_with_inferred_namespace(snippetcompiler):
 
 def test_constructor_renamed_namespace(snippetcompiler):
     """
-    Test that the anchor for a constructor with `import a as b` work
+    Test that the anchor for a constructor with `import a as b` works
     """
 
     module: str = "tests"
