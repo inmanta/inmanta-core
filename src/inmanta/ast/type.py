@@ -432,9 +432,12 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+            raise RuntimeException(None, f"Invalid value '{value}', expected {List.type_string(self)}")
 
         return True
+
+    def type_string(self) -> str:
+        return "list"
 
     def type_string_internal(self) -> str:
         return "List"

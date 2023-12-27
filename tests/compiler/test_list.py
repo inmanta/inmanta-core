@@ -556,3 +556,14 @@ def test_relation_list_duplicate_assignment(snippetcompiler):
         )
     )
     compiler.do_compile()
+
+
+def test_608_opt_to_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::count("hello"))
+        """
+    )
+    with pytest.raises(RuntimeException) as exc_info:
+        (_, scopes) = compiler.do_compile()
+    assert "Invalid value 'hello', expected list" in exc_info.value.msg
