@@ -558,7 +558,7 @@ def test_relation_list_duplicate_assignment(snippetcompiler):
     compiler.do_compile()
 
 
-def test_608_opt_to_list(snippetcompiler):
+def test_error_list_validation(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
         std::print(std::count("hello"))

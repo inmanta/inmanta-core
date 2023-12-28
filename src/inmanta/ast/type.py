@@ -432,7 +432,7 @@ class List(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, f"Invalid value '{value}', expected {List.type_string(self)}")
+            raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
 
@@ -765,7 +765,7 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
     # quickfix issue #1774
     allowed_element_type: Type = Type()
     if locatable_type.value == "list":
-        return TypedList(allowed_element_type)
+        return List()
     if locatable_type.value == "dict":
         return TypedDict(allowed_element_type)
 
