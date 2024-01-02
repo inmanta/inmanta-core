@@ -91,6 +91,33 @@ def start_server(options: argparse.Namespace) -> None:
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
+    util.ensure_event_loop()
+
+    ibl = InmantaBootloader()
+    setup_signal_handlers(ibl.stop)
+
+    ioloop = IOLoop.current()
+
+    # handle startup exceptions
+    def _handle_startup_done(fut: asyncio.Future) -> None:
+        if fut.cancelled():
+            safe_shutdown(ioloop, ibl.stop)
+        else:
+            exc = fut.exception()
+            if exc is not None:
+                LOGGER.exception("Server setup failed", exc_info=exc)
+                traceback.print_exception(type(exc), exc, exc.__traceback__)
+                safe_shutdown(ioloop, ibl.stop)
+            else:
+                LOGGER.info("Server startup complete")
+
+    ensure_future(ibl.start()).add_done_callback(_handle_startup_done)
+
+    ioloop.start()
+    LOGGER.info("Server shutdown complete")
+    if not ibl.started:
+        exit(EXIT_START_FAILED)
+
 
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options: argparse.Namespace) -> None:
