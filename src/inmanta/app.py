@@ -83,7 +83,6 @@ LOGGER = logging.getLogger("inmanta")
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
-    # Log the version at startup
     LOGGER.info(f"Starting inmanta-server version {__version__}")
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
