@@ -60,6 +60,7 @@ class Server(protocol.ServerSlice):
     def __init__(self) -> None:
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
+        LOGGER.info(self._server)
 
     def get_dependencies(self) -> list[str]:
         return [SLICE_DATABASE, SLICE_COMPILER]
