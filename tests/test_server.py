@@ -652,7 +652,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
 
     # try to access a non environment call (global)
     result = await client_multi.list_environments()
-    assert result.code == 401
+    assert result.code == 403
 
     result = await client_multi.list_versions(environment_multi)
     assert result.code == 200
@@ -662,7 +662,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
 
     client_multi._transport_instance.token = agent_jot
     result = await client_multi.list_versions(environment_multi)
-    assert result.code == 401
+    assert result.code == 403
 
 
 async def test_token_without_auth(server, client, environment):
