@@ -34,6 +34,7 @@ import asyncio
 import contextlib
 import dataclasses
 import enum
+import importlib.metadata
 import json
 import logging
 import os
@@ -81,9 +82,30 @@ except ImportError:
 LOGGER = logging.getLogger("inmanta")
 
 
+def get_product_version() -> Optional[str]:
+    """
+    Returns the version of the Inmanta server product package.
+    This function checks for two packages: 'inmanta-service-orchestrator' and 'inmanta'.
+    It returns the version of 'inmanta-service-orchestrator' if found,
+    else it returns the version of 'inmanta'
+    """
+    try:
+        # Try to get the version of 'inmanta-service-orchestrator' (ISO)
+        return importlib.metadata.version("inmanta-service-orchestrator")
+    except importlib.metadata.PackageNotFoundError:
+        # If not found, try 'inmanta' (OSS)
+        try:
+            return importlib.metadata.version("inmanta")
+        except importlib.metadata.PackageNotFoundError:
+            return
+
+
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
-    LOGGER.info(f"Starting inmanta-server version %s", COMPILER_VERSION)
+    version = get_product_version()
+    if version:
+        LOGGER.info(f"Starting inmanta-server version %s", get_product_version())
+
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
