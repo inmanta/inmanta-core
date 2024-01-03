@@ -567,3 +567,23 @@ def test_error_list_validation(snippetcompiler):
     with pytest.raises(RuntimeException) as exc_info:
         (_, scopes) = compiler.do_compile()
     assert "Invalid value 'hello', expected list" in exc_info.value.msg
+
+
+def test_error_list_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::count("hello"))
+        """
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello', expected list"):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_error_dict_validation(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+        std::print(std::dict_get("hello1", "hello2"))
+        """
+    )
+    with pytest.raises(RuntimeException, match="Invalid value 'hello1', expected dict"):
+        (_, scopes) = compiler.do_compile()

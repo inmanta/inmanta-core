@@ -419,6 +419,7 @@ class String(Primitive):
 class List(Type):
     """
     Instances of this class represent a list type containing any types of values.
+    This class refers to the list type used in plugin annotations. For the list type in the Inmanta DSL, see `LiteralList`.
     """
 
     def __init__(self):
@@ -437,6 +438,7 @@ class List(Type):
         return True
 
     def type_string(self) -> str:
+        # This is not a type in the model, but it is used in plugin annotations, which are also part of the DSL.
         return "list"
 
     def type_string_internal(self) -> str:
