@@ -60,7 +60,7 @@ from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 
 import inmanta.compiler as compiler
-from inmanta import __version__, const, module, moduletool, protocol, util
+from inmanta import COMPILER_VERSION, const, module, moduletool, protocol, util
 from inmanta.ast import CompilerException, Namespace
 from inmanta.ast import type as inmanta_type
 from inmanta.command import CLIException, Commander, ShowUsageException, command
@@ -83,7 +83,7 @@ LOGGER = logging.getLogger("inmanta")
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
-    LOGGER.info(f"Starting inmanta-server version {__version__}")
+    LOGGER.info(f"Starting inmanta-server version {COMPILER_VERSION}")
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 
