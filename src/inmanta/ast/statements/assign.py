@@ -33,7 +33,7 @@ from inmanta.ast import (
     Location,
     OptionalValueException,
     RuntimeException,
-    TypeReferenceAnchor,
+    TypeAnchor,
     TypingException,
 )
 from inmanta.ast.attribute import RelationAttribute
@@ -442,7 +442,7 @@ class IndexLookup(ReferenceStatement, Resumer):
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
-        self.anchors.append(TypeReferenceAnchor(self.index_type.namespace, self.index_type))
+        self.anchors.append(TypeAnchor(self.index_type, self.type))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
         requires: dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
