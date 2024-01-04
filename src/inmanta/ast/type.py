@@ -419,6 +419,7 @@ class String(Primitive):
 class List(Type):
     """
     Instances of this class represent a list type containing any types of values.
+    This class refers to the list type used in plugin annotations. For the list type in the Inmanta DSL, see `LiteralList`.
     """
 
     def __init__(self):
@@ -435,6 +436,10 @@ class List(Type):
             raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
         return True
+
+    def type_string(self) -> str:
+        # This is not a type in the model, but it is used in plugin annotations, which are also part of the DSL.
+        return "list"
 
     def type_string_internal(self) -> str:
         return "List"
@@ -762,7 +767,7 @@ def resolve_type(locatable_type: LocatableString, resolver: Namespace) -> Type:
     # quickfix issue #1774
     allowed_element_type: Type = Type()
     if locatable_type.value == "list":
-        return TypedList(allowed_element_type)
+        return List()
     if locatable_type.value == "dict":
         return TypedDict(allowed_element_type)
 
