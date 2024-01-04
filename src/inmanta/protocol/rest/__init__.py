@@ -59,10 +59,10 @@ def authorize_request(
     env_key: str = const.INMANTA_URN + "env"
     if env_key in auth_data:
         if env_key not in metadata:
-            raise exceptions.UnauthorizedException("The authorization token is scoped to a specific environment.")
+            raise exceptions.Forbidden("The authorization token is scoped to a specific environment.")
 
         if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
-            raise exceptions.UnauthorizedException("The authorization token is not valid for the requested environment.")
+            raise exceptions.Forbidden("The authorization token is not valid for the requested environment.")
 
     # Enforce client_types restrictions
     ok: bool = False
@@ -72,7 +72,7 @@ def authorize_request(
             ok = True
 
     if not ok:
-        raise exceptions.UnauthorizedException(
+        raise exceptions.Forbidden(
             "The authorization token does not have a valid client type for this call."
             + f" ({auth_data[ct_key]} provided, {config.properties.client_types} expected"
         )
