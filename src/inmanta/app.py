@@ -102,10 +102,6 @@ def get_product_version() -> Optional[str]:
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options: argparse.Namespace) -> None:
-    version = get_product_version()
-    if version:
-        LOGGER.info(f"Starting inmanta-server version %s", get_product_version())
-
     if options.config_file and not os.path.exists(options.config_file):
         LOGGER.warning("Config file %s doesn't exist", options.config_file)
 

@@ -81,6 +81,8 @@ class InmantaBootloader:
 
     async def start(self) -> None:
         ctx = self.load_slices()
+        version = ctx.get_feature_manager().get_product_metadata().version
+        LOGGER.info(f"Starting inmanta-server version {version}")
         for mypart in ctx.get_slices():
             self.restserver.add_slice(mypart)
             ctx.get_feature_manager().add_slice(mypart)
