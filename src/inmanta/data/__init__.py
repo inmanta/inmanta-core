@@ -988,7 +988,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         self.limit = limit
         self.backward_paging = backward_paging
         self.prelude = prelude
-        self.prelude_extra = prelude_extra
+        self.prelude_extra = prelude_extra if prelude_extra else []
 
     def select(self, select_clause: str) -> "SimpleQueryBuilder":
         """Set the select clause of the query"""
