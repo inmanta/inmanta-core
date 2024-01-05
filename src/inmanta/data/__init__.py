@@ -1048,7 +1048,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         )
 
     def build(self) -> tuple[str, list[object]]:
-        if not self.select_clause or not self.from_clause:
+        if not self.select_clause or not self._from_clause:
             raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
 
         prelude_section = ""
