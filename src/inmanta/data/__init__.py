@@ -1987,7 +1987,7 @@ class BaseDocument(metaclass=DocumentMeta):
         if isinstance(value, dict):
             return json_encode(value)
 
-        if isinstance(value, DataDocument) or isinstance(value, BaseModel):
+        if isinstance(value, (DataDocument, BaseModel)):
             return json_encode(value)
 
         if isinstance(value, list):
