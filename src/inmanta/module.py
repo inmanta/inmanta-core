@@ -1886,7 +1886,7 @@ class ModuleLikeWithYmlMetadataFile(ABC):
         # Parse cfg file
         content: CommentedMap = PreservativeYamlParser.parse(self.get_metadata_file_path())
         # Update requires
-        if "requires" in content:
+        if "requires" in content and content["requires"]:
             existing_matching_reqs: list[str] = [
                 r for r in content["requires"] if InmantaModuleRequirement.parse(r).key == requirement.key
             ]
