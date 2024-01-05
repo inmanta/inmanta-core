@@ -1048,14 +1048,22 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         )
 
     def build(self) -> tuple[str, list[object]]:
-        if not self.select_clause or not self._from_clause:
+        if not self.select_clause or not self.from_clause:
             raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
-        full_query = f"""{self.select_clause}
-                         {self._from_clause}
-                         {self._join_filter_statements(self.filter_statements)}
-                         """
+
+        prelude_section = ""
         if self.prelude:
-            full_query = self.prelude + "\n" + "\n".join(self.prelude_extra) + full_query
+            prelude_section = self.prelude
+        if self.prelude_extra:
+            prelude_extra_section = ",\n".join(self.prelude_extra)
+            prelude_section = "\n".join([prelude_section + ",", prelude_extra_section])
+
+        if prelude_section:
+            prelude_section = "WITH " + prelude_section
+
+        full_query = f"{prelude_section}\n{self.select_clause}\n{self._from_clause}"
+        full_query += "\n" + self._join_filter_statements(self.filter_statements)
+
         if self.db_order:
             full_query += self.db_order.get_order_by_statement(self.backward_paging)
         if self.limit is not None:

@@ -1282,28 +1282,25 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
 
     def build(self) -> tuple[str, list[object]]:
         prelude_query, prelude_values = self._prelude_query_builder.build()
-        prelude_query_in_with_block = f"WITH prelude AS ({prelude_query})"
+        prelude_section = f"prelude AS ({prelude_query})"
         extra_prelude_values = []
         extra_prelude_queries = []
-        extra_prelude_filters = []
 
-        # Building additional prelude queries with unique names
         for idx, extra_builder in enumerate(self._prelude_query_builder_extra):
             extra_query, extra_values = extra_builder.build()
-            prelude_name = f"extra_prelude_{idx}"
-            extra_prelude_queries.append(f", {prelude_name} AS ({extra_query})")
+            prelude_name = f"extra_prelude_{idx + 1}"
+            extra_prelude_queries.append(f"{prelude_name} AS ({extra_query})")
             extra_prelude_values.extend(extra_values)
-            extra_prelude_filters.extend(extra_builder.filter_statements)
 
         delegate = SimpleQueryBuilder(
             select_clause=self.select_clause,
             from_clause=self._from_clause,
-            filter_statements=self._prelude_query_builder.filter_statements + extra_prelude_filters + self.filter_statements,
-            values=self._prelude_query_builder.values + extra_prelude_values + self.values,
+            filter_statements=self.filter_statements,
+            values=self.values,
             db_order=self.db_order,
             limit=None,
             backward_paging=self.backward_paging,
-            prelude=prelude_query_in_with_block,
+            prelude=prelude_section,
             prelude_extra=extra_prelude_queries,
         )
         full_query, values_full = delegate.build()

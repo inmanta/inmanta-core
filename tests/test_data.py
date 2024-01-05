@@ -34,7 +34,8 @@ from asyncpg.pool import Pool
 import utils
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, QueryType
+from inmanta.data import ArgumentCollector, DatabaseOrderV2, QueryType, SimpleQueryBuilder
+from inmanta.data.dataview import PreludeBasedFilteringQueryBuilder
 from inmanta.resources import Id, ResourceVersionIdStr
 
 
@@ -3228,3 +3229,83 @@ async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_sche
 
     report = await data.Report.get_by_id(report.id)
     assert report.returncode is None
+
+
+class TestQueryBuilder:
+    @pytest.fixture
+    def simple_query_builder(self):
+        return SimpleQueryBuilder(
+            select_clause="SELECT *",
+            from_clause="FROM table",
+            filter_statements=["column = $1"],
+            values=["value"],
+            limit=10,
+            backward_paging=False,
+            prelude="prelude_query AS (SELECT * FROM prelude_table)",
+            prelude_extra=[
+                "extra_prelude_1 AS (SELECT * FROM extra_table1)",
+                "extra_prelude_2 AS (SELECT * FROM extra_table2)",
+            ],
+        )
+
+    @pytest.fixture
+    def prelude_query_builder(self):
+        return SimpleQueryBuilder(
+            select_clause="SELECT *",
+            from_clause="FROM prelude_table",
+            filter_statements=["prelude_column = $1"],
+            values=["prelude_value"],
+        )
+
+    def test_prelude_extra_in_simple_query_builder(self, simple_query_builder):
+        query, _ = simple_query_builder.build()
+        assert (
+            """WITH prelude_query AS (SELECT * FROM prelude_table),
+extra_prelude_1 AS (SELECT * FROM extra_table1),
+extra_prelude_2 AS (SELECT * FROM extra_table2)
+SELECT *"""
+            in query
+        )
+
+    def test_query_building_in_prelude_based_filtering_query_builder(self, prelude_query_builder):
+        extra_prelude_builder = SimpleQueryBuilder(
+            select_clause="SELECT *",
+            from_clause="FROM extra_prelude_table",
+            filter_statements=["extra_prelude_column = $2"],
+            values=["extra_prelude_value"],
+        )
+
+        prelude_based_builder = PreludeBasedFilteringQueryBuilder(
+            prelude_query_builder=prelude_query_builder,
+            prelude_query_builder_extra=[extra_prelude_builder],
+            select_clause="SELECT mt.*",
+            from_clause="""
+            FROM main_table mt
+            JOIN prelude p ON mt.some_column = p.some_related_column
+            JOIN extra_prelude_1 ep ON mt.another_column = ep.another_related_column""",
+        )
+
+        query, values = prelude_based_builder.build()
+        assert "WITH prelude AS (SELECT * FROM prelude_table)" in query
+        assert ", extra_prelude_1 AS (SELECT * FROM extra_prelude_table)" in query
+        assert "prelude_value" in values
+        assert "extra_prelude_value" in values
+
+    def test_offset_calculation_in_prelude_based_filtering_query_builder(self, prelude_query_builder):
+        extra_prelude_builder = SimpleQueryBuilder(
+            select_clause="SELECT *",
+            from_clause="FROM extra_prelude_table",
+            filter_statements=["extra_prelude_column = %s"],
+            values=["extra_value1", "extra_value2"],
+        )
+
+        prelude_based_builder = PreludeBasedFilteringQueryBuilder(
+            prelude_query_builder=prelude_query_builder,
+            prelude_query_builder_extra=[extra_prelude_builder],
+            select_clause="SELECT *",
+            from_clause="FROM main_table",
+        )
+
+        offset = prelude_based_builder.offset
+        expected_offset = 1 + len(prelude_query_builder.values) + len(extra_prelude_builder.values)
+        assert offset == expected_offset
