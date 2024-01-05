@@ -1134,7 +1134,7 @@ class Field(Generic[T]):
 
     def _validate_single(self, name: str, value: object) -> None:
         """Validate a single value against the types in this field."""
-        if not (value.__class__ is self.field_type or isinstance(value, self.field_type)):
+        if not isinstance(value, self.field_type):
             raise TypeError(
                 "Field %s should have the correct type (%s instead of %s)"
                 % (name, self.field_type.__name__, type(value).__name__)
@@ -1174,7 +1174,7 @@ class Field(Generic[T]):
 
     def _from_db_single(self, name: str, value: object) -> object:
         """Load a single database value. Converts database representation to appropriately typed object."""
-        if value.__class__ is self.field_type or isinstance(value, self.field_type):
+        if isinstance(value, self.field_type):
             return value
 
         # asyncpg does not convert a jsonb field to a dict
@@ -1979,7 +1979,7 @@ class BaseDocument(metaclass=DocumentMeta):
         if isinstance(value, dict):
             return json_encode(value)
 
-        if isinstance(value, DataDocument) or issubclass(value.__class__, DataDocument):
+        if isinstance(value, (DataDocument, BaseModel)):
             return json_encode(value)
 
         if isinstance(value, list):
