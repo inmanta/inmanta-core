@@ -1055,7 +1055,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                          {self._join_filter_statements(self.filter_statements)}
                          """
         if self.prelude:
-            full_query = self.prelude + "\n".join(self.prelude_extra) + full_query
+            full_query = self.prelude + "\n" + "\n".join(self.prelude_extra) + full_query
         if self.db_order:
             full_query += self.db_order.get_order_by_statement(self.backward_paging)
         if self.limit is not None:
