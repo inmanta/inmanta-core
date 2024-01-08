@@ -1,0 +1,6 @@
+change-type: patch
+description: Bump types-python-dateutil from 2.8.19.14 to 2.8.19.20240106
+destination-branches:
+- master
+- iso7
+sections: {}
