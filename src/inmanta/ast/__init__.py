@@ -688,7 +688,10 @@ class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
     def __init__(self, type: LocatableString, ns: Namespace) -> None:
-        RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}")
+        suggest_importing: str = ""
+        if "::" in type.value:
+            suggest_importing = f". Try importing the module with `import {type.value.split('::')[0]}`"
+        RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}{suggest_importing}")
         self.type = type
         self.ns = ns
         self.set_location(type.get_location())

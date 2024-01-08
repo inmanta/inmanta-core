@@ -129,7 +129,25 @@ def test_unknown_type_in_relation(snippetcompiler):
         """
 foo::Entity.test [1] -- std::Entity
         """,
-        "could not find type foo::Entity in namespace __config__ ({dir}/main.cf:2:1)",
+        (
+            "could not find type foo::Entity in namespace __config__. "
+            "Try importing the module with `import foo` ({dir}/main.cf:2:1)"
+        ),
+    )
+
+
+def test_suggest_importing_module(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test:
+    foo::name name
+end
+        """,
+        (
+            "could not find type foo::name in namespace __config__. Try importing the "
+            "module with `import foo` (reported in Entity(Test) "
+            "({dir}/main.cf:3:5))"
+        ),
     )
 
 
