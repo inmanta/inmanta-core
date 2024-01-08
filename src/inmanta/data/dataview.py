@@ -1255,7 +1255,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
     def __init__(
         self,
         prelude_query_builder: SimpleQueryBuilder,
-        prelude_query_builder_extra: Optional[list[SimpleQueryBuilder]],
+        prelude_query_builder_extra: Optional[list[SimpleQueryBuilder]] = None,
         select_clause: Optional[str] = None,
         from_clause: Optional[str] = None,
         db_order: Optional[DatabaseOrderV2] = None,
@@ -1272,7 +1272,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             prelude=None,
         )
         self._prelude_query_builder = prelude_query_builder
-        self._prelude_query_builder_extra = prelude_query_builder_extra
+        self._prelude_query_builder_extra = prelude_query_builder_extra if prelude_query_builder_extra else []
 
     @property
     def offset(self) -> int:
