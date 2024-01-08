@@ -3261,7 +3261,7 @@ def prelude_query_builder():
 def test_prelude_extra_in_simple_query_builder(simple_query_builder):
     query, _ = simple_query_builder.build()
     assert (
-        """WITH prelude_query AS (SELECT * FROM prelude_table),
+        """prelude_query AS (SELECT * FROM prelude_table),
 extra_prelude_1 AS (SELECT * FROM extra_table1),
 extra_prelude_2 AS (SELECT * FROM extra_table2)
 SELECT *"""

@@ -1058,9 +1058,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             prelude_extra_section = ",\n".join(self.prelude_extra)
             prelude_section = "\n".join([prelude_section + ",", prelude_extra_section])
 
-        if prelude_section:
-            prelude_section = "WITH " + prelude_section
-
         full_query = f"{prelude_section}\n{self.select_clause}\n{self._from_clause}"
         full_query += "\n" + self._join_filter_statements(self.filter_statements)
 

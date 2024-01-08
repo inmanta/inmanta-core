@@ -1282,7 +1282,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
 
     def build(self) -> tuple[str, list[object]]:
         prelude_query, prelude_values = self._prelude_query_builder.build()
-        prelude_section = f"prelude AS ({prelude_query})"
+        prelude_section = f"WITH prelude AS ({prelude_query})"
         extra_prelude_values = []
         extra_prelude_queries = []
 
@@ -1304,7 +1304,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             prelude_extra=extra_prelude_queries,
         )
         full_query, values_full = delegate.build()
-        return full_query, prelude_values + extra_prelude_values
+        return full_query, prelude_values
 
     def select(self, select_clause: str) -> "PreludeBasedFilteringQueryBuilder":
         """Set the select clause of the query"""
