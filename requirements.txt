@@ -10,7 +10,7 @@ email-validator==2.1.0.post1
 execnet==1.9.0
 importlib_metadata==7.0.1
 jinja2==3.1.2
-more-itertools==10.1.0
+more-itertools==10.2.0
 netifaces==0.11.0
 packaging==23.2
 pip==23.3.2
