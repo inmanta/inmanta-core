@@ -815,7 +815,15 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 # Get parameters from the agent
 
 
-@method(path="/agent_parameter", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[])
+@method(
+    path="/agent_parameter",
+    operation="POST",
+    server_agent=True,
+    timeout=5,
+    arg_options=AGENT_ENV_OPTS,
+    client_types=[],
+    reply=False,
+)
 def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
     Get all parameters/facts known by the agents for the given resource

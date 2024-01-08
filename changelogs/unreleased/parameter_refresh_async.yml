@@ -1,0 +1,5 @@
+description: Make parameter refresh a non-blocking call
+change-type: patch
+destination-branches: [master, iso6, iso7]
+sections:
+  minor-improvement: "{{description}}"
