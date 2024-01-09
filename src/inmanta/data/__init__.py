@@ -969,6 +969,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         backward_paging: bool = False,
         prelude: Optional[str] = None,
         prelude_extra: Optional[list[str]] = None,
+        base_offset: int = 1,
     ) -> None:
         """
         :param select_clause: The select clause of the query
@@ -982,6 +983,10 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         :param prelude: part of the query preceding all else, for use with 'with' binding
         :param prelude_extra: part of the query preceding all else, for use with 'with' binding and if one prelude isn't
                                 enough.
+        :param base_offset: default to one, this is the offset that will be applied to additional filters added to the query.
+                            as example: adding a filter for a query that has 3 values with a base_offset of 6 means that
+                            the filter will be done using $10 in its condition. By default the offset is 1
+
         """
         super().__init__(select_clause, from_clause, filter_statements, values)
         self.db_order = db_order
@@ -989,6 +994,12 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         self.backward_paging = backward_paging
         self.prelude = prelude
         self.prelude_extra = prelude_extra if prelude_extra else []
+        self.base_offset = base_offset
+
+    @property
+    def offset(self) -> int:
+        """The current offset of the values to be used for filter statements"""
+        return self.base_offset + len(self.values)
 
     def select(self, select_clause: str) -> "SimpleQueryBuilder":
         """Set the select clause of the query"""

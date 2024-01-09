@@ -3232,7 +3232,16 @@ async def test_retrieve_optional_field_no_default(init_dataclasses_and_load_sche
 
 
 @pytest.fixture
-def simple_query_builder():
+def prelude_query_builder():
+    return SimpleQueryBuilder(
+        select_clause="SELECT *",
+        from_clause="FROM prelude_table",
+        filter_statements=["prelude_column = $1"],
+        values=["prelude_value"],
+    )
+
+
+def simple_query_builder(base_offset=1):
     return SimpleQueryBuilder(
         select_clause="SELECT *",
         from_clause="FROM table",
@@ -3245,21 +3254,13 @@ def simple_query_builder():
             "extra_prelude_1 AS (SELECT * FROM extra_table1)",
             "extra_prelude_2 AS (SELECT * FROM extra_table2)",
         ],
+        base_offset=base_offset,
     )
 
 
-@pytest.fixture
-def prelude_query_builder():
-    return SimpleQueryBuilder(
-        select_clause="SELECT *",
-        from_clause="FROM prelude_table",
-        filter_statements=["prelude_column = $1"],
-        values=["prelude_value"],
-    )
-
-
-def test_prelude_extra_in_simple_query_builder(simple_query_builder):
-    query, values = simple_query_builder.build()
+def test_prelude_extra_in_simple_query_builder():
+    sqb = simple_query_builder()
+    query, values = sqb.build()
     assert (
         """WITH prelude_query AS (SELECT * FROM prelude_table),
 extra_prelude_1 AS (SELECT * FROM extra_table1),
@@ -3273,21 +3274,32 @@ WHERE column = $1 LIMIT 10"""
 
 
 def test_query_building_in_prelude_based_filtering_query_builder(prelude_query_builder):
-    extra_prelude_builder = SimpleQueryBuilder(
+    extra_prelude_builder_1 = SimpleQueryBuilder(
         select_clause="SELECT *",
-        from_clause="FROM extra_prelude_table",
+        from_clause="FROM extra_prelude_table_1",
         filter_statements=["extra_prelude_column = $2"],
+        values=["extra_prelude_value"],
+    )
+
+    extra_prelude_builder_2 = SimpleQueryBuilder(
+        select_clause="SELECT *",
+        from_clause="FROM extra_prelude_table_2",
+        filter_statements=["extra_prelude_column = $3"],
         values=["extra_prelude_value"],
     )
 
     prelude_based_builder = PreludeBasedFilteringQueryBuilder(
         prelude_query_builder=prelude_query_builder,
-        prelude_query_builder_extra=[("extra_prelude_1", extra_prelude_builder)],
+        prelude_query_builder_extra=[
+            ("extra_prelude_1", extra_prelude_builder_1),
+            ("extra_prelude_2", extra_prelude_builder_2),
+        ],
         select_clause="SELECT mt.*",
         from_clause="""
         FROM main_table mt
         JOIN prelude p ON mt.some_column = p.some_related_column
-        JOIN extra_prelude_1 ep ON mt.another_column = ep.another_related_column""",
+        JOIN extra_prelude_1 ep1 ON mt.another_column = ep1.another_related_column
+        JOIN extra_prelude_2 ep2 ON ep1.another_column = ep2.another_related_column""",
     )
 
     query, values = prelude_based_builder.build()
@@ -3298,35 +3310,54 @@ FROM prelude_table
 WHERE prelude_column = $1),
 extra_prelude_1 AS (
 SELECT *
-FROM extra_prelude_table
-WHERE extra_prelude_column = $2)
+FROM extra_prelude_table_1
+WHERE extra_prelude_column = $2),
+extra_prelude_2 AS (
+SELECT *
+FROM extra_prelude_table_2
+WHERE extra_prelude_column = $3)
 SELECT mt.*
 
         FROM main_table mt
         JOIN prelude p ON mt.some_column = p.some_related_column
-        JOIN extra_prelude_1 ep ON mt.another_column = ep.another_related_column
+        JOIN extra_prelude_1 ep1 ON mt.another_column = ep1.another_related_column
+        JOIN extra_prelude_2 ep2 ON ep1.another_column = ep2.another_related_column
 """
         == query
     )
     assert "prelude_value" == values[0]
     assert "extra_prelude_value" == values[1]
+    assert "extra_prelude_value" == values[2]
 
 
 def test_offset_calculation_in_prelude_based_filtering_query_builder(prelude_query_builder):
-    extra_prelude_builder = SimpleQueryBuilder(
+    extra_prelude_builder1 = SimpleQueryBuilder(
         select_clause="SELECT *",
-        from_clause="FROM extra_prelude_table",
-        filter_statements=["extra_prelude_column = $2"],
-        values=["extra_value1", "extra_value2"],
+        from_clause="FROM extra_prelude_table1",
+        filter_statements=["extra_prelude_column1 = $2"],
+        values=["extra_value1"],
+    )
+
+    extra_prelude_builder2 = SimpleQueryBuilder(
+        select_clause="SELECT *",
+        from_clause="FROM extra_prelude_table2",
+        filter_statements=["extra_prelude_column2 = $3", "extra_prelude_column2 = $4"],
+        values=["extra_value2", "extra_value3"],
     )
 
     prelude_based_builder = PreludeBasedFilteringQueryBuilder(
         prelude_query_builder=prelude_query_builder,
-        prelude_query_builder_extra=[("extra_prelude_1", extra_prelude_builder)],
+        prelude_query_builder_extra=[("extra_prelude_1", extra_prelude_builder1), ("extra_prelude_2", extra_prelude_builder2)],
         select_clause="SELECT *",
         from_clause="FROM main_table",
     )
 
     offset = prelude_based_builder.offset
-    expected_offset = 1 + 1 + 2  # we start at 1 + 1 for prelude_query_builder and 2 for extra_prelude_builder
+    expected_offset = 1 + 1 + 1 + 2  # base offset of 1 + 1 for prelude_query_builder and 1 for extra_prelude_builder1
+    # and 2 for the extra_prelude_builder2
     assert offset == expected_offset
+
+
+def test_base_offset_simple_query():
+    sqb = simple_query_builder(base_offset=10)
+    assert sqb.offset == 10 + 1  # base offset of 10 + 1 value

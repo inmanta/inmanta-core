@@ -779,7 +779,7 @@ class ResourceHistoryView(DataView[ResourceHistoryOrder, ResourceHistory]):
         return {}
 
     def get_base_url(self) -> str:
-        return f"/api/v2/resource/{quote(self.rid,safe='')}/history"
+        return f"/api/v2/resource/{quote(self.rid, safe='')}/history"
 
     def get_base_query(self) -> SimpleQueryBuilder:
         query_builder = SimpleQueryBuilder(
@@ -1250,6 +1250,9 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
     """
     A query builder that applies any filters and the LIMIT statement to the prelude query rather than the outer query.
     The outer query may use the table name "prelude" to refer to the inner query.
+    Other preludes can be added to the query using the prelude_query_builder_extra argument.
+    This is a list of tuples where each tuple consist of the name that will be given to the CTE and
+    a SimpleQueryBuilder that will create the CTE. The filtering will only be done on the first prelude.
     """
 
     def __init__(
@@ -1292,19 +1295,23 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             extra_prelude_queries.append(f"{prelude_name} AS ({extra_query})")
             extra_prelude_values.extend(extra_values)
 
+        # The filter_statements and values are not aligned. this is because we don't want to re-apply the filters of
+        # the prelude to the main query. We still need all the values and the offset to be able to apply additional
+        # filters.
         delegate = SimpleQueryBuilder(
             select_clause=self.select_clause,
             from_clause=self._from_clause,
             filter_statements=self.filter_statements,
-            values=self.values,
+            values=self._prelude_query_builder.values + self.values,
             db_order=self.db_order,
             limit=None,
             backward_paging=self.backward_paging,
             prelude=prelude_section,
             prelude_extra=extra_prelude_queries,
+            base_offset=len(self._prelude_query_builder.values) + 1,
         )
         full_query, values_full = delegate.build()
-        return full_query, prelude_values
+        return full_query, prelude_values + extra_prelude_values
 
     def select(self, select_clause: str) -> "PreludeBasedFilteringQueryBuilder":
         """Set the select clause of the query"""
@@ -1328,6 +1335,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             prelude_query_builder_extra=self._prelude_query_builder_extra,
         )
 
+    # The order and limit is only applied to the prelude, not to the extra_preludes
     def order_and_limit(
         self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
     ) -> "PreludeBasedFilteringQueryBuilder":
@@ -1341,6 +1349,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             prelude_query_builder_extra=self._prelude_query_builder_extra,
         )
 
+    # The filter is only applied to the prelude, not to the extra_preludes
     def filter(self, filter_statements: list[str], values: list[object]) -> "PreludeBasedFilteringQueryBuilder":
         return PreludeBasedFilteringQueryBuilder(
             select_clause=self.select_clause,
