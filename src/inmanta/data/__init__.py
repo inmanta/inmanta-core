@@ -1059,7 +1059,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
                          """
         if self.prelude:
             full_query = self.prelude + full_query
-
         if self.db_order:
             full_query += self.db_order.get_order_by_statement(self.backward_paging)
         if self.limit is not None:
@@ -1070,6 +1069,7 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         if self.db_order and self.backward_paging:
             order_by = self.db_order.get_order_by_statement(table="matching_records")
             full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
+
         return full_query, self.values
 
 
