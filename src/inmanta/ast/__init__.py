@@ -399,7 +399,7 @@ class Namespace(Namespaced):
                 else:
                     raise TypeNotFoundException(typ, ns)
             else:
-                raise TypeNotFoundException(typ, self)
+                raise TypeNotFoundException(typ, self, parts)
         elif name in self.primitives:
             if name == "number":
                 warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
@@ -687,13 +687,10 @@ class VariableShadowWarning(CompilerRuntimeWarning):
 class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
-    def __init__(self, type: LocatableString, ns: Namespace) -> None:
+    def __init__(self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None) -> None:
         suggest_importing: str = ""
-        if "::" in type.value:
-            module_name = type.value.rsplit("::", 1)[0]
-
-            if module_name not in ns.visible_namespaces.keys():
-                suggest_importing = f". Try importing the module with `import {module_name}`"
+        if parts:
+            suggest_importing = f". Try importing the module with `import {parts[0]}`"
 
         RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}{suggest_importing}")
         self.type = type
