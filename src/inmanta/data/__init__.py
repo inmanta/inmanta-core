@@ -968,7 +968,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         limit: Optional[int] = None,
         backward_paging: bool = False,
         prelude: Optional[str] = None,
-        prelude_extra: Optional[list[str]] = None,
         base_offset: int = 1,
     ) -> None:
         """
@@ -981,8 +980,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         :param backward_paging: Whether the ordering of the results should be inverted,
                                 used when going backward through the pages
         :param prelude: part of the query preceding all else, for use with 'with' binding
-        :param prelude_extra: part of the query preceding all else, for use with 'with' binding and if one prelude isn't
-                                enough.
         :param base_offset: default to one, this is the offset that will be applied to additional filters added to the query.
                             as example: adding a filter for a query that has 3 values with a base_offset of 6 means that
                             the filter will be done using $10 in its condition. By default the offset is 1
@@ -993,7 +990,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         self.limit = limit
         self.backward_paging = backward_paging
         self.prelude = prelude
-        self.prelude_extra = prelude_extra if prelude_extra else []
         self.base_offset = base_offset
 
     @property
@@ -1012,7 +1008,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.limit,
             self.backward_paging,
             self.prelude,
-            self.prelude_extra,
         )
 
     def from_clause(self, from_clause: str) -> "SimpleQueryBuilder":
@@ -1026,7 +1021,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.limit,
             self.backward_paging,
             self.prelude,
-            self.prelude_extra,
         )
 
     def order_and_limit(
@@ -1042,7 +1036,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             limit,
             backward_paging,
             self.prelude,
-            self.prelude_extra,
         )
 
     def filter(self, filter_statements: list[str], values: list[object]) -> "SimpleQueryBuilder":
@@ -1055,7 +1048,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
             self.limit,
             self.backward_paging,
             self.prelude,
-            self.prelude_extra,
         )
 
     def build(self) -> tuple[str, list[object]]:
@@ -1065,9 +1057,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         prelude_section = ""
         if self.prelude:
             prelude_section = self.prelude
-        if self.prelude_extra:
-            prelude_extra_section = ",\n".join(self.prelude_extra)
-            prelude_section = "\n".join([prelude_section + ",", prelude_extra_section])
 
         full_query = f"{prelude_section}\n{self.select_clause}\n{self._from_clause}"
         full_query += "\n" + self._join_filter_statements(self.filter_statements)
