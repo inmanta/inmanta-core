@@ -3240,7 +3240,7 @@ def simple_query_builder():
         values=["value"],
         limit=10,
         backward_paging=False,
-        prelude="prelude_query AS (SELECT * FROM prelude_table)",
+        prelude="WITH prelude_query AS (SELECT * FROM prelude_table)",
         prelude_extra=[
             "extra_prelude_1 AS (SELECT * FROM extra_table1)",
             "extra_prelude_2 AS (SELECT * FROM extra_table2)",
@@ -3259,14 +3259,17 @@ def prelude_query_builder():
 
 
 def test_prelude_extra_in_simple_query_builder(simple_query_builder):
-    query, _ = simple_query_builder.build()
+    query, values = simple_query_builder.build()
     assert (
-        """prelude_query AS (SELECT * FROM prelude_table),
+        """WITH prelude_query AS (SELECT * FROM prelude_table),
 extra_prelude_1 AS (SELECT * FROM extra_table1),
 extra_prelude_2 AS (SELECT * FROM extra_table2)
-SELECT *"""
-        in query
+SELECT *
+FROM table
+WHERE column = $1 LIMIT 10"""
+        == query
     )
+    assert values == ["value"]
 
 
 def test_query_building_in_prelude_based_filtering_query_builder(prelude_query_builder):
@@ -3279,7 +3282,7 @@ def test_query_building_in_prelude_based_filtering_query_builder(prelude_query_b
 
     prelude_based_builder = PreludeBasedFilteringQueryBuilder(
         prelude_query_builder=prelude_query_builder,
-        prelude_query_builder_extra=[extra_prelude_builder],
+        prelude_query_builder_extra=[("extra_prelude_1", extra_prelude_builder)],
         select_clause="SELECT mt.*",
         from_clause="""
         FROM main_table mt
@@ -3303,7 +3306,7 @@ SELECT mt.*
         JOIN prelude p ON mt.some_column = p.some_related_column
         JOIN extra_prelude_1 ep ON mt.another_column = ep.another_related_column
 """
-        in query
+        == query
     )
     assert "prelude_value" == values[0]
     assert "extra_prelude_value" == values[1]
@@ -3313,13 +3316,13 @@ def test_offset_calculation_in_prelude_based_filtering_query_builder(prelude_que
     extra_prelude_builder = SimpleQueryBuilder(
         select_clause="SELECT *",
         from_clause="FROM extra_prelude_table",
-        filter_statements=["extra_prelude_column = %s"],
+        filter_statements=["extra_prelude_column = $2"],
         values=["extra_value1", "extra_value2"],
     )
 
     prelude_based_builder = PreludeBasedFilteringQueryBuilder(
         prelude_query_builder=prelude_query_builder,
-        prelude_query_builder_extra=[extra_prelude_builder],
+        prelude_query_builder_extra=[("extra_prelude_1", extra_prelude_builder)],
         select_clause="SELECT *",
         from_clause="FROM main_table",
     )

@@ -21,7 +21,7 @@ import json
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Generic, Optional, TypeVar, Union, cast
+from typing import Generic, Optional, Tuple, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
@@ -1255,7 +1255,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
     def __init__(
         self,
         prelude_query_builder: SimpleQueryBuilder,
-        prelude_query_builder_extra: Optional[list[SimpleQueryBuilder]] = None,
+        prelude_query_builder_extra: Optional[list[Tuple[str, SimpleQueryBuilder]]] = None,
         select_clause: Optional[str] = None,
         from_clause: Optional[str] = None,
         db_order: Optional[DatabaseOrderV2] = None,
@@ -1277,7 +1277,7 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
     @property
     def offset(self) -> int:
         """The current offset of the values to be used for filter statements"""
-        extra_values_count = sum(len(builder.values) for builder in self._prelude_query_builder_extra)
+        extra_values_count = sum(len(builder[1].values) for builder in self._prelude_query_builder_extra)
         return len(self.values) + len(self._prelude_query_builder.values) + extra_values_count + 1
 
     def build(self) -> tuple[str, list[object]]:
@@ -1287,8 +1287,8 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
         extra_prelude_queries = []
 
         for idx, extra_builder in enumerate(self._prelude_query_builder_extra):
-            extra_query, extra_values = extra_builder.build()
-            prelude_name = f"extra_prelude_{idx + 1}"
+            extra_query, extra_values = extra_builder[1].build()
+            prelude_name = extra_builder[0]
             extra_prelude_queries.append(f"{prelude_name} AS ({extra_query})")
             extra_prelude_values.extend(extra_values)
 
