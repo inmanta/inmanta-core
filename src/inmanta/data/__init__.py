@@ -1053,7 +1053,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
     def build(self) -> tuple[str, list[object]]:
         if not self.select_clause or not self._from_clause:
             raise InvalidQueryParameter("A valid query must have a SELECT and a FROM clause")
-
         full_query = f"""{self.select_clause}
                          {self._from_clause}
                          {self._join_filter_statements(self.filter_statements)}
@@ -1071,7 +1070,6 @@ class SimpleQueryBuilder(BaseQueryBuilder):
         if self.db_order and self.backward_paging:
             order_by = self.db_order.get_order_by_statement(table="matching_records")
             full_query = f"""SELECT * FROM ({full_query}) AS matching_records {order_by}"""
-
         return full_query, self.values
 
 

@@ -21,7 +21,7 @@ import json
 from abc import ABC
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Generic, Optional, Tuple, TypeVar, Union, cast
+from typing import Generic, Optional, TypeVar, Union, cast
 from urllib import parse
 from urllib.parse import quote
 from uuid import UUID
@@ -1318,7 +1318,6 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             prelude_query_builder=self._prelude_query_builder,
         )
 
-    # The order and limit is only applied to the prelude, not to the extra_preludes
     def order_and_limit(
         self, db_order: DatabaseOrderV2, limit: Optional[int] = None, backward_paging: bool = False
     ) -> "PreludeBasedFilteringQueryBuilder":
@@ -1331,7 +1330,6 @@ class PreludeBasedFilteringQueryBuilder(SimpleQueryBuilder):
             prelude_query_builder=self._prelude_query_builder.order_and_limit(db_order, limit, backward_paging),
         )
 
-    # The filter is only applied to the prelude, not to the extra_preludes
     def filter(self, filter_statements: list[str], values: list[object]) -> "PreludeBasedFilteringQueryBuilder":
         return PreludeBasedFilteringQueryBuilder(
             select_clause=self.select_clause,
