@@ -690,7 +690,11 @@ class TypeNotFoundException(RuntimeException):
     def __init__(self, type: LocatableString, ns: Namespace) -> None:
         suggest_importing: str = ""
         if "::" in type.value:
-            suggest_importing = f". Try importing the module with `import {type.value.split('::')[0]}`"
+            module_name = type.value.rsplit("::", 1)[0]
+
+            if module_name not in ns.visible_namespaces.keys():
+                suggest_importing = f". Try importing the module with `import {module_name}`"
+
         RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}{suggest_importing}")
         self.type = type
         self.ns = ns

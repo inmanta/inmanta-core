@@ -151,6 +151,23 @@ end
     )
 
 
+def test_suggest_importing_module_nested(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import tests::subpack
+
+entity A:
+    tests::subpack::submod::test test
+end
+    """,
+        (
+            "could not find type tests::subpack::submod::test in namespace __config__. Try importing the "
+            "module with `import tests::subpack::submod` (reported in Entity(A) "
+            "({dir}/main.cf:5:5))"
+        ),
+    )
+
+
 def test_unknown_type_in_dicts(snippetcompiler):
     """This test checks that accessing an unknown map, or a known map with an unknown key
     rightfully propagates the unknown value.
