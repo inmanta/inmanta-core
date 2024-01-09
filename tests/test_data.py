@@ -34,8 +34,7 @@ from asyncpg.pool import Pool
 import utils
 from inmanta import const, data
 from inmanta.const import AgentStatus, LogLevel
-from inmanta.data import ArgumentCollector, DatabaseOrderV2, QueryType, SimpleQueryBuilder
-from inmanta.data.dataview import PreludeBasedFilteringQueryBuilder
+from inmanta.data import ArgumentCollector, QueryType, SimpleQueryBuilder
 from inmanta.resources import Id, ResourceVersionIdStr
 
 
