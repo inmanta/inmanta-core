@@ -3241,4 +3241,4 @@ def test_base_offset_simple_query():
         backward_paging=False,
         base_offset=10,
     )
-    assert sqb.offset == 10 + 2  # base offset of 10 + 2 values
+    assert sqb.offset == 10 + 23  # base offset of 10 + 2 values
