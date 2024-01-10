@@ -711,7 +711,6 @@ class ConditionalExpression(ExpressionStatement):
         return requires[self]
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
-        return {}
         condition_value: object = self.condition.execute_direct(requires)
         if isinstance(condition_value, Unknown):
             return Unknown(self)
