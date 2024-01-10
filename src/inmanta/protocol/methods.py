@@ -828,6 +828,10 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
     """
     Get all parameters/facts known by the agents for the given resource
 
+    This method will not actually return them.
+    This call wil register the request with the agent and return,
+    The agent will push the parameters back to the server when they are available.
+
     :param tid: The environment
     :param agent: The agent to get the parameters from
     :param resource: The resource to query the parameters from
