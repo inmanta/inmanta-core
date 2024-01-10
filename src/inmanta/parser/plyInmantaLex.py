@@ -60,9 +60,22 @@ literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
-tokens = ["INT", "FLOAT", "ID", "CID", "SEP", "STRING", "MLS", "CMP_OP", "REGEX", "REL", "PEQ", "RSTRING", "FSTRING"] + sorted(
-    list(reserved.values())
-)
+tokens = [
+    "INT",
+    "FLOAT",
+    "ID",
+    "CID",
+    "SEP",
+    "STRING",
+    "MLS",
+    "CMP_OP",
+    "REGEX",
+    "REL",
+    "PEQ",
+    "RSTRING",
+    "FSTRING",
+    "ARITHMETIC_OP",
+] + sorted(list(reserved.values()))
 
 
 def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
@@ -126,6 +139,11 @@ def t_REL(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 def t_CMP_OP(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r"!=|==|>=|<=|<|>"
+    return t
+
+
+def t_ARITHMETIC_OP(t: lex.LexToken) -> lex.LexToken:
+    r"\+"
     return t
 
 

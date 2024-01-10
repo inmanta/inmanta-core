@@ -616,7 +616,8 @@ def p_expression(p: YaccProduction) -> None:
     | map_def
     | map_lookup empty
     | index_lookup
-    | conditional_expression"""
+    | conditional_expression
+    | arithmetic_expression"""
     p[0] = p[1]
 
 
@@ -659,6 +660,15 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
     """boolean_expression : ID IS DEFINED"""
     p[0] = IsDefined(None, p[1])
     attach_lnr(p)
+
+
+def p_arithmetic_expression(p: YaccProduction) -> None:
+    """arithmetic_expression : expression ARITHMETIC_OP expression"""
+    operator = Operator.get_operator_class(str(p[2]))
+    if operator is None:
+        raise ParserException(p[1].location, str(p[2]), f"Invalid operator {str(p[2])}")
+    p[0] = operator(p[1], p[3])
+    attach_lnr(p, 2)
 
 
 def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:

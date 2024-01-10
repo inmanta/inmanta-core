@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import numbers
 import re
 from abc import ABCMeta, abstractmethod
 from collections import abc
@@ -508,6 +508,24 @@ class NotEqual(BinaryOperator):
         @see Operator#_op
         """
         return arg1 != arg2
+
+
+class Plus(BinaryOperator):
+    __slots__ = ()
+    __op = "+"
+
+    def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
+        BinaryOperator.__init__(self, "plus", op1, op2)
+
+    def _bin_op(self, arg1: object, arg2: object) -> object:
+        """
+        @see Operator#_op
+        """
+        if not isinstance(arg1, numbers.Number):
+            raise TypingException(self, f"The plus operator in not supported on type {type(arg1)}.")
+        if not isinstance(arg2, numbers.Number):
+            raise TypingException(self, f"The plus operator in not supported on type {type(arg2)}.")
+        return arg1 + arg2
 
 
 class And(LazyBooleanOperator):
