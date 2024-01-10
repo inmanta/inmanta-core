@@ -397,10 +397,9 @@ class Namespace(Namespaced):
                 if parts[1] in ns.defines_types:
                     return ns.defines_types[parts[1]]
                 else:
-
                     raise TypeNotFoundException(typ, ns)
             else:
-                raise TypeNotFoundException(typ, self, parts)
+                raise MissingImportException(typ, self, parts, str(self.location.file))
         elif name in self.primitives:
             if name == "number":
                 warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
@@ -411,9 +410,8 @@ class Namespace(Namespaced):
                 if name in cns.defines_types:
                     return cns.defines_types[name]
                 cns = cns.get_parent()
-            # breakpoint()
 
-            raise TypeNotFoundException(typ, self, [name], str(self.location.file))
+            raise TypeNotFoundException(typ, self)
 
     def get_name(self) -> str:
         """
@@ -690,20 +688,30 @@ class VariableShadowWarning(CompilerRuntimeWarning):
 class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
-    def __init__(self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None, file: Optional[str] = None) -> None:
-        suggest_importing: str = ""
-        if file:
-            suggest_file = f' in {file}'
-        if parts:
-            suggest_importing = f".\nTry importing the module with `import {parts[0]}`{suggest_file}"
-
-        RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}{suggest_importing}")
+    def __init__(self, type: LocatableString, ns: Namespace) -> None:
+        RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}")
         self.type = type
         self.ns = ns
         self.set_location(type.get_location())
 
     def importantance(self) -> int:
         return 20
+
+
+class MissingImportException(TypeNotFoundException):
+    """Exception raised when a referenced type's module is missing from the namespace"""
+
+    def __init__(
+        self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None, file: Optional[str] = None
+    ) -> None:
+        suggest_importing: str = ""
+        suggest_file = ""
+        if file:
+            suggest_file = f" in {file}"
+        if parts:
+            suggest_importing = f".\nTry importing the module with `import {parts[0]}`{suggest_file}"
+        super().__init__(type, ns)
+        self.msg += suggest_importing
 
 
 class AmbiguousTypeException(TypeNotFoundException):
