@@ -694,7 +694,7 @@ def test_conditional_expression_unknown(snippetcompiler) -> None:
     compiler.do_compile()
 
 
-def test_if_inline_error(snippetcompiler):
+def test_if_inline_error_1(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
 x = 1

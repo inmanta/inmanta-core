@@ -637,7 +637,7 @@ class If(RequiresEmitStatement):
         try:
             inmanta_type.Bool().validate(cond)
         except RuntimeException as e:
-            e.set_statement(self.condition)
+            e.set_statement(self)
             e.msg = "Invalid value `%s`: the condition for an if statement can only be a boolean expression" % cond
             raise e
         # schedule appropriate branch body
@@ -716,7 +716,7 @@ class ConditionalExpression(ExpressionStatement):
             return Unknown(self)
         if not isinstance(condition_value, bool):
             raise RuntimeException(
-                self.condition,
+                self,
                 "Invalid value `%s`: the condition for a conditional expression must be a boolean expression" % condition_value,
             )
         return (self.if_expression if condition_value else self.else_expression).execute_direct(requires)
