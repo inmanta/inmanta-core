@@ -700,8 +700,7 @@ def test_if_inline_error(snippetcompiler):
 x = 1
 std::print(x ? "test" : "no test")
         """,
-        "Invalid value `%s`: the condition for a conditional expression must be a "
-        "boolean expression (reported in "
-        "<inmanta.ast.statements.generator.ConditionalExpressionResumer object at "
-        "0x7f7486ea4450> (/tmp/tmpsdjde1y6/main.cf:3:12))",
+        "Invalid value `1`: the condition for a conditional expression must be a "
+        "boolean expression (reported in x ? 'test' : 'no test' "
+        "({dir}/main.cf:3:12))",
     )
