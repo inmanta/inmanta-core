@@ -142,13 +142,13 @@ def t_CMP_OP(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     return t
 
 
-def t_ARITHMETIC_OP(t: lex.LexToken) -> lex.LexToken:
-    r"\+"
+def t_PEQ(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
+    r"[+]="
     return t
 
 
-def t_PEQ(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"[+]="
+def t_ARITHMETIC_OP(t: lex.LexToken) -> lex.LexToken:
+    r"\+"
     return t
 
 
