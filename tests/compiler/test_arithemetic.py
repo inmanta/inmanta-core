@@ -111,9 +111,9 @@ def test_plus(snippetcompiler) -> None:
             ######################
 
             seq = std::sequence(2)
-            filtered = [elem for elem in seq if elem + 1 < 2]
-            std::assert(0 in filtered)
-            std::assert(1 not in filtered)
+            filtered = [elem + 10 for elem in seq if elem + 1 < 2]
+            std::assert(10 in filtered)
+            std::assert(11 not in filtered)
             """.strip(
                 "\n"
             )
