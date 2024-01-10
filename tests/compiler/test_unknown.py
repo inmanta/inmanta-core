@@ -130,8 +130,8 @@ def test_unknown_type_in_relation(snippetcompiler):
 foo::Entity.test [1] -- std::Entity
         """,
         (
-            "could not find type foo::Entity in namespace __config__. "
-            "Try importing the module with `import foo` ({dir}/main.cf:2:1)"
+            "could not find type foo::Entity in namespace __config__."
+            "\nTry importing the module with `import foo` ({dir}/main.cf:2:1)"
         ),
     )
 
@@ -144,7 +144,7 @@ entity Test:
 end
         """,
         (
-            "could not find type foo::name in namespace __config__. Try importing the "
+            "could not find type foo::name in namespace __config__.\nTry importing the "
             "module with `import foo` (reported in Entity(Test) "
             "({dir}/main.cf:3:5))"
         ),
@@ -161,7 +161,7 @@ entity A:
 end
     """,
         (
-            "could not find type tests::subpack::submod::test in namespace __config__. Try importing the "
+            "could not find type tests::subpack::submod::test in namespace __config__.\nTry importing the "
             "module with `import tests::subpack::submod` (reported in Entity(A) "
             "({dir}/main.cf:5:5))"
         ),
