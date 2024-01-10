@@ -378,7 +378,7 @@ class Namespace(Namespaced):
 
     def lookup_namespace(self, name: str) -> Import:
         if name not in self.visible_namespaces:
-            raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
+            raise NotFoundException(None, name, f"Namespace {name} not found.\nTry importing it with `import {name}`")
         return self.visible_namespaces[name]
 
     def lookup(self, name: str) -> "Union[Type, ResultVariable]":
