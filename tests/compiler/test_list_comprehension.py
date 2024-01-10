@@ -865,16 +865,16 @@ def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> 
 
 def test_list_comprehension_direct_error(snippetcompiler) -> None:
     """
-    Verify that condtional expression in execute context raises the right error.
+    Verify that an incorrect conditional expression in execute context raises the right error.
     """
     model_def: str = textwrap.dedent(
         """
         import tests
 
-        typedef nineties as int matching self in ["test" ? 42 : tests::sum(i, 90) for i in std::sequence(10) if i != 5]
+        typedef testdef as int matching self in ["test" ? 42 : 43]
 
         entity A:
-            nineties n
+            testdef n
         end
         implement A using std::none
         """.strip(
@@ -882,14 +882,14 @@ def test_list_comprehension_direct_error(snippetcompiler) -> None:
         )
     )
     snippetcompiler.setup_for_error(
-        textwrap.dedent(f"{model_def}\nA(n={91})"),
+        textwrap.dedent(f"{model_def}\nA(n={1})"),
         (
             "Could not set attribute `n` on instance `__config__::A (instantiated at "
             "{dir}/main.cf:10)` (reported in Construct(A) "
             "({dir}/main.cf:10))\n"
             "caused by:\n"
             "  Invalid value `test`: the condition for a conditional expression must be a "
-            "boolean expression (reported in 'test' ? 42 : tests::sum(i,90) "
+            "boolean expression (reported in 'test' ? 42 : 43 "
             "({dir}/main.cf:3))"
         ),
     )
