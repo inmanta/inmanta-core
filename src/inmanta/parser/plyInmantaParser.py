@@ -77,6 +77,7 @@ precedence = (
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
+    ("left", "ARITHMETIC_OP"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
     ("left", "CID", "ID"),
