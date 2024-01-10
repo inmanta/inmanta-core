@@ -397,6 +397,7 @@ class Namespace(Namespaced):
                 if parts[1] in ns.defines_types:
                     return ns.defines_types[parts[1]]
                 else:
+
                     raise TypeNotFoundException(typ, ns)
             else:
                 raise TypeNotFoundException(typ, self, parts)
@@ -410,7 +411,9 @@ class Namespace(Namespaced):
                 if name in cns.defines_types:
                     return cns.defines_types[name]
                 cns = cns.get_parent()
-            raise TypeNotFoundException(typ, self)
+            # breakpoint()
+
+            raise TypeNotFoundException(typ, self, [name], str(self.location.file))
 
     def get_name(self) -> str:
         """
@@ -687,10 +690,12 @@ class VariableShadowWarning(CompilerRuntimeWarning):
 class TypeNotFoundException(RuntimeException):
     """Exception raised when a type is referenced that does not exist"""
 
-    def __init__(self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None) -> None:
+    def __init__(self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None, file: Optional[str] = None) -> None:
         suggest_importing: str = ""
+        if file:
+            suggest_file = f' in {file}'
         if parts:
-            suggest_importing = f". Try importing the module with `import {parts[0]}`"
+            suggest_importing = f".\nTry importing the module with `import {parts[0]}`{suggest_file}"
 
         RuntimeException.__init__(self, stmt=None, msg=f"could not find type {type} in namespace {ns}{suggest_importing}")
         self.type = type
