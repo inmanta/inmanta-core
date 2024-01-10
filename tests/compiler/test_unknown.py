@@ -131,7 +131,7 @@ foo::Entity.test [1] -- std::Entity
         """,
         (
             "could not find type foo::Entity in namespace __config__."
-            "\nTry importing the module with `import foo` ({dir}/main.cf:2:1)"
+            "\nTry importing the module with `import foo` in {dir}/main.cf ({dir}/main.cf:2:1)"
         ),
     )
 
@@ -145,8 +145,8 @@ end
         """,
         (
             "could not find type foo::name in namespace __config__.\nTry importing the "
-            "module with `import foo` (reported in Entity(Test) "
-            "({dir}/main.cf:3:5))"
+            "module with `import foo` in {dir}/main.cf "
+            "(reported in Entity(Test) ({dir}/main.cf:3:5))"
         ),
     )
 
@@ -162,8 +162,8 @@ end
     """,
         (
             "could not find type tests::subpack::submod::test in namespace __config__.\nTry importing the "
-            "module with `import tests::subpack::submod` (reported in Entity(A) "
-            "({dir}/main.cf:5:5))"
+            "module with `import tests::subpack::submod` in {dir}/main.cf "
+            "(reported in Entity(A) ({dir}/main.cf:5:5))"
         ),
     )
 
