@@ -525,7 +525,7 @@ class Implementation(NamedType):
         try:
             self.statements.normalize()
         except RuntimeException as e:
-            e.set_statement(self.location, False)
+            e.set_statement(self, False)
             raise
 
     def get_full_name(self) -> str:
