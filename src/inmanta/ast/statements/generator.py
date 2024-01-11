@@ -696,7 +696,7 @@ class ConditionalExpression(ExpressionStatement):
         # Schedule execution to resume when the condition can be executed
         resumer: RawResumer = ConditionalExpressionResumer(self, result, lhs=lhs)
         self.copy_location(resumer)
-        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer)
+        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer, override_exception_location=False)
 
         # Wait for the result variable to be populated
         requires[self] = result
@@ -716,7 +716,8 @@ class ConditionalExpression(ExpressionStatement):
             return Unknown(self)
         if not isinstance(condition_value, bool):
             raise RuntimeException(
-                self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                self,
+                "Invalid value `%s`: the condition for a conditional expression must be a boolean expression" % condition_value,
             )
         return (self.if_expression if condition_value else self.else_expression).execute_direct(requires)
 
@@ -753,7 +754,9 @@ class ConditionalExpressionResumer(RawResumer):
                 return
             if not isinstance(condition_value, bool):
                 raise RuntimeException(
-                    self, "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                    self.expression,
+                    "Invalid value `%s`: the condition for a conditional expression must be a boolean expression"
+                    % condition_value,
                 )
             self.condition_value = condition_value
 
