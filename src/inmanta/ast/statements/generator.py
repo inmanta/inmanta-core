@@ -696,7 +696,7 @@ class ConditionalExpression(ExpressionStatement):
         # Schedule execution to resume when the condition can be executed
         resumer: RawResumer = ConditionalExpressionResumer(self, result, lhs=lhs)
         self.copy_location(resumer)
-        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer, False)
+        RawUnit(queue, resolver, self.condition.requires_emit(resolver, queue), resumer, override_exception_location=False)
 
         # Wait for the result variable to be populated
         requires[self] = result
