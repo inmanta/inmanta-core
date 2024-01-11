@@ -1,0 +1,4 @@
+description: Log the version of the inmanta server at start-up
+issue-nr: 6866
+change-type: patch
+destination-branches: [master, iso7, iso6]

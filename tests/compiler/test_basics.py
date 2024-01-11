@@ -22,7 +22,7 @@ from typing import Optional
 import pytest
 
 from inmanta import compiler, const
-from inmanta.ast import DoubleSetException
+from inmanta.ast import DoubleSetException, RuntimeException
 from inmanta.plugins import PluginDeprecationWarning
 from utils import module_from_template, v1_module_from_template
 
@@ -697,3 +697,28 @@ A(x=B())
 """,
         r"variable u not found (reported in std::print(u) ({dir}/main.cf:11))",
     )
+
+
+def test_implementation_import_missing_error(snippetcompiler) -> None:
+    """
+    Verify that an error is raised when referring to something that is not imported in an implementation
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+        entity A:
+        end
+
+        implementation a for A:
+            test = tests::length("one")
+        end
+
+        implement A using a
+
+        """
+    )
+
+    with pytest.raises(RuntimeException) as exception:
+        snippetcompiler.do_export()
+    assert exception.value.msg == "could not find type tests::length in namespace __config__"
+    assert exception.value.location.lnr == 6
+    assert exception.value.location.start_char == 20
