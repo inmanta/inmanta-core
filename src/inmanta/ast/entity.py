@@ -527,6 +527,9 @@ class Implementation(NamedType):
         except RuntimeException as e:
             e.set_statement(self, False)
             raise
+        except CompilerException as e:
+            e.set_location(self.location)
+            raise
 
     def get_full_name(self) -> str:
         return self.namespace.get_full_name() + "::" + self.name
