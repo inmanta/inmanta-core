@@ -719,6 +719,6 @@ def test_implementation_import_missing_error(snippetcompiler) -> None:
 
     with pytest.raises(RuntimeException) as exception:
         snippetcompiler.do_export()
-    assert exception.value.msg in "could not find type tests::length in namespace __config__"
+    assert "could not find type tests::length in namespace __config__" in exception.value.msg
     assert exception.value.location.lnr == 6
     assert exception.value.location.start_char == 20
