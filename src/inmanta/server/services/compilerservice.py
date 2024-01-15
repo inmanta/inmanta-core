@@ -75,7 +75,10 @@ class CompileStateListener:
 
 
 class CompileRun:
-    """Class encapsulating running the compiler."""
+    """
+    Class encapsulating running the compiler. This class was created separated form the CompilerService
+    to be able to easily mock(CompileRunnerMock) it in tests as it can make test quit slow.
+    """
 
     def __init__(self, request: data.Compile, project_dir: str) -> None:
         self.request = request

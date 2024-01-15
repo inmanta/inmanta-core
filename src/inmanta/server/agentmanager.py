@@ -84,14 +84,6 @@ Model in server         On Agent
 |               |
 +---------------+
 
-
-get_resources_for_agent
-
-resource_action_update
-
-dryrun_update
-
-set_parameters
 """
 
 

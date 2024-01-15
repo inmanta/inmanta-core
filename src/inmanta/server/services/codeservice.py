@@ -30,7 +30,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 class CodeService(protocol.ServerSlice):
-    """Slice serving and managing code"""
+    """
+    This service is similar is used to handles source code that is needed by agents.
+    Each code is associated with a version of the configuration model, the resource type
+    this code belongs to (handlers of resources in model).
+    A dict where the key is the code_hash and the value is a tuple
+    containing the filename, a bool indicating if the code bytecode and the Python requires for the source code
+    is stored for each source_code. The code itself is stored as a file using teh FileService.
+    """
 
     file_slice: FileService
 

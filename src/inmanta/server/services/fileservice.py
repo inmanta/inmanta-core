@@ -35,7 +35,12 @@ LOGGER = logging.getLogger(__name__)
 
 
 class FileService(protocol.ServerSlice):
-    """Slice serving and managing files"""
+    """
+    This service is used to upload files to the database and to agents.
+    Files stored in the DB are identified by the hash of their content.
+    It also contains some functions to get information about files present on the server and to create the diff
+    between 2 files.
+    """
 
     server_slice: Server
 
