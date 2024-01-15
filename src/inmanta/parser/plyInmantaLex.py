@@ -56,7 +56,7 @@ keyworldlist = [
     "else",
     "elif",
 ]
-literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*"]
+literals = [":", "[", "]", "(", ")", "=", ",", ".", "{", "}", "?", "*", "%"]
 reserved = {k: k.upper() for k in keyworldlist}
 
 # List of token names.   This is always required
@@ -74,7 +74,10 @@ tokens = [
     "PEQ",
     "RSTRING",
     "FSTRING",
-    "ARITHMETIC_OP",
+    "PLUS_OP",
+    "MIN_OP",
+    "DIVISION_OP",
+    "DOUBLE_STAR",
 ] + sorted(list(reserved.values()))
 
 
@@ -147,11 +150,6 @@ def t_PEQ(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     return t
 
 
-def t_ARITHMETIC_OP(t: lex.LexToken) -> lex.LexToken:
-    r"\+"
-    return t
-
-
 def t_COMMENT(t: lex.LexToken) -> None:  # noqa: N802
     r"\#.*?\n"
     t.lexer.lineno += 1
@@ -215,7 +213,7 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 
 def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"/([^/\\]|\\.)+/"
+    r"/([^/\\\n]|\\.)+/"
     value = Reference("self")  # anonymous value
     try:
         expr = Regex(value, t.value[1:-1])
@@ -228,6 +226,26 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
         r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
         raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
+
+
+def t_PLUS_OP(t: lex.LexToken) -> lex.LexToken:
+    r"\+"
+    return t
+
+
+def t_MIN_OP(t: lex.LexToken) -> lex.LexToken:
+    r"-"
+    return t
+
+
+def t_DIVISION_OP(t: lex.LexToken) -> lex.LexToken:
+    r"/"
+    return t
+
+
+def t_DOUBLE_STAR(t: lex.LexToken) -> lex.LexToken:
+    r"\*\*"
+    return t
 
 
 # Define a rule so we can track line numbers

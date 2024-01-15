@@ -510,22 +510,92 @@ class NotEqual(BinaryOperator):
         return arg1 != arg2
 
 
-class Plus(BinaryOperator):
+class ArithmeticOperator(BinaryOperator):
+    __slots__ = ()
+
+    def _bin_op(self, arg1: object, arg2: object) -> object:
+        if not isinstance(arg1, numbers.Number):
+            raise TypingException(self, f"The {self.get_name()} operator in not supported for {arg1} of type {type(arg1)}.")
+        if not isinstance(arg2, numbers.Number):
+            raise TypingException(self, f"The {self.get_name()} operator in not supported for {arg2} of type {type(arg2)}.")
+        return self._arithmetic_op(arg1, arg2)
+
+    @abstractmethod
+    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+        """
+        The implementation for this ArithmeticOperator, excluding the type validation.
+        Type validation is done in the _bin_op() method.
+        """
+        raise NotImplementedError()
+
+
+class Plus(ArithmeticOperator):
     __slots__ = ()
     __op = "+"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
-        BinaryOperator.__init__(self, "plus", op1, op2)
+        ArithmeticOperator.__init__(self, "plus", op1, op2)
 
-    def _bin_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+        return arg1 + arg2
+
+
+class Min(ArithmeticOperator):
+    __slots__ = ()
+    __op = "-"
+
+    def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
+        ArithmeticOperator.__init__(self, "min", op1, op2)
+
+    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+        return arg1 - arg2
+
+
+class Division(ArithmeticOperator):
+    __slots__ = ()
+    __op = "/"
+
+    def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
+        ArithmeticOperator.__init__(self, "division", op1, op2)
+
+    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+        return arg1 / arg2
+
+
+class Multiplication(ArithmeticOperator):
+    __slots__ = ()
+    __op = "*"
+
+    def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
+        ArithmeticOperator.__init__(self, "multiplication", op1, op2)
+
+    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+        return arg1 * arg2
+
+
+class Modulo(ArithmeticOperator):
+    __slots__ = ()
+    __op = "%"
+
+    def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
+        ArithmeticOperator.__init__(self, "modulo", op1, op2)
+
+    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+        return arg1 % arg2
+
+
+class Power(ArithmeticOperator):
+    __slots__ = ()
+    __op = "**"
+
+    def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
+        ArithmeticOperator.__init__(self, "power", op1, op2)
+
+    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
         """
         @see Operator#_op
         """
-        if not isinstance(arg1, numbers.Number):
-            raise TypingException(self, f"The plus operator in not supported on type {type(arg1)}.")
-        if not isinstance(arg2, numbers.Number):
-            raise TypingException(self, f"The plus operator in not supported on type {type(arg2)}.")
-        return arg1 + arg2
+        return arg1**arg2
 
 
 class And(LazyBooleanOperator):

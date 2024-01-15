@@ -1914,7 +1914,7 @@ def test_640_syntax_error_output_6():
     with pytest.raises(ParserException) as pytest_e:
         parse_code(
             """
-typedef positive as number matching self >= 1-
+typedef positive as number matching self >= 1&
             """
         )
     exc: ParserException = pytest_e.value
@@ -1923,8 +1923,8 @@ typedef positive as number matching self >= 1-
     assert exc.location.start_char == 46
     assert exc.location.end_lnr == 2
     assert exc.location.end_char == 47
-    assert exc.value == "-"
-    assert exc.msg == "Syntax error: Illegal character '-'"
+    assert exc.value == "&"
+    assert exc.msg == "Syntax error: Illegal character '&'"
 
 
 def test_1766_empty_model_single_newline():

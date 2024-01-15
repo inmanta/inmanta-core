@@ -77,7 +77,9 @@ precedence = (
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
-    ("left", "ARITHMETIC_OP"),
+    ("left", "PLUS_OP", "MIN_OP"),
+    ("left", "*", "DIVISION_OP", "%"),
+    ("left", "DOUBLE_STAR"),
     ("nonassoc", "NOT"),
     ("left", "IN"),
     ("left", "CID", "ID"),
@@ -664,7 +666,13 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
 
 
 def p_arithmetic_expression(p: YaccProduction) -> None:
-    """arithmetic_expression : expression ARITHMETIC_OP expression"""
+    """arithmetic_expression : expression PLUS_OP expression
+    | expression MIN_OP expression
+    | expression DIVISION_OP expression
+    | expression '*' expression
+    | expression '%' expression
+    | expression DOUBLE_STAR expression
+    """
     operator = Operator.get_operator_class(str(p[2]))
     if operator is None:
         raise ParserException(p[1].location, str(p[2]), f"Invalid operator {str(p[2])}")
@@ -1091,8 +1099,8 @@ def p_constants_collect(p: YaccProduction) -> None:
 
 
 def p_wrapped_kwargs(p: YaccProduction) -> None:
-    "wrapped_kwargs : '*' '*' operand"
-    p[0] = WrappedKwargs(p[3])
+    "wrapped_kwargs : DOUBLE_STAR operand"
+    p[0] = WrappedKwargs(p[2])
     attach_lnr(p, 1)
 
 
@@ -1328,7 +1336,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
             data = data + "\n"
             lexer.lineno = 1
             lexer.linestart = 0
-            return parser.parse(data, lexer=lexer, debug=False)
+            return parser.parse(data, lexer=lexer, debug=True)
     else:
         data = content
         if len(data) == 0:
@@ -1337,7 +1345,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         data = data + "\n"
         lexer.lineno = 1
         lexer.linestart = 0
-        return parser.parse(data, lexer=lexer, debug=False)
+        return parser.parse(data, lexer=lexer, debug=True)
 
 
 cache_manager = CacheManager()
