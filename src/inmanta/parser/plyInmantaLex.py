@@ -29,7 +29,6 @@ from inmanta.parser import ParserException, ParserWarning
 keyworldlist = [
     "typedef",
     "as",
-    "matching",
     "entity",
     "extends",
     "end",
@@ -70,6 +69,7 @@ tokens = [
     "MLS",
     "CMP_OP",
     "REGEX",
+    "MATCHING",
     "REL",
     "PEQ",
     "RSTRING",
@@ -79,6 +79,32 @@ tokens = [
     "DIVISION_OP",
     "DOUBLE_STAR",
 ] + sorted(list(reserved.values()))
+
+
+def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
+    r"matching[\s]+/([^/\\\n]|\\.)+/"
+    index_first_slash_char = t.value.index("/")
+    regex_with_slashes_as_str = t.value[index_first_slash_char:]
+    regex_as_str = regex_with_slashes_as_str[1:-1]
+    value = Reference("self")  # anonymous value
+    try:
+        expr = Regex(value, regex_as_str)
+        t.value = expr
+        return t
+    except RegexError as error:
+        t.value = regex_with_slashes_as_str
+        end = t.lexer.lexpos - t.lexer.linestart + 1
+        (s, e) = t.lexer.lexmatch.span()
+        start = end - (e - s) + index_first_slash_char
+
+        r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
+        raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
+
+
+def t_MATCHING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
+    r"matching\s"
+    t.value = "matching"
+    return t
 
 
 def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
@@ -210,22 +236,6 @@ def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     )
 
     return t
-
-
-def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"/([^/\\\n]|\\.)+/"
-    value = Reference("self")  # anonymous value
-    try:
-        expr = Regex(value, t.value[1:-1])
-        t.value = expr
-        return t
-    except RegexError as error:
-        end = t.lexer.lexpos - t.lexer.linestart + 1
-        (s, e) = t.lexer.lexmatch.span()
-        start = end - (e - s)
-
-        r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
-        raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
 
 
 def t_PLUS_OP(t: lex.LexToken) -> lex.LexToken:

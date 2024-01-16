@@ -71,6 +71,7 @@ precedence = (
     # e.g. prefer one statement `x = 1 not in []` over two statements `x = 1` and `not in []`
     ("nonassoc", "LOW"),
     ("nonassoc", "MATCHING"),
+    ("nonassoc", "REGEX"),
     ("right", ","),
     ("nonassoc", ":"),
     ("nonassoc", "?"),
@@ -587,6 +588,13 @@ def p_typedef_1(p: YaccProduction) -> None:
     """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
     assert namespace
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
+    attach_lnr(p, 2)
+
+
+def p_typedef_regex(p: YaccProduction) -> None:
+    """typedef_inner : TYPEDEF ID AS ns_ref REGEX"""
+    assert namespace
+    p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[5])
     attach_lnr(p, 2)
 
 
