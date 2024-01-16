@@ -540,12 +540,12 @@ class Plus(ArithmeticOperator):
         return arg1 + arg2
 
 
-class Min(ArithmeticOperator):
+class Minus(ArithmeticOperator):
     __slots__ = ()
     __op = "-"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
-        ArithmeticOperator.__init__(self, "min", op1, op2)
+        ArithmeticOperator.__init__(self, "minus", op1, op2)
 
     def _arithmetic_op(self, arg1: object, arg2: object) -> object:
         return arg1 - arg2
@@ -584,12 +584,12 @@ class Modulo(ArithmeticOperator):
         return arg1 % arg2
 
 
-class Power(ArithmeticOperator):
+class Exponentiation(ArithmeticOperator):
     __slots__ = ()
     __op = "**"
 
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
-        ArithmeticOperator.__init__(self, "power", op1, op2)
+        ArithmeticOperator.__init__(self, "exponentiation", op1, op2)
 
     def _arithmetic_op(self, arg1: object, arg2: object) -> object:
         """

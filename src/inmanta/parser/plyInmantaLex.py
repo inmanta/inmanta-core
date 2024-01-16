@@ -75,7 +75,7 @@ tokens = [
     "RSTRING",
     "FSTRING",
     "PLUS_OP",
-    "MIN_OP",
+    "MINUS_OP",
     "DIVISION_OP",
     "DOUBLE_STAR",
 ] + sorted(list(reserved.values()))
@@ -243,7 +243,7 @@ def t_PLUS_OP(t: lex.LexToken) -> lex.LexToken:
     return t
 
 
-def t_MIN_OP(t: lex.LexToken) -> lex.LexToken:
+def t_MINUS_OP(t: lex.LexToken) -> lex.LexToken:
     r"-"
     return t
 

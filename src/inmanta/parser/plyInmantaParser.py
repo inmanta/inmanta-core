@@ -78,7 +78,7 @@ precedence = (
     ("left", "OR"),
     ("left", "AND"),
     ("left", "CMP_OP"),
-    ("left", "PLUS_OP", "MIN_OP"),
+    ("left", "PLUS_OP", "MINUS_OP"),
     ("left", "*", "DIVISION_OP", "%"),
     ("left", "DOUBLE_STAR"),
     ("nonassoc", "NOT"),
@@ -675,7 +675,7 @@ def p_boolean_expression_is_defined_short(p: YaccProduction) -> None:
 
 def p_arithmetic_expression(p: YaccProduction) -> None:
     """arithmetic_expression : expression PLUS_OP expression
-    | expression MIN_OP expression
+    | expression MINUS_OP expression
     | expression DIVISION_OP expression
     | expression '*' expression
     | expression '%' expression
@@ -1344,7 +1344,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
             data = data + "\n"
             lexer.lineno = 1
             lexer.linestart = 0
-            return parser.parse(data, lexer=lexer, debug=True)
+            return parser.parse(data, lexer=lexer, debug=False)
     else:
         data = content
         if len(data) == 0:
@@ -1353,7 +1353,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         data = data + "\n"
         lexer.lineno = 1
         lexer.linestart = 0
-        return parser.parse(data, lexer=lexer, debug=True)
+        return parser.parse(data, lexer=lexer, debug=False)
 
 
 cache_manager = CacheManager()
