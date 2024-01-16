@@ -121,6 +121,32 @@ Literal values can be assigned to variables
     sshservice = ip::services::ssh
 
 
+Arithmetic operations
+=====================
+
+The following arithmetic operations are supported:
+
+* Addition (``+``)
+* Substraction (``-``)
+* Multiplication (``*``)
+* Division (``/``)
+* Exponentiation (``**``)
+* Modulo (``%``)
+
+Example:
+
+.. code-block:: inmanta
+
+    var = 3 + 5
+    var = 10 - 2
+    var = 4 * 2
+    var = int(16 / 2)
+    var = 2 ** 3
+    var = 18 % 10
+
+Note that the result of the division operation is casted to the type ``int``. This is done because a division always
+results in a value of type ``float``.
+
 
 Primitive types
 ==============================
