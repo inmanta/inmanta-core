@@ -264,11 +264,18 @@ def is_str_opt(value: str) -> Optional[str]:
     return str(value)
 
 
-def is_uuid_opt(value: str) -> uuid.UUID:
+def is_uuid_opt(value: str) -> Optional[uuid.UUID]:
     """optional uuid"""
     if value is None:
         return None
     return uuid.UUID(value)
+
+
+def is_int_opt(value: str) -> Optional[int]:
+    """optional int"""
+    if value is None:
+        return None
+    return int(value)
 
 
 T = TypeVar("T")
@@ -419,6 +426,13 @@ class TransportConfig:
         self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
         self.request_timeout = Option(
             self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int
+        )
+        self.max_clients = Option(
+            self.prefix,
+            "max_clients",
+            None,
+            "The maximum number of simultaneous connections that can be open in parallel",
+            is_int_opt,
         )
 
 
