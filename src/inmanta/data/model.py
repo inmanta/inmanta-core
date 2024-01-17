@@ -556,7 +556,8 @@ class Parameter(BaseModel):
 
 class Fact(Parameter):
     resource_id: ResourceIdStr
-    expires: bool=True
+    expires: bool = True
+
 
 class Agent(BaseModel):
     """

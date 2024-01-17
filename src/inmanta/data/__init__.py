@@ -3046,7 +3046,7 @@ class Parameter(BaseDocument):
             source=self.source,
             updated=self.updated,
             metadata=self.metadata,
-            expires=self.expires
+            expires=self.expires,
         )
 
 
