@@ -35,7 +35,9 @@ end
     dir: str = snippetcompiler.project_dir
     with pytest.raises(
         DuplicateException,
-        match=re.escape(f"attribute already exists (original at ({dir}/main.cf:3:12)) (duplicate at ({dir}/main.cf:4:10))"),
+        match=re.escape(
+            f"attribute 'test' already exists (original at ({dir}/main.cf:3:12)) (duplicate at ({dir}/main.cf:4:10))"
+        ),
     ):
         compiler.do_compile()
 
