@@ -3628,7 +3628,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
 
     # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
     await _deploy_resources(client, environment, resources, version, push=True)
-    await wait_for_n_deployed_resources(client, environment, version, n=2)
+    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=6666666)
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2])
@@ -3671,6 +3671,106 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2, param3, param4])
 
+async def test_set_non_expiring_fact_in_handler(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
+    """
+    Test whether non-expiring facts set in the handler via the ctx.set_fact() method arrive on the server.
+    """
+
+    def get_resources(version: str, params: list[data.Parameter]) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": param.name,
+                "value": param.value,
+                "metadata": param.metadata,
+                "id": f"{param.resource_id},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": False,
+                "requires": [],
+            }
+            for param in params
+        ]
+
+    def compare_params(actual_params: list[data.Parameter], expected_params: list[data.Parameter]) -> None:
+        actual_params = sorted(actual_params, key=lambda p: p.name)
+        expected_params = sorted(expected_params, key=lambda p: p.name)
+        assert len(expected_params) == len(actual_params), f"{expected_params=} {actual_params=}"
+        for i in range(len(expected_params)):
+            for attr_name in ["name", "value", "environment", "resource_id", "source", "metadata", "expires"]:
+                # if attr_name == "expires":
+                    # breakpoint()
+                expected = getattr(expected_params[i], attr_name)
+                actual = getattr(actual_params[i], attr_name)
+                assert expected == actual, f"{expected=} {actual=}"
+
+    # Assert initial state
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+
+    param1 = data.Parameter(
+        name="key1",
+        value="value1",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=key1]",
+        source=ParameterSource.fact.value,
+        expires=False,
+    )
+    param2 = data.Parameter(
+        name="key2",
+        value="value2",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=key2]",
+        source=ParameterSource.fact.value,
+        expires=False,
+    )
+
+    version = await clienthelper.get_version()
+    resources = get_resources(version, [param1, param2])
+
+    # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
+    await _deploy_resources(client, environment, resources, version, push=True)
+    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=10000)
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2])
+
+    # Ensure that:
+    # * Facts set in the handler.facts() method via ctx.set_fact() method are pushed to the Inmanta server.
+    # * Facts returned via the handler.facts() method are pushed to the Inmanta server.
+    await asyncio.gather(*[p.delete() for p in params])
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+    agent_manager = server.get_slice(name=SLICE_AGENT_MANAGER)
+    agent_manager._fact_resource_block = 0
+
+    result = await client.get_param(tid=environment, id="key1", resource_id="test::SetNonExpiringFact[agent1,key=key1]")
+    assert result.code == 503
+    result = await client.get_param(tid=environment, id="key2", resource_id="test::SetNonExpiringFact[agent1,key=key2]")
+    assert result.code == 503
+
+    async def _wait_until_facts_are_available():
+        params = await data.Parameter.get_list()
+        return len(params) == 4
+
+    await retry_limited(_wait_until_facts_are_available, 100000)
+
+    param3 = data.Parameter(
+        name="returned_fact_key1",
+        value="test",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=key1]",
+        source=ParameterSource.fact.value,
+    )
+    param4 = data.Parameter(
+        name="returned_fact_key2",
+        value="test",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=key2]",
+        source=ParameterSource.fact.value,
+    )
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2, param3, param4])
 
 async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
     """

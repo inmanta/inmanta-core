@@ -132,6 +132,13 @@ def resource_container():
         """
 
         fields = ("key", "value", "purged", "purge_on_delete")
+    @resource("test::SetNonExpiringFact", agent="agent", id_attribute="key")
+    class SetNonExpiringFactResource(PurgeableResource):
+        """
+        A file on a filesystem
+        """
+
+        fields = ("key", "value", "purged", "purge_on_delete")
 
     @resource("test::Fail", agent="agent", id_attribute="key")
     class FailR(Resource):
@@ -412,6 +419,30 @@ def resource_container():
 
         def _do_set_fact(self, ctx: HandlerContext, resource: SetFactResource) -> None:
             ctx.set_fact(fact_id=resource.key, value=resource.value)
+
+
+    @provider("test::SetNonExpiringFact", name="test_set_non_expiring_fact")
+    class SetNonExpiringFact(CRUDHandler[SetNonExpiringFactResource]):
+        def read_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            self._do_set_fact(ctx, resource)
+
+        def create_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            pass
+
+        def delete_resource(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            pass
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: SetFactResource) -> None:
+            pass
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            self._do_set_fact(ctx, resource)
+            return ctx.facts
+            # return {f"returned_fact_{resource.key}": "test"}
+
+        def _do_set_fact(self, ctx: HandlerContext, resource: SetFactResource) -> None:
+            ctx.set_fact(fact_id=resource.key, value=resource.value, expires=False)
+
 
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
