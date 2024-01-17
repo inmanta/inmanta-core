@@ -61,6 +61,23 @@ def test_for_error_2(snippetcompiler):
     )
 
 
+def test_for_error_nullable_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string[]? elements=null
+        end
+        implement A using std::none
+
+        a = A()
+        for element in a.elements:
+            std::print(element)
+        end
+    """,
+        "A for loop can only be applied to lists and relations. Hint: 'a.elements' is null. (reported in For(element) ({dir}/main.cf:8))",
+    )
+
+
 def test_for_loop_on_list_attribute(snippetcompiler) -> None:
     """
     Verify the basic workings of the for loop statement when applied to a plain list attribute.

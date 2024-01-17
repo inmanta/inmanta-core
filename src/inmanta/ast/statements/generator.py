@@ -74,7 +74,7 @@ from inmanta.execute.runtime import (
     WrappedValueVariable,
 )
 from inmanta.execute.tracking import ImplementsTracker
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import NoneValue, Unknown
 
 try:
     from typing import TYPE_CHECKING
@@ -252,7 +252,10 @@ class For(RequiresEmitStatement):
         var = self.base.execute(requires, resolver, queue)
 
         if not isinstance(var, (list, Unknown)):
-            raise TypingException(self, "A for loop can only be applied to lists and relations")
+            msg = "A for loop can only be applied to lists and relations."
+            if isinstance(var, NoneValue):
+                msg += " Hint: '%s' is null." % self.base
+            raise TypingException(self, msg)
 
         # we're done here: base's execute has reported results to helper
         return None
