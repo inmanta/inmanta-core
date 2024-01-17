@@ -239,7 +239,9 @@ class Entity(NamedType, WithComment):
             self._attributes[attribute.name] = attribute
         else:
             raise DuplicateException(
-                self._attributes[attribute.name], attribute, "attribute '%s' already exists" % attribute.name
+                self._attributes[attribute.name],
+                attribute,
+                "attribute '%s' already exists on entity '%s'" % (attribute.name, self.name),
             )
 
     def get_attribute(self, name: str) -> Optional["Attribute"]:
