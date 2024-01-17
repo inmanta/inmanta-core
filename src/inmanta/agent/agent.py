@@ -1062,7 +1062,7 @@ class AgentInstance:
                     resource = Resource.deserialize(res["attributes"], use_generic=True)
                     loaded_resources.append(resource)
 
-            except TypeError:
+            except Exception:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
                 resource = Resource.deserialize(res["attributes"], use_generic=True)
