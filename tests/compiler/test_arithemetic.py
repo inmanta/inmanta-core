@@ -524,7 +524,7 @@ def test_exponentiation(snippetcompiler) -> None:
             end
 
             t_float = TestFloat(val1=0.2, val2=2.0)
-            std::assert(not (t_float.result > 0.4 and t_float.result < 0.41))
+            std::assert( t_float.result >= 0.04 and t_float.result < 0.041)
 
             ###################
             # TestIntAndFloat #
