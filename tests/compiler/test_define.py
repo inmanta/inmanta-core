@@ -36,7 +36,8 @@ end
     with pytest.raises(
         DuplicateException,
         match=re.escape(
-            f"attribute 'test' already exists on entity 'Test' (original at ({dir}/main.cf:3:12)) (duplicate at ({dir}/main.cf:4:10))"
+            f"attribute 'test' already exists on entity 'Test' (original at ({dir}/main.cf:3:12)) "
+            f"(duplicate at ({dir}/main.cf:4:10))"
         ),
     ):
         compiler.do_compile()
