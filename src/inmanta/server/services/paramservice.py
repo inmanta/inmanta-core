@@ -131,7 +131,7 @@ class ParameterService(protocol.ServerSlice):
 
         # check if it was expired
         now = datetime.datetime.now().astimezone()
-        if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
+        if resource_id is None or not param.expires or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
         LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
@@ -235,8 +235,9 @@ class ParameterService(protocol.ServerSlice):
             value = param["value"] if "value" in param else None
             resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
+            expires = param["expires"] if "expires" in param else True
 
-            result = await self._update_param(env, name, value, source, resource_id, metadata)
+            result = await self._update_param(env, name, value, source, resource_id, metadata, expires)
             if result:
                 recompile = True
                 params.append((name, resource_id))

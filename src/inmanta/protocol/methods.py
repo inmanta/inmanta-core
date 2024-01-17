@@ -808,6 +808,7 @@ def set_parameters(tid: uuid.UUID, parameters: list):
         - source The source of the parameter. Valid values are defined in the ParameterSource enum (see: inmanta/const.py)
         - value The value of the parameter
         - resource_id Optionally, scope the parameter to resource (fact)
+        - expires Defaults to true. Set to false to create a never expiring fact
         - metadata metadata about the parameter
     """
 

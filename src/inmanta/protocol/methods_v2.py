@@ -1155,6 +1155,7 @@ def get_all_facts(
                 The following options are available:
                 name: filter by the name of the fact
                 resource_id: filter by the resource_id of the fact
+                expires: filter on whether the fact expires or not
     :param sort: Return the results sorted according to the parameter value.
                 The following sorting attributes are supported: 'name', 'resource_id'.
                 The following orders are supported: 'asc', 'desc'

@@ -967,6 +967,7 @@ class FactsView(DataView[FactOrder, Fact]):
         return {
             "name": ContainsPartialFilter,
             "resource_id": ContainsPartialFilter,
+            "expires": BooleanEqualityFilter,
         }
 
     def get_base_url(self) -> str:
