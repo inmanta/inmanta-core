@@ -521,7 +521,7 @@ class ArithmeticOperator(BinaryOperator):
         return self._arithmetic_op(arg1, arg2)
 
     @abstractmethod
-    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: numbers.Number, arg2: numbers.Number) -> object:
         """
         The implementation for this ArithmeticOperator, excluding the type validation.
         Type validation is done in the _bin_op() method.
