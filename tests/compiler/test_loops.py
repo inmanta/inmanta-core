@@ -47,7 +47,9 @@ def test_for_error(snippetcompiler):
         for i in a:
         end
     """,
-        "A for loop can only be applied to lists and relations. (reported in For(i) ({dir}/main.cf:7))",
+        "A for loop can only be applied to lists and relations. Hint: 'a' is "
+        "'__config__::A (instantiated at {dir}/main.cf:6)'. (reported in "
+        "For(i) ({dir}/main.cf:7))",
     )
 
 
@@ -75,7 +77,7 @@ def test_for_error_nullable_list(snippetcompiler):
         end
     """,
         "A for loop can only be applied to lists and relations. "
-        "Hint: 'a.elements' is null. (reported in For(element) ({dir}/main.cf:8))",
+        "Hint: 'a.elements' is 'null'. (reported in For(element) ({dir}/main.cf:8))",
     )
 
 
