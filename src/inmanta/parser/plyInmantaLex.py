@@ -82,7 +82,7 @@ tokens = [
 
 
 def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"matching[\s]+/([^/\\\n]|\\.)+/"
+    r"matching[\s]?/([^/\\\n]|\\.)+/"
     index_first_slash_char = t.value.index("/")
     regex_with_slashes_as_str = t.value[index_first_slash_char:]
     regex_as_str = regex_with_slashes_as_str[1:-1]
