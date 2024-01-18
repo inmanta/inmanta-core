@@ -581,7 +581,7 @@ def release_version(
     :param agent_trigger_method: Optional. Indicates whether the agents should perform a full or an incremental deploy when
                                 push is true.
 
-     :return: Returns the following status codes:
+    :return: Returns the following status codes:
             200: The version is released
             404: The requested version does not exist
             409: The requested version was already released
@@ -724,10 +724,12 @@ def get_param(tid: uuid.UUID, id: str, resource_id: Optional[str] = None):
     :param resource_id: Optional. scope the parameter to resource (fact),
                         if the resource id should not contain a version, the latest version is used
     :return: Returns the following status codes:
-            200: The parameter content is returned
-            404: The parameter is not found and unable to find it because its resource is not known to the server
-            410: The parameter has expired
-            503: The parameter is not found but its value is requested from an agent
+
+        - 200: The parameter content is returned
+        - 404: The parameter is not found and unable to find it because its resource is not known to the server
+        - 410: The parameter has expired
+        - 503: The parameter is not found but its value is requested from an agent
+
     """
 
 
@@ -804,6 +806,7 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 
     :param tid: The id of the environment
     :param parameters: A list of dicts with the following keys:
+
         - id The name of the parameter
         - source The source of the parameter. Valid values are defined in the ParameterSource enum (see: inmanta/const.py)
         - value The value of the parameter

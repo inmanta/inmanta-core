@@ -95,6 +95,17 @@ Each Handler should override 4 methods of the CRUDHandler:
 The context (See :class:`~inmanta.agent.handler.HandlerContext`) passed to most methods is used to
 report results, changes and logs to the handler and the server.
 
+The :meth:`~inmanta.agent.handler.HandlerContext.set_fact method reports facts to the server.
+By default, facts are considered stale after not being refreshed or updated for a certain time. This time span is
+controlled by the :inmanta.config:option:`server.fact-expire` config option and querying for a stale fact will force the
+agent to refresh it first.
+
+All stale facts are also periodically refreshed. This time interval is controlled by the
+:inmanta.config:option:`server.fact-renew` config option.
+
+When reporting a fact, setting the `expires` parameter to False will ensure that this fact never goes stale. This
+is useful to take some load off the agent when working with models that have many facts that don't get updated often.
+
 Built-in Handler utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
