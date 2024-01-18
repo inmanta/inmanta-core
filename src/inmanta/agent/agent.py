@@ -112,7 +112,7 @@ class ResourceActionBase(abc.ABC):
 
     def cancel(self) -> None:
         if not self.is_running() and not self.is_done():
-            LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource_id)
+            self.logger.info("Cancelled deploy of %s %s %s", self.__class__.__name__, self.gid, self.resource_id)
             self.future.set_result(ResourceActionResult(cancel=True))
 
     def long_string(self) -> str:
@@ -1060,7 +1060,7 @@ class AgentInstance:
                     resource = Resource.deserialize(res["attributes"], use_generic=True)
                     loaded_resources.append(resource)
 
-            except TypeError:
+            except Exception:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
                 resource = Resource.deserialize(res["attributes"], use_generic=True)
