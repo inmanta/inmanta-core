@@ -21,8 +21,10 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    await connection.execute(
-        """
+    schema = """
+    -- Add the 'expires' column to support never expiring facts
+
     ALTER TABLE public.parameter
-      ADD COLUMN expires boolean DEFAULT true;"""
-    )
+    ADD COLUMN expires boolean DEFAULT true;
+    """
+    await connection.execute(schema)

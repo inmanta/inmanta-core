@@ -181,7 +181,9 @@ class ParameterService(protocol.ServerSlice):
         else:
             param = params[0]
             value_updated = param.value != value
-            await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata, expires=expires)
+            await param.update(
+                source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata, expires=expires
+            )
 
         # check if the parameter is an unknown
         unknown_params = await data.UnknownParameter.get_list(

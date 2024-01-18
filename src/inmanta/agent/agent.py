@@ -23,9 +23,7 @@ import enum
 import logging
 import os
 import random
-import sys
 import time
-import traceback
 import uuid
 from asyncio import Lock
 from collections import defaultdict
@@ -1021,9 +1019,7 @@ class AgentInstance:
                         messages=ctx.logs,
                     )
 
-                except Exception as e:
-                    # print(sys.exc_info()[2])
-                    traceback.format_exc()
+                except Exception:
                     self.logger.exception("Unable to retrieve fact")
                 finally:
                     self._cache.close_version(version)
@@ -1524,7 +1520,6 @@ class Agent(SessionEndpoint):
         if not instance:
             return 200
 
-        # breakpoint()
         return await instance.get_facts(resource)
 
     @protocol.handle(methods.get_status)
