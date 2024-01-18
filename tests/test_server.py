@@ -22,7 +22,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
 import pytest
@@ -1101,27 +1101,39 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     rvid_r2_v1 = f"{rvid_r2},v={model_version}"
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
-    await data.Resource.new(
-        environment=env_id,
+    async def make_resource_with_last_non_deploying_status(
+        status: const.ResourceState,
+        last_non_deploying_status: const.NonDeployingResourceState,
+        resource_version_id: str,
+        attributes: dict[str, object],
+    ) -> data.Resource:
+        r1 = data.Resource.new(
+            environment=env_id,
+            status=status,
+            resource_version_id=resource_version_id,
+            attributes=attributes,
+        )
+        await r1.insert()
+        await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
+
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
-    ).insert()
-    await data.Resource.new(
-        environment=env_id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env_id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
+    )
 
     action_id = uuid.uuid4()
 

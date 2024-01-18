@@ -23,6 +23,7 @@ import logging
 import time
 import uuid
 from collections import abc
+from datetime import UTC
 from typing import Optional, cast
 
 import asyncpg
@@ -2439,7 +2440,7 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(
         "SELECT table_name FROM information_schema.tables " "WHERE table_schema='public'"
     )
     table_names_in_database = [x["table_name"] for x in table_names]
-    table_names_in_classes_list = [x.__name__.lower() for x in data._classes]
+    table_names_in_classes_list = [x.table_name() for x in data._classes]
     # Schema management table is not in classes list
     # Join tables on resource and resource action is not in the classes list
     assert len(table_names_in_classes_list) + 2 == len(table_names_in_database)
@@ -2994,34 +2995,47 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rvid_r3_v1 = rid_r3_v1 + ",v=1"
     rvid_r4_v1 = rid_r4_v1 + ",v=1"
 
-    await data.Resource.new(
-        environment=env.id,
+    async def make_resource_with_last_non_deploying_status(
+        status: const.ResourceState,
+        last_non_deploying_status: const.NonDeployingResourceState,
+        resource_version_id: str,
+        attributes: dict[str, object],
+    ) -> data.Resource:
+        r1 = data.Resource.new(
+            environment=env.id,
+            status=status,
+            resource_version_id=resource_version_id,
+            attributes=attributes,
+        )
+        await r1.insert()
+        await r1.update_persistent_state(
+            last_deploy=datetime.datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status
+        )
+
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.available,
         last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rid_r2_v1, rid_r3_v1, rid_r4_v1]},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.available,
         last_non_deploying_status=const.NonDeployingResourceState.available,
         resource_version_id=rvid_r4_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
+    )
 
     expected_states = {
         rvid_r2_v1: const.ResourceState.deployed,
@@ -3046,41 +3060,36 @@ async def test_get_last_non_deploying_state_for_dependencies(init_dataclasses_an
     rvid_r4_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file4],v=2")
     rvid_r5_v2 = cast(ResourceVersionIdStr, "std::File[agent1,path=/etc/file5],v=2")
 
-    await data.Resource.new(
-        environment=env.id,
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v2,
         attributes={"purge_on_delete": False, "requires": [rid_r2_v2, rid_r3_v2]},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r2_v2,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r3_v2,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r4_v2,
         attributes={"purge_on_delete": False, "requires": [rid_r3_v2]},
-    ).insert()
-    await data.Resource.new(
-        environment=env.id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r5_v2,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
+    )
 
     expected_states = {
         rvid_r2_v2: const.ResourceState.failed,

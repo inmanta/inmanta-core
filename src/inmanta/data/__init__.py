@@ -4785,7 +4785,8 @@ class Resource(BaseDocument):
         *,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
-        """ This method performs none of the mangling required to produce valid resources! """
+        """This method performs none of the mangling required to produce valid resources!"""
+
         def collect_projection(projection: Optional[list[str]], prefix: str) -> str:
             if not projection:
                 return f"{prefix}.*"
