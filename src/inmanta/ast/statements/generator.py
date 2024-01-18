@@ -74,7 +74,7 @@ from inmanta.execute.runtime import (
     WrappedValueVariable,
 )
 from inmanta.execute.tracking import ImplementsTracker
-from inmanta.execute.util import NoneValue, Unknown
+from inmanta.execute.util import Unknown
 
 try:
     from typing import TYPE_CHECKING
