@@ -1142,7 +1142,7 @@ class Field(Generic[T]):
 
     def _validate_single(self, name: str, value: object) -> None:
         """Validate a single value against the types in this field."""
-        if not (value.__class__ is self.field_type or isinstance(value, self.field_type)):
+        if not isinstance(value, self.field_type):
             raise TypeError(
                 "Field %s should have the correct type (%s instead of %s)"
                 % (name, self.field_type.__name__, type(value).__name__)
@@ -1182,7 +1182,7 @@ class Field(Generic[T]):
 
     def _from_db_single(self, name: str, value: object) -> object:
         """Load a single database value. Converts database representation to appropriately typed object."""
-        if value.__class__ is self.field_type or isinstance(value, self.field_type):
+        if isinstance(value, self.field_type):
             return value
 
         # asyncpg does not convert a jsonb field to a dict
@@ -1987,7 +1987,7 @@ class BaseDocument(metaclass=DocumentMeta):
         if isinstance(value, dict):
             return json_encode(value)
 
-        if isinstance(value, DataDocument) or issubclass(value.__class__, DataDocument) or isinstance(value, BaseModel):
+        if isinstance(value, (DataDocument, BaseModel)):
             return json_encode(value)
 
         if isinstance(value, list):
@@ -4218,6 +4218,7 @@ class ResourceAction(BaseDocument):
         last_timestamp: Optional[datetime.datetime] = None,
         action: Optional[const.ResourceAction] = None,
         resource_id: Optional[ResourceIdStr] = None,
+        exclude_changes: Optional[list[const.Change]] = None,
     ) -> list["ResourceAction"]:
         query = """SELECT DISTINCT ra.*
                     FROM public.resource as r
@@ -4282,6 +4283,14 @@ class ResourceAction(BaseDocument):
             query += f" AND started < ${parameter_index}"
             values.append(cls._get_value(last_timestamp))
             parameter_index += 1
+
+        if exclude_changes:
+            # Create a string with placeholders for each item in exclude_changes
+            exclude_placeholders = ", ".join([f"${parameter_index + i}" for i in range(len(exclude_changes))])
+            query += f" AND ra.change NOT IN ({exclude_placeholders})"
+            values.extend([cls._get_value(change) for change in exclude_changes])
+            parameter_index += len(exclude_changes)
+
         if first_timestamp:
             query += " ORDER BY started, action_id"
         else:

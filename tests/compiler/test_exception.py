@@ -317,7 +317,7 @@ def test_reference_nonexisting_namespace(snippetcompiler, namespace: str) -> Non
     with pytest.raises(
         NotFoundException,
         match=re.escape(
-            f"Namespace {namespace} not found. Try importing it with `import {namespace}`"
+            f"Namespace {namespace} not found.\nTry importing it with `import {namespace}`"
             f" (reported in {namespace}::x ({snippetcompiler.project_dir}/main.cf:3:1))"
         ),
     ):

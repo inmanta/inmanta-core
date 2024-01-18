@@ -652,7 +652,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
 
     # try to access a non environment call (global)
     result = await client_multi.list_environments()
-    assert result.code == 401
+    assert result.code == 403
 
     result = await client_multi.list_versions(environment_multi)
     assert result.code == 200
@@ -662,7 +662,7 @@ async def test_tokens(server_multi, client_multi, environment_multi, request):
 
     client_multi._transport_instance.token = agent_jot
     result = await client_multi.list_versions(environment_multi)
-    assert result.code == 401
+    assert result.code == 403
 
 
 async def test_token_without_auth(server, client, environment):
@@ -841,6 +841,25 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
             }
         )
 
+    #  adding a resource action with its change field set to "created" to test the get_resource_actions
+    #  filtering on resources with changes
+
+    rvid_r1_v1 = f"std::File[agent1,path=/etc/file200],v={version}"
+    resources.append(
+        {
+            "group": "root",
+            "hash": "89bf880a0dc5ffc1156c8d958b4960971370ee6a",
+            "id": rvid_r1_v1,
+            "owner": "root",
+            "path": "/tmp/file200",
+            "permissions": 644,
+            "purged": False,
+            "reload": False,
+            "requires": [],
+            "version": version,
+        }
+    )
+
     res = await client.put_version(
         tid=environment,
         version=version,
@@ -854,19 +873,33 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     result = await client.release_version(environment, version, False)
     assert result.code == 200
 
-    resource_ids = [x["id"] for x in resources]
+    resource_ids_nochange = [x["id"] for x in resources[0:-1]]
+    resource_ids_created = [resources[-1]["id"]]
 
     # Start the deploy
     action_id = uuid.uuid4()
     now = datetime.now().astimezone()
     result = await aclient.resource_action_update(
-        environment, resource_ids, action_id, "deploy", now, status=const.ResourceState.deploying
+        environment,
+        resource_ids_created,
+        action_id,
+        "deploy",
+        now,
+        status=const.ResourceState.deploying,
+        change=const.Change.created,
+    )
+    assert result.code == 200
+
+    action_id = uuid.uuid4()
+    result = await aclient.resource_action_update(
+        environment, resource_ids_nochange, action_id, "deploy", now, status=const.ResourceState.deploying
     )
     assert result.code == 200
 
     # Get the status from a resource
     result = await client.get_resource_actions(tid=environment)
     assert result.code == 200
+    assert len(result.result["data"]) == 3
 
     result = await client.get_resource_actions(tid=environment, attribute="path")
     assert result.code == 400
@@ -883,14 +916,34 @@ async def test_get_resource_actions(postgresql_client, client, clienthelper, ser
     # Query actions happening later than the start of the test case
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1))
     assert result.code == 200
-    assert len(result.result["data"]) == 2
+    assert len(result.result["data"]) == 3
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), last_timestamp=now)
     assert result.code == 400
     result = await client.get_resource_actions(tid=environment, action_id=action_id)
     assert result.code == 400
     result = await client.get_resource_actions(tid=environment, first_timestamp=now - timedelta(minutes=1), action_id=action_id)
     assert result.code == 200
-    assert len(result.result["data"]) == 2
+    assert len(result.result["data"]) == 3
+
+    exclude_changes = [const.Change.nochange.value, const.Change.created.value]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 0
+
+    exclude_changes = []
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 3
+
+    exclude_changes = [const.Change.nochange.value]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 200
+    assert len(result.result["data"]) == 1  # only one of the 3 resource_actions has change != nochange
+
+    exclude_changes = ["error"]
+    result = await client.get_resource_actions(tid=environment, exclude_changes=exclude_changes)
+    assert result.code == 400
+    assert "Failed to validate argument" in result.result["message"]
 
 
 async def test_resource_action_pagination(postgresql_client, client, clienthelper, server, agent):

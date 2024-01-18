@@ -19,7 +19,7 @@ from os import path
 
 from setuptools import find_namespace_packages, setup
 
-version = "11.0.1"
+version = "11.0.2"
 
 requires = [
     "asyncpg",

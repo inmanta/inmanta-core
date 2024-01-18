@@ -264,21 +264,35 @@ class TypeReferenceAnchor(Anchor):
         return AnchorTarget(location=location, docstring=docstring)
 
 
-class AttributeReferenceAnchor(Anchor):
-    def __init__(self, range: Range, namespace: "Namespace", type: LocatableString, attribute: str) -> None:
-        Anchor.__init__(self, range=range)
-        self.namespace = namespace
+class TypeAnchor(Anchor):
+    """Reference to a resolved type"""
+
+    def __init__(self, reference: LocatableString, type: "Type") -> None:
+        """
+        :param reference: the location we are referencing from
+        :param type: the type that is being referenced
+        """
+        Anchor.__init__(self, range=reference.get_location())
         self.type = type
+        self.type.get_location()
+
+    def resolve(self) -> Optional[AnchorTarget]:
+        t = self.type
+        location = t.get_location()
+        docstring = t.comment if isinstance(t, WithComment) else None
+        if not location:
+            return None
+        return AnchorTarget(location=location, docstring=docstring)
+
+
+class AttributeAnchor(Anchor):
+    def __init__(self, range: Range, attribute: "Attribute") -> None:
+        Anchor.__init__(self, range=range)
         self.attribute = attribute
 
     def resolve(self) -> Optional[AnchorTarget]:
-        instancetype = self.namespace.get_type(self.type)
-        # type check impossible atm due to import loop
-        # assert isinstance(instancetype, Entity)
-        entity_attribute: Optional[Attribute] = instancetype.get_attribute(self.attribute)
-        assert entity_attribute is not None
-        location = entity_attribute.get_location()
-        docstring = instancetype.comment if isinstance(instancetype, WithComment) else None
+        location = self.attribute.get_location()
+        docstring = self.attribute.comment if isinstance(self.attribute, WithComment) else None
         if not location:
             return None
         return AnchorTarget(location=location, docstring=docstring)
@@ -364,7 +378,7 @@ class Namespace(Namespaced):
 
     def lookup_namespace(self, name: str) -> Import:
         if name not in self.visible_namespaces:
-            raise NotFoundException(None, name, f"Namespace {name} not found. Try importing it with `import {name}`")
+            raise NotFoundException(None, name, f"Namespace {name} not found.\nTry importing it with `import {name}`")
         return self.visible_namespaces[name]
 
     def lookup(self, name: str) -> "Union[Type, ResultVariable]":
@@ -385,7 +399,7 @@ class Namespace(Namespaced):
                 else:
                     raise TypeNotFoundException(typ, ns)
             else:
-                raise TypeNotFoundException(typ, self)
+                raise MissingImportException(typ, self, parts, str(self.location.file))
         elif name in self.primitives:
             if name == "number":
                 warnings.warn(TypeDeprecationWarning("Type 'number' is deprecated, use 'float' or 'int' instead"))
@@ -396,6 +410,7 @@ class Namespace(Namespaced):
                 if name in cns.defines_types:
                     return cns.defines_types[name]
                 cns = cns.get_parent()
+
             raise TypeNotFoundException(typ, self)
 
     def get_name(self) -> str:
@@ -681,6 +696,22 @@ class TypeNotFoundException(RuntimeException):
 
     def importantance(self) -> int:
         return 20
+
+
+class MissingImportException(TypeNotFoundException):
+    """Exception raised when a referenced type's module is missing from the namespace"""
+
+    def __init__(
+        self, type: LocatableString, ns: Namespace, parts: Optional[list[str]] = None, file: Optional[str] = None
+    ) -> None:
+        suggest_importing: str = ""
+        suggest_file = ""
+        if file:
+            suggest_file = f" in {file}"
+        if parts:
+            suggest_importing = f".\nTry importing the module with `import {parts[0]}`{suggest_file}"
+        super().__init__(type, ns)
+        self.msg += suggest_importing
 
 
 class AmbiguousTypeException(TypeNotFoundException):

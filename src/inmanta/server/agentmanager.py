@@ -851,7 +851,7 @@ class AgentManager(ServerSlice, SessionListener):
 
                 client = self.get_agent_client(env_id, res.agent)
                 if client is not None:
-                    self.add_background_task(client.get_parameter(str(env_id), res.agent, res.to_dict()))
+                    await client.get_parameter(str(env_id), res.agent, res.to_dict())
 
                 self._fact_resource_block_set[resource_id] = now
 

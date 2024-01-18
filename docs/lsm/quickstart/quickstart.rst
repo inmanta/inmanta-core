@@ -82,13 +82,10 @@ This folder contains a project.yml, which looks like this:
     copyright: 2022 Inmanta
     modulepath: libs
     downloadpath: libs
-    repo:
-    - type: package
-        url: https://packages.inmanta.com/public/quickstart/python/simple/
-    - type: package
-        url: https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/python/simple/
-    install_mode: release
-    requires:
+    # This example requires licensed modules,
+    # replace <token> with inmanta access token you received with your license
+    pip:
+      index_url: https://packages.inmanta.com/<token>/inmanta-service-orchestrator-|version_major|-stable/python/simple/
 
 .. note::
 
