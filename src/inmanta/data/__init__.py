@@ -4785,6 +4785,7 @@ class Resource(BaseDocument):
         *,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
+        """ This method performs none of the mangling required to produce valid resources! """
         def collect_projection(projection: Optional[list[str]], prefix: str) -> str:
             if not projection:
                 return f"{prefix}.*"
@@ -5747,15 +5748,7 @@ class ConfigurationModel(BaseDocument):
             if in_increment:
                 increment.append(resource)
             else:
-                # If no events, shortcut on known good
-                if (
-                    status == const.ResourceState.deployed.name
-                    and resource["attribute_hash"] == resource["last_deployed_attribute_hash"]
-                ):
-                    # Shortcut on easy good ones
-                    not_increment.append(resource)
-                else:
-                    next.append(resource)
+                next.append(resource)
         work = next
 
         # get versions
