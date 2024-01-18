@@ -144,7 +144,7 @@ Example:
     var = 2 ** 3
     var = 18 % 10
 
-Note that the result of the division operation is casted to the type ``int``. This is done because a division always
+Note that the result of the division operation is cast to the type ``int``. This is done because a division always
 results in a value of type ``float``.
 
 
