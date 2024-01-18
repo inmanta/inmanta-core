@@ -460,10 +460,14 @@ implement Test using test when not (fg(self) and false)
     assert isinstance(stmt.select.children[0].children[1], Literal)
 
 
-def test_regex():
+@pytest.mark.parametrize("sep", ["", " ", "  "])
+def test_regex(sep: str):
+    """
+    @param sep: The separator between the matching keyword and the actual regular expression.
+    """
     statements = parse_code(
-        """
-typedef test as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
+        f"""
+typedef test as string matching{sep}/[a-fA-F0-9]{{8}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{12}}/
 """
     )
 

@@ -82,7 +82,7 @@ tokens = [
 
 
 def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"matching[\s]?/([^/\\]|\\.)+/"
+    r"matching[\s]*/([^/\\]|\\.)+/"
     # We include the "matching" part in the regex, because a regex is demarcated by two slashes.
     # By including the "matching" part in the regex, we can make the distinction between a regex and
     # two subsequent division operations.
