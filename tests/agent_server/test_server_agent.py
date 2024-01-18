@@ -3690,11 +3690,10 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
 #     yield
 #     config.Config.set("server", "fact-expire", old_server_fact_expire)
 
-@pytest.fixture
-def server_pre_start(server_config):
-    config.Config.set("server", "fact-expire", "1")
-    pass
-    """This fixture is called by the server. Override this fixture to influence server config"""
+# @pytest.fixture
+# def server_pre_start(server_config):
+#     config.Config.set("server", "fact-expire", "3")
+#     # default fact renewal interval is 1/3 of fact-expire
 
 
 # @pytest.fixture
@@ -3703,9 +3702,12 @@ def server_pre_start(server_config):
 #     auth_client = protocol.Client("client")
 #     return auth_client
 
-async def test_set_non_expiring_fact_in_handler(server_pre_start, server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
+async def test_set_non_expiring_fact_in_handler(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
     """
     """
+    param_service = server.get_slice(SLICE_PARAM)
+    param_service._fact_expire = 0.1
+
     def get_resources(version: str, params: list[data.Parameter]) -> list[dict[str, Any]]:
         return [
             {
@@ -3783,7 +3785,7 @@ async def test_set_non_expiring_fact_in_handler(server_pre_start, server, client
         return len(params) == 2
 
     await retry_limited(_wait_until_facts_are_available, 10)
-    await asyncio.sleep(3.1)
+    await asyncio.sleep(.5)
 
     # Non expiring fact is returned straight away
     result = await client.get_param(tid=environment, id="non_expiring", resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]")
