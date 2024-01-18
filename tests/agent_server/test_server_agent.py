@@ -49,7 +49,7 @@ from inmanta.server import (
     SLICE_AUTOSTARTED_AGENT_MANAGER,
     SLICE_ENVIRONMENT,
     SLICE_PARAM,
-    SLICE_SESSION_MANAGER,
+    SLICE_SESSION_MANAGER, protocol,
 )
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.services.environmentservice import EnvironmentService
@@ -3649,6 +3649,8 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
 
     async def _wait_until_facts_are_available():
         params = await data.Parameter.get_list()
+        if len(params) == 4:
+            breakpoint()
         return len(params) == 4
 
     await retry_limited(_wait_until_facts_are_available, 10)
@@ -3671,11 +3673,39 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2, param3, param4])
 
-async def test_set_non_expiring_fact_in_handler(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
-    """
-    Test whether non-expiring facts set in the handler via the ctx.set_fact() method arrive on the server.
-    """
 
+# @pytest.fixture(scope="function")
+# async def server_with_small_fact_expiry(server_pre_start, server_config, async_finalizer):
+#     config.Config.set("server", "fact-expire", "1")
+#     ibl = InmantaBootloader()
+#     await ibl.start()
+#     yield ibl.restserver
+#     await ibl.stop(timeout=15)
+
+# @pytest.fixture
+# def server_pre_start(server_config):
+#     """
+#     """
+#     old_server_fact_expire = config.Config.get("server", "fact-expire", "3600")
+#     yield
+#     config.Config.set("server", "fact-expire", old_server_fact_expire)
+
+@pytest.fixture
+def server_pre_start(server_config):
+    config.Config.set("server", "fact-expire", "1")
+    pass
+    """This fixture is called by the server. Override this fixture to influence server config"""
+
+
+# @pytest.fixture
+# def rapid_fact_expiry_client(server_pre_start):
+#     # config.Config.set("server", "fact-expire", "1")
+#     auth_client = protocol.Client("client")
+#     return auth_client
+
+async def test_set_non_expiring_fact_in_handler(server_pre_start, server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
+    """
+    """
     def get_resources(version: str, params: list[data.Parameter]) -> list[dict[str, Any]]:
         return [
             {
@@ -3708,20 +3738,20 @@ async def test_set_non_expiring_fact_in_handler(server, client, environment, age
     assert len(params) == 0
 
     param1 = data.Parameter(
-        name="key1",
+        name="non_expiring",
         value="value1",
         environment=uuid.UUID(environment),
-        resource_id="test::SetNonExpiringFact[agent1,key=key1]",
+        resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]",
         source=ParameterSource.fact.value,
         expires=False,
     )
     param2 = data.Parameter(
-        name="key2",
+        name="expiring",
         value="value2",
         environment=uuid.UUID(environment),
-        resource_id="test::SetNonExpiringFact[agent1,key=key2]",
+        resource_id="test::SetNonExpiringFact[agent1,key=expiring]",
         source=ParameterSource.fact.value,
-        expires=False,
+        expires=True,
     )
 
     version = await clienthelper.get_version()
@@ -3743,34 +3773,29 @@ async def test_set_non_expiring_fact_in_handler(server, client, environment, age
     agent_manager = server.get_slice(name=SLICE_AGENT_MANAGER)
     agent_manager._fact_resource_block = 0
 
-    result = await client.get_param(tid=environment, id="key1", resource_id="test::SetNonExpiringFact[agent1,key=key1]")
+    result = await client.get_param(tid=environment, id="non_expiring", resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]")
     assert result.code == 503
-    result = await client.get_param(tid=environment, id="key2", resource_id="test::SetNonExpiringFact[agent1,key=key2]")
+    result = await client.get_param(tid=environment, id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
     assert result.code == 503
 
     async def _wait_until_facts_are_available():
         params = await data.Parameter.get_list()
-        return len(params) == 4
+        return len(params) == 2
 
-    await retry_limited(_wait_until_facts_are_available, 100000)
+    await retry_limited(_wait_until_facts_are_available, 10)
+    await asyncio.sleep(3.1)
 
-    param3 = data.Parameter(
-        name="returned_fact_key1",
-        value="test",
-        environment=uuid.UUID(environment),
-        resource_id="test::SetNonExpiringFact[agent1,key=key1]",
-        source=ParameterSource.fact.value,
-    )
-    param4 = data.Parameter(
-        name="returned_fact_key2",
-        value="test",
-        environment=uuid.UUID(environment),
-        resource_id="test::SetNonExpiringFact[agent1,key=key2]",
-        source=ParameterSource.fact.value,
-    )
+    # Non expiring fact is returned straight away
+    result = await client.get_param(tid=environment, id="non_expiring", resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]")
+    assert result.code == 200
+    # Expiring fact has to be refreshed
+    result = await client.get_param(tid=environment, id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
+    assert result.code == 503
+
+    await retry_limited(_wait_until_facts_are_available, 10)
 
     params = await data.Parameter.get_list()
-    compare_params(params, [param1, param2, param3, param4])
+    compare_params(params, [param1, param2])
 
 async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):
     """

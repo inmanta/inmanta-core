@@ -819,6 +819,7 @@ class ResourceHandler(HandlerAPI[TResource]):
         facts = {}
         try:
             self.pre(ctx, resource)
+            # breakpoint()
             facts = self.facts(ctx, resource)
         finally:
             try:

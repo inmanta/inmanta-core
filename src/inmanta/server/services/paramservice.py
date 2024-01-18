@@ -131,6 +131,7 @@ class ParameterService(protocol.ServerSlice):
 
         # check if it was expired
         now = datetime.datetime.now().astimezone()
+        breakpoint()
         if resource_id is None or not param.expires or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
