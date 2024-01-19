@@ -252,7 +252,12 @@ class For(RequiresEmitStatement):
         var = self.base.execute(requires, resolver, queue)
 
         if not isinstance(var, (list, Unknown)):
-            raise TypingException(self, "A for loop can only be applied to lists and relations")
+            msg = "A for loop can only be applied to lists and relations."
+            if isinstance(self.base, Reference):
+                msg += " Hint: '%s' resolves to '%s'." % (self.base, str(var))
+            else:
+                msg += " Hint: '%s' is not a list." % str(var)
+            raise TypingException(self, msg)
 
         # we're done here: base's execute has reported results to helper
         return None
