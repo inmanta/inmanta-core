@@ -87,6 +87,7 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     # By including the "matching" part in the regex, we can make the distinction between a regex and
     # two subsequent division operations.
     index_first_slash_char = t.value.index("/")
+    part_before_regex = t.value[:index_first_slash_char]
     regex_with_slashes_as_str = t.value[index_first_slash_char:]
     regex_as_str = regex_with_slashes_as_str[1:-1]
     value = Reference("self")  # anonymous value
@@ -100,7 +101,8 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
         (s, e) = t.lexer.lexmatch.span()
         start = end - (e - s) + index_first_slash_char
 
-        r: Range = Range(t.lexer.inmfile, t.lexer.lineno, start, t.lexer.lineno, end)
+        line_nr_regex = t.lexer.lineno + part_before_regex.count("\n")
+        r: Range = Range(t.lexer.inmfile, line_nr_regex, start, line_nr_regex, end)
         raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
 
 

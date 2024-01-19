@@ -539,6 +539,30 @@ typedef test as string matching /)/
     assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
 
 
+@pytest.mark.parametrize("nr_of_newlines", [1, 2])
+def test_regex_newline_between_matching_keyword_and_regex(nr_of_newlines: int) -> None:
+    """
+    Ensure that the line number of the regex is reported correctly, if the regex
+    is defined on a different line than the matching keyword.
+    """
+    newlines = "\n" * nr_of_newlines
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            f"""
+typedef test as string matching{newlines}/)/
+            """
+        )
+
+    exception: ParserException = pytest_e.value
+    assert exception.location.file == "test"
+    assert exception.location.lnr == 2 + nr_of_newlines
+    assert exception.location.start_char == 32 + nr_of_newlines
+    assert exception.location.end_lnr == 2 + nr_of_newlines
+    assert exception.location.end_char == 32 + nr_of_newlines + 3
+    assert exception.value == "/)/"
+    assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
+
+
 def test_typedef():
     statements = parse_code(
         """
