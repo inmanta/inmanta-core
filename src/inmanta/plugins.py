@@ -27,7 +27,6 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVa
 import inmanta.ast.type as inmanta_type
 from inmanta import const, protocol, util
 from inmanta.ast import (
-    CompilerException,
     LocatableString,
     Location,
     Namespace,
@@ -244,7 +243,7 @@ class PluginValue:
         once this object has been normalized (which happens during the plugin normalization).
         """
         if self._resolved_type is None:
-            raise CompilerException(
+            raise RuntimeException(
                 f"{type(self).__name__} {self.VALUE_NAME} ({repr(self.type_expression)}) has not been normalized, "
                 "its resolved type can't be accessed."
             )
@@ -265,7 +264,7 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
-            raise CompilerException(
+            raise RuntimeException(
                 "Bad annotation in plugin %s for %s, expected str but got %s (%s)"
                 % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression)
             )
@@ -424,7 +423,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             Get the annotation for a specific argument, and if none exists, raise an exception
             """
             if arg not in arg_spec.annotations:
-                raise CompilerException(
+                raise RuntimeException(
                     f"All arguments of plugin {repr(self.get_full_name())} should be annotated: "
                     f"{repr(arg)} has no annotation"
                 )
