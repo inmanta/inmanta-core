@@ -105,8 +105,7 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
 
 
 def t_MATCHING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"matching\s"
-    t.value = "matching"
+    r"matching"
     return t
 
 
