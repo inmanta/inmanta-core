@@ -3672,11 +3672,15 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
     compare_params(params, [param1, param2, param3, param4])
 
 
-async def test_set_non_expiring_fact_in_handler(
+async def test_set_non_expiring_fact_in_handler_6560(
     server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
 ):
     """
     Check that getting a non expiring fact doesn't trigger a parameter request from the agent.
+    In this test:
+        - create 2 facts, one that expires, one that doesn't expire
+        - wait for the _fact_expire delay
+        - when getting the facts back, check that only the fact that does expire triggers a refresh from the agent
     """
 
     # Setup a high fact expiry rate:
@@ -3758,6 +3762,8 @@ async def test_set_non_expiring_fact_in_handler(
         return len(params) == 2
 
     await retry_limited(_wait_until_facts_are_available, 10)
+
+    # Wait for a bit to let facts expire
     await asyncio.sleep(0.5)
 
     # Non expiring fact is returned straight away
