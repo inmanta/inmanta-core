@@ -502,7 +502,7 @@ any values to the relation attribute.
     f2 = File(host=h1, path="/opt/2")
     f3 = File(host=h1, path="/opt/3")
 
-    // h1.files equals [f1, f2, f3]
+    # h1.files equals [f1, f2, f3]
 
     FileSet.files [0:] -- File.set [1]
 
@@ -510,11 +510,11 @@ any values to the relation attribute.
     s1.files = [f1,f2]
     s1.files = f3
 
-    // s1.files equals [f1, f2, f3]
+    # s1.files equals [f1, f2, f3]
 
     s1.files = f3
-    // adding a value twice does not affect the relation,
-    // s1.files still equals [f1, f2, f3]
+    # adding a value twice does not affect the relation,
+    # s1.files still equals [f1, f2, f3]
 
 In addition, attributes can be assigned in a constructor using keyword arguments by using ``**dct`` where ``dct`` is a dictionary that contains
 attribute names as keys and the desired values as values. For example:
@@ -538,7 +538,7 @@ It is also possible to add elements to a relation with the ``+=`` operator:
     h1.files += f2
     h1.files += f3
 
-    // h1.files equals [f1, f2, f3]
+    # h1.files equals [f1, f2, f3]
 
 
 .. note::
