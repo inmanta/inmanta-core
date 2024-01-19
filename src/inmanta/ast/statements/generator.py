@@ -253,8 +253,10 @@ class For(RequiresEmitStatement):
 
         if not isinstance(var, (list, Unknown)):
             msg = "A for loop can only be applied to lists and relations."
-            if not isinstance(self.base, Literal):
-                msg += " Hint: '%s' is '%s'." % (self.base, str(var))
+            if isinstance(self.base, Reference):
+                msg += " Hint: '%s' resolves to '%s'." % (self.base, str(var))
+            else:
+                msg += " Hint: '%s' is not a list." % str(var)
             raise TypingException(self, msg)
 
         # we're done here: base's execute has reported results to helper
