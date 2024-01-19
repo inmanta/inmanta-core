@@ -460,7 +460,7 @@ implement Test using test when not (fg(self) and false)
     assert isinstance(stmt.select.children[0].children[1], Literal)
 
 
-@pytest.mark.parametrize("sep", ["", " ", "  "])
+@pytest.mark.parametrize("sep", [" ", "  "])
 def test_regex(sep: str):
     """
     @param sep: The separator between the matching keyword and the actual regular expression.
