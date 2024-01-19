@@ -536,7 +536,7 @@ class Plus(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "plus", op1, op2)
 
-    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: numbers.Number, arg2: numbers.Number) -> numbers.Number:
         return arg1 + arg2
 
 
@@ -547,7 +547,7 @@ class Minus(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "minus", op1, op2)
 
-    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: numbers.Number, arg2: numbers.Number) -> numbers.Number:
         return arg1 - arg2
 
 
@@ -558,7 +558,7 @@ class Division(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "division", op1, op2)
 
-    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: numbers.Number, arg2: numbers.Number) -> numbers.Number:
         return arg1 / arg2
 
 
@@ -569,7 +569,7 @@ class Multiplication(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "multiplication", op1, op2)
 
-    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: numbers.Number, arg2: numbers.Number) -> numbers.Number:
         return arg1 * arg2
 
 
@@ -580,7 +580,7 @@ class Modulo(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "modulo", op1, op2)
 
-    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: numbers.Number, arg2: numbers.Number) -> numbers.Number:
         return arg1 % arg2
 
 
@@ -591,7 +591,7 @@ class Exponentiation(ArithmeticOperator):
     def __init__(self, op1: ExpressionStatement, op2: ExpressionStatement) -> None:
         ArithmeticOperator.__init__(self, "exponentiation", op1, op2)
 
-    def _arithmetic_op(self, arg1: object, arg2: object) -> object:
+    def _arithmetic_op(self, arg1: numbers.Number, arg2: numbers.Number) -> numbers.Number:
         """
         @see Operator#_op
         """
