@@ -437,7 +437,7 @@ def resource_container():
 
         def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
             self._do_set_fact(ctx, resource)
-            return {fact["id"]: fact for fact in ctx.facts}
+            return {}
 
         def _do_set_fact(self, ctx: HandlerContext, resource: SetNonExpiringFactResource) -> None:
             expires = resource.key == "expiring"
