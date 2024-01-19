@@ -96,15 +96,39 @@ The context (See :class:`~inmanta.agent.handler.HandlerContext`) passed to most 
 report results, changes and logs to the handler and the server.
 
 
-.. _using-facts:
+.. _Using facts:
 
-The :meth:`~inmanta.agent.handler.HandlerContext.set_fact` method can be used to report facts to the server.
-By default, facts are considered stale after not being refreshed or updated for a certain time. This time span is
-controlled by the :inmanta.config:option:`server.fact-expire` config option and querying for a stale fact will force the
-agent to refresh it first.
+Using facts
+"""""""""""
 
-All stale facts are also periodically refreshed. This time interval is controlled by the
+Facts are properties of the environment whose values are not managed by the orchestrator.
+Facts are either used as input in a model, e.g. a virtual machine provider provides an ip and the model then uses this
+ip to run a service, or used for reporting purposes.
+
+Retrieving a fact in the model is done with the `std::getfact() <../../../reference/modules/std.html#std.getfact>`_
+function.
+
+Example taken from the `openstack Inmanta module <https://github.com/inmanta/openstack>`_:
+
+.. code-block:: inmanta
+    :linenos:
+
+    implementation fipAddr for FloatingIP:
+        self.address = std::getfact(self, "ip_address")
+    end
+
+Setting a value for a fact can be done
+
+By default, facts expire when they are not being refreshed or updated for a certain time, controlled by the
+:inmanta.config:option:`server.fact-expire` config option.
+Expired facts are periodically refreshed. This time interval is controlled by the
 :inmanta.config:option:`server.fact-renew` config option.
+
+ and querying for a stale fact will force the
+agent to refresh it first.
+The :meth:`~inmanta.agent.handler.HandlerContext.set_fact` method can be used to report facts to the server.
+
+
 
 When reporting a fact, setting the ``expires`` parameter to ``False`` will ensure that this fact never goes stale. This
 is useful to take some load off the agent when working with models that have many facts that don't get updated often.
