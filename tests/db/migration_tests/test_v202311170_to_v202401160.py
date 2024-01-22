@@ -29,34 +29,24 @@ part = file_name_regex.match(__name__)[1]
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
 async def test_add_non_expiring_facts(postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_columns_in_db_table) -> None:
-    # This migration script adds a column. Just verify that the script doesn't fail.
-
-    result = await postgresql_client.fetch(
     """
-        SELECT * FROM public.environment;
-    """
-    )
-    result = await postgresql_client.fetch(
-        """
-            SELECT * FROM public.parameter;
-        """
-    )
+    This migration script adds the ``expires`` column to the parameter table.
 
-    # settings = json.loads(result[0]["settings"])
-    out  = await get_columns_in_db_table("parameter")
-    print(result)
+    Following 0002-database-upgrade-testing.md ADR:
+        - Update "pre" dump v202311170.sql: add a fact to the parameter table using "old" codebase (master)
+        - Ensure the migration correctly populates the newly added ``expires`` column with default ``True`` value.
+    """
+
+    columns_before_migration = await get_columns_in_db_table("parameter")
+    assert "expires" not in columns_before_migration
+
     await migrate_db_from()
-    out  =  await get_columns_in_db_table("parameter")
-    result = await postgresql_client.fetch(
-    """
-        SELECT * FROM public.environment;
-    """
-    )
-    result = await postgresql_client.fetch(
-        """
-            SELECT * FROM public.parameter;
-        """
+
+    columns_after_migration = await get_columns_in_db_table("parameter")
+    assert "expires" in columns_after_migration
+
+    expires = await postgresql_client.fetchval(
+        "SELECT expires FROM public.parameter where name='test_default_expires';"
     )
 
-    print(result)
-    a = 3
+    assert expires is True
