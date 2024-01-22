@@ -33,8 +33,28 @@ async def test_add_non_expiring_facts(postgresql_client: asyncpg.Connection, mig
 
     result = await postgresql_client.fetch(
     """
-        SELECT * FROM public.parameter WHERE name='dev-1';
+        SELECT * FROM public.environment;
     """
     )
-    settings = json.loads(result[0]["settings"])
+    result = await postgresql_client.fetch(
+        """
+            SELECT * FROM public.parameter;
+        """
+    )
+
+    # settings = json.loads(result[0]["settings"])
+    print(result)
     await migrate_db_from()
+    result = await postgresql_client.fetch(
+    """
+        SELECT * FROM public.environment;
+    """
+    )
+    result = await postgresql_client.fetch(
+        """
+            SELECT * FROM public.parameter;
+        """
+    )
+
+    print(result)
+    a = 3
