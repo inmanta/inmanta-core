@@ -15,10 +15,12 @@
 
     Contact: code@inmanta.com
 """
+import json
 import os
 import re
 from collections import abc
 
+import asyncpg
 import pytest
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
@@ -26,6 +28,13 @@ part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
-async def test_add_non_expiring_facts(migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
+async def test_add_non_expiring_facts(postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
     # This migration script adds a column. Just verify that the script doesn't fail.
+
+    result = await postgresql_client.fetch(
+    """
+        SELECT * FROM public.parameter WHERE name='dev-1';
+    """
+    )
+    settings = json.loads(result[0]["settings"])
     await migrate_db_from()
