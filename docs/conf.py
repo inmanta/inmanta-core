@@ -136,10 +136,10 @@ except NameError:
 
 
 version_major = int(version.split(".")[0])
-rst_prolog = f"""
-    .. |version_major| replace:: {version_major}
-    .. |iso_gpg_key| replace:: {iso_gpg_key}
-    .. |oss_gpg_key| replace:: {oss_gpg_key}
+rst_prolog = f"""\
+.. |version_major| replace:: {version_major}
+.. |iso_gpg_key| replace:: {iso_gpg_key}
+.. |oss_gpg_key| replace:: {oss_gpg_key}
 """
 
 
