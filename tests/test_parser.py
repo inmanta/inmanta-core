@@ -479,6 +479,24 @@ typedef test as string matching{sep}/[a-fA-F0-9]{{8}}-[a-fA-F0-9]{{4}}-[a-fA-F0-
     assert regex_expr.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 
+def test_matching_keyword_in_identifier(snippetcompiler):
+    """
+    Verify that 'matching' is allowed as part of an identifier even though it's a keyword.
+    """
+    statements = parse_code(
+        f"""
+entity A:
+    int matching_attribute
+end
+"""
+    )
+
+    assert len(statements) == 1
+    assert isinstance(statements[0], DefineEntity)
+    assert len(statements[0].attributes) == 1
+    compare_attr(statements[0].attributes[0], "matching_attribute", "int", lambda _: True)
+
+
 def test_regex_backslash():
     statements = parse_code(
         r"""
