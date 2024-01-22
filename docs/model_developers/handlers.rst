@@ -117,21 +117,39 @@ Example taken from the `openstack Inmanta module <https://github.com/inmanta/ope
         self.address = std::getfact(self, "ip_address")
     end
 
-Setting a value for a fact can be done
+Setting a value for a fact is done in the handler with the :meth:`~inmanta.agent.handler.HandlerContext.set_fact`
+method. e.g.:
+
+.. code-block:: inmanta
+    :linenos:
+
+    @provider("openstack::FloatingIP", name="openstack")
+    class FloatingIPHandler(OpenStackHandler):
+        def read_resource(self, ctx: handler.HandlerContext, resource: FloatingIP) -> None:
+            ...
+
+        def create_resource(self, ctx: handler.HandlerContext, resource: FloatingIP) -> None:
+            ...
+            # Setting fact manually
+            for key, value in ...:
+                ctx.set_fact(fact_id=key, value=value, expires=True)
 
 By default, facts expire when they are not being refreshed or updated for a certain time, controlled by the
-:inmanta.config:option:`server.fact-expire` config option.
-Expired facts are periodically refreshed. This time interval is controlled by the
+:inmanta.config:option:`server.fact-expire` config option. Querying for an expired fact will force the
+agent to refresh it first.
+Expired facts are also refreshed periodically. This time interval is controlled by the
 :inmanta.config:option:`server.fact-renew` config option.
 
- and querying for a stale fact will force the
-agent to refresh it first.
-The :meth:`~inmanta.agent.handler.HandlerContext.set_fact` method can be used to report facts to the server.
+
+When reporting a fact, setting the ``expires`` parameter to ``False`` will ensure that this fact never expires. This
+is useful to take some load off the agent when working with facts whose values never change. On the other hand, when
+working with facts whose values are subject to change, setting the ``expires`` parameter to ``True`` will ensure
+they are periodically refreshed.
 
 
-
-When reporting a fact, setting the ``expires`` parameter to ``False`` will ensure that this fact never goes stale. This
-is useful to take some load off the agent when working with models that have many facts that don't get updated often.
+.. note::
+    Facts should not be used for things that change rapidly (e.g. cpu usage),
+    as they are not intended to refresh very quickly.
 
 Built-in Handler utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
