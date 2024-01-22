@@ -1739,7 +1739,7 @@ async def migrate_db_from(
     # restore old version
     with open(marker.args[0]) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
-        logger.debug(f"Restored %s", marker.args[0])
+        logger.debug("Restored %s", marker.args[0])
 
     bootloader: InmantaBootloader = InmantaBootloader()
 
