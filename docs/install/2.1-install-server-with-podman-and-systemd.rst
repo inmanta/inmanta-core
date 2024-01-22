@@ -1,0 +1,354 @@
+.. _install-server-with-podman:
+
+Install Inmanta with Podman and Systemd
+***************************
+
+This page explains how to setup an orchestration server using podman and systemd.
+This guide assumes you already have `podman <http://podman.io/>`_ installed on your machine and that you are running a linux distribution with systemd.
+
+Pull the image
+##############
+
+.. only:: oss
+
+    Use podman pull to get the desired image:
+
+    .. code-block:: sh
+
+        podman pull ghcr.io/inmanta/orchestrator:latest
+
+
+    This command will pull the latest version of the Inmanta OSS Orchestrator image.
+
+.. only:: iso
+
+    Step 1: Log in to Cloudsmith registry
+    -------------------------------------
+
+    Connect to the Cloudsmith registry using your entitlement token.
+
+    .. code-block:: console
+
+        $ podman login containers.inmanta.com
+        Username: containers
+        Password: <your-entitlement-token>
+
+        Login Succeeded
+        $
+
+
+    Replace ``<your-entitlement-token>`` with the entitlement token provided with your license.
+
+
+    Step 2: Pull the image
+    ----------------------
+
+    Use podman pull to get the desired image:
+
+    .. code-block:: sh
+       :substitutions:
+
+        podman pull containers.inmanta.com/containers/service-orchestrator:|version_major|
+
+
+    This command will pull the latest version of the Inmanta Service Orchestrator image.
+
+Start the server with systemd
+#############################
+
+Here is a minimalistic systemd unit file that can be used to deploy the server on your machine.
+
+
+
+.. only:: oss
+
+    .. code-block:: 
+
+        [Unit]
+        Description=Podman 
+        Documentation=https://docs.inmanta.com
+        Wants=network-online.target
+        After=network-online.target
+        RequiresMountsFor=%t/containers
+
+        [Service]
+        Environment=PODMAN_SYSTEMD_UNIT=%n
+        Restart=on-failure
+        TimeoutStopSec=70
+        ExecStart=/usr/bin/podman run \
+                --cidfile=%t/%n.ctr-id \
+                --cgroups=no-conmon \
+                --sdnotify=conmon \
+                -d \
+                --replace \
+                --publish=127.0.0.1:8888:8888 \
+                --uidmap=993:@%U \
+                --uidmap=0:1:993 \
+                --gidmap=993:@%G \
+                --gidmap=0:1:993 \
+                --name=inmanta-orchestrator-server \
+                --volume=/home/%u/.config/inmanta/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
+                --volume=/var/log/inmanta:/var/log/inmanta:z \
+                --entrypoint=/usr/bin/inmanta \
+                --user=993:993 \
+                ghcr.io/inmanta/orchestrator:latest -vvv --timed-logs server
+        ExecStop=/usr/bin/podman stop \
+                --ignore -t 10 \
+                --cidfile=%t/%n.ctr-id
+        ExecStopPost=/usr/bin/podman rm \
+                -f \
+                --ignore -t 10 \
+                --cidfile=%t/%n.ctr-id
+        Type=notify
+        NotifyAccess=all
+
+        [Install]
+        WantedBy=default.target
+
+.. only:: iso
+
+    .. code-block:: 
+       :substitutions:
+
+        [Unit]
+        Description=Podman 
+        Documentation=https://docs.inmanta.com
+        Wants=network-online.target
+        After=network-online.target
+        RequiresMountsFor=%t/containers
+
+        [Service]
+        Environment=PODMAN_SYSTEMD_UNIT=%n
+        Restart=on-failure
+        TimeoutStopSec=70
+        ExecStart=/usr/bin/podman run \
+                --cidfile=%t/%n.ctr-id \
+                --cgroups=no-conmon \
+                --sdnotify=conmon \
+                -d \
+                --replace \
+                --publish=127.0.0.1:8888:8888 \
+                --uidmap=993:@%U \
+                --uidmap=0:1:993 \
+                --gidmap=993:@%G \
+                --gidmap=0:1:993 \
+                --name=inmanta-orchestrator-server \
+                --volume=/home/%u/.config/inmanta/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
+                --volume=/home/%u/.config/inmanta/license/com.inmanta.license:/etc/inmanta/license/com.inmanta.license:z \
+                --volume=/home/%u/.config/inmanta/license/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe:z \
+                --volume=/var/log/inmanta:/var/log/inmanta:z \
+                --entrypoint=/usr/bin/inmanta \
+                --user=993:993 \
+                containers.inmanta.com/containers/service-orchestrator:|version_major| -vvv --timed-logs server
+        ExecStop=/usr/bin/podman stop \
+                --ignore -t 10 \
+                --cidfile=%t/%n.ctr-id
+        ExecStopPost=/usr/bin/podman rm \
+                -f \
+                --ignore -t 10 \
+                --cidfile=%t/%n.ctr-id
+        Type=notify
+        NotifyAccess=all
+
+
+    You can paste this configuration in a file named `container-inmanta-orchestrator-server.service` in the `.config/systemd/user` folder of your user
+    and ensure you have you license files available.
+    With the proposed config, they should be located in a ``resources/`` folder on the side of the podman-compose file you create,
+    and the license files should be named ``com.inmanta.license`` and ``com.inmanta.jwe``. You can of course update the content
+    of the podman-compose file to match your current configuration.
+    Then bring the containers up by running the following command:
+
+.. code-block:: sh
+
+    podman-compose up
+
+You should be able to reach the orchestrator to this address: `http://172.30.0.3:8888 <http://172.30.0.3:8888>`_.
+
+The default server config included in the container images assumes that the orchestrator can reach a database server
+with hostname ``inmanta_db`` and that it can authenticate to it using the username ``inmanta``
+and password ``inmanta``.
+When using a different setup than the one mentioned above, you should overwrite the server config with one
+matching your needs.  You can find more instructions for overwriting the config in a following section,
+:ref:`here<podman_overwrite_server_conf>`.
+
+.. warning::
+    We don't recommend using the setup described above as a production environment. Hosting a database in a
+    container as shown here is not ideal in term of performance, reliability and raises some serious data
+    persistence concerns.
+
+
+.. _podman_overwrite_server_conf:
+
+Overwrite default server configuration
+######################################
+
+By default the server will use the file located in the image at ``/etc/inmanta/inmanta.cfg``.
+If you want to change it, you can copy this file, edit it, then mount it in the container,
+where the original file was located.
+
+If you use podman-compose, you can simply update this section of the example above:
+
+
+.. only:: iso
+
+    .. code-block:: yaml
+        :substitutions:
+
+        inmanta-server:
+            container_name: inmanta_orchestrator
+            image: containers.inmanta.com/containers/service-orchestrator:|version_major|
+            ports:
+                - 8888:8888
+            volumes:
+                - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
+                - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
+                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+
+.. only:: oss
+
+    .. code-block:: yaml
+
+        inmanta-server:
+            container_name: inmanta_orchestrator
+            image: ghcr.io/inmanta/orchestrator:latest
+            ports:
+                - 8888:8888
+            volumes:
+                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+
+
+Starting the ssh server
+#######################
+
+By default, no ssh server is running in the container.  You don't need it to have a functional
+orchestrator.
+If you want to enable ssh anyway, for easy access to the orchestrator,
+you can overwrite the startup command of the container with the following:
+
+.. code-block:: sh
+
+    server-with-ssh
+
+
+If you use podman-compose, it should look like:
+
+.. code-block:: yaml
+
+    inmanta-server:
+        container_name: inmanta_orchestrator
+        ...
+        command: "server-with-ssh"
+
+.. warning::
+    By default, the inmanta user doesn't have any password, if you want to ssh into the container,
+    you also need to set the authorized_keys file for the inmanta user.  You can do so by mounting
+    your public key to the following path in the container: ``/var/lib/inmanta/.ssh/authorized_keys``.
+    When starting, the container will make sure that the file has the correct ownership and permissions.
+
+
+Waiting for the database
+########################
+
+Depending on you setup, you might want your container to wait for the database to be ready
+to accept connections before starting the server (as this one would fail, trying to reach
+the db).
+You can do this by adding the following arguments to the startup command of the container:
+
+.. code-block:: sh
+
+    server --wait-for-host <your-db-host> --wait-for-port <your-db-port>
+
+
+If you use podman-compose, it should look like:
+
+.. code-block:: yaml
+
+    inmanta-server:
+        container_name: inmanta_orchestrator
+        ...
+        command: "server --wait-for-host <your-db-host> --wait-for-port <your-db-port>"
+
+
+Setting environment variables
+#############################
+
+You might want your inmanta server to be able to reach some environment variables.
+There are two ways you can achieve this:
+
+    1.  Set the environment variables with podman, either using the ``--env`` argument or in your
+        podman-compose file.  Those variables will be accessible to the inmanta server and any
+        agent it starts, but not to any other process running in the container (if you for example
+        login via ssh to the container and try to install a project again).
+
+    2.  (Recommended) Set the environment variables in a file and mount it to the following path in the
+        container: ``/etc/inmanta/env``.  This file will be loaded when starting the server and for
+        every session that the inmanta user starts in the container.
+
+.. only:: oss
+
+    .. code-block:: yaml
+
+        inmanta-server:
+            container_name: inmanta_orchestrator
+            image: ghcr.io/inmanta/orchestrator:latest
+            ports:
+                - 8888:8888
+            volumes:
+                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+                - ./resources/my-env-file:/etc/inmanta/env
+
+.. only:: iso
+
+    .. code-block:: yaml
+        :substitutions:
+
+        inmanta-server:
+            container_name: inmanta_orchestrator
+            image: containers.inmanta.com/containers/service-orchestrator:|version_major|
+            ports:
+                - 8888:8888
+            volumes:
+                - ./resources/com.inmanta.license:/etc/inmanta/license/com.inmanta.license
+                - ./resources/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe
+                - ./resources/my-server-conf.cfg:/etc/inmanta/inmanta.cfg
+                - ./resources/my-env-file:/etc/inmanta/env
+
+
+Changing inmanta user/group id
+##############################
+
+If you mount a folder of your host in the container, and expect the inmanta user to interact with it,
+you might face the issue that the inmanta user inside the container doesn't have ownership of the files.
+You could fix this by changing the ownership in the container, but this change would also be reflected
+on the host, meaning that you would lose the ownership of you files.  This is a very uncomfortable
+situation.
+While ``Podman`` has been offering the possibility to do a mapping of a user id in the container to a
+user id on the host at runtime, which would solve our problem here, ``Docker`` still doesn't offer this
+functionality.
+The inmanta container allows you to change the user and group id of the inmanta user inside the
+container when starting the container to match the user on the host, getting rid that way of any
+conflict in the files ownership.
+
+This can be done easily by simply setting those environment variables:
+ - ``INMANTA_UID``: Will change, when starting the container, the id of the inmanta user.
+ - ``INMANTA_GID``: Will change, when starting the container, the id of the inmanta group.
+
+If you use podman-compose, you can simply update this section of the example above:
+
+.. code-block:: yaml
+
+    inmanta-server:
+        container_name: inmanta_orchestrator
+        ...
+        environment:
+            INMANTA_UID: 1000
+            INMANTA_GID: 1000
+
+
+Log rotation
+############
+
+By default, the container won't do any log rotation, to let you the choice of dealing with the logs
+according to your own preferences.  We recommend that you do so by mounting a folder inside of the container
+at the following path: ``/var/log``. This path contains all the logs of inmanta (unless you specified
+a different path in the config of the server) and the logs of the SSH server.
