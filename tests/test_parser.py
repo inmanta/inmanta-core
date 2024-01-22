@@ -484,7 +484,7 @@ def test_matching_keyword_in_identifier(snippetcompiler):
     Verify that 'matching' is allowed as part of an identifier even though it's a keyword.
     """
     statements = parse_code(
-        f"""
+        """
 entity A:
     int matching_attribute
 end
