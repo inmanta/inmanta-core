@@ -35,6 +35,7 @@ keyworldlist = [
     "in",
     "implementation",
     "for",
+    "matching",
     "index",
     "implement",
     "using",
@@ -69,7 +70,6 @@ tokens = [
     "MLS",
     "CMP_OP",
     "REGEX",
-    "MATCHING",
     "REL",
     "PEQ",
     "RSTRING",
@@ -104,11 +104,6 @@ def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
         line_nr_regex = t.lexer.lineno + part_before_regex.count("\n")
         r: Range = Range(t.lexer.inmfile, line_nr_regex, start, line_nr_regex, end)
         raise ParserException(r, t.value, f"Regex error in {t.value}: '{error}'")
-
-
-def t_MATCHING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
-    r"matching"
-    return t
 
 
 def t_FSTRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
