@@ -6,7 +6,7 @@ Install Inmanta with Podman and Systemd
 This page explains how to setup an orchestration server using podman and systemd.
 This guide assumes you already have `podman <http://podman.io/>`_ installed on your machine and that you are running a linux distribution with systemd.
 
-.. info::
+.. note::
     The full setup should be doable without any root privilege (rootless) on the host, running the orchestrator with your current user.  
 
 .. warning::
@@ -19,7 +19,7 @@ Pull the image
 
 .. only:: oss
 
-    Use podman pull to get the desired image:
+    Use ``podman pull`` to get the desired image:
 
     .. code-block:: sh
 
@@ -51,7 +51,7 @@ Pull the image
     Step 2: Pull the image
     ----------------------
 
-    Use podman pull to get the desired image:
+    Use ``podman pull`` to get the desired image:
 
     .. code-block:: sh
        :substitutions:
@@ -68,7 +68,7 @@ Prepare the orchestrator configuration
 1.  Get configuration file.
     As of now, the container can not be configured with environment variables, we should use a configuration file, mounted inside of the container.
     To do this, you can get the current configuration file from the container, edit it, and mount it where it should be in the container.
-    Let's create a file at `~/.config/inmanta/inmanta.cfg`, we can take as template the default file already packaged in our
+    Let's create a file at ``~/.config/inmanta/inmanta.cfg``, we can take as template the default file already packaged in our
     container image.
 
     .. only:: oss
@@ -257,7 +257,7 @@ Deploy postgresql with podman and systemd
 
         podman pull docker.io/library/postgres:13
 
-2. Create a podman network for your database and the orchestrator.
+2.  Create a podman network for your database and the orchestrator.
 
     .. code-block:: sh
 
@@ -323,3 +323,5 @@ Deploy postgresql with podman and systemd
 
 6.  In the unit file of the orchestrator (as described :ref:`here<setup-systemd-unit>`), make sure to attach the orchestrator
     container to the network the database is a part of, using the ``--network`` option of the ``podman run`` command.
+
+7.  Don't forget to update the ip address of the database in the inmanta server configuration file (``~/.config/inmanta/inmanta.cfg``)!
