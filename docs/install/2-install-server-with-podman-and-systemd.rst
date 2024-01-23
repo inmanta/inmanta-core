@@ -54,7 +54,7 @@ Pull the image
     Use ``podman pull`` to get the desired image:
 
     .. code-block:: sh
-       :substitutions:
+        :substitutions:
 
         podman pull containers.inmanta.com/containers/service-orchestrator:|version_major|
 
@@ -81,6 +81,7 @@ Prepare the orchestrator configuration
     .. only:: iso
 
         .. code-block:: sh
+            :substitutions:
 
             mkdir -p ~/.config/inmanta
             podman run --rm -ti containers.inmanta.com/containers/service-orchestrator:|version_major| cat /etc/inmanta/inmanta.cfg > ~/.config/inmanta/inmanta.cfg
