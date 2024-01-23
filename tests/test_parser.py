@@ -460,75 +460,123 @@ implement Test using test when not (fg(self) and false)
     assert isinstance(stmt.select.children[0].children[1], Literal)
 
 
-def test_regex():
+@pytest.mark.parametrize("sep", [" ", "  "])
+def test_regex(sep: str):
+    """
+    @param sep: The separator between the matching keyword and the actual regular expression.
+    """
     statements = parse_code(
-        """
-a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
+        f"""
+typedef test as string matching{sep}/[a-fA-F0-9]{{8}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{4}}-[a-fA-F0-9]{{12}}/
 """
     )
 
     assert len(statements) == 1
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.children[1].value == stmt.regex
-    assert stmt.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
+    assert isinstance(statements[0], DefineTypeConstraint)
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.children[1].value == regex_expr.regex
+    assert regex_expr.regex == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
+
+
+def test_matching_keyword_in_identifier(snippetcompiler):
+    """
+    Verify that 'matching' is allowed as part of an identifier even though it's a keyword.
+    """
+    statements = parse_code(
+        """
+entity A:
+    int matching_attribute
+end
+"""
+    )
+
+    assert len(statements) == 1
+    assert isinstance(statements[0], DefineEntity)
+    assert len(statements[0].attributes) == 1
+    compare_attr(statements[0].attributes[0], "matching_attribute", "int", lambda _: True)
 
 
 def test_regex_backslash():
     statements = parse_code(
         r"""
-a = /\\/
+typedef test as string matching /\\/
 """
     )
 
     assert len(statements) == 1
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.regex == re.compile(r"\\")
+    assert isinstance(statements[0], DefineTypeConstraint)
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.regex == re.compile(r"\\")
 
 
 def test_regex_escape():
     statements = parse_code(
         r"""
-a = /\/1/
+typedef test as string matching /\/1/
 """
     )
 
     assert len(statements) == 1
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.regex == re.compile(r"\/1")
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.regex == re.compile(r"\/1")
 
 
 def test_regex_twice():
     statements = parse_code(
         r"""
-a = /\/1/
+typedef regex1 as string matching /\/1/
 b = "v"
-c = /\/1/
+typedef regex2 as string matching /\/1/
 """
     )
 
     assert len(statements) == 3
-    stmt = statements[0].value
-    assert isinstance(stmt, Regex)
-    assert stmt.regex == re.compile(r"\/1")
+    regex_expr = statements[0].expression
+    assert isinstance(regex_expr, Regex)
+    assert regex_expr.regex == re.compile(r"\/1")
 
 
 def test_1584_regex_error():
     with pytest.raises(ParserException) as pytest_e:
         parse_code(
             """
-a = /)/
+typedef test as string matching /)/
             """
         )
 
     exception: ParserException = pytest_e.value
     assert exception.location.file == "test"
     assert exception.location.lnr == 2
-    assert exception.location.start_char == 5
+    assert exception.location.start_char == 33
     assert exception.location.end_lnr == 2
-    assert exception.location.end_char == 8
+    assert exception.location.end_char == 36
+    assert exception.value == "/)/"
+    assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
+
+
+@pytest.mark.parametrize("nr_of_newlines", [1, 2])
+def test_regex_newline_between_matching_keyword_and_regex(nr_of_newlines: int) -> None:
+    """
+    Ensure that the line number of the regex is reported correctly, if the regex
+    is defined on a different line than the matching keyword.
+    """
+    newlines = "\n" * nr_of_newlines
+    with pytest.raises(ParserException) as pytest_e:
+        parse_code(
+            f"""
+typedef test as string matching{newlines}/)/
+            """
+        )
+
+    exception: ParserException = pytest_e.value
+    assert exception.location.file == "test"
+    assert exception.location.lnr == 2 + nr_of_newlines
+    assert exception.location.start_char == 32 + nr_of_newlines
+    assert exception.location.end_lnr == 2 + nr_of_newlines
+    assert exception.location.end_char == 32 + nr_of_newlines + 3
     assert exception.value == "/)/"
     assert exception.msg == "Syntax error: Regex error in /)/: 'unbalanced parenthesis at position 0'"
 
@@ -1914,7 +1962,7 @@ def test_640_syntax_error_output_6():
     with pytest.raises(ParserException) as pytest_e:
         parse_code(
             """
-typedef positive as number matching self >= 1-
+typedef positive as number matching self >= 1&
             """
         )
     exc: ParserException = pytest_e.value
@@ -1923,8 +1971,8 @@ typedef positive as number matching self >= 1-
     assert exc.location.start_char == 46
     assert exc.location.end_lnr == 2
     assert exc.location.end_char == 47
-    assert exc.value == "-"
-    assert exc.msg == "Syntax error: Illegal character '-'"
+    assert exc.value == "&"
+    assert exc.msg == "Syntax error: Illegal character '&'"
 
 
 def test_1766_empty_model_single_newline():
@@ -2272,10 +2320,9 @@ File(host = 5, path = "Jos")
 { "a":"b", "b":1}
 File[host = 5, path = "Jos"]
 y > 0 ? y : y < 0 ? -1 : 0
-/some_out_of_place_regex/
     """
     )
-    assert len(statements) == 9
+    assert len(statements) == 8
     boolean_expression = statements[0]
     constant = statements[1]
     function_call = statements[2]
@@ -2284,7 +2331,6 @@ y > 0 ? y : y < 0 ? -1 : 0
     map_def = statements[5]
     index_lookup = statements[6]
     conditional_expression = statements[7]
-    regex = statements[8]
     assert isinstance(boolean_expression, Equals)
     assert isinstance(constant, Literal)
     assert isinstance(function_call, FunctionCall)
@@ -2293,7 +2339,6 @@ y > 0 ? y : y < 0 ? -1 : 0
     assert isinstance(map_def, CreateDict)
     assert isinstance(index_lookup, IndexLookup)
     assert isinstance(conditional_expression, ConditionalExpression)
-    assert isinstance(regex, Regex)
 
 
 def test_invalid_escape_sequence(snippetcompiler, caplog):
