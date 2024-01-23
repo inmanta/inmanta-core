@@ -18,10 +18,9 @@ V1 modules
 ##########
 
 Inmanta V1 modules are versioned based on git tags. The current version is reflected in the ``module.yml`` file.
-The commit should be tagged with the version in the git repository as well. To
-ease the use inmanta provides
-the `release <https://docs.inmanta.com/community/latest/reference/commands.html#release>`_ command
-(``inmanta module release``) to modify module versions, commit to git and place the correct tag.
+The commit should be tagged with the version in the git repository as well. To release a module, use the
+`release <https://docs.inmanta.com/community/latest/reference/commands.html#release>`_ command
+as outlined below.
 
 Development Versions
 --------------------
@@ -76,20 +75,20 @@ For v1 modules:
 
 .. code-block:: bash
 
-	inmanta module freeze --recursive --operator "=="
+    inmanta module freeze --recursive --operator "=="
 
 For v2 modules:
 
 .. code-block:: bash
 
-	pip freeze > out_file.txt
+    pip freeze > out_file.txt
 
 
 Or for the current project
 
 .. code-block:: bash
 
-	inmanta project freeze --recursive --operator "=="
+    inmanta project freeze --recursive --operator "=="
 
 Distributing V1 modules
 -----------------------

@@ -33,22 +33,31 @@ Context
 Procedure
 ++++++++++
 
-1. Verify in ``project.yml`` that ``install_mode`` is set to ``release``
-2. Freeze all modules with
+1. Verify in ``project.yml`` that ``install_mode`` is set to ``release``.
+2. Freeze all modules with:
 
 .. code-block:: bash
 
     inmanta -vv project freeze --recursive --operator "=="
 
-This will cause the `project.yml` file to be updated with constraints that only allow this project to work with
+This will cause the ``project.yml`` file to be updated with constraints that only allow this project to work with
 this exact set of module versions. This ensures that no unwanted updates can 'leak' into the production environment.
 
 3. Verify that all modules are frozen to the correct version.
 
-    * Open ``project.yml`` and verify that all module versions are frozen to the expected versions
+    Open ``project.yml`` and verify that all module versions are frozen to the expected versions
 
-5. Commit this change (`git commit -a`)
-6. Push to the release branch (`git push`)
+4. Commit this change.
+
+.. code-block:: bash
+
+    git commit -a
+
+5. Push to the release branch.
+
+.. code-block:: bash
+
+    git push
 
 .. _operational_procedures_upgrade:
 
