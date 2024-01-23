@@ -144,6 +144,10 @@ By default, facts expire when they have not been refreshed or updated for a cert
 :inmanta.config:option:`server.fact-expire` config option. Querying for an expired fact will force the
 agent to refresh it first.
 
+When reporting a fact, setting the ``expires`` parameter to ``False`` will ensure that this fact never expires. This
+is useful to take some load off the agent when working with facts whose values never change. On the other hand, when
+working with facts whose values are subject to change, setting the ``expires`` parameter to ``True`` will ensure
+they are periodically refreshed.
 
 ---------
 
@@ -159,23 +163,16 @@ handler's :meth:`~inmanta.agent.handler.CRUDHandler.facts` method. e.g.:
     class FloatingIPHandler(OpenStackHandler):
         ...
 
-    def facts(self, ctx, resource) -> dict[str, object]:
-        port_id = self.get_port_id(resource.port)
-        fip = self._neutron.list_floatingips(port_id=port_id)["floatingips"]
-        if len(fip) == 0:
-            return {}
+        def facts(self, ctx, resource) -> dict[str, object]:
+            port_id = self.get_port_id(resource.port)
+            fip = self._neutron.list_floatingips(port_id=port_id)["floatingips"]
+            if len(fip) == 0:
+                return {}
 
-        else:
-            return {"ip_address": fip[0]["floating_ip_address"]}
+            else:
+                return {"ip_address": fip[0]["floating_ip_address"]}
 
 
-
----------
-
-When reporting a fact, setting the ``expires`` parameter to ``False`` will ensure that this fact never expires. This
-is useful to take some load off the agent when working with facts whose values never change. On the other hand, when
-working with facts whose values are subject to change, setting the ``expires`` parameter to ``True`` will ensure
-they are periodically refreshed.
 
 .. warning::
     If you ever push a fact that does expire, make sure it is also returned by the handler's ``facts()`` method.
