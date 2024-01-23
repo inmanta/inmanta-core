@@ -134,7 +134,8 @@ method. e.g.:
             for key, value in ...:
                 ctx.set_fact(fact_id=key, value=value, expires=True)
 
-By default, facts expire when they are not being refreshed or updated for a certain time, controlled by the
+
+By default, facts expire when they have not been refreshed or updated for a certain time, controlled by the
 :inmanta.config:option:`server.fact-expire` config option. Querying for an expired fact will force the
 agent to refresh it first.
 Expired facts are also refreshed periodically. This time interval is controlled by the
