@@ -120,7 +120,7 @@ Example taken from the `openstack Inmanta module <https://github.com/inmanta/ope
 Setting a value for a fact is done in the handler with the :meth:`~inmanta.agent.handler.HandlerContext.set_fact`
 method. e.g.:
 
-.. code-block:: inmanta
+.. code-block:: python
     :linenos:
 
     @provider("openstack::FloatingIP", name="openstack")
