@@ -117,8 +117,13 @@ Example taken from the `openstack Inmanta module <https://github.com/inmanta/ope
         self.address = std::getfact(self, "ip_address")
     end
 
-Setting a value for a fact is done in the handler with the :meth:`~inmanta.agent.handler.HandlerContext.set_fact`
-method. e.g.:
+Facts can be pushed or pulled through the handler.
+
+---------
+
+
+Pushing a fact is done in the handler with the :meth:`~inmanta.agent.handler.HandlerContext.set_fact`
+method during resource deployment (in ``read_resource`` and/or ``create_resource``). e.g.:
 
 .. code-block:: python
     :linenos:
@@ -138,15 +143,43 @@ method. e.g.:
 By default, facts expire when they have not been refreshed or updated for a certain time, controlled by the
 :inmanta.config:option:`server.fact-expire` config option. Querying for an expired fact will force the
 agent to refresh it first.
-Expired facts are also refreshed periodically. This time interval is controlled by the
-:inmanta.config:option:`server.fact-renew` config option.
 
+
+---------
+
+Facts are automatically pulled periodically (this time interval is controlled by the
+:inmanta.config:option:`server.fact-renew` config option). The server periodically asks the agent to call into the
+handler's :meth:`~inmanta.agent.handler.CRUDHandler.facts` method. e.g.:
+
+
+.. code-block:: python
+    :linenos:
+
+    @provider("openstack::FloatingIP", name="openstack")
+    class FloatingIPHandler(OpenStackHandler):
+        ...
+
+    def facts(self, ctx, resource) -> dict[str, object]:
+        port_id = self.get_port_id(resource.port)
+        fip = self._neutron.list_floatingips(port_id=port_id)["floatingips"]
+        if len(fip) == 0:
+            return {}
+
+        else:
+            return {"ip_address": fip[0]["floating_ip_address"]}
+
+
+
+---------
 
 When reporting a fact, setting the ``expires`` parameter to ``False`` will ensure that this fact never expires. This
 is useful to take some load off the agent when working with facts whose values never change. On the other hand, when
 working with facts whose values are subject to change, setting the ``expires`` parameter to ``True`` will ensure
 they are periodically refreshed.
 
+.. warning::
+    If you ever push a fact that does expire, make sure it is also returned by the handler's ``facts()`` method.
+    If you omit to do so, when the fact eventually expires, the agent will keep on trying to refresh it unsuccessfully.
 
 .. note::
     Facts should not be used for things that change rapidly (e.g. cpu usage),

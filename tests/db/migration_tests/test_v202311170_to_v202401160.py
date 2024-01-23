@@ -49,3 +49,6 @@ async def test_add_non_expiring_facts(
     expires = await postgresql_client.fetchval("SELECT expires FROM public.parameter where name='test_default_expires';")
 
     assert expires is True
+
+    # result = await client.get_param(tid="2dd63a9e-7804-4d20-9cf7-751a50b3c1a9", id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
+    # assert result.code == 200
