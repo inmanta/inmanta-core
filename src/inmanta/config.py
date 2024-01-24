@@ -40,6 +40,9 @@ from inmanta import const
 LOGGER = logging.getLogger(__name__)
 
 
+T = TypeVar("T")
+
+
 def _normalize_name(name: str) -> str:
     return name.replace("_", "-")
 
@@ -122,28 +125,34 @@ class Config:
     @classmethod
     def get(
         cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[str] = None
-    ) -> Union[str, ConfigParser]:
+    ) -> object:
         """
         Get the entire config or get a value directly
         """
-        cfg = cls._get_instance()
         if section is None:
-            return cfg
+            return cls._get_instance()
 
         assert name is not None
         name = _normalize_name(name)
 
-        opt = cls.validate_option_request(section, name, default_value)
+        option: Optional[Option] = cls.validate_option_request(section, name, default_value)
+        return self.get_for_option(option) if option is not None else self._get_value(section, name, default_value)
 
-        val = _get_from_env(section, name)
+    @classmethod
+    def _get_value(cls, section: str, name: str, default_value: Optional[str] = None) -> str:
+        cfg: ConfigParser = cls._get_instance()
+        val: Optional[str] = _get_from_env(section, name)
         if val is not None:
             LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
         else:
             val = cfg.get(section, name, fallback=default_value)
 
-        if not opt:
-            return val
-        return opt.validate(val)
+        return val
+
+    @classmethod
+    def get_for_option(cls, option: "Option[T]") -> T:
+        raw_value: str = cls._get_value(option.section, option.name, option.get_default_value())
+        return option.validate(raw_value)
 
     @classmethod
     def is_set(cls, section: str, name: str) -> bool:
@@ -278,9 +287,6 @@ def is_int_opt(value: str) -> Optional[int]:
     return int(value)
 
 
-T = TypeVar("T")
-
-
 class Option(Generic[T]):
     """
     Defines an option and exposes it for use
@@ -330,7 +336,7 @@ class Option(Generic[T]):
                     category=DeprecationWarning,
                 )
                 return self.predecessor_option.get()
-        return Config.get(self.section, self.name, default_value=self.get_default_value())
+        return Config.get_for_option(self)
 
     def get_type(self) -> Optional[str]:
         if callable(self.validator):
