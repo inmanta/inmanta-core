@@ -3,15 +3,15 @@
 Install Inmanta with Podman and Systemd
 ***************************************
 
-This page explains how to setup an orchestration server using podman and systemd.
-This guide assumes you already have `podman <http://podman.io/>`_ installed on your machine and that you are running a linux distribution with systemd.
+This page explains how to setup an Inmanta OSS orchestration server using Podman and Systemd.
+This guide assumes you already have `Podman <http://podman.io/>`_ installed on your machine and that you are running a Linux distribution with Systemd.
 
 .. note::
-    The full setup should be doable without any root privilege (rootless) on the host, running the orchestrator with your current user.  
+    The full setup should be doable without any root privilege (rootless) on the host, running the orchestrator with an unprivileged user.  
 
 .. warning::
-    The setup described below assumes you already have a postgresql instance available that the orchestrator can use for its persistent storage.  If it is not the case, 
-    please jump to the end of this document, where we explain to you how to easily deploy a database using postman and systemd: :ref:`here<install-postgresql-with-podman>`
+    The setup described below assumes you already have a PostgreSQL instance available that the orchestrator can use for its persistent storage.  If it is not the case, 
+    please :ref:`jump to the end of this document<install-postgresql-with-podman>`, where we explain to you how to easily deploy a database using Postman and Systemd.
 
 
 Pull the image
@@ -65,10 +65,10 @@ Pull the image
 Prepare the orchestrator configuration
 ######################################
 
-1.  Get configuration file.
+1.  Get the default configuration file:
     As of now, the container can not be configured with environment variables, we should use a configuration file, mounted inside of the container.
     To do this, you can get the current configuration file from the container, edit it, and mount it where it should be in the container.
-    Let's create a file at ``~/.config/inmanta/inmanta.cfg``, we can take as template the default file already packaged in our
+    Let's create a file on the host at ``~/.config/inmanta/inmanta.cfg``. We can take as template the default file already packaged in our
     container image.
 
     .. only:: oss
@@ -86,7 +86,7 @@ Prepare the orchestrator configuration
             mkdir -p ~/.config/inmanta
             podman run --rm -ti containers.inmanta.com/containers/service-orchestrator:|version_major| cat /etc/inmanta/inmanta.cfg > ~/.config/inmanta/inmanta.cfg
 
-2.  Update database settings
+2.  Update database settings:
     It is very unlikely that your database setup will match the one described in the default config we just got.  Update the configuration in the ``[database]`` section
     to reflect the setup you have.
 
@@ -226,15 +226,15 @@ Then start the container by running the following command:
 
     systemctl --user start inmanta-orchestrator-server.service
 
-You should be able to reach the orchestrator at this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_.
+You should be able to reach the orchestrator at this address: `http://127.0.0.1:8888 <http://127.0.0.1:8888>`_ on the host.
 
 
 Setting environment variables
 #############################
 
 You might want your inmanta server to be able to use some environment variables.
-You can set the environment by updating your systemd unit file, relying on the ``--env/--env-file``
-options of the ``podman run`` command.  Those variables will be accessible to the inmanta server, the compiler,
+You can set the environment variables by updating your Systemd unit file, relying on the ``--env/--env-file``
+options of the ``podman run`` command.  Those variables will be accessible to the inmanta server, the compiler
 and any agent started by the server.
 
 
@@ -308,7 +308,7 @@ Deploy postgresql with podman and systemd
         [Install]
         WantedBy=default.target
 
-4.  Create the folder that will container the persistent storage for the database: ``~/.local/shared/inmanta-orchestrator-db/data``.
+4.  Create the folder that will contain the persistent storage for the database: ``~/.local/shared/inmanta-orchestrator-db/data``.
 
     .. code-block:: sh
 
