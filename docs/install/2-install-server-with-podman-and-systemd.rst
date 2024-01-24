@@ -59,7 +59,7 @@ Pull the image
         podman pull containers.inmanta.com/containers/service-orchestrator:|version_major|
 
 
-    This command will pull the latest version of the Inmanta Service Orchestrator image.
+    This command will pull the latest release of the Inmanta Service Orchestrator image within this major version.
 
 
 Prepare the orchestrator configuration
