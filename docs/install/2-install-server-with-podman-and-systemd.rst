@@ -4,7 +4,7 @@ Install Inmanta with Podman and Systemd
 ***************************************
 
 This page explains how to setup an orchestration server using podman and systemd.
-This guide assumes you already have `podman <http://podman.io/>`_ (``>=4.7.0``) installed on your machine and that you are running a linux distribution with systemd.
+This guide assumes you already have `podman <http://podman.io/>`_ installed on your machine and that you are running a linux distribution with systemd.
 
 .. note::
     The full setup should be doable without any root privilege (rootless) on the host, running the orchestrator with your current user.  
@@ -138,9 +138,9 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                 -d \
                 --replace \
                 --publish=127.0.0.1:8888:8888 \
-                --uidmap=993:@%U \
+                --uidmap=993:0:1 \
                 --uidmap=0:1:993 \
-                --gidmap=993:@%G \
+                --gidmap=993:0:1 \
                 --gidmap=0:1:993 \
                 --name=inmanta-orchestrator-server \
                 --volume=%E/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
@@ -184,9 +184,9 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                 -d \
                 --replace \
                 --publish=127.0.0.1:8888:8888 \
-                --uidmap=993:@%U \
+                --uidmap=993:0:1 \
                 --uidmap=0:1:993 \
-                --gidmap=993:@%G \
+                --gidmap=993:0:1 \
                 --gidmap=0:1:993 \
                 --name=inmanta-orchestrator-server \
                 --volume=%E/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
@@ -286,9 +286,9 @@ Deploy postgresql with podman and systemd
                 -d \
                 --replace \
                 --network=inmanta-orchestrator-net:ip=172.42.0.2 \
-                --uidmap=999:@%U \
+                --uidmap=999:0:1 \
                 --uidmap=0:1:999 \
-                --gidmap=999:@%U \
+                --gidmap=999:0:1 \
                 --gidmap=0:1:999 \
                 --name=inmanta-orchestrator-db \
                 --volume=%h/.local/share/inmanta-orchestrator-db/data:/var/lib/postgresql/data:z \
