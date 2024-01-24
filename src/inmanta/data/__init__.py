@@ -2985,6 +2985,7 @@ class Parameter(BaseDocument):
     :param source: The source of the parameter
     :param resource_id: An optional resource id
     :param updated: When was the parameter updated last
+    :param expires: Boolean denoting whether this parameter expires.
 
     :todo Add history
     """
@@ -2999,6 +3000,7 @@ class Parameter(BaseDocument):
     resource_id: m.ResourceIdStr = ""
     updated: Optional[datetime.datetime] = None
     metadata: Optional[JsonType] = None
+    expires: bool = True
 
     @classmethod
     async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
@@ -3006,13 +3008,15 @@ class Parameter(BaseDocument):
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
         """
         query = f"""
-         WITH non_halted_envs AS (
-          SELECT id FROM public.environment WHERE NOT halted
+        WITH non_halted_envs AS (
+            SELECT id FROM public.environment WHERE NOT halted
         )
         SELECT * FROM {cls.table_name()}
         WHERE environment IN (
-          SELECT id FROM non_halted_envs
-        ) and updated < $1;
+            SELECT id FROM non_halted_envs
+        )
+        AND updated < $1
+        AND expires = true;
         """
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
@@ -3042,6 +3046,7 @@ class Parameter(BaseDocument):
             source=self.source,
             updated=self.updated,
             metadata=self.metadata,
+            expires=self.expires,
         )
 
 

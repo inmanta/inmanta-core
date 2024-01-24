@@ -241,12 +241,13 @@ class HandlerContext(LoggerABC):
 
         self._facts: list[dict[str, Any]] = []
 
-    def set_fact(self, fact_id: str, value: str) -> None:
+    def set_fact(self, fact_id: str, value: str, expires: bool = True) -> None:
         """
         Send a fact to the Inmanta server.
 
         :param fact_id: The name of the fact.
         :param value: The actual value of the fact.
+        :param expires: Whether this fact expires or not.
         """
         resource_id = self._resource.id.resource_str()
         fact = {
@@ -254,6 +255,7 @@ class HandlerContext(LoggerABC):
             "source": ParameterSource.fact.value,
             "value": value,
             "resource_id": resource_id,
+            "expires": expires,
         }
         self._facts.append(fact)
 
