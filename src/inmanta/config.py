@@ -136,7 +136,7 @@ class Config:
         name = _normalize_name(name)
 
         option: Optional[Option] = cls.validate_option_request(section, name, default_value)
-        return self.get_for_option(option) if option is not None else self._get_value(section, name, default_value)
+        return cls.get_for_option(option) if option is not None else cls._get_value(section, name, default_value)
 
     @classmethod
     def _get_value(cls, section: str, name: str, default_value: Optional[str] = None) -> str:
