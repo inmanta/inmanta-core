@@ -3,7 +3,7 @@
 Install Inmanta with Podman and Systemd
 ***************************************
 
-This page explains how to setup an Inmanta OSS orchestration server using Podman and Systemd.
+This page explains how to setup an Inmanta orchestration server using Podman and Systemd.
 This guide assumes you already have `Podman <http://podman.io/>`_ installed on your machine and that you are running a Linux distribution with Systemd.
 
 .. note::
@@ -92,8 +92,8 @@ Prepare the orchestrator configuration
 
 .. only:: iso
 
-    3.  Get the license files
-        Together with the access to the inmanta container repo, you should also have received a license and an entitlement files.  The orchestrator will need them
+    3.  Get the license files:
+        Together with the access to the inmanta container repo, you should also have received a license and an entitlement file. The orchestrator will need them
         in order to run properly.  You can also place them in a config directory on your host.  After this step, we assume that this folder is
         ``~/.config/inmanta/license/`` and that both files are named ``com.inmanta.license`` and ``com.inmanta.jwe`` respectively.
 
