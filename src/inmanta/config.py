@@ -319,6 +319,7 @@ class Option(Generic[T]):
         Config.register_option(self)
 
     def get(self) -> T:
+        # TODO: clean up! Option calls into Config and Config calls into Option
         raw_config: ConfigParser = Config._get_instance()
         if self.predecessor_option:
             has_deprecated_option = raw_config.has_option(self.predecessor_option.section, self.predecessor_option.name)
@@ -329,8 +330,7 @@ class Option(Generic[T]):
                     category=DeprecationWarning,
                 )
                 return self.predecessor_option.get()
-        out = Config.get(self.section, self.name, default_value=self.get_default_value())
-        return self.validate(out)
+        return Config.get(self.section, self.name, default_value=self.get_default_value())
 
     def get_type(self) -> Optional[str]:
         if callable(self.validator):
