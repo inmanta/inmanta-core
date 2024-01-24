@@ -35,62 +35,17 @@ CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
     PRIMARY KEY(environment, resource_id)
 );
 
+INSERT INTO public.resource_persistent_state (environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events)
+ SELECT environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events
+ FROM public.resource
+ WHERE (environment, model) IN (
+    SELECT environment, max(version) FROM public.configurationmodel WHERE released=true GROUP BY environment
+ );
+
 ALTER TABLE public.resource DROP COLUMN last_success;
 ALTER TABLE public.resource DROP COLUMN last_non_deploying_status;
 ALTER TABLE public.resource DROP COLUMN last_produced_events;
 
 """
     )
-    # TODO POPULATE
 
-    #
-    # @classmethod
-    # async def copy_last_success(
-    #     cls,
-    #     environment: uuid.UUID,
-    #     from_version: int,
-    #     to_version: int,
-    #     *,
-    #     connection: Optional[Connection] = None,
-    # ) -> None:
-    #     query = f"""
-    #     UPDATE {cls.table_name()} as new_resource
-    #     SET
-    #         last_success = (
-    #             SELECT last_success from {cls.table_name()} as old_resource
-    #             WHERE old_resource.model=$3
-    #             AND old_resource.environment=$2
-    #             AND old_resource.resource_id=new_resource.resource_id
-    #         )
-    #     WHERE new_resource.model=$1
-    #     AND new_resource.environment=$2
-    #     AND new_resource.last_success is null"""
-    #     await cls._execute_query(query, to_version, environment, from_version, connection=connection)
-
-    #
-    # @classmethod
-    # async def copy_last_produced_events(
-    #     cls,
-    #     environment: uuid.UUID,
-    #     from_version: int,
-    #     to_version: int,
-    #     *,
-    #     connection: Optional[Connection] = None,
-    # ) -> None:
-    #     """
-    #     Copy the value of last_produced events for every resource in the to_version from the from_version
-    #     """
-    #     query = f"""
-    #        UPDATE {cls.table_name()} as new_resource
-    #        SET
-    #            last_produced_events = (
-    #                SELECT old_resource.last_produced_events
-    #                FROM {cls.table_name()} as old_resource
-    #                WHERE old_resource.model=$3
-    #                AND old_resource.environment=$2
-    #                AND old_resource.resource_id=new_resource.resource_id
-    #            )
-    #        WHERE new_resource.model=$1
-    #        AND new_resource.environment=$2
-    #        AND new_resource.last_produced_events is null"""
-    #     await cls._execute_query(query, to_version, environment, from_version, connection=connection)

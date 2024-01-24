@@ -81,7 +81,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     await _wait_until_deployment_finishes(client, env_id_1, v1, 20)
 
-    await client.notify_change(id=env_id_1)
+    await client.notify_change(id=env_id_1, update=False)
 
     versions = await wait_for_version(client, env_id_1, 2)
     v2 = versions["versions"][0]["version"]
@@ -91,7 +91,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await _wait_until_deployment_finishes(client, env_id_1, v2, 20)
 
     # a version that is release, but not deployed
-    await client.notify_change(id=env_id_1)
+    await client.notify_change(id=env_id_1, update=False)
 
     versions = await wait_for_version(client, env_id_1, 3)
     v3 = versions["versions"][0]["version"]
@@ -99,7 +99,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await client.release_version(env_id_1, v3, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
 
     # a not released version
-    await client.notify_change(id=env_id_1)
+    await client.notify_change(id=env_id_1, update=False)
     versions = await wait_for_version(client, env_id_1, 4)
 
     proc = await asyncio.create_subprocess_exec(
