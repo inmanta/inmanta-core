@@ -152,7 +152,8 @@ they are periodically refreshed.
 ---------
 
 Facts are automatically pulled periodically (this time interval is controlled by the
-:inmanta.config:option:`server.fact-renew` config option). The server periodically asks the agent to call into the
+:inmanta.config:option:`server.fact-renew` config option) when they are about to expire or if a model requested them
+and they were not present. The server periodically asks the agent to call into the
 handler's :meth:`~inmanta.agent.handler.CRUDHandler.facts` method. e.g.:
 
 
@@ -163,15 +164,11 @@ handler's :meth:`~inmanta.agent.handler.CRUDHandler.facts` method. e.g.:
     class FloatingIPHandler(OpenStackHandler):
         ...
 
-        def facts(self, ctx, resource) -> dict[str, object]:
+        def facts(self, ctx, resource):
             port_id = self.get_port_id(resource.port)
             fip = self._neutron.list_floatingips(port_id=port_id)["floatingips"]
-            if len(fip) == 0:
-                return {}
-
-            else:
-                return {"ip_address": fip[0]["floating_ip_address"]}
-
+            if len(fip) > 0:
+                ctx.set_fact("ip_address", fip[0]["floating_ip_address"])
 
 
 .. warning::
