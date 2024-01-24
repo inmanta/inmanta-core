@@ -22,33 +22,30 @@ from collections import abc
 import asyncpg
 import pytest
 
+from inmanta.protocol import Client
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
 
 @pytest.mark.db_restore_dump(os.path.join(os.path.dirname(__file__), f"dumps/v{part}.sql"))
 async def test_add_non_expiring_facts(
-    postgresql_client: asyncpg.Connection, migrate_db_from: abc.Callable[[], abc.Awaitable[None]], get_columns_in_db_table
+    postgresql_client: asyncpg.Connection,
+    migrate_db_from: abc.Callable[[], abc.Awaitable[None]],
 ) -> None:
     """
     This migration script adds the ``expires`` column to the parameter table.
 
     Following 0002-database-upgrade-testing.md ADR:
         - Update "pre" dump v202311170.sql: add a fact to the parameter table using "old" codebase (master)
-        - Ensure the migration correctly populates the newly added ``expires`` column with default ``True`` value.
+        - Ensure the migration correctly populates the newly added ``expires`` column with default ``True`` value in such
+        a way that the test won't break if the schema is updated at a later stage.
     """
 
-    columns_before_migration = await get_columns_in_db_table("parameter")
-    assert "expires" not in columns_before_migration
-
     await migrate_db_from()
-
-    columns_after_migration = await get_columns_in_db_table("parameter")
-    assert "expires" in columns_after_migration
-
-    expires = await postgresql_client.fetchval("SELECT expires FROM public.parameter where name='test_default_expires';")
-
-    assert expires is True
-
-    # result = await client.get_param(tid="2dd63a9e-7804-4d20-9cf7-751a50b3c1a9", id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
-    # assert result.code == 200
+    client = Client("client")
+    result = await client.list_params(tid="5fe05a29-1ffd-4073-84ca-ce523fc30aa0")
+    assert result.code == 200
+    for param in result.result["parameters"]:
+        if param["id"] == "36df4879-e609-4456-afcc-04cf2fe9b518":
+            assert param["expires"]
