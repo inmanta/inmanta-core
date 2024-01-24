@@ -319,17 +319,17 @@ class Option(Generic[T]):
         Config.register_option(self)
 
     def get(self) -> T:
-        cfg = Config._get_instance()
+        raw_config: ConfigParser = Config._get_instance()
         if self.predecessor_option:
-            has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
-            has_new_option = cfg.has_option(self.section, self.name)
+            has_deprecated_option = raw_config.has_option(self.predecessor_option.section, self.predecessor_option.name)
+            has_new_option = raw_config.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
                 warnings.warn(
                     f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
                     category=DeprecationWarning,
                 )
                 return self.predecessor_option.get()
-        out = cfg.get(self.section, self.name, fallback=self.get_default_value())
+        out = Config.get(self.section, self.name, default_value=self.get_default_value())
         return self.validate(out)
 
     def get_type(self) -> Optional[str]:
