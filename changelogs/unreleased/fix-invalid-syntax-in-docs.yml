@@ -1,0 +1,4 @@
+---
+description: Fix issue in the docs where invalid syntax is used to defined a regex-based type
+change-type: patch
+destination-branches: [master, iso7, iso6]
