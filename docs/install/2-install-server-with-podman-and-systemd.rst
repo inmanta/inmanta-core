@@ -4,7 +4,7 @@ Install Inmanta with Podman and Systemd
 ***************************************
 
 This page explains how to setup an orchestration server using podman and systemd.
-This guide assumes you already have `podman <http://podman.io/>`_ installed on your machine and that you are running a linux distribution with systemd.
+This guide assumes you already have `podman <http://podman.io/>`_ (``>=4.7.0``) installed on your machine and that you are running a linux distribution with systemd.
 
 .. note::
     The full setup should be doable without any root privilege (rootless) on the host, running the orchestrator with your current user.  
