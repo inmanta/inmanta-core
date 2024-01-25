@@ -146,8 +146,8 @@ class ParameterService(protocol.ServerSlice):
         source: str,
         resource_id: str,
         metadata: JsonType,
-        expires: bool = True,
         recompile: bool = False,
+        expires: bool = True,
     ) -> bool:
         """
         Update or set a parameter.
