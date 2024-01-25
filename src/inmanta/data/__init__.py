@@ -4434,8 +4434,13 @@ class ResourcePersistentState(BaseDocument):
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
+    # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
+    # i.e. the end time of the last deploy
     last_success: Optional[datetime.datetime] = None
+    # last actual deployment completed without failure. i.e start time of the last deploy where status == ResourceState.deployed
     last_produced_events: Optional[datetime.datetime] = None
+    # Last produced an event. i.e. the end time of the last deploy where we hand an effective change
+    # (change is not None and change != Change.nochange:)
 
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available

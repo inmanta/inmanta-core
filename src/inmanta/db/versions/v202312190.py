@@ -48,4 +48,3 @@ ALTER TABLE public.resource DROP COLUMN last_produced_events;
 
 """
     )
-
