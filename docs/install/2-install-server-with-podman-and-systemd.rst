@@ -90,9 +90,21 @@ Prepare the orchestrator configuration
     It is very unlikely that your database setup will match the one described in the default config we just got.  Update the configuration in the ``[database]`` section
     to reflect the setup you have.
 
+3.  Make sure that there is a folder on your host that can persist all the logs of the server and that it is owned by the user running the orchestrator service.  
+    In this setup, the folder on the host will be ``~/.local/share/inmanta-orchestrator-server/logs``.
+
+    .. code-block:: sh
+
+        mkdir -p ~/.local/share/inmanta-orchestrator-server/logs
+
+    .. warning:: 
+        Inside of the container, this folder will be mounted at ``/var/log/inmanta`` as it is the default location where the orchestrator saves its logs.  This
+        location is configurable in the orchestrator configuration file.  If you were, for any reason, to change this location, make sure to update any usage
+        of the ``/var/log/inmanta`` folder in the next installation steps.
+
 .. only:: iso
 
-    3.  Get the license files:
+    4.  Get the license files:
         Together with the access to the inmanta container repo, you should also have received a license and an entitlement file. The orchestrator will need them
         in order to run properly.  You can also place them in a config directory on your host.  After this step, we assume that this folder is
         ``~/.config/inmanta/license/`` and that both files are named ``com.inmanta.license`` and ``com.inmanta.jwe`` respectively.
@@ -144,10 +156,11 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                 --gidmap=0:1:993 \
                 --name=inmanta-orchestrator-server \
                 --volume=%E/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
+                --volume=%h/.local/share/inmanta-orchestrator-server/logs:/var/log/inmanta:z \
                 --entrypoint=/usr/bin/inmanta \
                 --user=993:993 \
                 ghcr.io/inmanta/orchestrator:latest \
-                -vvv --timed-logs server
+                --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
         ExecStop=/usr/bin/podman stop \
                 --ignore -t 10 \
                 --cidfile=%t/%n.ctr-id
@@ -192,10 +205,11 @@ Here is a systemd unit file that can be used to deploy the server on your machin
                 --volume=%E/inmanta/inmanta.cfg:/etc/inmanta/inmanta.cfg:z \
                 --volume=%E/inmanta/license/com.inmanta.license:/etc/inmanta/license/com.inmanta.license:z \
                 --volume=%E/inmanta/license/com.inmanta.jwe:/etc/inmanta/license/com.inmanta.jwe:z \
+                --volume=%h/.local/share/inmanta-orchestrator-server/logs:/var/log/inmanta:z \
                 --entrypoint=/usr/bin/inmanta \
                 --user=993:993 \
                 containers.inmanta.com/containers/service-orchestrator:|version_major| \
-                -vvv --timed-logs server
+                --log-file /var/log/inmanta/server.log --log-file-level 2 --timed-logs server
         ExecStop=/usr/bin/podman stop \
                 --ignore -t 10 \
                 --cidfile=%t/%n.ctr-id
@@ -241,10 +255,9 @@ and any agent started by the server.
 Log rotation
 ############
 
-By default, the container won't do any log rotation, to let you the choice of dealing with the logs
-according to your own preferences.  We recommend that you do so by mounting a folder inside of the container
-at the following path: ``/var/log/inmanta``. This path contains all the logs of inmanta (unless you specified
-a different path in the config of the server).
+By default, the container won't do any log rotation, we let you the choice of dealing with the logs
+according to your own preferences.  We recommend you to setup some log rotation, for example using a logrotate service running on
+your host.
 
 
 .. _install-postgresql-with-podman:
