@@ -150,7 +150,7 @@ class ParameterService(protocol.ServerSlice):
         resource_id: str,
         metadata: JsonType,
         recompile: bool = False,
-        expires: bool = True,
+        expires: Optional[bool] = None,
     ) -> bool:
         """
         Update or set a parameter.
@@ -184,9 +184,12 @@ class ParameterService(protocol.ServerSlice):
         else:
             param = params[0]
             value_updated = param.value != value
-            await param.update(
-                source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata, expires=expires
-            )
+            if expires is not None:
+                await param.update(
+                    source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata, expires=expires
+                )
+            else:
+                await param.update(source=source, value=value, updated=datetime.datetime.now().astimezone(), metadata=metadata)
 
         # check if the parameter is an unknown
         unknown_params = await data.UnknownParameter.get_list(
@@ -242,7 +245,7 @@ class ParameterService(protocol.ServerSlice):
             value = param["value"] if "value" in param else None
             resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
-            expires = param["expires"] if "expires" in param else True
+            expires = param["expires"] if "expires" in param else None
 
             result = await self._update_param(env, name, value, source, resource_id, metadata, expires)
             if result:
