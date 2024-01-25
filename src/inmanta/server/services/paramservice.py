@@ -247,7 +247,7 @@ class ParameterService(protocol.ServerSlice):
             metadata = param["metadata"] if "metadata" in param else None
             expires = param["expires"] if "expires" in param else None
 
-            result = await self._update_param(env, name, value, source, resource_id, metadata, expires)
+            result = await self._update_param(env, name, value, source, resource_id, metadata, expires=expires)
             if result:
                 recompile = True
                 params.append((name, resource_id))
