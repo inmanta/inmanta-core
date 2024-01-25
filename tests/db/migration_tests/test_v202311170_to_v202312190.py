@@ -22,6 +22,9 @@ import asyncio
 
 import pytest
 
+from inmanta import const
+from inmanta.data import Environment, ConfigurationModel, Resource, ResourcePersistentState, ResourceAction
+
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]
 
@@ -30,7 +33,17 @@ part = file_name_regex.match(__name__)[1]
 async def test_resource_state_table(postgres_db, database_name, migrate_db_from: abc.Callable[[], abc.Awaitable[None]]) -> None:
     # This migration script adds a column. Just verify that the script doesn't fail.
     await migrate_db_from()
-    proc = await asyncio.create_subprocess_exec(
-        "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", "dump.sql", "-O", "-U", postgres_db.user, database_name
+    env = await Environment.get_one(name="dev-1")
+    assert env
+
+    # verify time on last success
+    rps = await ResourcePersistentState.get_one(environment=env.id, resource_id="std::AgentConfig[internal,agentname=localhost]")
+
+    actions = await ResourceAction.query_resource_actions(
+        environment=env.id, resource_id="std::AgentConfig[internal,agentname=localhost]", action=const.ResourceAction.deploy
     )
-    await proc.wait()
+    last_deploy = actions[1]
+    assert last_deploy.version == 2
+    assert rps.last_success == last_deploy.started
+    assert last_deploy.started != last_deploy.finished
+
