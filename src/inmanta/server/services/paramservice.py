@@ -137,7 +137,7 @@ class ParameterService(protocol.ServerSlice):
         if resource_id is None or not param.expires or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
-        LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
+        LOGGER.info("Fact %s of resource %s expired.", param_id, resource_id)
         out = await self.agentmanager.request_parameter(env.id, resource_id)
         return out
 
