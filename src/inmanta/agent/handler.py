@@ -904,6 +904,8 @@ class CRUDHandler(ResourceHandler[TPurgeableResource]):
         return self._diff(current, desired)
 
     def execute(self, ctx: HandlerContext, resource: TPurgeableResource, dry_run: bool = False) -> None:
+        # TODO: tdb where to call this (pytest, agent, facts, ...)
+        resource.resolve_all_references()
         try:
             self.pre(ctx, resource)
 

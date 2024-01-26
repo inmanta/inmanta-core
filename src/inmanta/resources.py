@@ -18,16 +18,20 @@
 import json
 import logging
 import re
+import uuid
 from collections.abc import Iterable, Iterator, Sequence
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Annotated, Any, Callable, Optional, TypeVar, Union, cast
+
+from pydantic import Field
 
 import inmanta.util
-from inmanta import plugins
+from inmanta import plugins, references
 from inmanta.ast import CompilerException, ExplicitPluginException, ExternalException
 from inmanta.data.model import ResourceIdStr, ResourceVersionIdStr
 from inmanta.execute import proxy, util
 from inmanta.stable_api import stable_api
 from inmanta.types import JsonType
+from inmanta.util import dict_path
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -179,6 +183,94 @@ class ResourceMeta(type):
 RESERVED_FOR_RESOURCE = {"id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"}
 
 
+class ValueReferenceCollector:
+    """Collect and organize all secret references and mappings"""
+
+    def __init__(self) -> None:
+        self.values: dict[uuid.UUID, references.ValueReference] = {}
+        self.mappings: list[references.ValueReferenceAttributeString] = []
+
+    def add_reference(self, path: str, reference: references.ValueReferenceAttributeString) -> None:
+        """Add a new attribute map to a value reference that we found at the given path.
+
+        :param path: The path where the value needs to be inserted
+        :param reference: The attribute reference
+        """
+        ref_id = reference._value_reference.ref_id
+        if ref_id not in self.values:
+            self.values[ref_id] = reference._value_reference
+
+        self.mappings.append(
+            references.ValueReferenceAttributeMap(
+                value_reference_id=ref_id,
+                attribute=reference._attribute,
+                path=path,
+            )
+        )
+
+    def model(self) -> references.ValueReferencesField:
+        """Create a pydantic model that can be serialized to include in the resource"""
+        reference_types = Union[*references.ValueReferenceModel.get_all_reference_types()]  # type: ignore
+
+        model = references.ValueReferencesField[reference_types](
+            values={str(key): value for key, value in self.values.items()},
+            mappings=self.mappings,
+        ).model_dump()
+
+        # add references in references
+        # TODO: this should be recursive
+        for ref_id, ref in list(model["values"].items()):
+            for k, v in list(ref.items()):
+                if isinstance(v, references._ValueReferenceAttributeString):
+                    new_ref = v._value_reference
+                    attr = v._attribute
+
+                    ref[k] = {
+                        "$value_reference": {
+                            "value_reference_id": new_ref.ref_id,
+                            "attribute": attr,
+                        }
+                    }
+
+                    model["values"][str(new_ref.ref_id)] = new_ref.model_dump()
+
+        return model
+
+
+def collect_value_references(value_reference_collector: ValueReferenceCollector, value: object, path: str) -> object:
+    """Collect value references
+
+    TODO: can we use this one also to find unknown so we can skip the json dump?
+
+    :param value_reference_collector: An object that holds all the collected secret references and mappings
+    :param value: The value to recursively find value references on
+    :param path: The current path we are working on in the tree
+    """
+    match value:
+        case list():
+            return [
+                collect_value_references(value_reference_collector, value, f"{path}[{index}]")
+                for index, value in enumerate(value)
+            ]
+
+        case dict():
+            return {
+                key: collect_value_references(value_reference_collector, value, f"{path}.{key}") for key, value in value.items()
+            }
+        case references._ValueReferenceAttributeString():
+            value_reference_collector.add_reference(path, value)
+            return None
+
+        case _:
+            return value
+
+
+def get_reference_type(resolver: type[references.Resolver]) -> type[references.ValueReferenceModel]:
+    """Get the resolver type key from the given resolver subclass"""
+    # TODO: make this more robust, this now assumes there is only one baseclass
+    return resolver.__orig_bases__[0].__args__[0]
+
+
 @stable_api
 class Resource(metaclass=ResourceMeta):
     """
@@ -190,7 +282,7 @@ class Resource(metaclass=ResourceMeta):
     static methods in the class with the name "get_$fieldname".
     """
 
-    fields: Sequence[str] = ("send_event",)
+    fields: Sequence[str] = ("send_event", "value_references")
     send_event: bool  # Deprecated field
     model: "proxy.DynamicProxy"
     map: dict[str, Callable[[Optional["export.Exporter"], "proxy.DynamicProxy"], Any]]
@@ -201,6 +293,11 @@ class Resource(metaclass=ResourceMeta):
             return obj.send_event
         except Exception:
             return False
+
+    @staticmethod
+    def get_value_references(_, instance) -> dict:
+        """This method is present so the serialization works correctly. This field is set by the serializer"""
+        return {}
 
     @classmethod
     def convert_requires(
@@ -283,7 +380,12 @@ class Resource(metaclass=ResourceMeta):
 
     @classmethod
     def map_field(
-        cls, exporter: Optional["export.Exporter"], entity_name: str, field_name: str, model_object: "proxy.DynamicProxy"
+        cls,
+        exporter: Optional["export.Exporter"],
+        entity_name: str,
+        field_name: str,
+        model_object: "proxy.DynamicProxy",
+        value_reference_collector: Optional[ValueReferenceCollector] = None,
     ) -> str:
         try:
             if hasattr(cls, "get_" + field_name):
@@ -293,6 +395,11 @@ class Resource(metaclass=ResourceMeta):
                 value = cls.map[field_name](exporter, model_object)
             else:
                 value = getattr(model_object, field_name)
+
+            # walk the entire model to find any value references
+            if value_reference_collector:
+                value = collect_value_references(value_reference_collector, value, field_name)
+
             # serialize to weed out all unknowns
             # not very efficient, but the tree has to be traversed anyways
             # passing along the serialized version would break the resource apis
@@ -317,6 +424,7 @@ class Resource(metaclass=ResourceMeta):
         Build a resource from a given configuration model entity
         """
         resource_cls, options = resource.get_class(entity_name)
+        value_reference_collector = ValueReferenceCollector()
 
         if resource_cls is None or options is None:
             raise TypeError("No resource class registered for entity %s" % entity_name)
@@ -325,7 +433,12 @@ class Resource(metaclass=ResourceMeta):
         obj_id = resource_cls.object_to_id(model_object, entity_name, options["name"], options["agent"])
 
         # map all fields
-        fields = {field: resource_cls.map_field(exporter, entity_name, field, model_object) for field in resource_cls.fields}
+        fields = {
+            field: resource_cls.map_field(exporter, entity_name, field, model_object, value_reference_collector)
+            for field in resource_cls.fields
+        }
+
+        fields["value_references"] = value_reference_collector.model()
 
         obj = resource_cls(obj_id)
         obj.populate(fields)
@@ -335,8 +448,10 @@ class Resource(metaclass=ResourceMeta):
 
     @classmethod
     def deserialize(cls, obj_map: JsonType, use_generic: bool = False) -> "Resource":
-        """
-        Deserialize the resource from the given dictionary
+        """Deserialize the resource from the given dictionary
+
+        :param obj_map: The json structure that represents all fields of the resource
+        :param use_generic: Do not deserialize to the specific resource type. Only create a Resource instance.
         """
         obj_id = Id.parse_id(obj_map["id"])
         cls_resource, _options = resource.get_class(obj_id.entity_type)
@@ -377,6 +492,51 @@ class Resource(metaclass=ResourceMeta):
             setattr(self, field, None)
 
         self.version = _id.version
+
+    def __getitem__(self, key: str) -> object:
+        """Support dict like access on the resource"""
+        if key in self.fields:
+            return getattr(self, key)
+
+        raise KeyError()
+
+    def __setitem__(self, key: str, value: object) -> None:
+        """Support dict like access on the resource. It is not possible to create new
+        attributes using setitem
+        """
+        if key in self.fields:
+            return setattr(self, key, value)
+
+        raise KeyError()
+
+    def resolve_all_references(self) -> None:
+        """Resolve all value references
+
+        TODO: This cannot be called in deserialize because for example pytest-inmanta never calls this method. This also
+              complicates how we can use dict path
+        """
+        if not self.value_references:
+            return
+
+        # build the union of references and parse the references. Use reference_type to determine which class is used for each
+        # reference.
+        resolvers = {get_reference_type(resolver): resolver for resolver in references.Resolver.get_all_reference_resolvers()}
+
+        refs = Annotated[Union[*resolvers.keys()], Field(discriminator="reference_type")]  # type: ignore
+        parsed_references = references.ValueReferencesField[refs](**self.value_references)
+
+        # update the fields
+        # TODO: add more reference checks and caching
+        for map in parsed_references.mappings:
+            value_ref = parsed_references.values[str(map.value_reference_id)]
+            resolver = resolvers[type(value_ref)]
+
+            value_obj = resolver(value_ref).fetch()
+            value = getattr(value_obj, map.attribute)
+
+            # TODO make sure we support indexed based addressing
+            dict_path_expr = dict_path.to_path(map.path)
+            dict_path_expr.set_element(self, value)
 
     def populate(self, fields: dict[str, Any], force_fields: bool = False) -> None:
         for field in self.__class__.fields:

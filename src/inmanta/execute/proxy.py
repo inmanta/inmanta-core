@@ -21,7 +21,7 @@ from copy import copy
 from typing import Callable, Optional, Union
 
 from inmanta.ast import NotFoundException, RuntimeException
-from inmanta.execute.util import NoneValue, Unknown
+from inmanta.execute import util
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 from inmanta.util import JSONSerializable
@@ -61,9 +61,13 @@ class UnknownException(Exception):
     depending on this value by return an instance of Unknown as well.
     """
 
-    def __init__(self, unknown: Unknown):
+    def __init__(self, unknown: util.Unknown):
         super().__init__()
         self.unknown = unknown
+
+
+class ValueReferenceException(Exception):
+    pass
 
 
 class AttributeNotFound(NotFoundException, AttributeError):
@@ -93,7 +97,7 @@ class DynamicProxy:
         Converts a value from the plugin domain to the internal domain.
         """
         if item is None:
-            return NoneValue()
+            return util.NoneValue()
 
         if isinstance(item, DynamicProxy):
             return item._get_instance()
@@ -123,11 +127,14 @@ class DynamicProxy:
         if value is None:
             return None
 
-        if isinstance(value, NoneValue):
+        if isinstance(value, util.NoneValue):
             return None
 
-        if isinstance(value, Unknown):
+        if isinstance(value, util.Unknown):
             raise UnknownException(value)
+
+        if isinstance(value, util.ValueReference):
+            raise ValueReferenceException()
 
         if isinstance(value, (str, tuple, int, float, bool)):
             return copy(value)
@@ -171,7 +178,7 @@ class DynamicProxy:
         Return true if this value is unknown and cannot be determined
         during this compilation run
         """
-        if isinstance(self._get_instance(), Unknown):
+        if isinstance(self._get_instance(), util.Unknown):
             return True
         return False
 

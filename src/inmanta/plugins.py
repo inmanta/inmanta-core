@@ -29,9 +29,9 @@ from inmanta import const, protocol, util
 from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
 from inmanta.ast.type import NamedType
 from inmanta.config import Config
+from inmanta.execute import util as execute_util
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
-from inmanta.execute.util import NoneValue, Unknown
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 
@@ -189,7 +189,7 @@ class Null(inmanta_type.Type):
     """
 
     def validate(self, value: Optional[object]) -> bool:
-        if isinstance(value, NoneValue):
+        if isinstance(value, execute_util.NoneValue):
             return True
 
         raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
@@ -271,12 +271,12 @@ class PluginValue:
     def validate(self, value: object) -> bool:
         """
         Validate that the given value can be passed to this argument.  Returns True if the value is known
-        and valid, False if the value is unknown, and raises a ValueError is the value is not of the
+        and valid, False if the value is unknown or a reference, and raises a ValueError is the value is not of the
         expected type.
 
         :param value: The value to validate
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, (execute_util.Unknown, execute_util.ValueReference)):
             # Value is not known, it can not be validated
             return False
 
@@ -661,6 +661,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
     def is_accept_unknowns(self) -> bool:
         return self.opts["allow_unknown"]
 
+    def is_accept_value_references(self) -> bool:
+        return self.opts["allow_value_reference"]
+
     def check_requirements(self) -> None:
         """
         Check if the plug-in has all it requires
@@ -692,7 +695,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
                 return arg
-            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+            elif isinstance(arg, execute_util.Unknown) and self.is_accept_unknowns():
+                return arg
+            elif isinstance(arg, execute_util.ValueReference) and self.is_accept_value_references():
                 return arg
             else:
                 return DynamicProxy.return_value(arg)
@@ -732,6 +737,7 @@ def plugin(
     commands: Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
+    allow_value_reference: bool = False,
 ) -> Callable:
     """
     Python decorator to register functions with inmanta as plugin
@@ -742,6 +748,7 @@ def plugin(
     :param emits_statements: Set to true if this plugin emits new statements that the compiler should execute. This is only
                              required for complex plugins such as integrating a template engine.
     :param allow_unknown: Set to true if this plugin accepts Unknown values as valid input.
+    :param allow_value_reference: Set to true if this plugin accepts ValueReference values as valid input
     """
 
     def curry_name(
@@ -749,6 +756,7 @@ def plugin(
         commands: Optional[list[str]] = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
+        allow_value_reference: bool = False,
     ) -> Callable:
         """
         Function to curry the name of the function
@@ -783,7 +791,12 @@ def plugin(
             dictionary["__function_name__"] = name
             dictionary["__fq_plugin_name__"] = fq_plugin_name
 
-            dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
+            dictionary["opts"] = {
+                "bin": commands,
+                "emits_statements": emits_statements,
+                "allow_unknown": allow_unknown,
+                "allow_value_reference": allow_value_reference,
+            }
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
 
@@ -794,13 +807,29 @@ def plugin(
         return call
 
     if function is None:
-        return curry_name(commands=commands, emits_statements=emits_statements, allow_unknown=allow_unknown)
+        return curry_name(
+            commands=commands,
+            emits_statements=emits_statements,
+            allow_unknown=allow_unknown,
+            allow_value_reference=allow_value_reference,
+        )
 
     elif isinstance(function, str):
-        return curry_name(function, commands=commands, emits_statements=emits_statements, allow_unknown=allow_unknown)
+        return curry_name(
+            function,
+            commands=commands,
+            emits_statements=emits_statements,
+            allow_unknown=allow_unknown,
+            allow_value_reference=allow_value_reference,
+        )
 
     elif function is not None:
-        fnc = curry_name(commands=commands, emits_statements=emits_statements, allow_unknown=allow_unknown)
+        fnc = curry_name(
+            commands=commands,
+            emits_statements=emits_statements,
+            allow_unknown=allow_unknown,
+            allow_value_reference=allow_value_reference,
+        )
         return fnc(function)
 
 
