@@ -139,6 +139,11 @@ class Config:
         return cls.get_for_option(option) if option is not None else cls._get_value(section, name, default_value)
 
     @classmethod
+    def get_for_option(cls, option: "Option[T]") -> T:
+        raw_value: str = cls._get_value(option.section, option.name, option.get_default_value())
+        return option.validate(raw_value)
+
+    @classmethod
     def _get_value(cls, section: str, name: str, default_value: Optional[str] = None) -> str:
         cfg: ConfigParser = cls._get_instance()
         val: Optional[str] = _get_from_env(section, name)
@@ -148,11 +153,6 @@ class Config:
             val = cfg.get(section, name, fallback=default_value)
 
         return val
-
-    @classmethod
-    def get_for_option(cls, option: "Option[T]") -> T:
-        raw_value: str = cls._get_value(option.section, option.name, option.get_default_value())
-        return option.validate(raw_value)
 
     @classmethod
     def is_set(cls, section: str, name: str) -> bool:
