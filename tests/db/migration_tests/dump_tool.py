@@ -40,15 +40,7 @@ def check_result(result):
 
 
 
-async def populate_facts_and_parameters(client, env_id, env_version):
-
-    check_result(await client.set_param(
-        tid=env_id,
-        id="test_default_expires",
-        source=const.ParameterSource.fact,
-        value="value",
-        resource_id="std::File[localhost,path=/tmp/test],v=%d" % env_version,
-    ))
+async def populate_facts_and_parameters(env_id):
     parameters: list[dict[str, str]] = [
         {
             "name": "fact1",
@@ -63,19 +55,21 @@ async def populate_facts_and_parameters(client, env_id, env_version):
             "source": const.ParameterSource.fact,
             "value": "value2",
             "resource_id": "std::File[localhost,path=/tmp/test2]",
+            "expires": None,
             "environment": UUID(env_id),
         },
         {
             "name": "parameter1",
             "source": const.ParameterSource.fact,
             "value": "value1",
-            "expires": True,
+            "expires": False,
             "environment": UUID(env_id),
         },
         {
             "name": "parameter2",
             "source": const.ParameterSource.fact,
             "value": "value2",
+            "expires": None,
             "environment": UUID(env_id),
         },
     ]
@@ -153,7 +147,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
         env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
 
-    await populate_facts_and_parameters(client, env_id_1,env_1_version)
+    await populate_facts_and_parameters(env_id_1)
 
     await wait_for_version(client, env_id_1, env_1_version)
 
