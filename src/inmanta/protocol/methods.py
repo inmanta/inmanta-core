@@ -763,6 +763,37 @@ def set_param(
 
 
 @method(
+    path="/fact/<id>",
+    operation="PUT",
+    arg_options=ENV_OPTS,
+    client_types=[const.ClientType.api, const.ClientType.compiler, const.ClientType.agent],
+)
+def set_fact(
+    tid: uuid.UUID,
+    id: str,
+    source: const.ParameterSource,
+    value: str,
+    resource_id: str,
+    expires: bool = True,
+    metadata: dict = {},
+    recompile: bool = False,
+):
+    """
+    Set a fact on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+
+    :param tid: The id of the environment.
+    :param id: The name of the fact.
+    :param source: The source of the fact.
+    :param value: The value of the fact.
+    :param resource_id: The resource this fact is associated with.
+    :param expires: Optional. Whether this fact expires (i.e. its value is subject to change).
+    :param metadata: Optional. Metadata about the fact.
+    :param recompile: Optional. Whether to trigger a recompile.
+    """
+
+
+@method(
     path="/parameter/<id>",
     operation="DELETE",
     arg_options=ENV_OPTS,

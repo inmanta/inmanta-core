@@ -206,6 +206,29 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
+    @handle(methods.set_fact, param_id="id", env="tid")
+    async def set_fact(
+        self,
+        env: data.Environment,
+        param_id: str,
+        source: ParameterSource,
+        value: str,
+        resource_id: str,
+        expires: bool,
+        metadata: JsonType,
+        recompile: bool,
+    ) -> Apireturn:
+        return await self.set_param(
+            env=env,
+            param_id=param_id,
+            source=source,
+            value=value,
+            resource_id=resource_id,
+            metadata=metadata,
+            recompile=recompile,
+            expires=expires,
+        )
+
     @handle(methods.set_param, param_id="id", env="tid")
     async def set_param(
         self,
@@ -216,8 +239,9 @@ class ParameterService(protocol.ServerSlice):
         resource_id: str,
         metadata: JsonType,
         recompile: bool,
+        expires: bool = False,
     ) -> Apireturn:
-        result = await self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
+        result = await self._update_param(env, param_id, value, source, resource_id, metadata, recompile, expires)
         warnings = None
         if result:
             compile_metadata = {
@@ -292,8 +316,7 @@ class ParameterService(protocol.ServerSlice):
             200,
             {
                 "parameters": params,
-                "expire": self._fact_expire,
-                # Serialization happens in the RESTHandler's json encoder
+                "expire": self._fact_expire,  # Serialization happens in the RESTHandler's json encoder
                 "now": datetime.datetime.now().astimezone(),
             },
         )

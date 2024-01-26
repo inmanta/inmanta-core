@@ -3000,7 +3000,7 @@ class Parameter(BaseDocument):
     resource_id: m.ResourceIdStr = ""
     updated: Optional[datetime.datetime] = None
     metadata: Optional[JsonType] = None
-    expires: bool = True
+    expires: bool
 
     @classmethod
     async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
