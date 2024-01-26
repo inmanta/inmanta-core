@@ -46,15 +46,15 @@ async def populate_facts_and_parameters(client, env_id, env_version):
         value="value",
         resource_id="std::File[localhost,path=/tmp/test],v=%d" % env_version,
     ))
-
-    ('e6fcc5d7-2a95-4d2b-838a-4f1a50945f8a', , 'value1', '5f271af9-a561-4a29-9e62-bcfb214bae1b', '', 'user',
-     '2024-01-26 08:14:37.215558+01', '{}'::json, null),
-    ('810cf06b-80a2-48eb-a157-5493c8303095', 'fact2', 'value2', '5f271af9-a561-4a29-9e62-bcfb214bae1b', '', 'user',
-     '2024-01-26 08:14:37.215558+01', '{}'::json, false),
-    ('2ed5552d-9fc2-455c-bfff-bac8638c5e97', 'fact3', 'value3', '5f271af9-a561-4a29-9e62-bcfb214bae1b',
-     'std::File[localhost,path=/tmp/test]', 'user', '2024-01-26 08:14:37.215558+01', '{}'::json, null),
-    ('b76e8fbc-8591-4e7d-8268-afcb4f03991b', 'fact4', 'value4', '5f271af9-a561-4a29-9e62-bcfb214bae1b',
-     'std::File[localhost,path=/tmp/test]', 'user', '2024-01-26 08:14:37.215558+01', '{}'::json, true);
+    #
+    # ('e6fcc5d7-2a95-4d2b-838a-4f1a50945f8a', , 'value1', '5f271af9-a561-4a29-9e62-bcfb214bae1b', '', 'user',
+    #  '2024-01-26 08:14:37.215558+01', '{}'::json, null),
+    # ('810cf06b-80a2-48eb-a157-5493c8303095', 'fact2', 'value2', '5f271af9-a561-4a29-9e62-bcfb214bae1b', '', 'user',
+    #  '2024-01-26 08:14:37.215558+01', '{}'::json, false),
+    # ('2ed5552d-9fc2-455c-bfff-bac8638c5e97', 'fact3', 'value3', '5f271af9-a561-4a29-9e62-bcfb214bae1b',
+    #  'std::File[localhost,path=/tmp/test]', 'user', '2024-01-26 08:14:37.215558+01', '{}'::json, null),
+    # ('b76e8fbc-8591-4e7d-8268-afcb4f03991b', 'fact4', 'value4', '5f271af9-a561-4a29-9e62-bcfb214bae1b',
+    #  'std::File[localhost,path=/tmp/test]', 'user', '2024-01-26 08:14:37.215558+01', '{}'::json, true);
 
     check_result(await client.set_param(
         tid=env_id,
