@@ -39,28 +39,32 @@ async def test_add_non_null_constraint(
     The v202401160.sql dump is initialized with 2 parameters and 2 facts:
 
     COPY public.parameter (id, name, value, environment, resource_id, source, updated, metadata, expires) FROM stdin;
-    aa4d8e29-3ee3-45bc-bef7-a7e8048d132b	fact1	value1	2c47658c-27f4-4cb6-acb0-74f01d32f8f6	std::File[localhost,path=/tmp/test1]	fact	\N	\N	f
-    86a03d38-29e0-4c0a-bcf5-a1f6aaae4f40	fact2	value2	2c47658c-27f4-4cb6-acb0-74f01d32f8f6	std::File[localhost,path=/tmp/test2]	fact	\N	\N	\N
-    5c78a8f4-8e96-4c76-9625-c3de5cc868a1	parameter1	value1	2c47658c-27f4-4cb6-acb0-74f01d32f8f6		fact	\N	\N	t
-    58c20147-2e79-4b74-958d-8fd60280b914	parameter2	value2	2c47658c-27f4-4cb6-acb0-74f01d32f8f6		fact	\N	\N	\N
+    dc7b5b59-33f4-417b-9afc-3c91b24b4008	fact1	value1	630a163d-d010-4f70-b158-3434f7477aa9	std::File[localhost,path=/tmp/test1]	fact	\N	\N	f       # NOQA E501
+    379e582a-007e-46eb-ac76-479c23da3d14	fact2	value2	630a163d-d010-4f70-b158-3434f7477aa9	std::File[localhost,path=/tmp/test2]	fact	\N	\N	\N      # NOQA E501
+    7428c4f7-d03d-47f9-8cf0-bce6688b61b3	parameter1	value1	630a163d-d010-4f70-b158-3434f7477aa9		fact	\N	\N	f
+    bb53a43c-c74f-43a9-999d-dc04c54324a1	parameter2	value2	630a163d-d010-4f70-b158-3434f7477aa9		fact	\N	\N	\N
+    \.
 
     This test checks that a sensible default value is set for parameters/facts with a null value for the 'expires' column
     i.e. parameters never expire and facts always expire by default
     """
 
-    expected_expire_values: dict[str, bool]= {
-        "aa4d8e29-3ee3-45bc-bef7-a7e8048d132b": False,
-        "86a03d38-29e0-4c0a-bcf5-a1f6aaae4f40": True,
-        "5c78a8f4-8e96-4c76-9625-c3de5cc868a1": False,
-        "58c20147-2e79-4b74-958d-8fd60280b914": False
+    await migrate_db_from()
+
+    expected_expire_values: dict[str, bool] = {
+        # Facts:                                  Value before migration:
+        "dc7b5b59-33f4-417b-9afc-3c91b24b4008": False,  # False
+        "379e582a-007e-46eb-ac76-479c23da3d14": True,  # None
+        # Parameters:
+        "7428c4f7-d03d-47f9-8cf0-bce6688b61b3": False,  # False
+        "bb53a43c-c74f-43a9-999d-dc04c54324a1": False,  # None
     }
 
-    await migrate_db_from()
     client = Client("client")
-    result = await client.list_params(tid="2c47658c-27f4-4cb6-acb0-74f01d32f8f6")
+    result = await client.list_params(tid="630a163d-d010-4f70-b158-3434f7477aa9")
     assert result.code == 200
     for param in result.result["parameters"]:
         try:
-            assert expected_expire_values[param['id']] == param["expires"], param["name"]
+            assert expected_expire_values[param["id"]] == param["expires"], param["name"]
         except KeyError:
             pass

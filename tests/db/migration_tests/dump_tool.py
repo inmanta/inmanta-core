@@ -39,7 +39,6 @@ def check_result(result):
     assert result.code == 200
 
 
-
 async def populate_facts_and_parameters(env_id):
     parameters: list[dict[str, str]] = [
         {
@@ -77,7 +76,6 @@ async def populate_facts_and_parameters(env_id):
         param = Parameter(**param_data)
 
         await param.insert()
-
 
 
 async def test_dump_db(server, client, postgres_db, database_name):
