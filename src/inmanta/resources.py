@@ -515,8 +515,7 @@ class Resource(metaclass=ResourceMeta):
         raise KeyError()
 
     def resolve_all_references(self) -> None:
-        """Resolve all value references
-        """
+        """Resolve all value references"""
         if not self.value_references:
             return
 

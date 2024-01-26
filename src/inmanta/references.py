@@ -55,11 +55,12 @@ class ValueReferenceModel(pydantic.BaseModel):
     """
 
     def resolve_reference(self, values: list["ValueReferenceModel"]) -> object:
-        """ Resolve the reference.
+        """Resolve the reference.
 
         :param values: A list of all value reference
         """
         print(self.model_fields)
+
 
 class ValueReference(str):
     """This object holds the information required to resolve references. This is currently represented as a string
