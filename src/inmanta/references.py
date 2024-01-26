@@ -50,9 +50,16 @@ class ValueReferenceModel(pydantic.BaseModel):
 
     reference_type: str
     """ A type key that can be used to correctly select the correct pydantic resource
-        Something like https://docs.pydantic.dev/2.3/usage/fields/#discriminator
+
+    # TODO: validate that it matches the name of an entity (for consistency)
     """
 
+    def resolve_reference(self, values: list["ValueReferenceModel"]) -> object:
+        """ Resolve the reference.
+
+        :param values: A list of all value reference
+        """
+        print(self.model_fields)
 
 class ValueReference(str):
     """This object holds the information required to resolve references. This is currently represented as a string
@@ -105,7 +112,7 @@ class ValueReferenceAttributeMap(pydantic.BaseModel):
     path: str
     """ A dictpath expression where the value of the attribute should be stored in the resource
 
-    TODO: can we use a proper dictpath here?
+    TODO: add dictpath validation
     """
 
 

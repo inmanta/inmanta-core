@@ -187,8 +187,36 @@ class ValueReferenceCollector:
     """Collect and organize all secret references and mappings"""
 
     def __init__(self) -> None:
-        self.values: dict[uuid.UUID, references.ValueReference] = {}
-        self.mappings: list[references.ValueReferenceAttributeString] = []
+        self.values: dict[uuid.UUID, dict[str, object]] = {}
+        self.mappings: list[references.ValueReferenceAttributeMap] = []
+
+    def _serialize_reference(self, value: object) -> object:
+        """Serialize any recursive references found in a reference"""
+        match value:
+            case list():
+                return [self._serialize_reference(v) for v in value]
+
+            case dict():
+                return {k: self._serialize_reference(v) for k, v in value.items()}
+            case references._ValueReferenceAttributeString():
+                self._add_value_reference(value._value_reference)
+
+                return {
+                    "$value_reference": {
+                        "value_reference_id": str(value._value_reference.ref_id),
+                        "attribute": value._attribute,
+                    }
+                }
+
+            case _:
+                return value
+
+    def _add_value_reference(self, value_ref: references.ValueReferenceModel) -> None:
+        """Add a value reference and recursively add any other references."""
+        if value_ref.ref_id in self.values:
+            return
+
+        self.values[str(value_ref.ref_id)] = self._serialize_reference(value_ref.model_dump())
 
     def add_reference(self, path: str, reference: references.ValueReferenceAttributeString) -> None:
         """Add a new attribute map to a value reference that we found at the given path.
@@ -197,44 +225,21 @@ class ValueReferenceCollector:
         :param reference: The attribute reference
         """
         ref_id = reference._value_reference.ref_id
-        if ref_id not in self.values:
-            self.values[ref_id] = reference._value_reference
-
+        self._add_value_reference(reference._value_reference)
         self.mappings.append(
             references.ValueReferenceAttributeMap(
                 value_reference_id=ref_id,
                 attribute=reference._attribute,
                 path=path,
-            )
+            ).model_dump()
         )
 
-    def model(self) -> references.ValueReferencesField:
+    def model(self) -> dict[str, object]:
         """Create a pydantic model that can be serialized to include in the resource"""
-        reference_types = Union[*references.ValueReferenceModel.get_all_reference_types()]  # type: ignore
-
-        model = references.ValueReferencesField[reference_types](
+        return references.ValueReferencesField[dict[str, object]](
             values={str(key): value for key, value in self.values.items()},
             mappings=self.mappings,
         ).model_dump()
-
-        # add references in references
-        # TODO: this should be recursive
-        for ref_id, ref in list(model["values"].items()):
-            for k, v in list(ref.items()):
-                if isinstance(v, references._ValueReferenceAttributeString):
-                    new_ref = v._value_reference
-                    attr = v._attribute
-
-                    ref[k] = {
-                        "$value_reference": {
-                            "value_reference_id": new_ref.ref_id,
-                            "attribute": attr,
-                        }
-                    }
-
-                    model["values"][str(new_ref.ref_id)] = new_ref.model_dump()
-
-        return model
 
 
 def collect_value_references(value_reference_collector: ValueReferenceCollector, value: object, path: str) -> object:
@@ -511,9 +516,6 @@ class Resource(metaclass=ResourceMeta):
 
     def resolve_all_references(self) -> None:
         """Resolve all value references
-
-        TODO: This cannot be called in deserialize because for example pytest-inmanta never calls this method. This also
-              complicates how we can use dict path
         """
         if not self.value_references:
             return
@@ -535,6 +537,8 @@ class Resource(metaclass=ResourceMeta):
             value = getattr(value_obj, map.attribute)
 
             # TODO make sure we support indexed based addressing
+            # TODO move into a class so that other types are supported as well. For example, changing values in the yang
+            #      xml body.
             dict_path_expr = dict_path.to_path(map.path)
             dict_path_expr.set_element(self, value)
 
