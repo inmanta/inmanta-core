@@ -38,6 +38,53 @@ def check_result(result):
     assert result.code == 200
 
 
+async def populate_facts_and_parameters(client, env_id, env_version):
+    check_result(await client.set_param(
+        tid=env_id,
+        id="test_default_expires",
+        source=const.ParameterSource.fact,
+        value="value",
+        resource_id="std::File[localhost,path=/tmp/test],v=%d" % env_version,
+    ))
+
+    ('e6fcc5d7-2a95-4d2b-838a-4f1a50945f8a', , 'value1', '5f271af9-a561-4a29-9e62-bcfb214bae1b', '', 'user',
+     '2024-01-26 08:14:37.215558+01', '{}'::json, null),
+    ('810cf06b-80a2-48eb-a157-5493c8303095', 'fact2', 'value2', '5f271af9-a561-4a29-9e62-bcfb214bae1b', '', 'user',
+     '2024-01-26 08:14:37.215558+01', '{}'::json, false),
+    ('2ed5552d-9fc2-455c-bfff-bac8638c5e97', 'fact3', 'value3', '5f271af9-a561-4a29-9e62-bcfb214bae1b',
+     'std::File[localhost,path=/tmp/test]', 'user', '2024-01-26 08:14:37.215558+01', '{}'::json, null),
+    ('b76e8fbc-8591-4e7d-8268-afcb4f03991b', 'fact4', 'value4', '5f271af9-a561-4a29-9e62-bcfb214bae1b',
+     'std::File[localhost,path=/tmp/test]', 'user', '2024-01-26 08:14:37.215558+01', '{}'::json, true);
+
+    check_result(await client.set_param(
+        tid=env_id,
+        id='fact1',
+        source=const.ParameterSource.user,
+        value="value1",
+        resource_id="std::File[localhost,path=/tmp/test],v=%d" % env_version,
+    ))
+    check_result(await client.set_param(
+        tid=env_id,
+        id='fact2',
+        source=const.ParameterSource.user,
+        value="value2",
+        resource_id="std::File[localhost,path=/tmp/test],v=%d" % env_version,
+    ))
+    check_result(await client.set_param(
+        tid=env_id,
+        id="param1",
+        source=const.ParameterSource.user,
+        value="value1",
+        resource_id="",
+    ))
+    check_result(await client.set_param(
+        tid=env_id,
+        id="param2",
+        source=const.ParameterSource.user,
+        value="value2",
+        resource_id="",
+    ))
+
 async def test_dump_db(server, client, postgres_db, database_name):
     if False:
         # trick autocomplete to have autocomplete on client
@@ -105,14 +152,8 @@ async def test_dump_db(server, client, postgres_db, database_name):
         env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
 
-    result = await client.set_param(
-        tid=env_id_1,
-        id="test_default_expires",
-        source=const.ParameterSource.fact,
-        value="value",
-        resource_id="std::File[localhost,path=/tmp/test],v=%d" % env_1_version,
-    )
-    assert result.code == 200
+    await populate_facts_and_parameters(client, env_id_1, env_1_version)
+
 
     await wait_for_version(client, env_id_1, env_1_version)
 

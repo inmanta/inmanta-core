@@ -206,11 +206,11 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
-    @handle(methods.set_fact, param_id="id", env="tid")
+    @handle(methods_v2.set_fact, env="tid", resource_id="rid")
     async def set_fact(
         self,
         env: data.Environment,
-        param_id: str,
+        name: str,
         source: ParameterSource,
         value: str,
         resource_id: str,
@@ -220,7 +220,7 @@ class ParameterService(protocol.ServerSlice):
     ) -> Apireturn:
         return await self.set_param(
             env=env,
-            param_id=param_id,
+            name=name,
             source=source,
             value=value,
             resource_id=resource_id,
@@ -229,11 +229,11 @@ class ParameterService(protocol.ServerSlice):
             expires=expires,
         )
 
-    @handle(methods.set_param, param_id="id", env="tid")
+    @handle(methods.set_param, name="id", env="tid")
     async def set_param(
         self,
         env: data.Environment,
-        param_id: str,
+        name: str,
         source: ParameterSource,
         value: str,
         resource_id: str,
@@ -241,20 +241,20 @@ class ParameterService(protocol.ServerSlice):
         recompile: bool,
         expires: bool = False,
     ) -> Apireturn:
-        result = await self._update_param(env, param_id, value, source, resource_id, metadata, recompile, expires)
+        result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
         if result:
             compile_metadata = {
                 "message": "Recompile model because one or more parameters were updated",
                 "type": "param",
-                "params": [(param_id, resource_id)],
+                "params": [(name, resource_id)],
             }
             warnings = await self.server_slice._async_recompile(env, False, metadata=compile_metadata)
 
         if resource_id is None:
             resource_id = ""
 
-        params = await data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
+        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
         return attach_warnings(200, {"parameter": params[0]}, warnings)
 

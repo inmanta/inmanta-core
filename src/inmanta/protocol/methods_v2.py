@@ -21,6 +21,7 @@ import datetime
 import uuid
 from typing import Literal, Optional, Union
 
+from inmanta import const
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
@@ -28,7 +29,7 @@ from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
-from inmanta.types import PrimitiveTypes
+from inmanta.types import PrimitiveTypes, ArgumentTypes
 
 
 @typedmethod(
@@ -829,6 +830,33 @@ def resource_logs(
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
     """
 
+
+@typedmethod(
+    path="/resource/<rid>/fact", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+)
+def set_fact(
+    tid: uuid.UUID,
+    name: str,
+    source: const.ParameterSource,
+    value: str,
+    rid: model.ResourceIdStr,
+    expires: bool = True,
+    metadata: Optional[dict[str, str]] = None,
+    recompile: bool = False,
+) -> None:
+    """
+    Set a fact on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+
+    :param tid: The id of the environment.
+    :param name: The name of the fact.
+    :param source: The source of the fact.
+    :param value: The value of the fact.
+    :param rid: The resource this fact is associated with.
+    :param expires: Optional. Whether this fact expires (i.e. its value is subject to change).
+    :param metadata: Optional. Metadata about the fact.
+    :param recompile: Optional. Whether to trigger a recompile.
+    """
 
 @typedmethod(
     path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
