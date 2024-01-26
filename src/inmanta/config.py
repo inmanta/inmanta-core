@@ -118,7 +118,7 @@ class Config:
 
     @overload
     @classmethod
-    def get(cls, section: str, name: str, default_value: Optional[str] = None) -> Optional[str]:
+    def get(cls, section: str, name: str, default_value: Optional[str] = None) -> Optional[object]:
         ...
 
     # noinspection PyNoneFunctionAssignment
@@ -326,7 +326,7 @@ class Option(Generic[T]):
 
     def get(self) -> T:
         # TODO: clean up! Option calls into Config and Config calls into Option
-        raw_config: ConfigParser = Config._get_instance()
+        raw_config: ConfigParser = Config.get()
         if self.predecessor_option:
             has_deprecated_option = raw_config.has_option(self.predecessor_option.section, self.predecessor_option.name)
             has_new_option = raw_config.has_option(self.section, self.name)
