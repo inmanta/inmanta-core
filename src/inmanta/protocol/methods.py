@@ -762,9 +762,6 @@ def set_param(
     """
 
 
-
-
-
 @method(
     path="/parameter/<id>",
     operation="DELETE",

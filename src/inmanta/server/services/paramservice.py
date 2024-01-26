@@ -215,7 +215,6 @@ class ParameterService(protocol.ServerSlice):
         value: str,
         resource_id: str,
         expires: bool,
-        metadata: JsonType,
         recompile: bool,
     ) -> Apireturn:
         return await self.set_param(
@@ -224,7 +223,7 @@ class ParameterService(protocol.ServerSlice):
             source=source,
             value=value,
             resource_id=resource_id,
-            metadata=metadata,
+            metadata={},
             recompile=recompile,
             expires=expires,
         )

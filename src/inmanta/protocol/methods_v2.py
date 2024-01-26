@@ -29,7 +29,7 @@ from inmanta.protocol import methods
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.decorators import typedmethod
 from inmanta.protocol.openapi.model import OpenAPI
-from inmanta.types import PrimitiveTypes, ArgumentTypes
+from inmanta.types import PrimitiveTypes
 
 
 @typedmethod(
@@ -841,7 +841,6 @@ def set_fact(
     value: str,
     rid: model.ResourceIdStr,
     expires: bool = True,
-    metadata: Optional[dict[str, str]] = None,
     recompile: bool = False,
 ) -> None:
     """
@@ -854,9 +853,9 @@ def set_fact(
     :param value: The value of the fact.
     :param rid: The resource this fact is associated with.
     :param expires: Optional. Whether this fact expires (i.e. its value is subject to change).
-    :param metadata: Optional. Metadata about the fact.
     :param recompile: Optional. Whether to trigger a recompile.
     """
+
 
 @typedmethod(
     path="/resource/<rid>/facts", operation="GET", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2

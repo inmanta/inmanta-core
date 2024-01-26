@@ -50,4 +50,3 @@ async def update(connection: Connection) -> None:
         await connection.execute(set_default_for_facts)
         await connection.execute(set_default_for_parameters)
         await connection.execute(set_not_null)
-
