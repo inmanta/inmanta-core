@@ -33,12 +33,15 @@ Context
 Procedure
 ++++++++++
 
-1. Verify in ``project.yml`` that ``install_mode`` is set to ``release``.
+1. Check modules install mode:
+    - For v1 modules (if any): ensure that ``install_mode`` in ``project.yml`` is set to ``release``.
+    - For v2 modules (if any): ensure that ``pip.pre`` is not set.
+
 2. Freeze all modules with:
 
 .. code-block:: bash
 
-    inmanta -vv project freeze --recursive --operator "=="
+    inmanta -vv -X project freeze --recursive --operator "=="
 
 This will cause the ``project.yml`` file to be updated with constraints that only allow this project to work with
 this exact set of module versions. This ensures that no unwanted updates can 'leak' into the production environment.
