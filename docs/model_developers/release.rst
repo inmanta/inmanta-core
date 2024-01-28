@@ -42,7 +42,7 @@ Create a new dev release:
 
     inmanta module release --dev --patch -m "Fixed small bug"
 
-This command will set the version to the next dev version, e.g. ``+0.0.1dev`` here for a patch increment.
+This command will set the version to the next dev version, e.g. ``+0.0.1dev`` for a patch increment.
 
 The module tool supports semantic versioning.
 Use one of ``--major``, ``--minor`` or ``--patch`` to update version numbers: ``<major>.<minor>.<patch>``
