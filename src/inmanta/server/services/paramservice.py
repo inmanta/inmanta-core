@@ -147,7 +147,7 @@ class ParameterService(protocol.ServerSlice):
         name: str,
         value: str,
         source: str,
-        resource_id: str,
+        resource_id: Optional[str],
         metadata: JsonType,
         recompile: bool = False,
         expires: Optional[bool] = None,
@@ -213,28 +213,6 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
-    @handle(methods_v2.set_fact, env="tid", resource_id="rid")
-    async def set_fact(
-        self,
-        env: data.Environment,
-        name: str,
-        source: ParameterSource,
-        value: str,
-        resource_id: ResourceIdStr,
-        expires: bool,
-        recompile: bool,
-    ) -> Apireturn:
-        return await self.set_param(
-            env=env,
-            name=name,
-            source=source,
-            value=value,
-            resource_id=resource_id,
-            metadata={},
-            recompile=recompile,
-            expires=expires,
-        )
-
     @handle(methods.set_param, name="id", env="tid")
     async def set_param(
         self,
@@ -242,7 +220,7 @@ class ParameterService(protocol.ServerSlice):
         name: str,
         source: ParameterSource,
         value: str,
-        resource_id: str,
+        resource_id: Optional[str],
         metadata: JsonType,
         recompile: bool,
         expires: bool = False,
