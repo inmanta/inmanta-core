@@ -213,7 +213,7 @@ class ParameterService(protocol.ServerSlice):
         name: str,
         source: ParameterSource,
         value: str,
-        resource_id: str,
+        resource_id: ResourceIdStr,
         expires: bool,
         recompile: bool,
     ) -> Apireturn:

@@ -832,7 +832,7 @@ def resource_logs(
 
 
 @typedmethod(
-    path="/resource/<rid>/fact", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
+    path="/resource/<rid>/facts", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
 )
 def set_fact(
     tid: uuid.UUID,
@@ -844,8 +844,7 @@ def set_fact(
     recompile: bool = False,
 ) -> None:
     """
-    Set a fact on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
-    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+    Set a fact on the server.
 
     :param tid: The id of the environment.
     :param name: The name of the fact.
@@ -853,7 +852,7 @@ def set_fact(
     :param value: The value of the fact.
     :param rid: The resource this fact is associated with.
     :param expires: Optional. Whether this fact expires (i.e. its value is subject to change).
-    :param recompile: Optional. Whether to trigger a recompile.
+    :param recompile: Optional. If this API call changes the value of an existing fact and this parameter is set to True, a recompile will be triggered. If this API call resolves a tracked unknown, a recompile will be triggered anyway, on matter what the value of this parameter is.
     """
 
 
