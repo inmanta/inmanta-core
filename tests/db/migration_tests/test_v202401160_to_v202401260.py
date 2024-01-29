@@ -63,6 +63,7 @@ async def test_add_non_null_constraint(
     client = Client("client")
     result = await client.list_params(tid="630a163d-d010-4f70-b158-3434f7477aa9")
     assert result.code == 200
+    assert len(result.result["parameters"]) == len(expected_expire_values)
     for param in result.result["parameters"]:
         try:
             assert expected_expire_values[param["id"]] == param["expires"], param["name"]
