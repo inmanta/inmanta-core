@@ -54,20 +54,18 @@ the steps in the `Release Versions`_ section below.
 Release Versions
 ----------------
 
-To perform an actual stable release:
-
-First, merge your changes from your feature branch (e.g. ``mywork`` in the previous example) onto the branch dedicated to
-releases (e.g. master) and then do the actual release:
+To perform an actual stable release, checkout the main development branch
+and use the ``inmanta module release`` command:
 
 .. code-block:: bash
 
-    git checkout master
-    git pull
     inmanta module release
     git push
     git push origin {tag}
 
-This will remove the ``.dev`` version and automatically set the right tags on the module.
+This will create a stable version corresponding to the current dev version without the ``.dev`` and tag it.
+This will also setup the main development branch for further development by creating a new dev version
+that is a patch ahead of the latest released version.
 
 To automatically freeze all dependencies of this module to the currently checked out versions:
 
