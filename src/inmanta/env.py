@@ -506,6 +506,7 @@ class Pip(PipCommandBuilder):
         if return_code != 0:
             not_found: list[str] = []
             conflicts: list[str] = []
+            indexes: str = ""
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
@@ -514,10 +515,11 @@ class Pip(PipCommandBuilder):
 
                 if "versions have conflicting dependencies" in line:
                     conflicts.append(line)
+                # Get the indexes line from full_output
                 if "Looking in indexes:" in line:
                     indexes = line
             if not_found:
-                msg = "Packages %s were not found in the given indexes (%s)." % (", ".join(not_found), indexes)
+                msg = "Packages %s were not found in the given indexes. (%s)" % (", ".join(not_found), indexes)
                 raise PackageNotFound(msg)
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
