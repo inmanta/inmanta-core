@@ -36,7 +36,7 @@ When done, first use git to add files:
 
     git add *
 
-Create a new dev release:
+Create a new dev version:
 
 .. code-block:: bash
 
