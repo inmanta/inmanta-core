@@ -320,7 +320,7 @@ async def test_6477_stale_success(
 
 
 @pytest.mark.slowtest
-async def test_6477_stale_success_event(
+async def test_7066_stale_success_event(
     server, agent_factory, environment, resource_container, clienthelper, client, monkeypatch, no_agent_backoff
 ):
     """

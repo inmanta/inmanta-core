@@ -4529,6 +4529,13 @@ class Resource(BaseDocument):
         *,
         connection: Optional[Connection] = None,
     ) -> None:
+        """
+        This method makes sure the resource's event timers (last_success and last_produced_events) are up-to-date
+
+        used for propagation between versions
+
+        :param last_success: ignored if none
+        """
         if last_success is None:
             query = f"""
                     UPDATE {cls.table_name()} as resource

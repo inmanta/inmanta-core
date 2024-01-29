@@ -769,6 +769,7 @@ class ResourceService(protocol.ServerSlice):
                             can_overwrite_available=False,
                         )
                     if propagate_event_timers:
+                        # We only update last_succes IF we are a success
                         last_success = started if deploy_state == const.ResourceState.deployed else None
                         await data.Resource.update_event_timers_if_newer(
                             env.id, resource_id.resource_str(), latest_version, last_success, finished, connection=connection
