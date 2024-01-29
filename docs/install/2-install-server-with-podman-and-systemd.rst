@@ -4,7 +4,7 @@ Install Inmanta with Podman and Systemd
 ***************************************
 
 This page explains how to setup an Inmanta orchestration server using Podman and Systemd.
-This guide assumes you already have `Podman <http://podman.io/>`_ installed on your machine and that you are running a Linux distribution with Systemd.
+This guide assumes you already have `Podman <http://podman.io/>`_ installed on your machine and that you are running a Linux distribution using Systemd.
 
 .. note::
     The full setup should be doable without any root privilege (rootless) on the host, running the orchestrator with an unprivileged user.  
@@ -66,7 +66,7 @@ Prepare the orchestrator configuration
 ######################################
 
 1.  Get the default configuration file:
-    As of now, the container can not be configured with environment variables, we should use a configuration file, mounted inside of the container.
+    As of now, the container cannot be configured with environment variables, we should use a configuration file, mounted inside the container.
     To do this, you can get the current configuration file from the container, edit it, and mount it where it should be in the container.
     Let's create a file on the host at ``~/.config/inmanta/inmanta.cfg``. We can take as template the default file already packaged in our
     container image.
@@ -99,7 +99,7 @@ Prepare the orchestrator configuration
 
     .. warning:: 
         Inside of the container, this folder will be mounted at ``/var/log/inmanta`` as it is the default location where the orchestrator saves its logs.  This
-        location is configurable in the orchestrator configuration file.  If you were, for any reason, to change this location, make sure to update any usage
+        location is configurable in the orchestrator configuration file.  If you for any reason would change this location in the mount, make sure to update any usage
         of the ``/var/log/inmanta`` folder in the next installation steps.
 
 .. only:: iso
