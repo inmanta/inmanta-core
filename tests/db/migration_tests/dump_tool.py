@@ -58,6 +58,14 @@ async def populate_facts_and_parameters(env_id):
             "environment": UUID(env_id),
         },
         {
+            "name": "fact3",
+            "source": const.ParameterSource.fact,
+            "value": "value3",
+            "resource_id": "std::File[localhost,path=/tmp/test3]",
+            "expires": True,
+            "environment": UUID(env_id),
+        },
+        {
             "name": "parameter1",
             "source": const.ParameterSource.fact,
             "value": "value1",
@@ -69,6 +77,13 @@ async def populate_facts_and_parameters(env_id):
             "source": const.ParameterSource.fact,
             "value": "value2",
             "expires": None,
+            "environment": UUID(env_id),
+        },
+        {
+            "name": "parameter3",
+            "source": const.ParameterSource.fact,
+            "value": "value3",
+            "expires": True,
             "environment": UUID(env_id),
         },
     ]
