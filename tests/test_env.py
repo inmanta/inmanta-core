@@ -237,7 +237,11 @@ def test_process_env_install_from_index_not_found(
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
     """
-    with pytest.raises(env.PackageNotFound, match="Packages this-package-does-not-exist were not found in the given indexes."):
+    expected: str = (
+        "Packages this-package-does-not-exist were not found in the given indexes "
+        "(Looking in indexes: %s)." % local_module_package_index
+    )
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         # pass use_system_config=False for security reasons (anyone could publish this package to PyPi)
         env.process_env.install_for_config(
             [Requirement.parse("this-package-does-not-exist")],

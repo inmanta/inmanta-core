@@ -502,10 +502,11 @@ class Pip(PipCommandBuilder):
             log_msg.extend(create_log_content_files("constraints files", constraints_files))
         log_msg.append("Pip command: " + " ".join(cmd))
         LOGGER_PIP.debug("".join(log_msg).strip())
-        return_code, full_output = ("test", "test")
+        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
         if return_code != 0:
             not_found: list[str] = []
             conflicts: list[str] = []
+            indexes: str = ""
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
@@ -514,8 +515,11 @@ class Pip(PipCommandBuilder):
 
                 if "versions have conflicting dependencies" in line:
                     conflicts.append(line)
+                if "Looking in indexes:" in line:
+                    indexes = line
             if not_found:
-                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+                msg = "Packages %s were not found in the given indexes (%s)." % (", ".join(not_found), indexes)
+                raise PackageNotFound(msg)
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
             raise PipInstallError(
