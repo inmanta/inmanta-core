@@ -153,13 +153,17 @@ class ParameterService(protocol.ServerSlice):
         expires: Optional[bool] = None,
     ) -> bool:
         """
-        Update or set a parameter.
+        Update or set a parameter or fact.
 
         This method returns true if:
         - this update resolves an unknown
         - recompile is true and the parameter updates an existing parameter to a new value
         """
-        LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.id, resource_id)
+        if resource_id:
+            LOGGER.debug("Updating/setting fact %s in env %s (for resource %s)", name, env.id, resource_id)
+        else:
+            LOGGER.debug("Updating/setting parameter %s in env %s", name, env.id)
+
         if not isinstance(value, str):
             value = str(value)
 
