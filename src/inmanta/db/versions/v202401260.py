@@ -34,7 +34,7 @@ async def update(connection: Connection) -> None:
             -- Keep current value
             ELSE expires
         END
-    )
+    );
 
      -- change the type of the 'expires' column to disallow null values
 
