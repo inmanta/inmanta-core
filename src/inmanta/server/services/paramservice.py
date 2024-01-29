@@ -246,6 +246,10 @@ class ParameterService(protocol.ServerSlice):
     async def set_parameters(self, env: data.Environment, parameters: list[dict[str, Any]]) -> Apireturn:
         recompile = False
 
+        updating_facts: bool = False
+        updating_parameters: bool = False
+        parameters_and_or_facts: str = "parameters"
+
         params: list[tuple[str, ResourceIdStr]] = []
         for param in parameters:
             name: str = param["id"]
@@ -255,13 +259,23 @@ class ParameterService(protocol.ServerSlice):
             metadata = param["metadata"] if "metadata" in param else None
             expires = param["expires"] if "expires" in param else None
 
+            if resource_id:
+                updating_facts = True
+            else:
+                updating_parameters = True
+
             result = await self._update_param(env, name, value, source, resource_id, metadata, expires=expires)
             if result:
                 recompile = True
                 params.append((name, resource_id))
 
+        if updating_facts:
+            parameters_and_or_facts = "facts"
+        if updating_parameters and updating_facts:
+            parameters_and_or_facts = "parameters and facts"
+
         compile_metadata = {
-            "message": "Recompile model because one or more parameters were updated",
+            "message": f"Recompile model because one or more {parameters_and_or_facts} were updated",
             "type": "param",
             "params": params,
         }
