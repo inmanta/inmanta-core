@@ -44,7 +44,4 @@ async def update(connection: Connection) -> None:
      ALTER COLUMN expires SET NOT NULL;
      """
 
-    async with connection.transaction():
-        await connection.execute(set_default_for_facts)
-        await connection.execute(set_default_for_parameters)
-        await connection.execute(set_not_null)
+    await connection.execute(set_default_for_facts, set_not_null)
