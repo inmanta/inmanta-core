@@ -502,7 +502,7 @@ class Pip(PipCommandBuilder):
             log_msg.extend(create_log_content_files("constraints files", constraints_files))
         log_msg.append("Pip command: " + " ".join(cmd))
         LOGGER_PIP.debug("".join(log_msg).strip())
-        return_code, full_output = CommandRunner(LOGGER_PIP).run_command_and_stream_output(cmd, env_vars=env)
+        return_code, full_output = ("test", "test")
         if return_code != 0:
             not_found: list[str] = []
             conflicts: list[str] = []
