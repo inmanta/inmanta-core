@@ -169,6 +169,13 @@ class ParameterService(protocol.ServerSlice):
         params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
         value_updated = True
+
+        if expires is None:
+            # By default:
+            #   - parameters (i.e. not associated with a resource id) don't expire
+            #   - facts (i.e. associated with a resource id) expire
+            expires = bool(resource_id)
+
         if len(params) == 0:
             param = data.Parameter(
                 environment=env.id,

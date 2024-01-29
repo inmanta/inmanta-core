@@ -21,7 +21,7 @@ from asyncpg import Connection
 
 
 async def update(connection: Connection) -> None:
-    set_default_for_facts = """
+    schema = """
     UPDATE public.parameter
     SET expires=(
         CASE
@@ -35,13 +35,11 @@ async def update(connection: Connection) -> None:
             ELSE expires
         END
     )
-    """
 
-    set_not_null = """
      -- change the type of the 'expires' column to disallow null values
 
      ALTER TABLE public.parameter
      ALTER COLUMN expires SET NOT NULL;
      """
 
-    await connection.execute(set_default_for_facts, set_not_null)
+    await connection.execute(schema)

@@ -852,7 +852,9 @@ def set_fact(
     :param value: The value of the fact.
     :param rid: The resource this fact is associated with.
     :param expires: Optional. Whether this fact expires (i.e. its value is subject to change).
-    :param recompile: Optional. If this API call changes the value of an existing fact and this parameter is set to True, a recompile will be triggered. If this API call resolves a tracked unknown, a recompile will be triggered anyway, on matter what the value of this parameter is.
+    :param recompile: Optional. If this API call changes the value of an existing fact and this parameter is set to True,
+        a recompile will be triggered. If this API call resolves a tracked unknown, a recompile will be triggered anyway,
+        no matter what the value of this parameter is.
     """
 
 
