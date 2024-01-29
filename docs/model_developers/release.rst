@@ -54,7 +54,7 @@ the steps in the `Release Versions`_ section below.
 Release Versions
 ----------------
 
-To perform an actual non-dev release:
+To perform an actual stable release:
 
 First, merge your changes from your feature branch (e.g. ``mywork`` in the previous example) onto the branch dedicated to
 releases (e.g. master) and then do the actual release:
