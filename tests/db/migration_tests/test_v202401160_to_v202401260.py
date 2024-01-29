@@ -65,7 +65,4 @@ async def test_add_non_null_constraint(
     assert result.code == 200
     assert len(result.result["parameters"]) == len(expected_expire_values)
     for param in result.result["parameters"]:
-        try:
-            assert expected_expire_values[param["id"]] == param["expires"], param["name"]
-        except KeyError:
-            pass
+        assert expected_expire_values[param["id"]] == param["expires"], param["name"]

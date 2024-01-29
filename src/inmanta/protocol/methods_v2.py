@@ -21,7 +21,6 @@ import datetime
 import uuid
 from typing import Literal, Optional, Union
 
-from inmanta import const
 from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
@@ -828,33 +827,6 @@ def resource_logs(
     :return: A list of all matching resource logs
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
-    """
-
-
-@typedmethod(
-    path="/resource/<rid>/facts", operation="PUT", arg_options=methods.ENV_OPTS, client_types=[ClientType.api], api_version=2
-)
-def set_fact(
-    tid: uuid.UUID,
-    name: str,
-    source: const.ParameterSource,
-    value: str,
-    rid: model.ResourceIdStr,
-    expires: bool = True,
-    recompile: bool = False,
-) -> None:
-    """
-    Set a fact on the server.
-
-    :param tid: The id of the environment.
-    :param name: The name of the fact.
-    :param source: The source of the fact.
-    :param value: The value of the fact.
-    :param rid: The resource this fact is associated with.
-    :param expires: Optional. Whether this fact expires (i.e. its value is subject to change).
-    :param recompile: Optional. If this API call changes the value of an existing fact and this parameter is set to True,
-        a recompile will be triggered. If this API call resolves a tracked unknown, a recompile will be triggered anyway,
-        no matter what the value of this parameter is.
     """
 
 
