@@ -23,20 +23,18 @@ from asyncpg import Connection
 async def update(connection: Connection) -> None:
     set_default_for_facts = """
     UPDATE public.parameter
-
-    -- Facts (i.e. associated to a resource) expire by default:
-
-    SET expires=true
-    where resource_id != '' and expires is null;
-    """
-
-    set_default_for_parameters = """
-    UPDATE public.parameter
-
-    -- Parameters (i.e. not associated to a resource) never expire:
-
-    SET expires=false
-    where resource_id = '';
+    SET expires=(
+        CASE
+            WHEN resource_id IS NOT NULL AND resource_id != '' AND expires IS NULL
+            -- It's a fact and facts expire by default.
+            THEN TRUE
+            WHEN resource_id IS NULL OR resource_id = ''
+            -- It's a parameter. Parameters never expire.
+            THEN FALSE
+            -- Keep current value
+            ELSE expires
+        END
+    )
     """
 
     set_not_null = """
