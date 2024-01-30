@@ -1,0 +1,6 @@
+description: Fix install instructions with Podman and Systemd
+change-type: patch
+destination-branches:
+  - master
+  - iso7
+  - iso6
