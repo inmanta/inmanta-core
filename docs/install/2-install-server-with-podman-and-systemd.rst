@@ -12,10 +12,6 @@ This guide assumes you already have `Podman <http://podman.io/>`_ installed on y
     If you follow the latter, make sure to create a system user that we will use to run the orchestrator process.  We will assume in the next steps that such
     system user is named ``inmanta`` and its ``HOME`` folder is ``/var/lib/inmanta``.
 
-.. warning::
-    The setup described below assumes you already have a PostgreSQL instance available that the orchestrator can use for its persistent storage.  If it is not the case, 
-    please :ref:`jump to the end of this document<install-postgresql-with-podman>`, where we explain to you how to easily deploy a database using Postman and Systemd.
-
 
 Podman configuration
 ####################
@@ -244,6 +240,10 @@ Prepare the orchestrator configuration
 2.  Update database settings:
     It is very unlikely that your database setup will match the one described in the default config we just got.  Update the configuration in the ``[database]`` section
     to reflect the setup you have.
+
+    .. info::
+        The setup described here assumes you already have a PostgreSQL instance available that the orchestrator can use for its persistent storage.  If it is not the case, 
+        please :ref:`jump to the end of this document<install-postgresql-with-podman>`, where we explain to you how to easily deploy a database using Postman and Systemd.
 
 3.  Make sure that there is a folder on your host that can persist all the logs of the server and that it is owned by the user running the orchestrator service.  
 
