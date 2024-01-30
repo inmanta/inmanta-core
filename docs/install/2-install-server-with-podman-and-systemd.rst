@@ -188,6 +188,7 @@ Prepare the orchestrator configuration
 ######################################
 
 1.  Get the default configuration file:
+
     As of now, the container cannot be configured with environment variables, we should use a configuration file, mounted inside the container.
     To do this, you can get the current configuration file from the container, edit it, and mount it where it should be in the container.
 
@@ -238,6 +239,7 @@ Prepare the orchestrator configuration
                     # sudo -i -u inmanta -- podman run --rm containers.inmanta.com/containers/service-orchestrator:|version_major| cat /etc/inmanta/inmanta.cfg | sudo -i -u inmanta -- tee /etc/inmanta/inmanta.cfg
 
 2.  Update database settings:
+
     It is very unlikely that your database setup will match the one described in the default config we just got.  Update the configuration in the ``[database]`` section
     to reflect the setup you have.
 
@@ -276,6 +278,7 @@ Prepare the orchestrator configuration
 .. only:: iso
 
     4.  Get the license files:
+
         Together with the access to the inmanta container repo, you should also have received a license and an entitlement file. The orchestrator will need them
         in order to run properly.  You can also place them in a config directory on your host.  
         
@@ -379,7 +382,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
         .. only:: iso
 
             .. code-block:: systemd
-            :substitutions:
+                :substitutions:
 
                 [Unit]
                 Description=Podman 
@@ -487,7 +490,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
         .. only:: iso
 
             .. code-block:: systemd
-            :substitutions:
+                :substitutions:
 
                 [Unit]
                 Description=Podman 
