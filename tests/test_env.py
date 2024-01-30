@@ -233,12 +233,13 @@ def test_process_env_install_from_index(
 @pytest.mark.slowtest
 @pytest.mark.parametrize_any("extra_indexes", [[], ["http://example.com/extra_index_1", "http://example.com/extra_index_2"]])
 def test_process_env_install_from_index_not_found(
-    tmpvenv_active: tuple[py.path.local, py.path.local], local_module_package_index: str, extra_indexes
+    tmpvenv_active: tuple[py.path.local, py.path.local],
+    local_module_package_index: str,
+    extra_indexes,
 ) -> None:
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
     """
-    monkeypatch.setenv("PIP_INDEX_URL", "http://example.com/index_url_env")
     indexes = local_module_package_index
     if extra_indexes:
         indexes = local_module_package_index + ", " + ", ".join(extra_indexes)
