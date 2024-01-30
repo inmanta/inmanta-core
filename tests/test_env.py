@@ -288,12 +288,11 @@ def test_process_env_install_from_index_not_found_env_var(
     expected: str = (
         "Packages this-package-does-not-exist were not found in the given indexes. " "(Looking in indexes: %s)" % all_indexes
     )
-    with pytest.raises(env.PackageNotFound) as e:
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
             [Requirement.parse("this-package-does-not-exist")],
             config=PipConfig(index_url=index_url, extra_index_url=extra_index_url, use_system_config=use_system_config),
         )
-    assert e.value.args[0] == expected
 
 
 @pytest.mark.slowtest
