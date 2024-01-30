@@ -270,7 +270,7 @@ def test_process_env_install_from_index_not_found_env_var(
     Attempt to install a package that does not exist from a pip index defined in the env vars.
     Assert the appropriate error is raised.
     """
-    monkeypatch.setenv("PIP_INDEX_URL", "http://example.com/env_index_1")  # not used as index_url is set in PipConfig
+    monkeypatch.setenv("PIP_INDEX_URL", "http://example.com/env_1")  # not used as index_url is set in PipConfig
     monkeypatch.setenv("PIP_EXTRA_INDEX_URL", extra_indexes_env)
 
     index_url = local_module_package_index
