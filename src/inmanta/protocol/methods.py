@@ -760,6 +760,9 @@ def set_param(
     :param resource_id: Optional. Scope the parameter to resource (fact)
     :param metadata: Optional. Metadata about the parameter
     :param recompile: Optional. Whether to trigger a recompile
+    :param expires: When setting a new parameter/fact: if set to None, then a sensible default will be provided (i.e. False
+        for parameter and True for fact). When updating a parameter or fact, a None value will leave the existing value
+        unchanged.
     """
 
 

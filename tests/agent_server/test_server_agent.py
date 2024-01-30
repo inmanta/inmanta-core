@@ -3742,7 +3742,7 @@ async def test_set_non_expiring_fact_in_handler_6560(
 
     # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
     await _deploy_resources(client, environment, resources, version, push=True)
-    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=10000)
+    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=10)
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2])

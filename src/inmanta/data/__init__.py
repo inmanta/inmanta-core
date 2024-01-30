@@ -3004,7 +3004,7 @@ class Parameter(BaseDocument):
 
     @classmethod
     async def get_updated_before_active_env(
-        cls, updated_before: datetime.datetime, only_expiring: bool = False
+        cls, updated_before: datetime.datetime, only_expiring: bool = True
     ) -> list["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted

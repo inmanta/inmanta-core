@@ -21,6 +21,8 @@ import uuid
 from collections.abc import Sequence
 from typing import Any, Optional, Union, cast
 
+import asyncpg
+
 from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import InvalidSort
@@ -151,6 +153,7 @@ class ParameterService(protocol.ServerSlice):
         metadata: JsonType,
         recompile: bool = False,
         expires: Optional[bool] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> bool:
         """
         Update or set a parameter or fact.
@@ -180,7 +183,7 @@ class ParameterService(protocol.ServerSlice):
         if resource_id is None:
             resource_id = ""
 
-        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
+        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id, connection=connection)
 
         value_updated = True
 
@@ -201,7 +204,7 @@ class ParameterService(protocol.ServerSlice):
                 metadata=metadata,
                 expires=expires,
             )
-            await param.insert()
+            await param.insert(connection=connection)
         else:
             param = params[0]
             value_updated = param.value != value
@@ -265,23 +268,26 @@ class ParameterService(protocol.ServerSlice):
         parameters_and_or_facts: str = "parameters"
 
         params: list[tuple[str, ResourceIdStr]] = []
-        for param in parameters:
-            name: str = param["id"]
-            source = param["source"]
-            value = param["value"] if "value" in param else None
-            resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
-            metadata = param["metadata"] if "metadata" in param else None
-            expires = param["expires"] if "expires" in param else None
 
-            if resource_id:
-                updating_facts = True
-            else:
-                updating_parameters = True
+        with data.Parameter.get_connection() as connection:
+            async with connection.transaction():
+                for param in parameters:
+                    name: str = param["id"]
+                    source = param["source"]
+                    value = param["value"] if "value" in param else None
+                    resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
+                    metadata = param["metadata"] if "metadata" in param else None
+                    expires = param["expires"] if "expires" in param else None
 
-            result = await self._update_param(env, name, value, source, resource_id, metadata, expires=expires)
-            if result:
-                recompile = True
-                params.append((name, resource_id))
+                    if resource_id:
+                        updating_facts = True
+                    else:
+                        updating_parameters = True
+
+                    result = await self._update_param(env, name, value, source, resource_id, metadata, expires=expires,connection=connection )
+                    if result:
+                        recompile = True
+                        params.append((name, resource_id))
 
         if updating_facts:
             parameters_and_or_facts = "facts"
