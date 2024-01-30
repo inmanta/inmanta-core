@@ -335,7 +335,7 @@ async def test_7066_stale_success_event(
     resource E[k=k1],v=2 starts to deploy
     -> should not see the event from a[k=k1],v=1  again
     """
-    agent = await agent_factory(
+    await agent_factory(
         hostname="node1",
         environment=environment,
         agent_map={"agent1": "localhost"},
