@@ -2234,10 +2234,7 @@ async def test_code(init_dataclasses_and_load_schema):
     assert len(await data.Code.get_versions(env.id, code3.version + 1)) == 1
 
 
-@pytest.mark.parametrize("halted", [
-    True,
-    False
-])
+@pytest.mark.parametrize("halted", [True, False])
 async def test_parameter(init_dataclasses_and_load_schema, halted):
     # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
     project = data.Project(name="test")
@@ -2262,13 +2259,19 @@ async def test_parameter(init_dataclasses_and_load_schema, halted):
         parameters.append(parameter)
         await parameter.insert()
 
-    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 12, 12, 30), only_expiring=False)
+    updated_before = await data.Parameter.get_updated_before_active_env(
+        datetime.datetime(2018, 7, 12, 12, 30), only_expiring=False
+    )
     assert len(updated_before) == 0
-    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 14, 12, 30), only_expiring=False)
+    updated_before = await data.Parameter.get_updated_before_active_env(
+        datetime.datetime(2018, 7, 14, 12, 30), only_expiring=False
+    )
     assert len(updated_before) == (0 if halted else 1)
     if not halted:
         assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
-    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 15, 12, 30), only_expiring=False)
+    updated_before = await data.Parameter.get_updated_before_active_env(
+        datetime.datetime(2018, 7, 15, 12, 30), only_expiring=False
+    )
     list_of_ids = [(x.environment, x.name) for x in updated_before]
     assert len(updated_before) == (0 if halted else 2)
     if not halted:

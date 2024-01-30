@@ -826,7 +826,7 @@ async def test_register_setting(environment, client, server, caplog):
     assert result.result["value"] is False
 
 
-@pytest.mark.parametrize("halted", [True, False])
+@pytest.mark.parametrize("halted", [False, True])
 async def test_unknown_parameters(
     resource_container, environment, client, server, clienthelper, agent, no_agent_backoff, halted, caplog
 ):

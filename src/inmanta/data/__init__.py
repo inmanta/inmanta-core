@@ -3023,7 +3023,6 @@ class Parameter(BaseDocument):
         AND updated < $1
         {limit_to_expiring_facts};
         """
-        # breakpoint()
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result

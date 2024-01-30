@@ -269,7 +269,7 @@ class ParameterService(protocol.ServerSlice):
 
         params: list[tuple[str, ResourceIdStr]] = []
 
-        with data.Parameter.get_connection() as connection:
+        async with data.Parameter.get_connection() as connection:
             async with connection.transaction():
                 for param in parameters:
                     name: str = param["id"]
@@ -284,7 +284,9 @@ class ParameterService(protocol.ServerSlice):
                     else:
                         updating_parameters = True
 
-                    result = await self._update_param(env, name, value, source, resource_id, metadata, expires=expires,connection=connection )
+                    result = await self._update_param(
+                        env, name, value, source, resource_id, metadata, expires=expires, connection=connection
+                    )
                     if result:
                         recompile = True
                         params.append((name, resource_id))
