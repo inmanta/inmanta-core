@@ -71,10 +71,10 @@ class ParameterService(protocol.ServerSlice):
         """
         Send out requests to renew facts.
         """
-        LOGGER.info("Renewing parameters")
+        LOGGER.info("Renewing facts")
 
         updated_before = datetime.datetime.now().astimezone() - datetime.timedelta(0, self._fact_renew)
-        params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before)
+        params_to_renew = await data.Parameter.get_updated_before_active_env(updated_before, only_expiring=True)
 
         LOGGER.debug("Renewing %d parameters", len(params_to_renew))
 
@@ -168,8 +168,11 @@ class ParameterService(protocol.ServerSlice):
         else:
             if expires:
                 # Parameters cannot expire
-                raise BadRequest("Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
-                                 "Consider using a fact instead by providing a resource_id.", name)
+                raise BadRequest(
+                    "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
+                    "Consider using a fact instead by providing a resource_id.",
+                    name,
+                )
             LOGGER.debug("Updating/setting parameter %s in env %s", name, env.id)
 
         if not isinstance(value, str):

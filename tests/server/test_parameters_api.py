@@ -58,6 +58,7 @@ async def env_with_parameters(server, client, environment: str):
             source=source,
             updated=updated,
             metadata=metadata,
+            expires=False,
         ).insert()
         return param_id
 

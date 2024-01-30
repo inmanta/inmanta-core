@@ -2281,11 +2281,15 @@ async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
     await env.insert()
 
     metadata_param1 = {"test1": "testval1", "test2": "testval2"}
-    parameter1 = data.Parameter(name="param1", value="val", environment=env.id, source="test", metadata=metadata_param1, expires=False)
+    parameter1 = data.Parameter(
+        name="param1", value="val", environment=env.id, source="test", metadata=metadata_param1, expires=False
+    )
     await parameter1.insert()
 
     metadata_param2 = {"test3": "testval3"}
-    parameter2 = data.Parameter(name="param2", value="val", environment=env.id, source="test", metadata=metadata_param2, expires=False)
+    parameter2 = data.Parameter(
+        name="param2", value="val", environment=env.id, source="test", metadata=metadata_param2, expires=False
+    )
     await parameter2.insert()
 
     results = await data.Parameter.list_parameters(env.id, **{"test1": "testval1"})

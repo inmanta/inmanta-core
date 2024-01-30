@@ -83,6 +83,7 @@ async def env_with_facts(environment, client) -> tuple[str, list[str], list[str]
             resource_id=resource_id,
             updated=updated,
             metadata=metadata,
+            expires=bool(resource_id),
         ).insert()
         return param_id
 
