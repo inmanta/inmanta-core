@@ -29,7 +29,7 @@ import warnings
 from abc import abstractmethod
 from collections import abc, defaultdict
 from configparser import ConfigParser, Interpolation, SectionProxy
-from typing import Callable, Generic, Optional, TypeVar, Union, overload, Literal
+from typing import Callable, Generic, Literal, Optional, TypeVar, Union, overload
 from urllib import error, request
 
 from cryptography.hazmat.backends import default_backend
@@ -454,22 +454,23 @@ claim_type = dict[str, str | list[str]]
 
 @dataclasses.dataclass
 class ClaimMatch:
-    """ A base class for all claim matching
-    """
+    """A base class for all claim matching"""
+
     claim: str
     operator: str
     value: str
 
     @abstractmethod
     def match_claim(self, claims: claim_type) -> bool:
-        """ Match the claim
+        """Match the claim
 
         :param claims: A dict of all claims
         """
 
+
 class InClaim(ClaimMatch):
-    """ An in claim: exact match of a string in a claim that is a list
-    """
+    """An in claim: exact match of a string in a claim that is a list"""
+
     claim: str
     operator: Literal["in"] = "in"
     value: str
@@ -487,8 +488,8 @@ class InClaim(ClaimMatch):
 
 
 class IsClaim(ClaimMatch):
-    """ An is claim: exact match of a string claim
-    """
+    """An is claim: exact match of a string claim"""
+
     claim: str
     operator: Literal["is"] = "is"
     value: str
@@ -506,7 +507,7 @@ class IsClaim(ClaimMatch):
 
 
 def check_custom_claims(claims: claim_type, claim_constraints: list[ClaimMatch]) -> bool:
-    """ Check if the given dict of claims matches the list of constraints. If any of the
+    """Check if the given dict of claims matches the list of constraints. If any of the
     constraints fail, it will return false. If the wrong operation is used on a claim
     it will also result in false. For example, the in operator on a string instead of a
     list of strings
@@ -520,6 +521,7 @@ def check_custom_claims(claims: claim_type, claim_constraints: list[ClaimMatch])
     except Exception as e:
         LOGGER.info(f"The configured claim constraints failed to evaluate against the provided claims: {e}")
         return False
+
 
 class AuthJWTConfig:
     """
@@ -658,8 +660,7 @@ class AuthJWTConfig:
             self.parse_claim_matching(self._config["claims"])
 
     def parse_claim_matching(self, claim_conf: str) -> None:
-        """ Parse claim matching expressions
-        """
+        """Parse claim matching expressions"""
         items = re.findall(AUTH_JWT_CLAIM_RE, claim_conf, re.MULTILINE)
         for item in items:
             match item:

@@ -25,7 +25,7 @@ import pytest
 import tornado
 from tornado import web
 
-from inmanta import protocol, config
+from inmanta import config, protocol
 
 
 def test_jwt_create(inmanta_config):
@@ -176,8 +176,7 @@ validate_cert=false
 
 
 def test_custom_claim_matching(tmp_path) -> None:
-    """ Validate parsing claim matching
-    """
+    """Validate parsing claim matching"""
     config_file = tmp_path / "auth.cfg"
     with open(config_file, "w+", encoding="utf-8") as fd:
         fd.write(

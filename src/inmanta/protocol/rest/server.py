@@ -74,7 +74,6 @@ class RESTHandler(tornado.web.RequestHandler):
             )
             return None
 
-
         return common.decode_token(parts[1])
 
     def prepare(self) -> None:
