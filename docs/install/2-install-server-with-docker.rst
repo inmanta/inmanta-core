@@ -159,7 +159,7 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
 You should be able to reach the orchestrator to this address: `http://172.30.0.3:8888 <http://172.30.0.3:8888>`_.
 
 The PostgreSQL server started by the above-mentioned docker-compose file has a named volume ``pgdata`` attached. This
-means that no data will go lost when the PostgreSQL container restarts. Pass the ``-v`` option to the
+means that no data will be lost when the PostgreSQL container restarts. Pass the ``-v`` option to the
 ``docker-compose down`` to remove the volume.
 
 The default server config included in the container images assumes that the orchestrator can reach a database server
