@@ -241,7 +241,7 @@ Prepare the orchestrator configuration
     It is very unlikely that your database setup will match the one described in the default config we just got.  Update the configuration in the ``[database]`` section
     to reflect the setup you have.
 
-    .. info::
+    .. note::
         The setup described here assumes you already have a PostgreSQL instance available that the orchestrator can use for its persistent storage.  If it is not the case, 
         please :ref:`jump to the end of this document<install-postgresql-with-podman>`, where we explain to you how to easily deploy a database using Postman and Systemd.
 
