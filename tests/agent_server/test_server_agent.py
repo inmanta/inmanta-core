@@ -3614,7 +3614,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
-        expires=False,
+        expires=True,
     )
     param2 = data.Parameter(
         name="key2",
@@ -3622,7 +3622,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
-        expires=False,
+        expires=True,
     )
 
     version = await clienthelper.get_version()

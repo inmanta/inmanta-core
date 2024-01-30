@@ -2254,7 +2254,7 @@ async def test_parameter(init_dataclasses_and_load_schema, halted):
     for current_time in [time1, time2, time3]:
         t = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
         parameter = data.Parameter(
-            name="param_" + t, value="test_val_" + t, environment=env.id, source="test", updated=current_time
+            name="param_" + t, value="test_val_" + t, environment=env.id, source="test", updated=current_time, expires=False
         )
         parameters.append(parameter)
         await parameter.insert()
@@ -2281,11 +2281,11 @@ async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
     await env.insert()
 
     metadata_param1 = {"test1": "testval1", "test2": "testval2"}
-    parameter1 = data.Parameter(name="param1", value="val", environment=env.id, source="test", metadata=metadata_param1)
+    parameter1 = data.Parameter(name="param1", value="val", environment=env.id, source="test", metadata=metadata_param1, expires=False)
     await parameter1.insert()
 
     metadata_param2 = {"test3": "testval3"}
-    parameter2 = data.Parameter(name="param2", value="val", environment=env.id, source="test", metadata=metadata_param2)
+    parameter2 = data.Parameter(name="param2", value="val", environment=env.id, source="test", metadata=metadata_param2, expires=False)
     await parameter2.insert()
 
     results = await data.Parameter.list_parameters(env.id, **{"test1": "testval1"})

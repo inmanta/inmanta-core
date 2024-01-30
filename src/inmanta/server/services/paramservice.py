@@ -155,6 +155,10 @@ class ParameterService(protocol.ServerSlice):
         """
         Update or set a parameter or fact.
 
+        :param expires: When setting a new parameter/fact: if set to None, then a sensible default will be provided (i.e. False
+            for parameter and True for fact). When updating a parameter or fact, a None value will leave the existing value
+            unchanged.
+
         This method returns true if:
         - this update resolves an unknown
         - recompile is true and the parameter updates an existing parameter to a new value
@@ -162,6 +166,10 @@ class ParameterService(protocol.ServerSlice):
         if resource_id:
             LOGGER.debug("Updating/setting fact %s in env %s (for resource %s)", name, env.id, resource_id)
         else:
+            if expires:
+                # Parameters cannot expire
+                raise BadRequest("Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
+                                 "Consider using a fact instead by providing a resource_id.", name)
             LOGGER.debug("Updating/setting parameter %s in env %s", name, env.id)
 
         if not isinstance(value, str):
@@ -174,13 +182,13 @@ class ParameterService(protocol.ServerSlice):
 
         value_updated = True
 
-        if expires is None:
-            # By default:
-            #   - parameters (i.e. not associated with a resource id) don't expire
-            #   - facts (i.e. associated with a resource id) expire
-            expires = bool(resource_id)
-
         if len(params) == 0:
+            if expires is None:
+                # By default:
+                #   - parameters (i.e. not associated with a resource id) don't expire
+                #   - facts (i.e. associated with a resource id) expire
+                expires = bool(resource_id)
+
             param = data.Parameter(
                 environment=env.id,
                 name=name,
@@ -227,7 +235,7 @@ class ParameterService(protocol.ServerSlice):
         resource_id: Optional[str],
         metadata: JsonType,
         recompile: bool,
-        expires: bool = False,
+        expires: bool = None,
     ) -> Apireturn:
         result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
