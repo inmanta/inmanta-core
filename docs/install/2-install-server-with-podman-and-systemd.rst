@@ -379,7 +379,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
         .. only:: iso
 
             .. code-block:: systemd
-            :substitutions:
+                :substitutions:
 
                 [Unit]
                 Description=Podman 
@@ -487,7 +487,7 @@ Here is a systemd unit file that can be used to deploy the server on your machin
         .. only:: iso
 
             .. code-block:: systemd
-            :substitutions:
+                :substitutions:
 
                 [Unit]
                 Description=Podman 
