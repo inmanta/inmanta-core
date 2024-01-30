@@ -231,24 +231,69 @@ def test_process_env_install_from_index(
 
 
 @pytest.mark.slowtest
+@pytest.mark.parametrize_any("extra_indexes", [[], ["http://example.com/extra_index_1", "http://example.com/extra_index_2"]])
 def test_process_env_install_from_index_not_found(
-    tmpvenv_active: tuple[py.path.local, py.path.local], local_module_package_index: str
+    tmpvenv_active: tuple[py.path.local, py.path.local], local_module_package_index: str, extra_indexes
 ) -> None:
     """
     Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
     """
+    monkeypatch.setenv("PIP_INDEX_URL", "http://example.com/index_url_env")
+    indexes = local_module_package_index
+    if extra_indexes:
+        indexes = local_module_package_index + ", " + ", ".join(extra_indexes)
+
     expected: str = (
-        "Packages this-package-does-not-exist were not found in the given indexes. "
-        "(Looking in indexes: %s)" % local_module_package_index
+        "Packages this-package-does-not-exist were not found in the given indexes. " "(Looking in indexes: %s)" % indexes
     )
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         # pass use_system_config=False for security reasons (anyone could publish this package to PyPi)
         env.process_env.install_for_config(
             [Requirement.parse("this-package-does-not-exist")],
-            config=PipConfig(
-                index_url=local_module_package_index,
-            ),
+            config=PipConfig(index_url=local_module_package_index, extra_index_url=extra_indexes if extra_indexes else []),
         )
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize_any(
+    "extra_indexes_env", ["", "http://example.com/extra_env_index_1 http://example.com/extra_env_index_2"]
+)
+@pytest.mark.parametrize_any("use_system_config", [True, False])
+def test_process_env_install_from_index_not_found_env_var(
+    tmpvenv_active: tuple[py.path.local, py.path.local],
+    monkeypatch,
+    local_module_package_index: str,
+    extra_indexes_env,
+    use_system_config,
+) -> None:
+    """
+    Attempt to install a package that does not exist from a pip index defined in the env vars.
+    Assert the appropriate error is raised.
+    """
+    monkeypatch.setenv("PIP_INDEX_URL", "http://example.com/env_index_1")  # not used as as index_url is set in PipConfig
+    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", extra_indexes_env)
+
+    index_url = local_module_package_index
+    extra_index_url = ["http://example.com/extra_index_1", "http://example.com/extra_index_2"]
+
+    all_indexes = index_url
+    if use_system_config:
+        env_indexes = ", " + extra_indexes_env.replace(" ", ", ") if extra_indexes_env else ""
+        # PIP_EXTRA_INDEX_URL expects the different urls to be given as a string with a single space separating them, while the
+        # output has commas separating the different values.
+        all_indexes = all_indexes + env_indexes
+
+    all_indexes = all_indexes + ", " + ", ".join(extra_index_url)
+
+    expected: str = (
+        "Packages this-package-does-not-exist were not found in the given indexes. " "(Looking in indexes: %s)" % all_indexes
+    )
+    with pytest.raises(env.PackageNotFound) as e:
+        env.process_env.install_for_config(
+            [Requirement.parse("this-package-does-not-exist")],
+            config=PipConfig(index_url=index_url, extra_index_url=extra_index_url, use_system_config=use_system_config),
+        )
+    assert e.value.args[0] == expected
 
 
 @pytest.mark.slowtest
