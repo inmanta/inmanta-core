@@ -1,3 +1,5 @@
+.. _Releasing and distributing modules:
+
 Releasing and distributing modules
 ==================================
 
@@ -67,26 +69,6 @@ This will create a stable version corresponding to the current dev version witho
 This will also setup the main development branch for further development by creating a new dev version
 that is a patch ahead of the latest released version.
 
-To automatically freeze all dependencies of this module to the currently checked out versions:
-
-For v1 modules:
-
-.. code-block:: bash
-
-    inmanta module freeze --recursive --operator "=="
-
-For v2 modules:
-
-.. code-block:: bash
-
-    pip freeze > out_file.txt
-
-
-Or for the current project
-
-.. code-block:: bash
-
-    inmanta project freeze --recursive --operator "=="
 
 Distributing V1 modules
 -----------------------
