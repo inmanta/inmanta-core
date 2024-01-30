@@ -666,13 +666,13 @@ class ResourceService(protocol.ServerSlice):
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
 
-                propagate_last_produced_events = False
+                propagate_event_timers = False
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
                 if change != Change.nochange:
                     # We are producing an event
                     extra_fields["last_produced_events"] = finished
-                    propagate_last_produced_events = True
+                    propagate_event_timers = True
 
                 await resource.update_fields(
                     last_deploy=finished,
@@ -691,7 +691,14 @@ class ResourceService(protocol.ServerSlice):
 
                 propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
                 await self.propagate_resource_state_if_stale(
-                    connection, env, [resource_id], finished, status, propagate_last_produced_events, propagate_deploy_state
+                    connection,
+                    env,
+                    [resource_id],
+                    resource_action.started,
+                    finished,
+                    status,
+                    propagate_event_timers,
+                    propagate_deploy_state,
                 )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
@@ -717,12 +724,13 @@ class ResourceService(protocol.ServerSlice):
         connection: Connection,
         env: data.Environment,
         resource_ids: list[Id],
-        last_produced_events: datetime.datetime,
+        started: datetime.datetime,
+        finished: datetime.datetime,
         deploy_state: ResourceState,
-        propagate_last_produced_events: bool,
+        propagate_event_timers: bool,
         propagate_deploy_state: bool,
     ) -> None:
-        if propagate_deploy_state or propagate_last_produced_events:
+        if propagate_deploy_state or propagate_event_timers:
             # lock out release version
             await env.acquire_release_version_lock(connection=connection)
             latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
@@ -742,7 +750,7 @@ class ResourceService(protocol.ServerSlice):
                         await self._update_deploy_state(
                             env,
                             resource_id.resource_str(),
-                            last_produced_events,
+                            finished,
                             latest_version,
                             deploy_state,
                             f"update on stale version {resource_id.version}",
@@ -750,9 +758,11 @@ class ResourceService(protocol.ServerSlice):
                             connection=connection,
                             can_overwrite_available=False,
                         )
-                    if propagate_last_produced_events:
-                        await data.Resource.update_last_produced_events_if_newer(
-                            env.id, resource_id.resource_str(), latest_version, last_produced_events, connection=connection
+                    if propagate_event_timers:
+                        # We only update last_succes IF we are a success
+                        last_success = started if deploy_state == const.ResourceState.deployed else None
+                        await data.Resource.update_event_timers_if_newer(
+                            env.id, resource_id.resource_str(), latest_version, last_success, finished, connection=connection
                         )
 
     @handle(methods.resource_action_update, env="tid")
@@ -953,15 +963,16 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        propagate_last_produced_events = change != Change.nochange
+                        propagate_event_timers = change != Change.nochange
 
                         await self.propagate_resource_state_if_stale(
                             connection,
                             env,
                             [Id.parse_id(res) for res in resource_ids],
+                            started,
                             finished,
                             status,  # mypy can't figure out this is never None here
-                            propagate_last_produced_events,
+                            propagate_event_timers,
                             status == ResourceState.failed or status == ResourceState.skipped,
                         )
 
@@ -970,7 +981,7 @@ class ResourceService(protocol.ServerSlice):
                             extra_fields = {}
                             if status == ResourceState.deployed and not is_increment_notification:
                                 extra_fields["last_success"] = resource_action.started
-                            if propagate_last_produced_events:
+                            if propagate_event_timers:
                                 extra_fields["last_produced_events"] = finished
                             await update_fields_resource(
                                 res, last_deploy=finished, status=status, **extra_fields, connection=connection
