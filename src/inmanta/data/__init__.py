@@ -4499,23 +4499,44 @@ class Resource(BaseDocument):
         return {r["resource_id"] + ",v=" + str(r["model"]): const.ResourceState(r["last_non_deploying_status"]) for r in result}
 
     @classmethod
-    async def update_last_produced_events_if_newer(
+    async def update_event_timers_if_newer(
         cls,
         environment: uuid.UUID,
         resource_id: ResourceIdStr,
         version: int,
+        last_success: Optional[datetime.datetime],
         last_produced_events: datetime.datetime,
         *,
         connection: Optional[Connection] = None,
     ) -> None:
-        query = f"""
-                UPDATE {cls.table_name()} as resource
-                SET
-                    last_produced_events = GREATEST($4, last_produced_events)
-                WHERE resource.model=$2
-                AND resource.environment=$1
-                AND resource.resource_id=$3  """
-        await cls._execute_query(query, environment, version, resource_id, last_produced_events, connection=connection)
+        """
+        This method makes sure the resource's event timers (last_success and last_produced_events) are up-to-date
+
+        used for propagation between versions
+
+        :param last_success: ignored if none
+        """
+        if last_success is None:
+            query = f"""
+                    UPDATE {cls.table_name()} as resource
+                    SET
+                        last_produced_events = GREATEST($4, last_produced_events)
+                    WHERE resource.model=$2
+                    AND resource.environment=$1
+                    AND resource.resource_id=$3  """
+            await cls._execute_query(query, environment, version, resource_id, last_produced_events, connection=connection)
+        else:
+            query = f"""
+                    UPDATE {cls.table_name()} as resource
+                    SET
+                        last_produced_events = GREATEST($4, last_produced_events),
+                        last_success = GREATEST($5, last_success)
+                    WHERE resource.model=$2
+                    AND resource.environment=$1
+                    AND resource.resource_id=$3  """
+            await cls._execute_query(
+                query, environment, version, resource_id, last_produced_events, last_success, connection=connection
+            )
 
     def make_hash(self) -> None:
         character = json.dumps(
