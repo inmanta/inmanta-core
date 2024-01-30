@@ -1056,6 +1056,9 @@ def decode_token(token: str) -> dict[str, str]:
     except Exception as e:
         raise exceptions.Forbidden(*e.args)
 
+    if not inmanta_config.check_custom_claims(claims=payload, claim_constraints=cfg.claims):
+        raise exceptions.Forbidden(f"The configured claims constraints did not match. See logs for details.")
+
     return payload
 
 

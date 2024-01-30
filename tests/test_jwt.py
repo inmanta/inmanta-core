@@ -25,7 +25,7 @@ import pytest
 import tornado
 from tornado import web
 
-from inmanta import protocol
+from inmanta import protocol, config
 
 
 def test_jwt_create(inmanta_config):
@@ -173,3 +173,42 @@ validate_cert=false
     Config.load_config(config_file)
     with pytest.raises(ValueError):
         await asyncio.get_event_loop().run_in_executor(None, partial(AuthJWTConfig.get, "auth_jwt_keycloak"))
+
+
+def test_custom_claim_matching(tmp_path) -> None:
+    """ Validate parsing claim matching
+    """
+    config_file = tmp_path / "auth.cfg"
+    with open(config_file, "w+", encoding="utf-8") as fd:
+        fd.write(
+            """
+[auth_jwt_test]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8888/
+audience=https://localhost:8888/
+claims=
+    prod in environment
+    type is dc
+"""
+        )
+
+    from inmanta.config import AuthJWTConfig, Config
+
+    # Make sure the config starts from a clean slate
+    AuthJWTConfig.sections = {}
+    AuthJWTConfig.issuers = {}
+    Config.load_config(config_file)
+
+    # load and parse
+    cfg = AuthJWTConfig.get("test")
+    assert cfg
+
+    assert config.check_custom_claims({"environment": ["prod"], "type": "dc"}, cfg.claims)
+    assert not config.check_custom_claims({"environment": ["prod"], "type": ["dc"]}, cfg.claims)
+    assert config.check_custom_claims({"environment": ["prod"], "type": "dc", "other": "test"}, cfg.claims)
+    assert not config.check_custom_claims({"environment": ["prod"]}, cfg.claims)
+    assert config.check_custom_claims({"environment": ["prod"]}, [])
