@@ -747,7 +747,7 @@ def set_param(
     resource_id: Optional[str] = None,
     metadata: dict = {},
     recompile: bool = False,
-    expires: bool = None,
+    expires: Optional[bool] = None,
 ):
     """
     Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.

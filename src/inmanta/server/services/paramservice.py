@@ -170,8 +170,7 @@ class ParameterService(protocol.ServerSlice):
                 # Parameters cannot expire
                 raise BadRequest(
                     "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
-                    "Consider using a fact instead by providing a resource_id.",
-                    name,
+                    "Consider using a fact instead by providing a resource_id." % name,
                 )
             LOGGER.debug("Updating/setting parameter %s in env %s", name, env.id)
 
@@ -238,7 +237,7 @@ class ParameterService(protocol.ServerSlice):
         resource_id: Optional[str],
         metadata: JsonType,
         recompile: bool,
-        expires: bool = None,
+        expires: Optional[bool] = None,
     ) -> Apireturn:
         result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
