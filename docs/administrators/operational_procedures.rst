@@ -25,7 +25,7 @@ section for more information on how to set the project's pip configuration.
 Context
 ++++++++
 * The project development and testing is complete
-* All modules have been properly released.
+* All modules have been properly released (See `here <Releasing and distributing modules>`_ for the procedure).
 * The project is in a git repo, with a specific branch dedicated to production releases
 * The project is checked out on disk.
 * All modules are checked out on the correct, tagged commit.
