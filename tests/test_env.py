@@ -264,17 +264,18 @@ def test_process_env_install_from_index_not_found_env_var(
 
         monkeypatch.setenv("PIP_EXTRA_INDEX_URL", extra_index_urls_env)
 
-        all_indexes = index_url
+        expected_indexes = index_url
         if use_system_config:
             env_index_url_env = ", " + extra_index_urls_env.replace(" ", ", ") if use_extra_indexes_env else ""
             # PIP_EXTRA_INDEX_URL expects the different urls to be given as a string with a single space separating them,
             # while the output has commas separating the different values.
-            all_indexes = all_indexes + env_index_url_env
+            expected_indexes = expected_indexes + env_index_url_env
 
-        indexes = all_indexes + ", " + ", ".join(extra_index_urls) if extra_index_urls else all_indexes
+        expected_indexes = expected_indexes + ", " + ", ".join(extra_index_urls) if extra_index_urls else expected_indexes
 
         expected: str = (
-            "Packages this-package-does-not-exist were not found in the given indexes. " "(Looking in indexes: %s)" % indexes
+            "Packages this-package-does-not-exist were not "
+            "found in the given indexes. (Looking in indexes: %s)" % expected_indexes
         )
         with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
             env.process_env.install_for_config(
