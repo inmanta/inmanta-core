@@ -279,7 +279,7 @@ class ParameterService(protocol.ServerSlice):
             self._validate_parameter(
                 param["id"],
                 param["resource_id"] if "resource_id" in param else None,
-                param["expires"] if "expires" in param else None
+                param["expires"] if "expires" in param else None,
             )
 
         for param in parameters:
