@@ -251,7 +251,7 @@ def test_process_env_install_from_index_not_found(
         # pass use_system_config=False for security reasons (anyone could publish this package to PyPi)
         env.process_env.install_for_config(
             [Requirement.parse("this-package-does-not-exist")],
-            config=PipConfig(index_url=local_module_package_index, extra_index_url=extra_indexes if extra_indexes else []),
+            config=PipConfig(index_url=local_module_package_index, extra_index_url=extra_indexes),
         )
 
 
