@@ -231,7 +231,7 @@ class ParameterService(protocol.ServerSlice):
             # Parameters cannot expire
             raise BadRequest(
                 "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
-                "Consider using a fact instead by providing a resource_id." % name,
+                " Consider using a fact instead by providing a resource_id." % name,
             )
 
     @handle(methods.set_param, name="id", env="tid")
