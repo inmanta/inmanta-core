@@ -34,7 +34,6 @@ import py
 import pytest
 from pkg_resources import Requirement
 
-from conftest import create_local_package_index
 from inmanta import env, loader, module
 from inmanta.data.model import PipConfig
 from inmanta.env import Pip
@@ -238,6 +237,7 @@ def test_process_env_install_from_index(
 def test_process_env_install_from_index_not_found_env_var(
     tmpvenv_active: tuple[py.path.local, py.path.local],
     monkeypatch,
+    create_local_package_index,
     use_extra_indexes,
     use_extra_indexes_env,
     use_system_config,
