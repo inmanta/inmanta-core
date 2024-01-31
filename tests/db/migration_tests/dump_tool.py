@@ -21,9 +21,10 @@
 import asyncio
 import os
 import shutil
+from uuid import UUID
 
 from inmanta import const
-from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
+from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, Parameter
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
 from inmanta.server import SLICE_SERVER
@@ -36,6 +37,60 @@ else:
 
 def check_result(result):
     assert result.code == 200
+
+
+async def populate_facts_and_parameters(env_id):
+    parameters: list[dict[str, str]] = [
+        {
+            "name": "fact1",
+            "source": const.ParameterSource.fact,
+            "value": "value1",
+            "resource_id": "std::File[localhost,path=/tmp/test1]",
+            "expires": False,
+            "environment": UUID(env_id),
+        },
+        {
+            "name": "fact2",
+            "source": const.ParameterSource.fact,
+            "value": "value2",
+            "resource_id": "std::File[localhost,path=/tmp/test2]",
+            "expires": None,
+            "environment": UUID(env_id),
+        },
+        {
+            "name": "fact3",
+            "source": const.ParameterSource.fact,
+            "value": "value3",
+            "resource_id": "std::File[localhost,path=/tmp/test3]",
+            "expires": True,
+            "environment": UUID(env_id),
+        },
+        {
+            "name": "parameter1",
+            "source": const.ParameterSource.fact,
+            "value": "value1",
+            "expires": False,
+            "environment": UUID(env_id),
+        },
+        {
+            "name": "parameter2",
+            "source": const.ParameterSource.fact,
+            "value": "value2",
+            "expires": None,
+            "environment": UUID(env_id),
+        },
+        {
+            "name": "parameter3",
+            "source": const.ParameterSource.fact,
+            "value": "value3",
+            "expires": True,
+            "environment": UUID(env_id),
+        },
+    ]
+    for param_data in parameters:
+        param = Parameter(**param_data)
+
+        await param.insert()
 
 
 async def test_dump_db(server, client, postgres_db, database_name):
@@ -105,14 +160,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
         env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
 
-    result = await client.set_param(
-        tid=env_id_1,
-        id="test_default_expires",
-        source=const.ParameterSource.fact,
-        value="value",
-        resource_id="std::File[localhost,path=/tmp/test],v=%d" % env_1_version,
-    )
-    assert result.code == 200
+    await populate_facts_and_parameters(env_id_1)
 
     await wait_for_version(client, env_id_1, env_1_version)
 

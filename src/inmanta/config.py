@@ -40,6 +40,9 @@ from inmanta import const
 LOGGER = logging.getLogger(__name__)
 
 
+T = TypeVar("T")
+
+
 def _normalize_name(name: str) -> str:
     return name.replace("_", "-")
 
@@ -115,35 +118,41 @@ class Config:
 
     @overload
     @classmethod
-    def get(cls, section: str, name: str, default_value: Optional[str] = None) -> Optional[str]:
+    def get(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]:
         ...
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
     def get(
-        cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[str] = None
-    ) -> Union[str, ConfigParser]:
+        cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[object] = None
+    ) -> object:
         """
         Get the entire config or get a value directly
         """
-        cfg = cls._get_instance()
         if section is None:
-            return cfg
+            return cls._get_instance()
 
         assert name is not None
         name = _normalize_name(name)
 
-        opt = cls.validate_option_request(section, name, default_value)
+        option: Optional[Option[object]] = cls.validate_option_request(section, name, default_value)
+        return cls.get_for_option(option) if option is not None else cls._get_value(section, name, default_value)
 
-        val = _get_from_env(section, name)
+    @classmethod
+    def get_for_option(cls, option: "Option[T]") -> T:
+        raw_value: Optional[str | T] = cls._get_value(option.section, option.name, option.get_default_value())
+        return option.validate(raw_value)
+
+    @classmethod
+    def _get_value(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]:
+        cfg: ConfigParser = cls._get_instance()
+        val: Optional[str] = _get_from_env(section, name)
         if val is not None:
             LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
         else:
             val = cfg.get(section, name, fallback=default_value)
 
-        if not opt:
-            return val
-        return opt.validate(val)
+        return val
 
     @classmethod
     def is_set(cls, section: str, name: str) -> bool:
@@ -174,7 +183,7 @@ class Config:
         cls.__config_definition[option.section][option.name] = option
 
     @classmethod
-    def validate_option_request(cls, section: str, name: str, default_value: Optional[str]) -> Optional["Option"]:
+    def validate_option_request(cls, section: str, name: str, default_value: Optional[T]) -> Optional["Option[T]"]:
         if section not in cls.__config_definition:
             LOGGER.warning("Config section %s not defined" % (section))
             # raise Exception("Config section %s not defined" % (section))
@@ -257,28 +266,25 @@ def is_str(value: str) -> str:
     return str(value)
 
 
-def is_str_opt(value: str) -> Optional[str]:
+def is_str_opt(value: Optional[str]) -> Optional[str]:
     """optional str"""
     if value is None:
         return None
     return str(value)
 
 
-def is_uuid_opt(value: str) -> Optional[uuid.UUID]:
+def is_uuid_opt(value: Optional[str]) -> Optional[uuid.UUID]:
     """optional uuid"""
     if value is None:
         return None
     return uuid.UUID(value)
 
 
-def is_int_opt(value: str) -> Optional[int]:
+def is_int_opt(value: Optional[str]) -> Optional[int]:
     """optional int"""
     if value is None:
         return None
     return int(value)
-
-
-T = TypeVar("T")
 
 
 class Option(Generic[T]):
@@ -307,7 +313,7 @@ class Option(Generic[T]):
         name: str,
         default: Union[T, None, Callable[[], T]],
         documentation: str,
-        validator: Callable[[str], T] = is_str,
+        validator: Callable[[Optional[str | T]], T] = is_str,
         predecessor_option: Optional["Option"] = None,
     ) -> None:
         self.section = section
@@ -319,18 +325,17 @@ class Option(Generic[T]):
         Config.register_option(self)
 
     def get(self) -> T:
-        cfg = Config._get_instance()
+        raw_config: ConfigParser = Config.get()
         if self.predecessor_option:
-            has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
-            has_new_option = cfg.has_option(self.section, self.name)
+            has_deprecated_option = raw_config.has_option(self.predecessor_option.section, self.predecessor_option.name)
+            has_new_option = raw_config.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
                 warnings.warn(
                     f"Config option {self.predecessor_option.name} is deprecated. Use {self.name} instead.",
                     category=DeprecationWarning,
                 )
                 return self.predecessor_option.get()
-        out = cfg.get(self.section, self.name, fallback=self.get_default_value())
-        return self.validate(out)
+        return Config.get_for_option(self)
 
     def get_type(self) -> Optional[str]:
         if callable(self.validator):
@@ -344,7 +349,7 @@ class Option(Generic[T]):
         else:
             return f"``{defa}``"
 
-    def validate(self, value: str) -> T:
+    def validate(self, value: Optional[str | T]) -> T:
         return self.validator(value)
 
     def get_default_value(self) -> Optional[T]:

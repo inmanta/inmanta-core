@@ -365,7 +365,8 @@ linkcheck_ignore = [
     '../_specs/openapi.json',
     'extensions/inmanta-ui/index.html',
     '../extensions/inmanta-ui/index.html',
-    '../../../reference/modules/std.html#std.validate_type',
+    '../../reference/modules/std.html#std.validate_type',
+    '../reference/modules/std.html#std.getfact',
     r'https://github.com/inmanta/examples/tree/master/Networking/SR%20Linux#user-content-sr-linux-topology',
 ]
 
