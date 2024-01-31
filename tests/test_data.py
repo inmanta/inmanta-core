@@ -2235,7 +2235,7 @@ async def test_code(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.parametrize("halted", [True, False])
-async def test_parameter(init_dataclasses_and_load_schema, halted):
+async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, halted):
     # verify the call to "get_updated_before". If the env is halted it shouldn't return any result
     project = data.Project(name="test")
     await project.insert()
@@ -2259,7 +2259,7 @@ async def test_parameter(init_dataclasses_and_load_schema, halted):
             environment=env.id,
             source="test",
             updated=current_time,
-            resource_id="test::SetNonExpiringFact",
+            resource_id="test::SetExpiringFact",
             expires=True,
         )
         parameters.append(parameter)
