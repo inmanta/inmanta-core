@@ -274,6 +274,14 @@ class ParameterService(protocol.ServerSlice):
 
         params: list[tuple[str, ResourceIdStr]] = []
 
+        # Validate the full list of parameters before applying any changes
+        for param in parameters:
+            self._validate_parameter(
+                param["id"],
+                param["resource_id"] if "resource_id" in param else None,
+                param["expires"] if "expires" in param else None
+            )
+
         for param in parameters:
             name: str = param["id"]
             source = param["source"]
@@ -282,7 +290,6 @@ class ParameterService(protocol.ServerSlice):
             metadata = param["metadata"] if "metadata" in param else None
             expires = param["expires"] if "expires" in param else None
 
-            self._validate_parameter(name, resource_id, expires)
             if resource_id:
                 updating_facts = True
             else:

@@ -2259,7 +2259,7 @@ async def test_get_updated_before_active_env(init_dataclasses_and_load_schema, h
             environment=env.id,
             source="test",
             updated=current_time,
-            resource_id="test::SetExpiringFact",
+            resource_id="test::SetExpiringFact[agent1,key=key1]",
             expires=True,
         )
         parameters.append(parameter)
