@@ -3000,12 +3000,13 @@ class Parameter(BaseDocument):
     resource_id: m.ResourceIdStr = ""
     updated: Optional[datetime.datetime] = None
     metadata: Optional[JsonType] = None
-    expires: bool = True
+    expires: bool
 
     @classmethod
     async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
+
         """
         query = f"""
         WITH non_halted_envs AS (
