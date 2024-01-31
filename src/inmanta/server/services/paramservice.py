@@ -21,8 +21,6 @@ import uuid
 from collections.abc import Sequence
 from typing import Any, Optional, Union, cast
 
-import asyncpg
-
 from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import InvalidSort
@@ -153,7 +151,6 @@ class ParameterService(protocol.ServerSlice):
         metadata: JsonType,
         recompile: bool = False,
         expires: Optional[bool] = None,
-        connection: Optional[asyncpg.connection.Connection] = None,
     ) -> bool:
         """
         Update or set a parameter or fact.
@@ -169,12 +166,6 @@ class ParameterService(protocol.ServerSlice):
         if resource_id:
             LOGGER.debug("Updating/setting fact %s in env %s (for resource %s)", name, env.id, resource_id)
         else:
-            if expires:
-                # Parameters cannot expire
-                raise BadRequest(
-                    "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
-                    "Consider using a fact instead by providing a resource_id." % name,
-                )
             LOGGER.debug("Updating/setting parameter %s in env %s", name, env.id)
 
         if not isinstance(value, str):
@@ -183,7 +174,7 @@ class ParameterService(protocol.ServerSlice):
         if resource_id is None:
             resource_id = ""
 
-        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id, connection=connection)
+        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
         value_updated = True
 
@@ -204,7 +195,7 @@ class ParameterService(protocol.ServerSlice):
                 metadata=metadata,
                 expires=expires,
             )
-            await param.insert(connection=connection)
+            await param.insert()
         else:
             param = params[0]
             value_updated = param.value != value
@@ -230,6 +221,19 @@ class ParameterService(protocol.ServerSlice):
 
         return recompile and value_updated
 
+    def _validate_parameter(
+        self,
+        name: str,
+        resource_id: Optional[str],
+        expires: Optional[bool],
+    ) -> None:
+        if not resource_id and expires:
+            # Parameters cannot expire
+            raise BadRequest(
+                "Cannot update or set parameter %s: `expire` set to True but parameters cannot expire."
+                "Consider using a fact instead by providing a resource_id." % name,
+            )
+
     @handle(methods.set_param, name="id", env="tid")
     async def set_param(
         self,
@@ -242,6 +246,7 @@ class ParameterService(protocol.ServerSlice):
         recompile: bool,
         expires: Optional[bool] = None,
     ) -> Apireturn:
+        self._validate_parameter(name, resource_id, expires)
         result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
         warnings = None
         if result:
@@ -269,27 +274,24 @@ class ParameterService(protocol.ServerSlice):
 
         params: list[tuple[str, ResourceIdStr]] = []
 
-        async with data.Parameter.get_connection() as connection:
-            async with connection.transaction():
-                for param in parameters:
-                    name: str = param["id"]
-                    source = param["source"]
-                    value = param["value"] if "value" in param else None
-                    resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
-                    metadata = param["metadata"] if "metadata" in param else None
-                    expires = param["expires"] if "expires" in param else None
+        for param in parameters:
+            name: str = param["id"]
+            source = param["source"]
+            value = param["value"] if "value" in param else None
+            resource_id: ResourceIdStr = param["resource_id"] if "resource_id" in param else None
+            metadata = param["metadata"] if "metadata" in param else None
+            expires = param["expires"] if "expires" in param else None
 
-                    if resource_id:
-                        updating_facts = True
-                    else:
-                        updating_parameters = True
+            self._validate_parameter(name, resource_id, expires)
+            if resource_id:
+                updating_facts = True
+            else:
+                updating_parameters = True
 
-                    result = await self._update_param(
-                        env, name, value, source, resource_id, metadata, expires=expires, connection=connection
-                    )
-                    if result:
-                        recompile = True
-                        params.append((name, resource_id))
+            result = await self._update_param(env, name, value, source, resource_id, metadata, expires=expires)
+            if result:
+                recompile = True
+                params.append((name, resource_id))
 
         if updating_facts:
             parameters_and_or_facts = "facts"

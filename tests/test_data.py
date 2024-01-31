@@ -2254,24 +2254,24 @@ async def test_parameter(init_dataclasses_and_load_schema, halted):
     for current_time in [time1, time2, time3]:
         t = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
         parameter = data.Parameter(
-            name="param_" + t, value="test_val_" + t, environment=env.id, source="test", updated=current_time, expires=False
+            name="param_" + t,
+            value="test_val_" + t,
+            environment=env.id,
+            source="test",
+            updated=current_time,
+            resource_id="test::SetNonExpiringFact",
+            expires=True,
         )
         parameters.append(parameter)
         await parameter.insert()
 
-    updated_before = await data.Parameter.get_updated_before_active_env(
-        datetime.datetime(2018, 7, 12, 12, 30), only_expiring=False
-    )
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 12, 12, 30))
     assert len(updated_before) == 0
-    updated_before = await data.Parameter.get_updated_before_active_env(
-        datetime.datetime(2018, 7, 14, 12, 30), only_expiring=False
-    )
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 14, 12, 30))
     assert len(updated_before) == (0 if halted else 1)
     if not halted:
         assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
-    updated_before = await data.Parameter.get_updated_before_active_env(
-        datetime.datetime(2018, 7, 15, 12, 30), only_expiring=False
-    )
+    updated_before = await data.Parameter.get_updated_before_active_env(datetime.datetime(2018, 7, 15, 12, 30))
     list_of_ids = [(x.environment, x.name) for x in updated_before]
     assert len(updated_before) == (0 if halted else 2)
     if not halted:

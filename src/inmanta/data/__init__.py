@@ -3003,15 +3003,11 @@ class Parameter(BaseDocument):
     expires: bool
 
     @classmethod
-    async def get_updated_before_active_env(
-        cls, updated_before: datetime.datetime, only_expiring: bool = True
-    ) -> list["Parameter"]:
+    async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
 
-        :param only_expiring: Only return facts that expire.
         """
-        limit_to_expiring_facts: str = "AND expires = true" if only_expiring else ""
         query = f"""
         WITH non_halted_envs AS (
             SELECT id FROM public.environment WHERE NOT halted
@@ -3021,7 +3017,7 @@ class Parameter(BaseDocument):
             SELECT id FROM non_halted_envs
         )
         AND updated < $1
-        {limit_to_expiring_facts};
+        AND expires = true;
         """
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
