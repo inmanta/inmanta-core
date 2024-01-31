@@ -1673,15 +1673,14 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     loader.unload_modules_for_path(venv.site_packages_dir)
 
 
-@pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
+def create_local_package_index(modules_v2_dir: str, index_name: str = "simple"):
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
-    index_dir = os.path.join(build_dir, "simple")
+    index_dir = os.path.join(build_dir, index_name)
     timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
 
     def _should_rebuild_cache() -> bool:
@@ -1721,7 +1720,16 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     else:
         logger.info(f"Using cache {cache_dir}")
 
-    yield index_dir
+    return index_dir
+
+
+@pytest.fixture(scope="session")
+def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
+    """
+    Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
+    :return: The path to the index
+    """
+    yield create_local_package_index(modules_v2_dir)
 
 
 @pytest.fixture
