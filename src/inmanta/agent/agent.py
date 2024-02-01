@@ -78,6 +78,8 @@ ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
 class ResourceActionBase(abc.ABC):
     """Base class for Local and Remote resource actions"""
 
+    # Model dependencies between resources + inform each other when they're done deploying
+
     resource_id: Id
     future: ResourceActionResultFuture
     dependencies: list["ResourceActionBase"]
@@ -265,6 +267,8 @@ class ResourceAction(ResourceActionBase):
                         ctx.set_status(const.ResourceState.failed)
                         ctx.exception("Failed to report the start of the deployment to the server")
                     else:
+                        # THis must move to the executor and the surrounding code will have to work
+                        # with the dict representation of the resource (since deserialization cannot happen here anymore)
                         await self._execute(ctx=ctx, requires=requires)
 
                     ctx.debug(
@@ -1050,6 +1054,7 @@ class AgentInstance:
             try:
                 res["attributes"]["id"] = res["id"]
                 if res["resource_type"] not in failed_resource_types:
+                    # Trouble -> can't deserialize here since the module code is loaded in the executor
                     resource: Resource = Resource.deserialize(res["attributes"])
                     loaded_resources.append(resource)
 
@@ -1371,6 +1376,16 @@ class Agent(SessionEndpoint):
 
                         if pip_config is None:
                             pip_config = await self._get_pip_config(environment, version)
+                        # To move to the executor ultimately
+                        # Currently install and loading is done in the same place
+                        # We want to move installation to the venv mgr
+                        # ANd loading/importing into the executors
+
+
+
+                        # ultimately we would want an abstraction around 'Install all of these with these versions'
+                        # Passed on to the process mggr and
+                        #   - get an executor back
                         await self._install(sources, list(requirements), pip_config=pip_config)
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
                         self._last_loaded[rt] = version
