@@ -19,7 +19,7 @@
 import pytest
 
 from inmanta import config, const
-from inmanta.protocol import common, endpoints
+from inmanta.protocol import auth
 from inmanta.server import SLICE_USER, protocol
 
 
@@ -39,9 +39,9 @@ def server_pre_start(server_config):
 
 def get_auth_client(claim_rules: list[str], claims: dict[str, str | list[str]]) -> protocol.Client:
     config.Config.set("auth_jwt_default", "claims", "\n    ".join(claim_rules) + "\n")
-    config.AuthJWTConfig.reset()
+    auth.AuthJWTConfig.reset()
 
-    token = common.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=claims)
+    token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims=claims)
     config.Config.set("client_rest_transport", "token", token)
     auth_client = protocol.Client("client")
     return auth_client

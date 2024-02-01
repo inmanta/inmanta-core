@@ -20,8 +20,8 @@ import warnings
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
-from inmanta.config import AuthJWTConfig
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.protocol import auth
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -577,7 +577,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
-    AuthJWTConfig.reset()
+    auth.AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 

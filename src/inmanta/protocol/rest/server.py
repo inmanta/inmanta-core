@@ -32,7 +32,7 @@ from tornado import httpserver, iostream, routing, web
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta import const
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.rest import RESTBase
 from inmanta.server import config as server_config
 from inmanta.server.config import server_access_control_allow_origin, server_enable_auth, server_tz_aware_timestamps
@@ -74,7 +74,7 @@ class RESTHandler(tornado.web.RequestHandler):
             )
             return None
 
-        return common.decode_token(parts[1])
+        return auth.decode_token(parts[1])
 
     def prepare(self) -> None:
         # Setting "Access-Control-Allow-Origin": null can be exploited.

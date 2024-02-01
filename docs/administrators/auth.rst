@@ -336,3 +336,9 @@ the examples above this url is http://localhost:8080/realms/inmanta/.well-known/
 
 .. warning:: When the certificate of keycloak is not trusted by the system on which inmanta is installed, set ``validate_cert``
     to false in the ``auth_jwt_keycloak`` block for keycloak.
+
+Custom claims
+*************
+
+
+

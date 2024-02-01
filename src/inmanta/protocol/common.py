@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import dataclasses
 import enum
 import gzip
 import importlib
@@ -26,33 +25,28 @@ import logging
 import re
 import time
 import uuid
-from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Coroutine, Iterable, MutableMapping
 from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
-import jwt
 import pydantic
 import typing_inspect
 from pydantic import ValidationError
 from pydantic.main import create_model
 from tornado import web
 
-from inmanta import config as inmanta_config
 from inmanta import const, execute, types, util
 from inmanta.data.model import BaseModel, DateTimeNormalizerModel
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException
 from inmanta.protocol.openapi import model as openapi_model
 from inmanta.stable_api import stable_api
 from inmanta.types import ArgumentTypes, HandlerType, JsonType, MethodType, ReturnTypes
-
-from . import exceptions
 
 if TYPE_CHECKING:
     from .endpoints import CallTarget
@@ -988,173 +982,6 @@ def shorten(msg: str, max_len: int = 10) -> str:
     if len(msg) < max_len:
         return msg
     return msg[0 : max_len - 3] + "..."
-
-
-claim_type = dict[str, str | list[str]]
-
-
-class ClaimMatch:
-    """A base class for all claim matching"""
-
-    claim: str
-    operator: str
-    value: str
-
-    @abstractmethod
-    def match_claim(self, claims: claim_type) -> bool:
-        """Match the claim
-
-        :param claims: A dict of all claims
-        """
-        LOGGER.info(f"Matching claims against: '{self}'")
-
-
-@dataclasses.dataclass
-class InClaim(ClaimMatch):
-    """An in claim: exact match of a string in a claim that is a list"""
-
-    claim: str
-    value: str
-    operator: Literal["in"] = "in"
-
-    def match_claim(self, claims: claim_type) -> bool:
-        super().match_claim(claims)
-
-        if self.claim not in claims:
-            return False
-
-        claim_value = claims[self.claim]
-
-        if not isinstance(claim_value, list):
-            raise ValueError(f"claim {self.claim} should be of type list and not {type(claim_value)}")
-
-        return self.value in claim_value
-
-    def __repr__(self) -> str:
-        return f"{self.value} {self.operator} {self.claim}"
-
-
-@dataclasses.dataclass
-class IsClaim(ClaimMatch):
-    """An is claim: exact match of a string claim"""
-
-    claim: str
-    value: str
-    operator: Literal["is"] = "is"
-
-    def match_claim(self, claims: claim_type) -> bool:
-        super().match_claim(claims)
-
-        if self.claim not in claims:
-            return False
-
-        claim_value = claims[self.claim]
-
-        if not isinstance(claim_value, str):
-            raise ValueError(f"claim {self.claim} should be of type str and not {type(claim_value)}")
-
-        return self.value == claim_value
-
-    def __repr__(self) -> str:
-        return f"{self.claim} {self.operator} {self.value}"
-
-
-def check_custom_claims(claims: claim_type, claim_constraints: list[ClaimMatch]) -> bool:
-    """Check if the given dict of claims matches the list of constraints. If any of the
-    constraints fail, it will return false. If the wrong operation is used on a claim
-    it will also result in false. For example, the in operator on a string instead of a
-    list of strings
-
-    :param claims: The dict of claims to validate
-    :param claim_constraints: A list of all constraints
-    :return: The result of the check
-    """
-    try:
-        return all(constraint.match_claim(claims) for constraint in claim_constraints)
-    except Exception as e:
-        LOGGER.info(f"The configured claim constraints failed to evaluate against the provided claims: {e}")
-        return False
-
-
-def encode_token(
-    client_types: list[str],
-    environment: Optional[str] = None,
-    idempotent: bool = False,
-    expire: Optional[float] = None,
-    custom_claims: Optional[dict[str, str | list[str]]] = None,
-) -> str:
-    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
-    if cfg is None:
-        raise Exception("No JWT signing configuration available.")
-
-    for ct in client_types:
-        if ct not in cfg.client_types:
-            raise Exception(
-                f"The signing config does not support the requested client type {ct}. Only {cfg.client_types} are allowed."
-            )
-
-    payload: dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
-
-    if custom_claims:
-        payload.update(custom_claims)
-
-    if not idempotent:
-        payload["iat"] = int(time.time())
-
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
-
-    if environment is not None:
-        payload[const.INMANTA_URN + "env"] = environment
-
-    return jwt.encode(payload, cfg.key, cfg.algo)
-
-
-def decode_token(token: str) -> dict[str, str]:
-    try:
-        # First decode the token without verification
-        header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, options={"verify_signature": False})
-    except Exception:
-        raise exceptions.Forbidden("Unable to decode provided JWT bearer token.")
-
-    if "iss" not in payload:
-        raise exceptions.Forbidden("Issuer is required in token to validate.")
-
-    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
-    if cfg is None:
-        raise exceptions.Forbidden("Unknown issuer for token")
-
-    alg = header["alg"].lower()
-    if alg == "hs256":
-        key = cfg.key
-    elif alg == "rs256":
-        if "kid" not in header:
-            raise exceptions.Forbidden("A kid is required for RS256")
-        kid = header["kid"]
-        if kid not in cfg.keys:
-            raise exceptions.Forbidden(
-                "The kid provided in the token does not match a known key. Check the jwks_uri or try "
-                "restarting the server to load any new keys."
-            )
-
-        key = cfg.keys[kid]
-    else:
-        raise exceptions.Forbidden("Algorithm %s is not supported." % alg)
-
-    try:
-        payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
-        ct_key = const.INMANTA_URN + "ct"
-        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
-    except Exception as e:
-        raise exceptions.Forbidden(*e.args)
-
-    if not check_custom_claims(claims=payload, claim_constraints=cfg.claims):
-        raise exceptions.Forbidden(f"The configured claims constraints did not match. See logs for details.")
-
-    return payload
 
 
 @stable_api

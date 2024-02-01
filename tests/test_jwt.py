@@ -25,24 +25,25 @@ import pytest
 import tornado
 from tornado import web
 
-from inmanta import config, protocol
+from inmanta import config
+from inmanta.protocol import auth
 
 
 def test_jwt_create(inmanta_config):
     """
     Test creating, signing and verifying JWT with HS256 from the configuration
     """
-    jot = protocol.encode_token(["api"])
-    payload = protocol.decode_token(jot)
+    jot = auth.encode_token(["api"])
+    payload = auth.decode_token(jot)
 
     assert "api" in payload["urn:inmanta:ct"]
 
     # test creating an idempotent token
-    jot1 = protocol.encode_token(["agent"], idempotent=True)
-    jot3 = protocol.encode_token(["agent"])
+    jot1 = auth.encode_token(["agent"], idempotent=True)
+    jot3 = auth.encode_token(["agent"])
     time.sleep(1)
-    jot2 = protocol.encode_token(["agent"], idempotent=True)
-    jot4 = protocol.encode_token(["agent"])
+    jot2 = auth.encode_token(["agent"], idempotent=True)
+    jot4 = auth.encode_token(["agent"])
     assert jot1 == jot2
     assert jot3 != jot4
     assert jot1 != jot3
@@ -113,14 +114,11 @@ validate_cert=false
             )
         )
 
-    from inmanta.config import AuthJWTConfig, Config
-
     # Make sure the config starts from a clean slate
-    AuthJWTConfig.sections = {}
-    AuthJWTConfig.issuers = {}
-    Config.load_config(config_file)
+    auth.AuthJWTConfig.reset()
+    config.Config.load_config(config_file)
 
-    cfg_list = await asyncio.get_event_loop().run_in_executor(None, AuthJWTConfig.list)
+    cfg_list = await asyncio.get_event_loop().run_in_executor(None, auth.AuthJWTConfig.list)
     assert len(cfg_list) == 2
 
 
@@ -165,14 +163,11 @@ validate_cert=false
             )
         )
 
-    from inmanta.config import AuthJWTConfig, Config
-
     # Make sure the config starts from a clean slate
-    AuthJWTConfig.sections = {}
-    AuthJWTConfig.issuers = {}
-    Config.load_config(config_file)
+    auth.AuthJWTConfig.reset()
+    config.Config.load_config(config_file)
     with pytest.raises(ValueError):
-        await asyncio.get_event_loop().run_in_executor(None, partial(AuthJWTConfig.get, "auth_jwt_keycloak"))
+        await asyncio.get_event_loop().run_in_executor(None, partial(auth.AuthJWTConfig.get, "auth_jwt_keycloak"))
 
 
 def test_custom_claim_matching(tmp_path) -> None:
@@ -195,15 +190,12 @@ claims=
 """
         )
 
-    from inmanta.config import AuthJWTConfig, Config
-
     # Make sure the config starts from a clean slate
-    AuthJWTConfig.sections = {}
-    AuthJWTConfig.issuers = {}
-    Config.load_config(config_file)
+    auth.AuthJWTConfig.reset()
+    config.Config.load_config(config_file)
 
     # load and parse
-    cfg = AuthJWTConfig.get("test")
+    cfg = auth.AuthJWTConfig.get("test")
     assert cfg
 
     assert config.check_custom_claims({"environment": ["prod"], "type": "dc"}, cfg.claims)
