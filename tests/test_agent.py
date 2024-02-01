@@ -20,14 +20,16 @@ import asyncio
 import concurrent
 import logging
 import uuid
+from typing import Any
 
 import pytest
 
 from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
-from inmanta.agent.handler import HandlerContext, InvalidOperation
+from inmanta.agent.agent import Process, ProcessManager, ProcessVEnvironmentManager, ResourceAction
+from inmanta.agent.handler import CRUDHandler, HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
-from inmanta.resources import Id, PurgeableResource
+from inmanta.resources import Id, PurgeableResource, resource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from utils import retry_limited
@@ -217,3 +219,35 @@ async def test_update_agent_map(server, environment, agent_factory):
     await agent1._update_agent_map({"node1": "localhost2"})
 
     assert agent1._instances["node1"].is_enabled()
+
+
+async def test_process_manager():
+    @resource(name="aa::Aa", id_attribute="aa", agent="aa")
+    class TestResource(PurgeableResource):
+        fields = ("value",)
+
+    class DummyCrud(CRUDHandler[TestResource]):
+        def __init__(self):
+            self.updated = False
+
+        def read_resource(self, ctx: HandlerContext, resource: TestResource) -> None:
+            resource.value = "b"
+
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: TestResource) -> None:
+            self.updated = True
+
+    venv_manager = ProcessVEnvironmentManager()
+    pm = ProcessManager(venv_manager)
+
+    res1 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 1))
+    res1_2 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 2))
+    res2 = TestResource(Id("aa::Aa", "agent2", "aa", "aa", 1))
+
+    resources = [res1, res1_2, res2]
+    for r in resources:
+        pm.add_process(r)
+
+    pm.print_process_map()
+
+    for p in pm.process_map:
+        pm.process_map[p].spawn_process()

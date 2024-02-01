@@ -43,6 +43,7 @@ from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.env import VirtualEnv
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
@@ -617,6 +618,62 @@ class ResourceScheduler:
 
     def get_client(self) -> protocol.Client:
         return self.agent.get_client()
+
+
+class ProcessVEnvironment:
+    def __init__(self, process_id):
+        self.process_id = process_id
+        self.env = self.create_and_install_environment()
+
+    def create_and_install_environment(self):
+        virtual_env = VirtualEnv(str(self.process_id))
+        virtual_env.init_env()
+        return virtual_env
+
+
+class ProcessVEnvironmentManager:
+    def __init__(self):
+        self._environment_map: dict["str", ProcessVEnvironment] = {}
+
+    def create_environment(self, env_id):
+        process_environment = ProcessVEnvironment(env_id)
+        self._environment_map[process_environment.id] = process_environment
+        return process_environment
+
+    def get_environment(self, env_id):
+        if env_id in self._environment_map:
+            return self._environment_map[env_id]
+        return self.create_environment(env_id)
+
+
+class Process:
+    def __init__(self, resource: Resource, venv: ProcessVEnvironment):
+        self.resource = resource
+        self.venv = venv
+
+    @property
+    def id(self):
+        return self.resource.id.resource_version_str()
+        # identify each process based on agent, version and resource
+
+    def spawn_process(self):
+        print(f"spawning process with id {self.id} for resource {self.resource} with environment {self.venv}")
+
+
+class ProcessManager:
+    def __init__(self, environment_manager: ProcessVEnvironmentManager):
+        self.process_map: dict["str", Process] = {}  # maps a certain resource to a process
+        self.environment_manager = environment_manager
+
+    def add_process(self, resource: Resource):
+        env = self.environment_manager.get_environment(resource.id)
+        process = Process(resource, env)
+        self.process_map[process.id] = process
+
+    def print_process_map(self):
+        print("Process Map:")
+        for process_id, process in self.process_map.items():
+            print(f"{process_id}: {process}")
 
 
 class AgentInstance:
