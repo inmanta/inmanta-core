@@ -24,16 +24,7 @@ from typing import Callable
 from typing import List as PythonList
 from typing import Optional
 
-from inmanta.ast import (
-    DuplicateException,
-    Locatable,
-    LocatableString,
-    Named,
-    Namespace,
-    NotFoundException,
-    RuntimeException,
-    TypeNotFoundException,
-)
+from inmanta.ast import DuplicateException, Locatable, LocatableString, Named, Namespace, NotFoundException, RuntimeException
 from inmanta.execute.util import AnyType, NoneValue, Unknown
 from inmanta.stable_api import stable_api
 

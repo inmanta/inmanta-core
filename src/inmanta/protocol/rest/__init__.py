@@ -20,7 +20,7 @@ import inspect
 import json
 import logging
 import uuid
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
