@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import argparse
 import configparser
 import datetime

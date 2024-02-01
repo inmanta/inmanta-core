@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import textwrap
 
 import inmanta.compiler as compiler

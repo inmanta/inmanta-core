@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import collections.abc
 import logging
 import re

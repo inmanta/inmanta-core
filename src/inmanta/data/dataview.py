@@ -741,9 +741,11 @@ class DesiredStateVersionView(DataView[DesiredStateVersionOrder, DesiredStateVer
                 version=desired_state["version"],
                 date=desired_state["date"],
                 total=desired_state["total"],
-                labels=[DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
-                if desired_state["type"] and desired_state["message"]
-                else [],
+                labels=(
+                    [DesiredStateLabel(name=desired_state["type"], message=desired_state["message"])]
+                    if desired_state["type"] and desired_state["message"]
+                    else []
+                ),
                 status=desired_state["status"],
             )
             for desired_state in records

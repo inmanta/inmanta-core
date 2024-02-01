@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 from time import perf_counter, time
 from typing import Optional

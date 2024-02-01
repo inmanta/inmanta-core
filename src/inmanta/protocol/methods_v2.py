@@ -17,6 +17,7 @@
 
     Module defining the v2 rest api
 """
+
 import datetime
 import uuid
 from typing import Literal, Optional, Union

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import re
 from abc import ABCMeta, abstractmethod
 from collections import abc
