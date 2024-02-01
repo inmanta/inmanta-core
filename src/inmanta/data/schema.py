@@ -231,7 +231,7 @@ class DBSchema:
             raise ColumnNotFound() from e
         except UndefinedTableError as e:
             raise TableNotFound() from e
-        return version["legacy_version"] if version is not None else 0
+        return str(version["legacy_version"]) if version is not None else 0
 
     async def get_installed_versions(self) -> set[int]:
         """

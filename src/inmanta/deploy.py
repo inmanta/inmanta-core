@@ -187,16 +187,16 @@ host=localhost
     def _create_project(self, project_name: str) -> Optional[str]:
         LOGGER.debug("Creating project %s", project_name)
         result = self._client.create_project(project_name)
-        if result.code != 200:
+        if result.code != 200 or not result.result:
             LOGGER.error("Unable to create project %s", project_name)
             return None
 
-        return result.result["project"]["id"]
+        return str(result.result["project"]["id"])
 
     def _create_environment(self, project_id: str, environment_name: str) -> Optional[str]:
         LOGGER.debug("Creating environment %s in project %s", environment_name, project_id)
         result = self._client.create_environment(project_id=project_id, name=environment_name)
-        if result.code != 200:
+        if result.code != 200 or not result.result:
             LOGGER.error("Unable to create environment %s", environment_name)
             return None
 
@@ -250,7 +250,7 @@ host=localhost
 
         # get project id
         projects = self._client.list_projects()
-        if projects.code != 200:
+        if projects.code != 200 or not projects.result:
             LOGGER.error("Unable to retrieve project listing from the server")
             return False
 
@@ -267,7 +267,7 @@ host=localhost
 
         # get or create the environment
         environments = self._client.list_environments()
-        if environments.code != 200:
+        if environments.code != 200 or not environments.result:
             LOGGER.error("Unable to retrieve environments from server")
             return False
 
@@ -385,13 +385,14 @@ host=localhost
 
         else:
             result = self._check_result(self._client.dryrun_request(tid=self._environment_id, id=version))
+            assert result.result
             dryrun_id = result.result["dryrun"]["id"]
             if report:
                 self.progress_dryrun_report(dryrun_id)
 
     def _get_deploy_stats(self, version: int) -> tuple[int, int, dict[str, str]]:
         version_result = self._client.get_version(tid=self._environment_id, id=version)
-        if version_result.code != 200:
+        if version_result.code != 200 or not version_result.result:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
             return (0, 0, {})
 
@@ -435,7 +436,7 @@ host=localhost
     def _get_dryrun_status(self, dryrun_id: str) -> tuple[int, int, JsonType]:
         result = self._client.dryrun_report(self._environment_id, dryrun_id)
 
-        if result.code != 200:
+        if result.code != 200 or not result.result:
             raise Exception("Unable to get dryrun report")
 
         data = result.result["dryrun"]
@@ -467,7 +468,7 @@ host=localhost
                     for field, values in changes.items():
                         if field == "hash":
                             diff_result = self._client.diff(a=values[0], b=values[1])
-                            if diff_result.code == 200:
+                            if diff_result.code == 200 and diff_result.result:
                                 print("  - content:")
                                 diff_value = diff_result.result
                                 print("    " + "    ".join(diff_value["diff"]))

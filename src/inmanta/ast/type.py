@@ -46,41 +46,6 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement
 
 
-class BasicResolver:
-    def __init__(self, types):
-        self.types = types
-
-    def get_type(self, namespace, name):
-        if not isinstance(name, str):
-            raise Exception("Should Not Occur, bad AST construction")
-        if "::" in name:
-            if name in self.types:
-                return self.types[name]
-            else:
-                raise TypeNotFoundException(name, namespace)
-        elif name in TYPES:
-            return self.types[name]
-        else:
-            cns = namespace
-            while cns is not None:
-                full_name = f"{cns.get_full_name()}::{name}"
-                if full_name in self.types:
-                    return self.types[full_name]
-                cns = cns.get_parent()
-                raise TypeNotFoundException(name, namespace)
-
-
-class NameSpacedResolver:
-    def __init__(self, ns):
-        self.ns = ns
-
-    def get_type(self, name):
-        return self.ns.get_type(name)
-
-    def get_resolver_for(self, namespace: Namespace):
-        return NameSpacedResolver(namespace)
-
-
 @stable_api
 class Type(Locatable):
     """
