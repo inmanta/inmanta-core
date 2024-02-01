@@ -629,7 +629,7 @@ def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    yield config.Config._get_instance()
+    yield config.Config.get_instance()
 
 
 @pytest.fixture

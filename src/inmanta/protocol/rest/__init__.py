@@ -28,7 +28,7 @@ from tornado import escape
 
 from inmanta import const, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import common, exceptions, auth
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import Apireturn, JsonType
 
@@ -76,7 +76,6 @@ def authorize_request(
             "The authorization token does not have a valid client type for this call."
             + f" ({auth_data[ct_key]} provided, {config.properties.client_types} expected"
         )
-
 
 class CallArguments:
     """
@@ -526,10 +525,10 @@ class RESTBase(util.TaskHandler):
             message.update(kwargs)
 
             if config.properties.validate_sid:
-                if "sid" not in message:
+                if "sid" not in message or not isinstance(message["sid"], str):
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                sid = uuid.UUID(message["sid"])
+                sid = uuid.UUID(str(message["sid"]))
                 if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 

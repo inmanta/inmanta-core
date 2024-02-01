@@ -53,6 +53,7 @@ class ClaimMatch:
         :param claims: A dict of all claims
         """
         logging.getLogger(__name__).info(f"Matching claims against: '{self}'")
+        return False
 
 
 @dataclasses.dataclass
@@ -157,10 +158,10 @@ def encode_token(
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment
 
-    return jwt.encode(payload, cfg.key, cfg.algo)
+    return jwt.encode(payload=payload, key=cfg.key, algorithm=cfg.algo)
 
 
-def decode_token(token: str) -> dict[str, str]:
+def decode_token(token: str) -> claim_type:
     try:
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
@@ -171,16 +172,19 @@ def decode_token(token: str) -> dict[str, str]:
     if "iss" not in payload:
         raise exceptions.Forbidden("Issuer is required in token to validate.")
 
-    cfg = AuthJWTConfig.get_issuer(payload["iss"])
+    cfg = AuthJWTConfig.get_issuer(str(payload["iss"]))
     if cfg is None:
         raise exceptions.Forbidden("Unknown issuer for token")
+
+    if "alg" not in header or not isinstance(header["alg"], str):
+        raise exceptions.Forbidden("alg field is missing in jwt header or is not a valid string")
 
     alg = header["alg"].lower()
     if alg == "hs256":
         key = cfg.key
     elif alg == "rs256":
-        if "kid" not in header:
-            raise exceptions.Forbidden("A kid is required for RS256")
+        if "kid" not in header or not isinstance(header["kid"], str):
+            raise exceptions.Forbidden("kid is missing in jwt header or is not a valid string")
         kid = header["kid"]
         if kid not in cfg.keys:
             raise exceptions.Forbidden(
@@ -193,16 +197,34 @@ def decode_token(token: str) -> dict[str, str]:
         raise exceptions.Forbidden("Algorithm %s is not supported." % alg)
 
     try:
-        payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
+        # copy the payload and make sure the type is claim_type
+        decoded_payload: claim_type = {}
+        for k, v in jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]).items():
+            match v:
+                case str():
+                    decoded_payload[k] = v
+                case list():
+                    for el in v:
+                        if not isinstance(el, str):
+                            raise exceptions.Forbidden(
+                                "Only claims of type string or list of strings are supported. "
+                                f"Element {el} in claim {k} is not a string."
+                            )
+                    decoded_payload[k] = v
+                case _:
+                    logging.getLogger(__name__).info(
+                        "Only claims of type string or list of strings are supported. %s is filtered out.", k
+                    )
+
         ct_key = const.INMANTA_URN + "ct"
-        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
+        decoded_payload[ct_key] = [x.strip() for x in str(payload[ct_key]).split(",")]
     except Exception as e:
         raise exceptions.Forbidden(*e.args)
 
-    if not check_custom_claims(claims=payload, claim_constraints=cfg.claims):
+    if not check_custom_claims(claims=decoded_payload, claim_constraints=cfg.claims):
         raise exceptions.Forbidden("The configured claims constraints did not match. See logs for details.")
 
-    return payload
+    return decoded_payload
 
 
 #############################
@@ -221,6 +243,7 @@ class AuthJWTConfig:
     issuers: dict[str, "AuthJWTConfig"] = {}
 
     validate_cert: bool
+    key: bytes
 
     @classmethod
     def reset(cls) -> None:
@@ -233,14 +256,14 @@ class AuthJWTConfig:
         Return a list of all defined auth jwt configurations. This method will load new sections if they were added
         since the last invocation.
         """
-        cfg = config.Config._get_instance()
+        cfg = config.Config.get_instance()
         prefix_len = len(AUTH_JWT_PREFIX)
 
-        for section in cfg.keys():
-            if section[:prefix_len] == AUTH_JWT_PREFIX:
-                name = section[prefix_len:]
+        for config_section in cfg.keys():
+            if config_section[:prefix_len] == AUTH_JWT_PREFIX:
+                name = config_section[prefix_len:]
                 if name not in cls.sections:
-                    obj = cls(name, section, cfg[section])
+                    obj = cls(name, config_section, cfg[config_section])
                     cls.sections[name] = obj
                     if obj.issuer in cls.issuers:
                         raise ValueError("Only one configuration per issuer is supported")
@@ -249,8 +272,8 @@ class AuthJWTConfig:
 
         # Verify that only one has sign set to true
         sign = False
-        for name, cfg in cls.sections.items():
-            if cfg.sign:
+        for section in cls.sections.values():
+            if section.sign:
                 if sign:
                     raise ValueError("Only one auth_jwt section may have sign set to true")
                 else:
@@ -298,7 +321,7 @@ class AuthJWTConfig:
     def __init__(self, name: str, section: str, config: configparser.SectionProxy) -> None:
         self.name: str = name
         self.section: str = section
-        self.keys: dict[str, str] = {}
+        self.keys: dict[str, bytes] = {}
         self._config: configparser.SectionProxy = config
         self.claims: list[ClaimMatch] = []
         if "algorithm" not in config:
@@ -372,7 +395,7 @@ class AuthJWTConfig:
         if len(self.key) < 32:
             raise ValueError("HS256 requires a key of 32 bytes (256 bits) or longer in " + self.section)
 
-    def _load_public_key(self, e: str, n: str) -> str:
+    def _load_public_key(self, e: str, n: str) -> bytes:
         def to_int(x: str) -> int:
             bs = base64.urlsafe_b64decode(x + "==")
             return int.from_bytes(bs, byteorder="big")

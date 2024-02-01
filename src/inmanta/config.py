@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import abc
 import logging
 import os
 import re
@@ -24,7 +23,7 @@ import uuid
 import warnings
 from collections import abc, defaultdict
 from configparser import ConfigParser, Interpolation
-from typing import Callable, Generic, Literal, Optional, TypeVar, Union, overload
+from typing import Callable, Generic, Optional, TypeVar, Union, overload
 
 from crontab import CronTab
 
@@ -95,6 +94,11 @@ class Config:
         return cls.__instance
 
     @classmethod
+    def get_instance(cls) -> ConfigParser:
+        """Get the singleton instance of the ConfigParser. In case it did not load the config yet, it will be loaded."""
+        return cls._get_instance()
+
+    @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
@@ -117,7 +121,7 @@ class Config:
         """
         Get the entire config or get a value directly
         """
-        cfg = cls._get_instance()
+        cfg = cls.get_instance()
         if section is None:
             return cfg
 
@@ -139,7 +143,7 @@ class Config:
     @classmethod
     def is_set(cls, section: str, name: str) -> bool:
         """Check if a certain config option was specified in the config file."""
-        return section in cls._get_instance() and name in cls._get_instance()[section]
+        return section in cls.get_instance() and name in cls.get_instance()[section]
 
     @classmethod
     def getboolean(cls, section: str, name: str, default_value: Optional[bool] = None) -> bool:
@@ -147,7 +151,7 @@ class Config:
         Return a boolean from the configuration
         """
         cls.validate_option_request(section, name, default_value)
-        return cls._get_instance().getboolean(section, name, fallback=default_value)
+        return cls.get_instance().getboolean(section, name, fallback=default_value)
 
     @classmethod
     def set(cls, section: str, name: str, value: str) -> None:
@@ -156,9 +160,9 @@ class Config:
         """
         name = _normalize_name(name)
 
-        if section not in cls._get_instance():
-            cls._get_instance().add_section(section)
-        cls._get_instance().set(section, name, value)
+        if section not in cls.get_instance():
+            cls.get_instance().add_section(section)
+        cls.get_instance().set(section, name, value)
 
     @classmethod
     def register_option(cls, option: "Option") -> None:
@@ -215,7 +219,7 @@ def is_bool(value: Union[bool, str]) -> bool:
     """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
     if isinstance(value, bool):
         return value
-    boolean_states: abc.Mapping[str, bool] = Config._get_instance().BOOLEAN_STATES
+    boolean_states: abc.Mapping[str, bool] = Config.get_instance().BOOLEAN_STATES
     if value.lower() not in boolean_states:
         raise ValueError("Not a boolean: %s" % value)
     return boolean_states[value.lower()]
@@ -310,7 +314,7 @@ class Option(Generic[T]):
         Config.register_option(self)
 
     def get(self) -> T:
-        cfg = Config._get_instance()
+        cfg = Config.get_instance()
         if self.predecessor_option:
             has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
             has_new_option = cfg.has_option(self.section, self.name)
