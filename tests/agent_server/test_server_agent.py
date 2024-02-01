@@ -3614,6 +3614,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
     param2 = data.Parameter(
         name="key2",
@@ -3621,6 +3622,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
 
     version = await clienthelper.get_version()
@@ -3659,6 +3661,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
     param4 = data.Parameter(
         name="returned_fact_key2",
@@ -3666,6 +3669,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
 
     params = await data.Parameter.get_list()
@@ -3738,7 +3742,7 @@ async def test_set_non_expiring_fact_in_handler_6560(
 
     # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
     await _deploy_resources(client, environment, resources, version, push=True)
-    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=10000)
+    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=10)
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2])
