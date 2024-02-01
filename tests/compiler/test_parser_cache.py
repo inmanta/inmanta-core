@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os.path
 from pathlib import Path
 from time import sleep
