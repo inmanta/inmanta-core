@@ -623,12 +623,11 @@ class ResourceScheduler:
 class ProcessVEnvironment:
     def __init__(self, process_id):
         self.process_id = process_id
-        self.env = self.create_and_install_environment()
+
+    #        self.env = self.create_and_install_environment()
 
     def create_and_install_environment(self):
-        virtual_env = VirtualEnv(str(self.process_id))
-        virtual_env.init_env()
-        return virtual_env
+        pass
 
 
 class ProcessVEnvironmentManager:
