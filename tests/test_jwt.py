@@ -192,14 +192,14 @@ claims=
 
     # Make sure the config starts from a clean slate
     auth.AuthJWTConfig.reset()
-    config.Config.load_config(config_file)
+    config.Config.load_config(str(config_file))
 
     # load and parse
     cfg = auth.AuthJWTConfig.get("test")
     assert cfg
 
-    assert config.check_custom_claims({"environment": ["prod"], "type": "dc"}, cfg.claims)
-    assert not config.check_custom_claims({"environment": ["prod"], "type": ["dc"]}, cfg.claims)
-    assert config.check_custom_claims({"environment": ["prod"], "type": "dc", "other": "test"}, cfg.claims)
-    assert not config.check_custom_claims({"environment": ["prod"]}, cfg.claims)
-    assert config.check_custom_claims({"environment": ["prod"]}, [])
+    assert auth.check_custom_claims({"environment": ["prod"], "type": "dc"}, cfg.claims)
+    assert not auth.check_custom_claims({"environment": ["prod"], "type": ["dc"]}, cfg.claims)
+    assert auth.check_custom_claims({"environment": ["prod"], "type": "dc", "other": "test"}, cfg.claims)
+    assert not auth.check_custom_claims({"environment": ["prod"]}, cfg.claims)
+    assert auth.check_custom_claims({"environment": ["prod"]}, [])
