@@ -834,10 +834,10 @@ When a development release is done using the \--dev option, this command:
         """
         Convert a V1 module to a V2 module in place
         """
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise ModuleVersionException(f"Expected a v1 module, but found v{module.GENERATION.value} module")
-        ModuleConverter(module).convert_in_place()
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise ModuleVersionException(f"Expected a v1 module, but found v{mod.GENERATION.value} module")
+        ModuleConverter(mod).convert_in_place()
 
     def build(
         self, path: Optional[str] = None, output_dir: Optional[str] = None, dev_build: bool = False, byte_code: bool = False
@@ -1134,7 +1134,7 @@ version: 0.0.1dev0"""
         newconfig["requires"] = requires
 
         close = False
-        out_fd = None
+        out_fd: IO[str]
         if outfile is None:
             out_fd = open(module_obj.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
