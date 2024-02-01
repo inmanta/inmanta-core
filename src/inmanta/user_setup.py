@@ -25,9 +25,9 @@ from asyncpg import PostgresError
 
 import nacl.pwhash
 from inmanta import config, data
-from inmanta.protocol import auth
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod
+from inmanta.protocol import auth
 from inmanta.server import config as server_config
 
 

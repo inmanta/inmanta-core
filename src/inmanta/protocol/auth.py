@@ -24,7 +24,7 @@ import logging
 import re
 import ssl
 import time
-from typing import Any, Literal, Optional, Mapping, Sequence, MutableMapping
+from typing import Any, Literal, Mapping, MutableMapping, Optional, Sequence
 from urllib import error, request
 
 import jwt
