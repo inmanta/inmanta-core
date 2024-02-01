@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 """
 Based on the OpenAPI 3.0.2 Specification:
 https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.2.md

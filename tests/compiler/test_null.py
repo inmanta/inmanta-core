@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import NoneValue

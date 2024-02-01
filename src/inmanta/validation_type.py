@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import importlib
 import inspect
 from collections import abc

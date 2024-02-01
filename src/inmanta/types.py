@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 # This file defines named type definition for the Inmanta code base
 
 import builtins

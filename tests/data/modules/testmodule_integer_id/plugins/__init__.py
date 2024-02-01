@@ -3,6 +3,7 @@
     Contact: code@inmanta.com
     License: Apache 2.0
 """
+
 from inmanta.agent.handler import (
     CRUDHandler,
     HandlerContext,
