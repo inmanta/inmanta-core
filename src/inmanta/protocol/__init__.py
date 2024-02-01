@@ -72,4 +72,6 @@ __all__ = [
     "handle",
     "method",
     "typedmethod",
+    "decode_token",
+    "encode_token",
 ]

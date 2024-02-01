@@ -24,7 +24,7 @@ import logging
 import re
 import ssl
 import time
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Mapping, Sequence, MutableMapping
 from urllib import error, request
 
 import jwt
@@ -36,7 +36,7 @@ from inmanta import config, const
 
 from . import exceptions
 
-claim_type = dict[str, str | list[str]]
+claim_type = Mapping[str, str | Sequence[str]]
 
 
 class ClaimMatch:
@@ -198,7 +198,7 @@ def decode_token(token: str) -> claim_type:
 
     try:
         # copy the payload and make sure the type is claim_type
-        decoded_payload: claim_type = {}
+        decoded_payload: MutableMapping[str, str | Sequence[str]] = {}
         for k, v in jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]).items():
             match v:
                 case str():

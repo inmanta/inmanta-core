@@ -47,7 +47,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 def authorize_request(
-    auth_data: Optional[MutableMapping[str, str]], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
+    auth_data: Optional[auth.claim_type], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
     Authorize a request based on the given data
@@ -515,7 +515,7 @@ class RESTBase(util.TaskHandler):
         config: common.UrlMethod,
         message: dict[str, object],
         request_headers: Mapping[str, str],
-        auth: Optional[MutableMapping[str, str]] = None,
+        auth: Optional[auth.claim_type] = None,
     ) -> common.Response:
         try:
             if kwargs is None or config is None:

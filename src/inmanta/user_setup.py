@@ -25,6 +25,7 @@ from asyncpg import PostgresError
 
 import nacl.pwhash
 from inmanta import config, data
+from inmanta.protocol import auth
 from inmanta.const import MIN_PASSWORD_LENGTH
 from inmanta.data import AuthMethod
 from inmanta.server import config as server_config
@@ -75,7 +76,7 @@ def validate_server_setup() -> None:
         click.echo(f"{'Server authentication method: ' : <50}{click.style('database', fg='green')}")
 
         # make sure there is auth config that supports signing tokens
-        cfg = config.AuthJWTConfig.get_sign_config()
+        cfg = auth.AuthJWTConfig.get_sign_config()
         if cfg is None:
             click.echo("Error: No signing config available in the configuration.")
             click.echo("To use a new config, add the following to the configuration in /etc/inmanta/inmanta.d/auth.cfg:\n")

@@ -60,7 +60,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return self._config[http_method]
 
-    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[MutableMapping[str, str]]:
+    def get_auth_token(self, headers: MutableMapping[str, str]) -> Optional[auth.claim_type]:
         """
         Get the auth token provided by the caller. The token is provided as a bearer token.
         """
