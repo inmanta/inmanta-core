@@ -26,7 +26,6 @@ import ssl
 import sys
 import uuid
 import warnings
-from abc import abstractmethod
 from collections import abc, defaultdict
 from configparser import ConfigParser, Interpolation, SectionProxy
 from typing import Callable, Generic, Literal, Optional, TypeVar, Union, overload
@@ -37,7 +36,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from crontab import CronTab
-from inmanta import const
+from inmanta import const, protocol
 
 LOGGER = logging.getLogger(__name__)
 
@@ -449,79 +448,6 @@ cmdline_rest_transport = TransportConfig("cmdline")
 AUTH_JWT_PREFIX = "auth_jwt_"
 AUTH_JWT_CLAIM_RE = r"^\s*([^\s].+)\s+(in|is)\s+([^\s].+)\s*$"
 
-claim_type = dict[str, str | list[str]]
-
-
-@dataclasses.dataclass
-class ClaimMatch:
-    """A base class for all claim matching"""
-
-    claim: str
-    operator: str
-    value: str
-
-    @abstractmethod
-    def match_claim(self, claims: claim_type) -> bool:
-        """Match the claim
-
-        :param claims: A dict of all claims
-        """
-
-
-class InClaim(ClaimMatch):
-    """An in claim: exact match of a string in a claim that is a list"""
-
-    claim: str
-    operator: Literal["in"] = "in"
-    value: str
-
-    def match_claim(self, claims: claim_type) -> bool:
-        if self.claim not in claims:
-            return False
-
-        claim_value = claims[self.claim]
-
-        if not isinstance(claim_value, list):
-            raise ValueError(f"Claim {self.claim} should be of type list and not {type(claim_value)}")
-
-        return self.value in claim_value
-
-
-class IsClaim(ClaimMatch):
-    """An is claim: exact match of a string claim"""
-
-    claim: str
-    operator: Literal["is"] = "is"
-    value: str
-
-    def match_claim(self, claims: claim_type) -> bool:
-        if self.claim not in claims:
-            return False
-
-        claim_value = claims[self.claim]
-
-        if not isinstance(claim_value, str):
-            raise ValueError(f"Claim {self.claim} should be of type str and not {type(claim_value)}")
-
-        return self.value == claim_value
-
-
-def check_custom_claims(claims: claim_type, claim_constraints: list[ClaimMatch]) -> bool:
-    """Check if the given dict of claims matches the list of constraints. If any of the
-    constraints fail, it will return false. If the wrong operation is used on a claim
-    it will also result in false. For example, the in operator on a string instead of a
-    list of strings
-
-    :param claims: The dict of claims to validate
-    :param claim_constraints: A list of all constraints
-    :return: The result of the check
-    """
-    try:
-        return all(constraint.match_claim(claims) for constraint in claim_constraints)
-    except Exception as e:
-        LOGGER.info(f"The configured claim constraints failed to evaluate against the provided claims: {e}")
-        return False
-
 
 class AuthJWTConfig:
     """
@@ -554,7 +480,7 @@ class AuthJWTConfig:
                     obj = cls(name, section, cfg[section])
                     cls.sections[name] = obj
                     if obj.issuer in cls.issuers:
-                        raise ValueError("Only oner configuration per issuer is supported")
+                        raise ValueError("Only one configuration per issuer is supported")
 
                     cls.issuers[obj.issuer] = obj
 
@@ -610,7 +536,7 @@ class AuthJWTConfig:
         self.name: str = name
         self.section: str = section
         self._config: SectionProxy = config
-        self.claims: list[ClaimMatch] = []
+        self.claims: list[protocol.ClaimMatch] = []
         if "algorithm" not in config:
             raise ValueError("algorithm is required in %s section" % self.section)
 
@@ -664,10 +590,10 @@ class AuthJWTConfig:
         items = re.findall(AUTH_JWT_CLAIM_RE, claim_conf, re.MULTILINE)
         for item in items:
             match item:
-                case (claim, "is" as op, value):
-                    self.claims.append(IsClaim(claim, op, value))
-                case (value, "in" as op, claim):
-                    self.claims.append(InClaim(claim, op, value))
+                case (claim, "is", value):
+                    self.claims.append(protocol.IsClaim(claim, value))
+                case (value, "in", claim):
+                    self.claims.append(protocol.InClaim(claim, value))
                 case _:
                     raise ValueError(f"Invalid claim match '{' '.join(item)}' in {self.section}")
 

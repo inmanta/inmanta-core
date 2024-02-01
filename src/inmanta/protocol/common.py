@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import dataclasses
 import enum
 import gzip
 import importlib
@@ -25,13 +26,14 @@ import logging
 import re
 import time
 import uuid
+from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Coroutine, Iterable, MutableMapping
 from datetime import datetime
 from enum import Enum
 from functools import partial
 from inspect import Parameter
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, TypeVar, Union, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, Optional, TypeVar, Union, cast, get_type_hints
 from urllib import parse
 
 import docstring_parser
@@ -988,8 +990,98 @@ def shorten(msg: str, max_len: int = 10) -> str:
     return msg[0 : max_len - 3] + "..."
 
 
+claim_type = dict[str, str | list[str]]
+
+
+class ClaimMatch:
+    """A base class for all claim matching"""
+
+    claim: str
+    operator: str
+    value: str
+
+    @abstractmethod
+    def match_claim(self, claims: claim_type) -> bool:
+        """Match the claim
+
+        :param claims: A dict of all claims
+        """
+        LOGGER.info(f"Matching claims against: '{self}'")
+
+
+@dataclasses.dataclass
+class InClaim(ClaimMatch):
+    """An in claim: exact match of a string in a claim that is a list"""
+
+    claim: str
+    value: str
+    operator: Literal["in"] = "in"
+
+    def match_claim(self, claims: claim_type) -> bool:
+        super().match_claim(claims)
+
+        if self.claim not in claims:
+            return False
+
+        claim_value = claims[self.claim]
+
+        if not isinstance(claim_value, list):
+            raise ValueError(f"claim {self.claim} should be of type list and not {type(claim_value)}")
+
+        return self.value in claim_value
+
+    def __repr__(self) -> str:
+        return f"{self.value} {self.operator} {self.claim}"
+
+
+@dataclasses.dataclass
+class IsClaim(ClaimMatch):
+    """An is claim: exact match of a string claim"""
+
+    claim: str
+    value: str
+    operator: Literal["is"] = "is"
+
+    def match_claim(self, claims: claim_type) -> bool:
+        super().match_claim(claims)
+
+        if self.claim not in claims:
+            return False
+
+        claim_value = claims[self.claim]
+
+        if not isinstance(claim_value, str):
+            raise ValueError(f"claim {self.claim} should be of type str and not {type(claim_value)}")
+
+        return self.value == claim_value
+
+    def __repr__(self) -> str:
+        return f"{self.claim} {self.operator} {self.value}"
+
+
+def check_custom_claims(claims: claim_type, claim_constraints: list[ClaimMatch]) -> bool:
+    """Check if the given dict of claims matches the list of constraints. If any of the
+    constraints fail, it will return false. If the wrong operation is used on a claim
+    it will also result in false. For example, the in operator on a string instead of a
+    list of strings
+
+    :param claims: The dict of claims to validate
+    :param claim_constraints: A list of all constraints
+    :return: The result of the check
+    """
+    try:
+        return all(constraint.match_claim(claims) for constraint in claim_constraints)
+    except Exception as e:
+        LOGGER.info(f"The configured claim constraints failed to evaluate against the provided claims: {e}")
+        return False
+
+
 def encode_token(
-    client_types: list[str], environment: Optional[str] = None, idempotent: bool = False, expire: Optional[float] = None
+    client_types: list[str],
+    environment: Optional[str] = None,
+    idempotent: bool = False,
+    expire: Optional[float] = None,
+    custom_claims: Optional[dict[str, str | list[str]]] = None,
 ) -> str:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
     if cfg is None:
@@ -1002,6 +1094,9 @@ def encode_token(
             )
 
     payload: dict[str, Any] = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
+
+    if custom_claims:
+        payload.update(custom_claims)
 
     if not idempotent:
         payload["iat"] = int(time.time())
@@ -1056,7 +1151,7 @@ def decode_token(token: str) -> dict[str, str]:
     except Exception as e:
         raise exceptions.Forbidden(*e.args)
 
-    if not inmanta_config.check_custom_claims(claims=payload, claim_constraints=cfg.claims):
+    if not check_custom_claims(claims=payload, claim_constraints=cfg.claims):
         raise exceptions.Forbidden(f"The configured claims constraints did not match. See logs for details.")
 
     return payload
