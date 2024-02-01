@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequenc
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Optional, cast
+from typing import Optional, cast, Type
 
 import dateutil
 import dateutil.parser
@@ -233,7 +233,11 @@ class CompileRun:
 
             env = await data.Environment.get_by_id(environment_id)
 
-            env_string = ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
+            env_string = (
+                ", ".join([f"{k}='{v}'" for k, v in self.request.environment_variables.items()])
+                if self.request.environment_variables
+                else ""
+            )
             assert self.stage
             await self.stage.update_streams(out=f"Using extra environment variables during compile {env_string}\n")
 
@@ -412,9 +416,10 @@ class CompileRun:
             else:
                 cmd.append("--no-ssl")
 
-            if opt.server_ssl_ca_cert.get() is not None:
+            ssl_ca_cert = opt.server_ssl_ca_cert.get()
+            if ssl_ca_cert is not None:
                 cmd.append("--ssl-ca-cert")
-                cmd.append(opt.server_ssl_ca_cert.get())
+                cmd.append(ssl_ca_cert)
 
             self.tail_stdout = ""
 
@@ -498,7 +503,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
-        self._recompiles: dict[uuid.UUID, Task] = {}
+        self._recompiles: dict[uuid.UUID, Task[Type[None]]] = {}
         self._global_lock = asyncio.locks.Lock()
         self.listeners: list[CompileStateListener] = []
         self._scheduled_full_compiles: dict[uuid.UUID, tuple[TaskMethod, str]] = {}
@@ -623,7 +628,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         if env_vars is None:
             env_vars = {}
 
-        server_compile: bool = await env.get(data.SERVER_COMPILE)
+        server_compile: bool = bool(await env.get(data.SERVER_COMPILE))
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return None, ["Skipping compile because server compile not enabled for this environment."]
@@ -763,7 +768,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         compile_requested: datetime.datetime,
         last_compile_completed: datetime.datetime,
         now: datetime.datetime,
-    ) -> int:
+    ) -> float:
         if wait_time == 0:
             wait: float = 0
         else:
@@ -783,6 +788,9 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             )
         else:
             env = await data.Environment.get_by_id(compile.environment)
+            if env is None:
+                LOGGER.error("Unable to find environment %s in the database.", compile.environment)
+                return
             wait_time = await env.get(data.RECOMPILE_BACKOFF)
             if wait_time:
                 LOGGER.info("The recompile_backoff environment setting is enabled and set to %s seconds.", wait_time)
@@ -793,6 +801,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
             wait: float = 0
         else:
             assert last_run.completed is not None
+            assert compile.requested is not None
             wait = self._calculate_recompile_wait(
                 wait_time, compile.requested, last_run.completed, datetime.datetime.now().astimezone()
             )
@@ -834,7 +843,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         version = runner.version
 
         end = datetime.datetime.now().astimezone()
-        compile_data_json: Optional[dict] = None if compile_data is None else compile_data.model_dump()
+        compile_data_json: Optional[dict[str, object]] = None if compile_data is None else compile_data.model_dump()
         await compile.update_fields(completed=end, success=success, version=version, compile_data=compile_data_json)
         awaitables = [
             merge_candidate.update_fields(

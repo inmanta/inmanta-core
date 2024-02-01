@@ -39,7 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import BinaryIO, Callable, Optional, TypeVar, Union
+from typing import BinaryIO, Callable, Optional, TypeVar, Union, Any, Generic
 
 import asyncpg
 from tornado import gen
@@ -118,15 +118,15 @@ def ensure_future_and_handle_exception(
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
     future = ensure_future(action)
 
-    def handler(future):
+    def handler(task: Task[T]) -> None:
         try:
-            exc = future.exception()
+            exc = task.exception()
             if exc is not None:
                 logger.exception(msg, exc_info=exc)
         except CancelledError:
             pass
         finally:
-            notify_done_callback(future)
+            notify_done_callback(task)
 
     future.add_done_callback(handler)
     return future
@@ -288,7 +288,7 @@ class Scheduler:
         schedule: Union[TaskSchedule, int],  # int for backward compatibility,
         cancel_on_stop: bool = True,
         quiet_mode: bool = False,
-    ) -> ScheduledTask:
+    ) -> Optional[ScheduledTask]:
         """
         Add a new action
 
@@ -302,7 +302,7 @@ class Scheduler:
 
         if self._stopped:
             LOGGER.warning("Scheduling action '%s', while scheduler is stopped", action.__name__)
-            return
+            return None
 
         schedule_typed: TaskSchedule
         if isinstance(schedule, int):
@@ -506,12 +506,12 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
-def add_future(future: Union[Future, Coroutine]) -> Task:
+def add_future(future: Union[Future[T], Coroutine[Any, Any, T]]) -> Task[T]:
     """
     Add a future to the ioloop to be handled, but do not require the result.
     """
 
-    def handle_result(f: Task) -> None:
+    def handle_result(f: Task[T]) -> None:
         try:
             f.result()
         except Exception as e:
@@ -565,7 +565,7 @@ class StoppedException(Exception):
     """This exception is raised when a background task is added to the taskhandler when it is shutting down."""
 
 
-class TaskHandler:
+class TaskHandler(Generic[T]):
     """
     This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
     are reported. If stop is invoked, all background tasks are cancelled.
@@ -573,8 +573,8 @@ class TaskHandler:
 
     def __init__(self) -> None:
         super().__init__()
-        self._background_tasks: set[Task] = set()
-        self._await_tasks: set[Task] = set()
+        self._background_tasks: set[Task[T]] = set()
+        self._await_tasks: set[Task[T]] = set()
         self._stopped = False
 
     def is_stopped(self) -> bool:
@@ -583,7 +583,7 @@ class TaskHandler:
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop: bool = True) -> Task:
+    def add_background_task(self, future: Union[Future[T], Coroutine[Any, Any, T]], cancel_on_stop: bool = True) -> Task[T]:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
@@ -595,7 +595,7 @@ class TaskHandler:
 
         task = ensure_future(future)
 
-        def handle_result(task: Task) -> None:
+        def handle_result(task: Task[T]) -> None:
             try:
                 task.result()
             except CancelledError:

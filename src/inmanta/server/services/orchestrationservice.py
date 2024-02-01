@@ -57,7 +57,7 @@ from inmanta.server import diff, protocol
 from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.server.validate_filter import InvalidFilter
-from inmanta.types import Apireturn, JsonType, PrimitiveTypes
+from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1063,7 +1063,7 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> Apireturn:
+    ) -> ReturnTupple:
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
                 # explicit lock to allow patching of increments for stale failures

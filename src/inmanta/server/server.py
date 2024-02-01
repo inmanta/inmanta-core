@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Optional, Union, cast
 
 from tornado import routing, web
 
-from inmanta import data, config
+from inmanta import config, data
 from inmanta.const import ApiDocsFormat
 from inmanta.data.model import FeatureStatus, SliceStatus, StatusResponse
 from inmanta.protocol import exceptions, handle, methods, methods_v2

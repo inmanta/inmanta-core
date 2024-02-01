@@ -115,7 +115,7 @@ class ParameterService(protocol.ServerSlice):
         LOGGER.info("Done renewing parameters")
 
     @handle(methods.get_param, param_id="id", env="tid")
-    async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str] = None) -> Apireturn:
+    async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[ResourceIdStr] = None) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=param_id)
         else:

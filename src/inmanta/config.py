@@ -119,9 +119,7 @@ class Config:
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
-    def get(
-        cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[object] = None
-    ) -> object:
+    def get(cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[object] = None) -> object:
         """
         Get the entire config or get a value directly
         """

@@ -28,7 +28,7 @@ from tornado import escape
 
 from inmanta import const, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import common, exceptions, auth
+from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import Apireturn, JsonType
 
@@ -76,6 +76,7 @@ def authorize_request(
             "The authorization token does not have a valid client type for this call."
             + f" ({auth_data[ct_key]} provided, {config.properties.client_types} expected"
         )
+
 
 class CallArguments:
     """

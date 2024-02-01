@@ -1134,7 +1134,7 @@ class ResourceService(protocol.ServerSlice):
             attribute_value: Optional[str] = None,
             log_severity: Optional[str] = None,
             limit: Optional[int] = 0,
-        ) -> dict:
+        ) -> dict[str, None | str | int]:
             query_params = {
                 "resource_type": resource_type,
                 "agent": agent,
