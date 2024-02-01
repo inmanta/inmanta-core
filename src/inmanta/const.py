@@ -19,7 +19,7 @@
 import datetime
 from collections import abc
 from enum import Enum
-from typing import Optional
+from typing import Dict, Optional
 
 from inmanta.stable_api import stable_api
 
@@ -332,11 +332,32 @@ PG_ADVISORY_KEY_PUT_VERSION = 1
 PG_ADVISORY_KEY_RELEASE_VERSION = 2
 """ lock against releasing a version in an environment, to prevent release races"""
 
-
 # The filename of the changelog file in an Inmanta module
 MODULE_CHANGELOG_FILE = "CHANGELOG.md"
-
 
 DATETIME_MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 MODULE_PKG_NAME_PREFIX = "inmanta-module-"
+
+
+@stable_api
+class EnvVarManager:
+    """
+    EnvVarManager is a utility class for managing environment variables and expose them.
+    It provides a centralized way to register and access environment variables.
+    """
+
+    _env_vars: Dict[str, str] = {}
+
+    @staticmethod
+    def register(var_name: str, value: Optional[str] = None):
+        """Register an environment variable"""
+        EnvVarManager._env_vars[var_name] = value
+
+    @staticmethod
+    def get(var_name: str) -> str:
+        """Get the value of a registered environment variable or raise an exception if not found."""
+        if var_name in EnvVarManager._env_vars:
+            return EnvVarManager._env_vars[var_name]
+        else:
+            raise ValueError(f"Environment variable '{var_name}' not found")
