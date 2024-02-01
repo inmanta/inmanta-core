@@ -18,7 +18,6 @@ requires = [
     "importlib_metadata>=4,<8",
     "jinja2~=3.0",
     "more-itertools>=8,<11",
-    "netifaces~=0.11",
     # leave upper bound floating for fast-moving and extremely stable packaging
     "packaging>=21.3",
     # pip>=21.3 required for editable pyproject.toml + setup.cfg based install support
