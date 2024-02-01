@@ -1279,7 +1279,7 @@ class OrchestrationService(protocol.ServerSlice):
             env, version_id=version, push=push, agent_trigger_method=agent_trigger_method
         )
         if status_code != 200:
-            raise BaseHttpException(status_code, result["message"])
+            raise BaseHttpException(status_code, result["message"] if result else "")
 
     @handle(methods_v2.get_diff_of_versions, env="tid")
     async def get_diff_of_versions(

@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequenc
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Optional, cast, Type
+from typing import Optional, Type, cast
 
 import dateutil
 import dateutil.parser

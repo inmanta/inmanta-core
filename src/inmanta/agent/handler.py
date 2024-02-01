@@ -70,7 +70,7 @@ class provider:  # noqa: N801
         self._resource_type = resource_type
         self._name = name
 
-    def __call__(self, function):
+    def __call__(self, function: type["ResourceHandler[Any]"]) -> "type[ResourceHandler[Any]]":
         """
         The wrapping
         """
@@ -141,7 +141,7 @@ def cache(
         def wrapper(self, *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))
 
-            def bound(**kwds):
+            def bound(**kwds: object):
                 return f(self, **kwds)
 
             return self.cache.get_or_else(

@@ -37,7 +37,7 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast, IO
 
 import click
 import more_itertools
@@ -161,7 +161,9 @@ class ModuleLikeTool:
             project.load()
         return project
 
-    def determine_new_version(self, old_version, version, major, minor, patch, dev):
+    def determine_new_version(
+        self, old_version: Version, version: Version, major: bool, minor: bool, patch: bool, dev: bool
+    ) -> Optional[Version]:
         """
         Only used by the `inmanta module commit` command.
         """
@@ -180,7 +182,7 @@ class ModuleLikeTool:
             if not dev:
                 outversion = baseversion
             else:
-                outversion = "%s.dev%d" % (baseversion, time.time())
+                outversion = cast(Version, parse_version("%s.dev%d" % (baseversion, time.time())))
         else:
             opts = [x for x in [major, minor, patch] if x]
             if version is not None:
@@ -204,9 +206,9 @@ class ModuleLikeTool:
                     outversion = str(VersionOperation.set_version_tag(old_version, version_tag=""))
 
             if dev:
-                outversion = "%s.dev%d" % (outversion, time.time())
+                outversion = cast(Version, parse_version("%s.dev%d" % (outversion, time.time())))
 
-        outversion = parse_version(outversion)
+        outversion = cast(Version, parse_version(outversion))
         if outversion <= old_version:
             LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
             return None
@@ -417,20 +419,21 @@ compatible with the dependencies specified by the updated modules.
 
         close = False
 
+        outfile_fd: IO[str]
         if outfile is None:
-            outfile = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
+            outfile_fd = open(project.get_metadata_file_path(), "w", encoding="UTF-8")
             close = True
         elif outfile == "-":
-            outfile = sys.stdout
+            outfile_fd = sys.stdout
         else:
-            outfile = open(outfile, "w", encoding="UTF-8")
+            outfile_fd = open(outfile, "w", encoding="UTF-8")
             close = True
 
         try:
-            outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+            outfile_fd.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
         finally:
             if close:
-                outfile.close()
+                outfile_fd.close()
 
     def init(self, output_dir: str, name: str, default: bool) -> None:
         os.makedirs(output_dir, exist_ok=True)
@@ -1079,23 +1082,23 @@ version: 0.0.1dev0"""
             )
         )
         # find module
-        module = self.get_module(module)
-        if not isinstance(module, ModuleV1):
-            raise CLIException(f"{module.name} is a v2 module and does not support this operation.", exitcode=1)
+        mod = self.get_module(module)
+        if not isinstance(mod, ModuleV1):
+            raise CLIException(f"{mod.name} is a v2 module and does not support this operation.", exitcode=1)
         # get version
-        old_version = parse_version(str(module.version))
+        old_version = parse_version(str(mod.version))
 
         outversion = self.determine_new_version(old_version, version, major, minor, patch, dev)
 
         if outversion is None:
             return
 
-        module.rewrite_version(str(outversion))
+        mod.rewrite_version(str(outversion))
         # commit
-        gitprovider.commit(module._path, message, commit_all, [module.get_metadata_file_path()])
+        gitprovider.commit(mod._path, message, commit_all, [mod.get_metadata_file_path()])
         # tag
         if not dev or tag:
-            gitprovider.tag(module._path, str(outversion))
+            gitprovider.tag(mod._path, str(outversion))
 
     def freeze(self, outfile: Optional[str], recursive: Optional[bool], operator: str, module: Optional[str] = None) -> None:
         """

@@ -435,7 +435,7 @@ class EnvironmentService(protocol.ServerSlice):
             project_from_db = await data.Project.get_by_id(project_id)
             if not project_from_db:
                 raise BadRequest(f"Project with id={project_id} doesn't exist")
-            fields["project"] = project_id
+            fields["project"] = str(project_id)
 
         if description is not None:
             fields["description"] = description

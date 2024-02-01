@@ -866,7 +866,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return 404, {"message": "resource_id parameter is required."}
 
-    @protocol.handle(methods_v2.get_agents, env="tid")
+    @handle(methods_v2.get_agents, env="tid")
     async def get_agents(
         self,
         env: data.Environment,
@@ -894,7 +894,7 @@ class AgentManager(ServerSlice, SessionListener):
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
 
-    @protocol.handle(methods_v2.get_agent_process_details, env="tid")
+    @handle(methods_v2.get_agent_process_details, env="tid")
     async def get_agent_process_details(self, env: data.Environment, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
         agent_process = await data.AgentProcess.get_one(environment=env.id, sid=id)
         if not agent_process:
