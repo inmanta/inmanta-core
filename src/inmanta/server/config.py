@@ -31,8 +31,6 @@ from inmanta.config import (
     is_str,
     is_str_opt,
     is_time,
-    log_dir,
-    state_dir,
 )
 
 LOGGER = logging.getLogger(__name__)

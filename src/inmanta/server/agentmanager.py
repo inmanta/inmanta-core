@@ -52,7 +52,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
-from inmanta.types import Apireturn, ArgumentTypes
+from inmanta.types import Apireturn, ArgumentTypes, ReturnTupple
 
 from ..data.dataview import AgentView
 from . import config as server_config
@@ -294,7 +294,7 @@ class AgentManager(ServerSlice, SessionListener):
         should_be_unpaused_on_resume: bool,
         endpoint: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ):
+    ) -> None:
         """
         Set the unpause_on_resume field of an agent (or all agents in an environment when the endpoint is set to None)
         so that the agent is paused or unpaused after the environment is resumed
@@ -809,7 +809,7 @@ class AgentManager(ServerSlice, SessionListener):
             return 200, {"enabled": True}
         return 200, {"enabled": False}
 
-    async def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
+    async def get_agent_process_report(self, agent_sid: uuid.UUID) -> ReturnTupple:
         ap = await data.AgentProcess.get_one(sid=agent_sid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}

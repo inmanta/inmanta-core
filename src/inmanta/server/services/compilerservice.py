@@ -40,7 +40,6 @@ from asyncpg import Connection
 
 import inmanta.data.model as model
 from inmanta import config, const, data, protocol, server
-from inmanta.config import Config
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
@@ -522,7 +521,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     async def prestart(self, server: server.protocol.Server) -> None:
         await super().prestart(server)
-        state_dir: str = opt.state_dir.get()
+        state_dir: str = config.state_dir.get()
         server_state_dir = ensure_directory_exist(state_dir, "server")
         self._env_folder = ensure_directory_exist(server_state_dir, "environments")
 
@@ -775,7 +774,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
         return wait
 
     async def _auto_recompile_wait(self, compile: data.Compile) -> None:
-        if Config.is_set("server", "auto-recompile-wait"):
+        if config.Config.is_set("server", "auto-recompile-wait"):
             wait_time = opt.server_autrecompile_wait.get()
             LOGGER.warning(
                 "The server-auto-recompile-wait is enabled and set to %s seconds. "
