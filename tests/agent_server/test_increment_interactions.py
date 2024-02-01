@@ -309,12 +309,12 @@ async def test_6477_stale_success(
     #     resource a[k=k1],v=2 start to deploy, seeing a[k=k1],v=2 as available
 
     sid = agent.sessionid
+    # All done, but this pull updates the latest version!
     result = await agent._client.get_resources_for_agent(environment, "agent1", incremental_deploy=True, sid=sid)
     assert result.code == 200, result.result
-    assert len(result.result["resources"]) == 1
-    assert result.result["resources"][0]["resource_id"] == "test::Resource[agent1,key=key2]"
+    assert len(result.result["resources"]) == 0
 
-    # We report the required resource as deployed, so the agent can deploy the requiring resource
+   # We report the required resource as deployed, so the agent can deploy the requiring resource
     status = await get_status_map()
     assert status["key1"] == "deployed"
 
@@ -357,6 +357,7 @@ async def test_7066_stale_success_event(
                 "send_event": True,
                 "purged": False,
                 "requires": [rvid2],
+                "purge_on_delete": False,
             },
             {
                 "key": "key2",
@@ -365,6 +366,7 @@ async def test_7066_stale_success_event(
                 "send_event": False,
                 "purged": False,
                 "requires": [],
+                "purge_on_delete": False,
             },
         ]
         await clienthelper.put_version_simple(resources, version)
