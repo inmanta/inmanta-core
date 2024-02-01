@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import itertools
 import logging
 import os

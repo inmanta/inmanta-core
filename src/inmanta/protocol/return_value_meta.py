@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from collections.abc import Mapping, MutableMapping
 from typing import Any, Optional, cast
 

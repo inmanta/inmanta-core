@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 # Adapted from pyformance
 
 import asyncio
@@ -76,7 +77,6 @@ class AsyncReporter:
 
 
 class InfluxReporter(AsyncReporter):
-
     """
     InfluxDB reporter using native http api
     (based on https://influxdb.com/docs/v1.1/guides/writing_data.html)

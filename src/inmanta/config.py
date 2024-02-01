@@ -113,19 +113,15 @@ class Config:
 
     @overload
     @classmethod
-    def get(cls) -> ConfigParser:
-        ...
+    def get(cls) -> ConfigParser: ...
 
     @overload
     @classmethod
-    def get(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]:
-        ...
+    def get(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]: ...
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
-    def get(
-        cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[object] = None
-    ) -> object:
+    def get(cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[object] = None) -> object:
         """
         Get the entire config or get a value directly
         """
