@@ -232,13 +232,12 @@ async def test_process_manager(environment):
     resources = [res1, res2]
 
     venv_manager = VirtualEnvironmentManager()
-    pm = ProcessManager(venv_manager)
-    print("")
+    process_manager = ProcessManager(venv_manager)
 
-    pm.deploy(agent_name="agent1", code_version="hash_of_code_1", resources=resources)
-    pm.deploy(agent_name="agent1", code_version="hash_of_code_2", resources=resources)
-    pm.dryrun(agent_name="agent1", code_version="hash_of_code_1", resources=resources)
+    process_manager.deploy(agent_name="agent1", code_version="code_1", resources=resources)
+    process_manager.deploy(agent_name="agent1", code_version="code_2", resources=resources)
+    process_manager.dryrun(agent_name="agent1", code_version="code_1", resources=resources)
 
-    pm.print_process_map()
+    process_manager.print_process_map()
 
-    assert len(pm.process_map) == 2
+    assert len(process_manager.process_map) == 2

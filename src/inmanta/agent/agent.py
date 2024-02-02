@@ -623,9 +623,10 @@ class ResourceScheduler:
 class ProcessVirtualEnvironment:
     def __init__(self, env_id):
         self.env_id = env_id
+        self.create_and_install_environment()
 
     def create_and_install_environment(self):
-        # TODO create the venv and load/install code
+        # TODO create venv and load code
         pass
 
 
@@ -668,7 +669,7 @@ class ProcessManager:
         self.process_map: dict["str", Process] = {}  # maps a set of resources, agent and code version to a process
         self.environment_manager = environment_manager
 
-    def add_process(self, agent_name: str, code_version: str, resources: list[Resource]):
+    def create_process(self, agent_name: str, code_version: str, resources: list[Resource]):
         env = self.environment_manager.get_environment(code_version)
         process_id = str(hash(agent_name + code_version))
         process = Process(process_id, agent_name, code_version, env, resources)
@@ -678,19 +679,19 @@ class ProcessManager:
     def dryrun(self, agent_name, code_version, resources):
         process_id = str(hash(agent_name + code_version))
         if process_id not in self.process_map:
-            self.add_process(agent_name, code_version, resources)
+            self.create_process(agent_name, code_version, resources)
         self.process_map[process_id].start_dryrun()
 
     def deploy(self, agent_name, code_version, resources):
         process_id = str(hash(agent_name + code_version))
         if process_id not in self.process_map:
-            self.add_process(agent_name, code_version, resources)
+            self.create_process(agent_name, code_version, resources)
         self.process_map[process_id].start_deploy()
 
     def print_process_map(self):
         print("\nProcess Map:")
         for process_id, p in self.process_map.items():
-            print(f"{process_id}: agent:{p.agent_id}, code_version: {p.code_version}, venv: {p.venv.env_id}")
+            print(f"[process_id:{process_id}]: agent:{p.agent_id}, code_version: {p.code_version}, venv: {p.venv.env_id}")
         print("----------------")
 
 
