@@ -31,23 +31,27 @@ class PGRouterResolver(ExternalAttributeAllocator[T]):
         port = os.environ.get("db_port")
         user = os.environ.get("db_user")
         self.database = os.environ.get("db_name", "allocation_db")
-        self.conn = psycopg2.connect(host=host, port=port, user=user, dbname=self.database)
+        self.conn = psycopg2.connect(
+            host=host, port=port, user=user, dbname=self.database
+        )
         self.conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
 
     def post_allocate(self) -> None:
         """Close connection"""
         self.conn.close()
 
-    def needs_allocation(self, ctx: AllocationContext, instance: dict[str, Any]) -> bool:
+    def needs_allocation(
+        self, ctx: AllocationContext, instance: dict[str, Any]
+    ) -> bool:
         attribute_not_yet_allocated = super().needs_allocation(ctx, instance)
         id_attribute_changed = self._id_attribute_changed(instance)
         return attribute_not_yet_allocated or id_attribute_changed
 
     def _id_attribute_changed(self, instance: dict[str, Any]) -> bool:
         if instance["candidate_attributes"] and instance["active_attributes"]:
-            return instance["candidate_attributes"].get(self.id_attribute) != instance["active_attributes"].get(
-                self.id_attribute
-            )
+            return instance["candidate_attributes"].get(self.id_attribute) != instance[
+                "active_attributes"
+            ].get(self.id_attribute)
         return False
 
     def _get_value_from_result(self, result: Optional[tuple[T]]) -> Optional[T]:
@@ -57,7 +61,9 @@ class PGRouterResolver(ExternalAttributeAllocator[T]):
 
     def allocate_for_attribute(self, id_attribute_value: Any) -> T:
         with self.conn.cursor() as cursor:
-            cursor.execute("SELECT mgmt_ip FROM routers WHERE name=%s", (id_attribute_value,))
+            cursor.execute(
+                "SELECT mgmt_ip FROM routers WHERE name=%s", (id_attribute_value,)
+            )
             result = cursor.fetchone()
             allocated_value = self._get_value_from_result(result)
             if allocated_value:
