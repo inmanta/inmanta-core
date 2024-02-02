@@ -34,8 +34,19 @@ from utils import LogSequence
 
 
 async def make_source_structure(
-    into: dict, file: str, module: str, source: str, client: Client, byte_code: bool = False, dependencies: list[str] = []
+    into: dict[str, tuple[str, str, list[str]]],
+    file: str,
+    module: str,
+    source: str,
+    client: Client,
+    byte_code: bool = False,
+    dependencies: list[str] = [],
 ) -> str:
+    """
+    :param into: dict to populate:
+        - key = hash value of the file
+        - value = tuple (file_name, module, dependencies)
+    """
     with tempfile.TemporaryDirectory() as tmpdirname:
         if byte_code:
             py_file = os.path.join(tmpdirname, "test.py")

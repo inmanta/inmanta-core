@@ -69,6 +69,7 @@ class CodeService(protocol.ServerSlice):
                 ):
                     raise BadRequest("The values in the source map should be of the form (filename, module, [requirements])")
 
+        # list of file hashes
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
         val = await self.file_slice.stat_file_internal(allrefs)
@@ -98,6 +99,7 @@ class CodeService(protocol.ServerSlice):
 
     @handle(methods.get_code, code_id="id", env="tid")
     async def get_code(self, env: data.Environment, code_id: int, resource: str) -> Apireturn:
+        breakpoint()
         code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is None:
             raise NotFound(f"The version of the code does not exist. {resource}, {code_id}")

@@ -35,7 +35,7 @@ from typing import Any, Dict, Optional, Union, cast
 import pkg_resources
 
 from inmanta import const, data, env, protocol
-from inmanta.agent import config as cfg
+from inmanta.agent import config as cfg, poc
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import HandlerAPI, SkipResource
@@ -269,7 +269,9 @@ class ResourceAction(ResourceActionBase):
                     else:
                         # THis must move to the executor and the surrounding code will have to work
                         # with the dict representation of the resource (since deserialization cannot happen here anymore)
-                        await self._execute(ctx=ctx, requires=requires)
+                        executor = poc.scheduler.get_executor_for()
+                        await executor.execute(self, ctx=ctx, requires=requires)
+                        # await self._execute(ctx=ctx, requires=requires)
 
                     ctx.debug(
                         "End run for resource %(resource)s in deploy %(deploy_id)s",
@@ -560,7 +562,7 @@ class ResourceScheduler:
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
-        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, self.running.reason) for r in resources}
+        self.generation: dict[ResourceIdStr: ResourceAction] = {r.id.resource_str(): ResourceAction(self, r, gid, self.running.reason) for r in resources}
 
         # mark undeployable
         for key, res in self.generation.items():
@@ -861,13 +863,18 @@ class AgentInstance:
                 self.logger.warning("Got an error while pulling resources for %s. %s", deploy_request.reason, result.result)
 
             else:
-                undeployable, resources = await self.load_resources(
-                    result.result["version"], const.ResourceAction.deploy, result.result["resources"]
-                )
-                self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
+                if not poc.POC_ON:
+                    undeployable, resources = await self.load_resources(
+                        result.result["version"], const.ResourceAction.deploy, result.result["resources"]
+                    )
+                    self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
 
-                if len(resources) > 0:
-                    self._nq.reload(resources, undeployable, deploy_request)
+                    if len(resources) > 0:
+                        self._nq.reload(resources, undeployable, deploy_request)
+
+                else:
+                    # Send a request to the scheduler for resources from a specific version
+                    poc.scheduler.request_resources_loading(result.result["version"], result.result["resources"])
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
