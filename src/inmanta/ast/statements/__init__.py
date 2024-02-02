@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from collections import abc
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass

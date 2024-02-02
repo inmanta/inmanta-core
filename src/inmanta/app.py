@@ -29,6 +29,7 @@
     ------------
     @command annotation to register new command
 """
+
 import argparse
 import asyncio
 import contextlib
