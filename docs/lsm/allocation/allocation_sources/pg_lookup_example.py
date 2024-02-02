@@ -69,5 +69,7 @@ lsm.AllocationSpec(
     "allocate_for_virtualwire",
     PGRouterResolver(id_attribute="router_a", attribute="router_a_mgmt_ip"),
     PGRouterResolver(id_attribute="router_z", attribute="router_z_mgmt_ip"),
-    lsm.LSM_Allocator(attribute="vni", strategy=lsm.AnyUniqueInt(lower=50000, upper=70000)),
+    lsm.LSM_Allocator(
+        attribute="vni", strategy=lsm.AnyUniqueInt(lower=50000, upper=70000)
+    ),
 )
