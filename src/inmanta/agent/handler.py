@@ -204,8 +204,48 @@ class LoggerABC(ABC):
         raise NotImplementedError
 
 
+# TODO: extract logging behavior from HandlerContext
+class HandlerLogger(LoggerABC): pass
+    def __init__(
+        self,
+        resource_id: Id,
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
+        self._resource_id = resource_id
+        self.logger: logging.Logger
+        if logger is None:
+            self.logger = LOGGER
+        else:
+            self.logger = logger
+        # TODO: when this class is used, logs aren't actually stored on the HandlerContext, what are the consequences?
+        self._logs: list[data.LogLine] = []
+
+    def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
+        if len(args) > 0:
+            raise Exception("Args not supported")
+        if exc_info:
+            kwargs["traceback"] = traceback.format_exc()
+
+        for k, v in kwargs.items():
+            try:
+                json_encode(v)
+            except TypeError:
+                if inmanta.RUNNING_TESTS:
+                    # Fail the test when the value is not serializable
+                    raise Exception(f"Failed to serialize argument for log message {k}={v}")
+                else:
+                    # In production, try to cast the non-serializable value to str to prevent the handler from failing.
+                    kwargs[k] = str(v)
+
+            except Exception as e:
+                raise Exception("Exception during serializing log message arguments") from e
+        log = data.LogLine.log(level, msg, **kwargs)
+        self.logger.log(level, "resource %s: %s", self._resource_id.resource_version_str(), log._data["msg"], exc_info=exc_info)
+        self._logs.append(log)
+
+
 @stable_api
-class HandlerContext(LoggerABC):
+class HandlerContext(HandlerLogger):
     """
     Context passed to handler methods for state related "things"
     """
@@ -218,6 +258,7 @@ class HandlerContext(LoggerABC):
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self._resource = resource
+        self._resource_id = self._resource.id
         self._dry_run = dry_run
         self._cache: dict[str, Any] = {}
 
@@ -232,12 +273,6 @@ class HandlerContext(LoggerABC):
             action_id = uuid.uuid4()
         self._action_id = action_id
         self._status: Optional[ResourceState] = None
-        self._logs: list[data.LogLine] = []
-        self.logger: logging.Logger
-        if logger is None:
-            self.logger = LOGGER
-        else:
-            self.logger = logger
 
         self._facts: list[dict[str, Any]] = []
 
@@ -401,29 +436,6 @@ class HandlerContext(LoggerABC):
     @property
     def changes(self) -> dict[str, AttributeStateChange]:
         return self._changes
-
-    def _log_msg(self, level: int, msg: str, *args: object, exc_info: bool = False, **kwargs: object) -> None:
-        if len(args) > 0:
-            raise Exception("Args not supported")
-        if exc_info:
-            kwargs["traceback"] = traceback.format_exc()
-
-        for k, v in kwargs.items():
-            try:
-                json_encode(v)
-            except TypeError:
-                if inmanta.RUNNING_TESTS:
-                    # Fail the test when the value is not serializable
-                    raise Exception(f"Failed to serialize argument for log message {k}={v}")
-                else:
-                    # In production, try to cast the non-serializable value to str to prevent the handler from failing.
-                    kwargs[k] = str(v)
-
-            except Exception as e:
-                raise Exception("Exception during serializing log message arguments") from e
-        log = data.LogLine.log(level, msg, **kwargs)
-        self.logger.log(level, "resource %s: %s", self._resource.id.resource_version_str(), log._data["msg"], exc_info=exc_info)
-        self._logs.append(log)
 
 
 # Explicitly not yet part of the stable API until the interface has had some time to mature.

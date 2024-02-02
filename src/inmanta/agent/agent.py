@@ -27,7 +27,7 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Iterable, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Dict, Optional, Union, cast
@@ -139,17 +139,17 @@ class DummyResourceAction(ResourceActionBase):
 
 
 class ResourceAction(ResourceActionBase):
-    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
+    def __init__(self, scheduler: "ResourceScheduler", resource: dict[str, object], gid: uuid.UUID, reason: str) -> None:
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         super().__init__(scheduler, resource.id, gid, reason)
-        self.resource: Resource = resource
+        self.resource: dict[str, object] = resource
 
     async def send_in_progress(self, action_id: uuid.UUID) -> dict[ResourceIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
             tid=self.scheduler._env_id,
-            rvid=self.resource.id.resource_version_str(),
+            rvid=Id.parse_id(self.resource["id"]).resource_version_str(),
             action_id=action_id,
         )
         if result.code != 200 or result.result is None:
@@ -163,18 +163,28 @@ class ResourceAction(ResourceActionBase):
                          state that was not `deploying'.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
+        # TODO: double check: is this required? Is failure handled properly?
+        try:
+            resource: Resource = Resource.deserialize(self.resource)
+        except Exception:
+            ctx.set_status(const.ResourceState.unavailable)
+            ctx.exception("Unable to deserialize %(resource_id)s", resource_id=Id.parse_id(self.resource["id"]).resource_version_str())
+            return
+
+        ctx = handler.HandlerContext(resource, logger=self.logger)
+
 
         # setup provider
         provider: Optional[HandlerAPI[Any]] = None
         try:
-            provider = await self.scheduler.agent.get_provider(self.resource)
+            provider = await self.scheduler.agent.get_provider(resource)
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
             return
         except Exception:
             ctx.set_status(const.ResourceState.unavailable)
-            ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=self.resource.id.resource_version_str())
+            ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
             return
         else:
             # main execution
@@ -183,7 +193,7 @@ class ResourceAction(ResourceActionBase):
                     self.scheduler.agent.thread_pool,
                     provider.deploy,
                     ctx,
-                    self.resource,
+                    resource,
                     requires,
                 )
                 if ctx.status is None:
@@ -193,12 +203,12 @@ class ResourceAction(ResourceActionBase):
                 ctx.exception(str(e))
             except SkipResource as e:
                 ctx.set_status(const.ResourceState.skipped)
-                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=self.resource.id, reason=e.args)
+                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
                 ctx.exception(
                     "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                    resource_id=self.resource.id,
+                    resource_id=resource.id,
                     exception=repr(e),
                 )
         finally:
@@ -209,8 +219,8 @@ class ResourceAction(ResourceActionBase):
         self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
     ) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        with cache.manager(self.resource.id.get_version()):
-            self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
+        with cache.manager(Id.parse_id(self.resource["id"]).get_version()):
+            self.dependencies = [generation[Id.parse_id(x).resource_str()] for x in self.resource["requires"]]
             waiters = [x.future for x in self.dependencies]
             waiters.append(dummy.future)
             # Explicit cast is required because mypy has issues with * and generics
@@ -237,17 +247,18 @@ class ResourceAction(ResourceActionBase):
                     self.running = False
 
             async with self.scheduler.ratelimiter:
-                ctx = handler.HandlerContext(self.resource, logger=self.logger)
+                self.running = True
+
+                ctx = handler.HandlerLogger(Id.parse_id(self.resource["id"]), logger=self.logger)
 
                 ctx.debug(
                     "Start run for resource %(resource)s because %(reason)s",
-                    resource=str(self.resource.id),
+                    resource=str(Id.parse_id(self.resource["id"])),
                     deploy_id=self.gid,
                     agent=self.scheduler.agent.name,
                     reason=self.reason,
                 )
 
-                self.running = True
                 try:
                     if self.is_done():
                         # Action is cancelled
@@ -269,18 +280,16 @@ class ResourceAction(ResourceActionBase):
                     else:
                         # THis must move to the executor and the surrounding code will have to work
                         # with the dict representation of the resource (since deserialization cannot happen here anymore)
-                        executor = poc.scheduler.get_executor_for()
-                        await executor.execute(self, ctx=ctx, requires=requires)
-                        # await self._execute(ctx=ctx, requires=requires)
+                        await self._execute(ctx=ctx, requires=requires)
 
                     ctx.debug(
                         "End run for resource %(resource)s in deploy %(deploy_id)s",
-                        resource=str(self.resource.id),
+                        resource=str(Id.parse_id(self.resource["id"])),
                         deploy_id=self.gid,
                     )
 
                     changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {
-                        self.resource.id.resource_version_str(): ctx.changes
+                        Id.parse_id(self.resource["id"]).resource_version_str(): ctx.changes
                     }
 
                     if ctx.facts:
@@ -293,7 +302,7 @@ class ResourceAction(ResourceActionBase):
 
                     response = await self.scheduler.get_client().resource_deploy_done(
                         tid=self.scheduler._env_id,
-                        rvid=self.resource.id.resource_version_str(),
+                        rvid=Id.parse_id(self.resource["id"]).resource_version_str(),
                         action_id=ctx.action_id,
                         status=ctx.status,
                         messages=ctx.logs,
@@ -515,7 +524,7 @@ class ResourceScheduler:
 
     def reload(
         self,
-        resources: list[Resource],
+        resources: list[Mapping[str, object]],
         undeployable: dict[ResourceVersionIdStr, ResourceState],
         new_request: DeployRequest,
     ) -> None:
@@ -557,7 +566,7 @@ class ResourceScheduler:
 
         # start new run
         self.running = new_request
-        self.version = resources[0].id.get_version()
+        self.version = Id.parse_id(resources[0]["id"]).get_version()
         gid = uuid.uuid4()
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
@@ -571,7 +580,7 @@ class ResourceScheduler:
                 self.generation[key].undeployable = undeployable[vid]
 
         # hook up Cross Agent Dependencies
-        cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
+        cross_agent_dependencies: Sequence[Id] = [parsed_id for r in resources for raw in r.get("requires", []) if (parsed_id := Id.parse_id(raw)).get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
@@ -863,18 +872,13 @@ class AgentInstance:
                 self.logger.warning("Got an error while pulling resources for %s. %s", deploy_request.reason, result.result)
 
             else:
-                if not poc.POC_ON:
-                    undeployable, resources = await self.load_resources(
-                        result.result["version"], const.ResourceAction.deploy, result.result["resources"]
-                    )
-                    self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
+                undeployable, resources = await self.load_resources(
+                    result.result["version"], const.ResourceAction.deploy, result.result["resources"]
+                )
+                self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
 
-                    if len(resources) > 0:
-                        self._nq.reload(resources, undeployable, deploy_request)
-
-                else:
-                    # Send a request to the scheduler for resources from a specific version
-                    poc.scheduler.request_resources_loading(result.result["version"], result.result["resources"])
+                if len(resources) > 0:
+                    self._nq.reload(resources, undeployable, deploy_request)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
@@ -1045,15 +1049,16 @@ class AgentInstance:
 
     async def load_resources(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[Resource]]:
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[dict[str, object]]]:
         """Deserialize all resources and load all handler code. When the code for this type fails to load, the resource
         is marked as failed
         """
         started = datetime.datetime.now().astimezone()
+        # TODO: move this to executor
         failed_resource_types = await self.process.ensure_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
-        loaded_resources: list[Resource] = []
+        loaded_resources: list[dict[str, object]] = []
         failed_resources: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
@@ -1062,23 +1067,21 @@ class AgentInstance:
                 res["attributes"]["id"] = res["id"]
                 if res["resource_type"] not in failed_resource_types:
                     # Trouble -> can't deserialize here since the module code is loaded in the executor
-                    resource: Resource = Resource.deserialize(res["attributes"])
-                    loaded_resources.append(resource)
+                    loaded_resources.append(res["attributes"])
 
                     state = const.ResourceState[res["status"]]
                     if state in const.UNDEPLOYABLE_STATES:
                         undeployable[res["id"]] = state
                 else:
                     failed_resources.append(res["id"])
+                    # TODO: in practice, no more failed resources at this point because no code loading => clean up!
                     undeployable[res["id"]] = const.ResourceState.unavailable
-                    resource = Resource.deserialize(res["attributes"], use_generic=True)
-                    loaded_resources.append(resource)
+                    loaded_resources.append(res["attributes"])
 
             except Exception:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
-                resource = Resource.deserialize(res["attributes"], use_generic=True)
-                loaded_resources.append(resource)
+                loaded_resources.append(res["attributes"])
 
         if len(failed_resources) > 0:
             log = data.LogLine.log(
