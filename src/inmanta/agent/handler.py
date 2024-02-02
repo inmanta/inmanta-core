@@ -205,10 +205,10 @@ class LoggerABC(ABC):
 
 
 # TODO: extract logging behavior from HandlerContext
-class HandlerLogger(LoggerABC): pass
+class HandlerLogger(LoggerABC):
     def __init__(
         self,
-        resource_id: Id,
+        resource_id: resources.Id,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self._resource_id = resource_id
