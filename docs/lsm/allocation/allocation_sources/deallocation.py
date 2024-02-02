@@ -31,7 +31,9 @@ class PGServiceIdAllocator(ExternalServiceIdAllocator[int]):
         port = os.environ.get("db_port")
         user = os.environ.get("db_user")
         self.database = os.environ.get("db_name", "allocation_db")
-        self.conn = psycopg2.connect(host=host, port=port, user=user, dbname=self.database)
+        self.conn = psycopg2.connect(
+            host=host, port=port, user=user, dbname=self.database
+        )
         self.conn.set_isolation_level(ISOLATION_LEVEL_SERIALIZABLE)
 
     def post_allocate(self) -> None:
@@ -112,11 +114,15 @@ class PGAllocation(CRUDHandler[PGAllocationResource]):
     def post(self, ctx: handler.HandlerContext, resource: PGAllocationResource) -> None:
         self._allocator.post_allocate()
 
-    def read_resource(self, ctx: handler.HandlerContext, resource: PGAllocationResource) -> None:
+    def read_resource(
+            self, ctx: handler.HandlerContext, resource: PGAllocationResource
+        ) -> None:
         if not self._allocator.has_allocation_in_inventory(resource.service_id):
             raise ResourcePurged()
 
-    def delete_resource(self, ctx: handler.HandlerContext, resource: PGAllocationResource) -> None:
+    def delete_resource(
+            self, ctx: handler.HandlerContext, resource: PGAllocationResource
+        ) -> None:
         self._allocator.de_allocate(resource.service_id)
 
 
