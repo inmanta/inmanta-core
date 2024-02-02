@@ -19,7 +19,7 @@ class IPCRequestFrame:
 class IPCReplyFrame:
     id: uuid.UUID
     returnvalue: object
-
+    is_exception: bool
 
 class IPCFrameProtocol(Protocol):
     """
