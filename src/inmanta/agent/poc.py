@@ -13,14 +13,6 @@ POC_ON = True
 LOGGER = logging.getLogger(__name__)
 
 class Executor(ABC):
-    pass
-
-class PocExecutor(Executor):
-    async def execute(self):
-        LOGGER.info("Request to load resources %s %s" % version, resources)
-
-
-class ResourceActionBasedExecutor(Executor):
     @staticmethod
     async def execute(ra, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState]) -> None:
         """
@@ -29,11 +21,13 @@ class ResourceActionBasedExecutor(Executor):
                          state that was not `deploying'.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=ra.gid, resource_id=ra.resource_id)
-        breakpoint()
         # setup provider
         provider: Optional[HandlerAPI[Any]] = None
         try:
-            provider = await ra.scheduler.agent.get_provider(ra.resource)
+            if not POC_ON:
+                provider = await ra.scheduler.agent.get_provider(ra.resource)
+            else:
+                provider = scheduler.get_executor_for(ra.ve)
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
@@ -71,6 +65,15 @@ class ResourceActionBasedExecutor(Executor):
             if provider is not None:
                 provider.close()
 
+class PocExecutor(Executor):
+    async def execute(self):
+        LOGGER.info("PocExecutor executing...")
+
+
+class ResourceActionBasedExecutor(Executor):
+
+
+
 class Scheduler():
     def request_resources_loading(self, version: int, resources: dict[str, dict[str, object]]):
         """
@@ -83,6 +86,7 @@ class Scheduler():
         if POC_ON:
             return PocExecutor()
         return ResourceActionBasedExecutor()
+
 
 scheduler = Scheduler()
 
