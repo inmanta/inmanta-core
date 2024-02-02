@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import pytest
+
 from inmanta.const import (
     DONE_STATES,
     INITIAL_STATES,
@@ -23,6 +25,7 @@ from inmanta.const import (
     TRANSIENT_STATES,
     UNDEPLOYABLE_STATES,
     VALID_STATES_ON_STATE_UPDATE,
+    EnvVarManager,
 )
 
 
@@ -42,3 +45,43 @@ def test_action_set_consistency():
 
     # done + not_done == all == initial states + states one can transition to
     assert done | not_done == on_deploy | initial
+
+
+@pytest.mark.parametrize(
+    "var_name,value",
+    [
+        ("TEST_VAR", "test_value"),
+        ("EMPTY_VAR", ""),
+        ("NONE_VAR", None),
+    ],
+)
+def test_register_and_get_env_var(var_name, value):
+    EnvVarManager._env_vars.clear()
+
+    EnvVarManager.register(var_name, value)
+    result = EnvVarManager.get(var_name)
+
+    assert len(EnvVarManager._env_vars) == 1
+    assert result == value
+
+
+def test_get_unregistered_env_var_raises_exception():
+    env_var = "UNREGISTERED_VAR"
+    EnvVarManager._env_vars.clear()
+    with pytest.raises(ValueError) as exc_info:
+        EnvVarManager.get(env_var)
+    assert str(exc_info.value) == f"Environment variable '{env_var}' not found"
+
+
+def test_get_all_env_vars():
+    EnvVarManager._env_vars.clear()
+    EnvVarManager.register("TEST_VAR", "test_value")
+    EnvVarManager.register("EMPTY_VAR", "")
+    EnvVarManager.register("NONE_VAR", None)
+
+    all_vars = EnvVarManager.get_all()
+
+    assert len(all_vars) == 3
+    assert all_vars["TEST_VAR"] == "test_value"
+    assert all_vars["EMPTY_VAR"] == ""
+    assert all_vars["NONE_VAR"] is None

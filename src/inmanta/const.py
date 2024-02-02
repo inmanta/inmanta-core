@@ -349,15 +349,20 @@ class EnvVarManager:
 
     _env_vars: Dict[str, str] = {}
 
-    @staticmethod
-    def register(var_name: str, value: Optional[str] = None):
+    @classmethod
+    def register(cls, var_name: str, value: Optional[str] = None):
         """Register an environment variable"""
-        EnvVarManager._env_vars[var_name] = value
+        cls._env_vars[var_name] = value
 
-    @staticmethod
-    def get(var_name: str) -> str:
-        """Get the value of a registered environment variable or raise an exception if not found."""
-        if var_name in EnvVarManager._env_vars:
-            return EnvVarManager._env_vars[var_name]
+    @classmethod
+    def get(cls, var_name: str) -> str:
+        """Get a registered environment variable or raise an exception if not found."""
+        if var_name in cls._env_vars:
+            return cls._env_vars[var_name]
         else:
             raise ValueError(f"Environment variable '{var_name}' not found")
+
+    @classmethod
+    def get_all(cls) -> dict[str, str]:
+        """Get all registered environment variable"""
+        return cls._env_vars
