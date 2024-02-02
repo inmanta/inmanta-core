@@ -620,23 +620,22 @@ class ResourceScheduler:
         return self.agent.get_client()
 
 
-class ProcessVEnvironment:
+class ProcessVirtualEnvironment:
     def __init__(self, process_id):
         self.process_id = process_id
 
-    #        self.env = self.create_and_install_environment()
-
     def create_and_install_environment(self):
+        # TODO create the venv and load/install code
         pass
 
 
 class ProcessVEnvironmentManager:
     def __init__(self):
-        self._environment_map: dict["str", ProcessVEnvironment] = {}
+        self._environment_map: dict["str", ProcessVirtualEnvironment] = {}
 
     def create_environment(self, env_id):
-        process_environment = ProcessVEnvironment(env_id)
-        self._environment_map[process_environment.id] = process_environment
+        process_environment = ProcessVirtualEnvironment(env_id)
+        self._environment_map[process_environment.process_id] = process_environment
         return process_environment
 
     def get_environment(self, env_id):
@@ -646,33 +645,57 @@ class ProcessVEnvironmentManager:
 
 
 class Process:
-    def __init__(self, resource: Resource, venv: ProcessVEnvironment):
-        self.resource = resource
+    def __init__(
+        self, process_id: str, agent_id: str, code_version: str, venv: ProcessVirtualEnvironment, resources: list[Resource]
+    ):
+        self.process_id = process_id
+        self.resources = resources
         self.venv = venv
+        self.agent_id = agent_id
+        self.code_version = code_version
 
-    @property
-    def id(self):
-        return self.resource.id.resource_version_str()
-        # identify each process based on agent, version and resource
+    def create_process(self):
+        # TODO
+        print(f"spawning process with id {self.process_id} for resource {self.resources} with environment {self.venv}")
 
-    def spawn_process(self):
-        print(f"spawning process with id {self.id} for resource {self.resource} with environment {self.venv}")
+    def start_dryrun(self):
+        # TODO
+        print(f"starting dryrun id {self.process_id} for resource {self.resources} with environment {self.venv}")
+
+    def start_deploy(self):
+        # TODO
+        print(f"starting deploy with id {self.process_id} for resource {self.resources} with environment {self.venv}")
 
 
 class ProcessManager:
     def __init__(self, environment_manager: ProcessVEnvironmentManager):
-        self.process_map: dict["str", Process] = {}  # maps a certain resource to a process
+        self.process_map: dict["str", Process] = {}  # maps a set of resources, agent and code version to a process
         self.environment_manager = environment_manager
 
-    def add_process(self, resource: Resource):
-        env = self.environment_manager.get_environment(resource.id)
-        process = Process(resource, env)
-        self.process_map[process.id] = process
+    def add_process(self, agent_name: str, code_version: str, resources: list[Resource]):
+        env = self.environment_manager.get_environment(code_version)
+        process_id = str(hash(agent_name + code_version))
+        process = Process(process_id, agent_name, code_version, env, resources)
+        self.process_map[process_id] = process
+        return process_id
+
+    def dryrun(self, agent_name, code_version, resources):
+        process_id = str(hash(agent_name + code_version))
+        if process_id not in self.process_map:
+            self.add_process(agent_name, code_version, resources)
+        self.process_map[process_id].start_dryrun()
+
+    def deploy(self, agent_name, code_version, resources):
+        process_id = str(hash(agent_name + code_version))
+        if process_id not in self.process_map:
+            self.add_process(agent_name, code_version, resources)
+        self.process_map[process_id].start_deploy()
 
     def print_process_map(self):
-        print("Process Map:")
-        for process_id, process in self.process_map.items():
-            print(f"{process_id}: {process}")
+        print("\nProcess Map:")
+        for process_id, p in self.process_map.items():
+            print(f"{process_id}: agent:{p.agent_id}, code_version: {p.code_version}")
+        print("----------------")
 
 
 class AgentInstance:
