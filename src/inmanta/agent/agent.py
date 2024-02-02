@@ -645,7 +645,7 @@ class VirtualEnvironmentManager:
         return self.create_environment(env_id)
 
 
-class Process:
+class Process:  # Executor
     def __init__(
         self, process_id: str, agent_id: str, code_version: str, venv: ProcessVirtualEnvironment, resources: list[Resource]
     ):
@@ -666,7 +666,7 @@ class Process:
 
 class ProcessManager:
     def __init__(self, environment_manager: VirtualEnvironmentManager):
-        self.process_map: dict["str", Process] = {}  # maps a set of resources, agent and code version to a process
+        self.process_map: dict["str", Process] = {}
         self.environment_manager = environment_manager
 
     def create_process(self, agent_name: str, code_version: str, resources: list[Resource]):
