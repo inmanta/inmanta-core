@@ -115,14 +115,14 @@ class PGAllocation(CRUDHandler[PGAllocationResource]):
         self._allocator.post_allocate()
 
     def read_resource(
-            self, ctx: handler.HandlerContext, resource: PGAllocationResource
-        ) -> None:
+        self, ctx: handler.HandlerContext, resource: PGAllocationResource
+    ) -> None:
         if not self._allocator.has_allocation_in_inventory(resource.service_id):
             raise ResourcePurged()
 
     def delete_resource(
-            self, ctx: handler.HandlerContext, resource: PGAllocationResource
-        ) -> None:
+        self, ctx: handler.HandlerContext, resource: PGAllocationResource
+    ) -> None:
         self._allocator.de_allocate(resource.service_id)
 
 
