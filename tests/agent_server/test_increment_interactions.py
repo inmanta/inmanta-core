@@ -314,7 +314,7 @@ async def test_6477_stale_success(
     assert result.code == 200, result.result
     assert len(result.result["resources"]) == 0
 
-   # We report the required resource as deployed, so the agent can deploy the requiring resource
+    # We report the required resource as deployed, so the agent can deploy the requiring resource
     status = await get_status_map()
     assert status["key1"] == "deployed"
 
