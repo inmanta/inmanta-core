@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from uuid import UUID
 
 import pytest

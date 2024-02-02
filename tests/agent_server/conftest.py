@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import time
@@ -214,7 +215,7 @@ def resource_container():
         fields = ("key", "value", "set_state_to_deployed", "purged")
 
     @resource("test::EventResource", agent="agent", id_attribute="key")
-    class EventResource(Resource):
+    class EventResource(PurgeableResource):
         """
         Raise a SkipResource exception in the deploy() handler method.
         """

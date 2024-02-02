@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import copy
 import datetime
@@ -3913,9 +3914,9 @@ class Compile(BaseDocument):
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
             metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=json.loads(requested_compile["environment_variables"])
-            if requested_compile["environment_variables"]
-            else {},
+            environment_variables=(
+                json.loads(requested_compile["environment_variables"]) if requested_compile["environment_variables"] else {}
+            ),
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
