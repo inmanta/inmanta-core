@@ -5,6 +5,7 @@
     :contact: code@inmanta.com
     :license: Inmanta EULA
 """
+
 from inmanta.util import dict_path
 from inmanta_plugins.lsm.allocation import AllocationSpecV2
 from inmanta_plugins.lsm.allocation_v2.framework import AllocatorV2, ContextV2, ForEach

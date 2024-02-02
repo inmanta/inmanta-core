@@ -5,6 +5,7 @@
     :contact: code@inmanta.com
     :license: Inmanta EULA
 """
+
 import os
 from typing import Any, Optional
 
@@ -26,9 +27,7 @@ class PGAttributeAllocator(ExternalAttributeAllocator[T]):
         port = os.environ.get("db_port")
         user = os.environ.get("db_user")
         self.database = os.environ.get("db_name", "allocation_db")
-        self.conn = psycopg2.connect(
-            host=host, port=port, user=user, dbname=self.database
-        )
+        self.conn = psycopg2.connect(host=host, port=port, user=user, dbname=self.database)
         self.conn.set_isolation_level(ISOLATION_LEVEL_SERIALIZABLE)
 
     def post_allocate(self) -> None:
