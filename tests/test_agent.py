@@ -26,7 +26,7 @@ import pytest
 
 from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
-from inmanta.agent.agent import ProcessManager, ProcessVEnvironmentManager, ResourceAction
+from inmanta.agent.agent import ProcessManager, ResourceAction, VirtualEnvironmentManager
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange
 from inmanta.resources import Id, PurgeableResource, resource
@@ -231,8 +231,9 @@ async def test_process_manager(environment):
 
     resources = [res1, res2]
 
-    venv_manager = ProcessVEnvironmentManager()
+    venv_manager = VirtualEnvironmentManager()
     pm = ProcessManager(venv_manager)
+    print("")
 
     pm.deploy(agent_name="agent1", code_version="hash_of_code_1", resources=resources)
     pm.deploy(agent_name="agent1", code_version="hash_of_code_2", resources=resources)

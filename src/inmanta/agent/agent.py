@@ -621,21 +621,21 @@ class ResourceScheduler:
 
 
 class ProcessVirtualEnvironment:
-    def __init__(self, process_id):
-        self.process_id = process_id
+    def __init__(self, env_id):
+        self.env_id = env_id
 
     def create_and_install_environment(self):
         # TODO create the venv and load/install code
         pass
 
 
-class ProcessVEnvironmentManager:
+class VirtualEnvironmentManager:
     def __init__(self):
         self._environment_map: dict["str", ProcessVirtualEnvironment] = {}
 
     def create_environment(self, env_id):
         process_environment = ProcessVirtualEnvironment(env_id)
-        self._environment_map[process_environment.process_id] = process_environment
+        self._environment_map[process_environment.env_id] = process_environment
         return process_environment
 
     def get_environment(self, env_id):
@@ -654,21 +654,17 @@ class Process:
         self.agent_id = agent_id
         self.code_version = code_version
 
-    def create_process(self):
-        # TODO
-        print(f"spawning process with id {self.process_id} for resource {self.resources} with environment {self.venv}")
-
     def start_dryrun(self):
         # TODO
-        print(f"starting dryrun id {self.process_id} for resource {self.resources} with environment {self.venv}")
+        print(f"starting dryrun with process_id {self.process_id} for resource {self.resources} with environment {self.venv}")
 
     def start_deploy(self):
         # TODO
-        print(f"starting deploy with id {self.process_id} for resource {self.resources} with environment {self.venv}")
+        print(f"starting deploy with process_id {self.process_id} for resource {self.resources} with environment {self.venv}")
 
 
 class ProcessManager:
-    def __init__(self, environment_manager: ProcessVEnvironmentManager):
+    def __init__(self, environment_manager: VirtualEnvironmentManager):
         self.process_map: dict["str", Process] = {}  # maps a set of resources, agent and code version to a process
         self.environment_manager = environment_manager
 
@@ -694,7 +690,7 @@ class ProcessManager:
     def print_process_map(self):
         print("\nProcess Map:")
         for process_id, p in self.process_map.items():
-            print(f"{process_id}: agent:{p.agent_id}, code_version: {p.code_version}")
+            print(f"{process_id}: agent:{p.agent_id}, code_version: {p.code_version}, venv: {p.venv.env_id}")
         print("----------------")
 
 
