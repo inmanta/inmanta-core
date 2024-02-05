@@ -1682,7 +1682,7 @@ def create_local_package_index():
     """
 
     def _create_local_package_index(modules_v2_dir: str, index_name: str = "simple"):
-
+        pass
 
 
 @pytest.fixture(scope="session")
@@ -1729,7 +1729,6 @@ def local_module_package_index(modules_v2_dir: str, create_local_package_index) 
         logging.info(f"Using cache %s", cache_dir)
 
     yield index_dir
-
 
 
 @pytest.fixture
