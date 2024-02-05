@@ -1729,7 +1729,7 @@ def local_module_package_index(modules_v2_dir: str, create_local_package_index) 
         )
 
     if _should_rebuild_cache():
-        logging.info(f"Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
+        logger.info(f"Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
@@ -1741,12 +1741,13 @@ def local_module_package_index(modules_v2_dir: str, create_local_package_index) 
         CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
             ["pip", "download", "setuptools", "wheel"], cwd=build_dir
         )
+
         # Build python package repository
         dir2pi(argv=["dir2pi", build_dir])
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:
-        logging.info(f"Using cache %s", cache_dir)
+        logger.info(f"Using cache %s", cache_dir)
 
     yield index_dir
 

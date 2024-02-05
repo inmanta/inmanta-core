@@ -238,7 +238,7 @@ def test_process_env_install_from_index(
 def test_process_env_install_from_index_not_found_env_var(
     tmpvenv_active: tuple[py.path.local, py.path.local],
     monkeypatch,
-    create_local_package_index,
+    create_local_package_index_factory,
     use_extra_indexes: bool,
     use_extra_indexes_env: bool,
     use_system_config: bool,
@@ -248,41 +248,97 @@ def test_process_env_install_from_index_not_found_env_var(
     This if the system config are used or not.
     Assert the appropriate error is raised.
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        index_url = create_local_package_index(tmpdir)
+    index_url = create_local_package_index_factory()
 
-        extra_index_urls = []
-        if use_extra_indexes:
-            extra_index_1 = create_local_package_index(tmpdir, "extra1")
-            extra_index_2 = create_local_package_index(tmpdir, "extra2")
-            extra_index_urls = [extra_index_1, extra_index_2]
+    extra_index_urls = []
+    if use_extra_indexes:
+        extra_index_1 = create_local_package_index_factory("extra1")
+        extra_index_2 = create_local_package_index_factory("extra2")
+        extra_index_urls = [extra_index_1, extra_index_2]
 
-        extra_index_urls_env = ""
-        if use_extra_indexes_env:
-            extra_index_env1 = create_local_package_index(tmpdir, "extra_env1")
-            extra_index_env2 = create_local_package_index(tmpdir, "extra_env2")
-            extra_index_urls_env = f"{extra_index_env1} {extra_index_env2}"
+    extra_index_urls_env = ""
+    if use_extra_indexes_env:
+        extra_index_env1 = create_local_package_index_factory("extra_env1")
+        extra_index_env2 = create_local_package_index_factory("extra_env2")
+        extra_index_urls_env = f"{extra_index_env1} {extra_index_env2}"
 
-        monkeypatch.setenv("PIP_EXTRA_INDEX_URL", extra_index_urls_env)
+    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", extra_index_urls_env)
 
-        expected_indexes = index_url
-        if use_system_config:
-            env_index_url_env = ", " + extra_index_urls_env.replace(" ", ", ") if use_extra_indexes_env else ""
-            # PIP_EXTRA_INDEX_URL expects the different urls to be given as a string with a single space separating them,
-            # while the output has commas separating the different values.
-            expected_indexes = expected_indexes + env_index_url_env
+    expected_indexes = index_url
+    if use_system_config:
+        env_index_url_env = ", " + extra_index_urls_env.replace(" ", ", ") if use_extra_indexes_env else ""
+        # PIP_EXTRA_INDEX_URL expects the different urls to be given as a string with a single space separating them,
+        # while the output has commas separating the different values.
+        expected_indexes = expected_indexes + env_index_url_env
 
-        expected_indexes = expected_indexes + ", " + ", ".join(extra_index_urls) if extra_index_urls else expected_indexes
+    expected_indexes = expected_indexes + ", " + ", ".join(extra_index_urls) if extra_index_urls else expected_indexes
 
-        expected: str = (
-            "Packages this-package-does-not-exist were not "
-            "found in the given indexes. (Looking in indexes: %s)" % expected_indexes
+    expected: str = (
+        "Packages this-package-does-not-exist were not "
+        "found in the given indexes. (Looking in indexes: %s)" % expected_indexes
+    )
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
+        env.process_env.install_for_config(
+            [Requirement.parse("this-package-does-not-exist")],
+            config=PipConfig(index_url=index_url, extra_index_url=extra_index_urls, use_system_config=use_system_config),
         )
-        with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
-            env.process_env.install_for_config(
-                [Requirement.parse("this-package-does-not-exist")],
-                config=PipConfig(index_url=index_url, extra_index_url=extra_index_urls, use_system_config=use_system_config),
-            )
+
+
+@pytest.mark.slowtest
+def test_process_env_install_with_no_index_url(
+    tmpvenv_active: tuple[py.path.local, py.path.local],
+    monkeypatch,
+    create_local_package_index_factory,
+) -> None:
+    """
+    Attempt to install a package with the primary index URL set to None.
+    This tests the behavior when no primary pip index is defined, and only extra index URLs are used.
+    Assert that the appropriate error is raised.
+    """
+    extra_index_1 = create_local_package_index_factory("extra1")
+    extra_index_2 = create_local_package_index_factory("extra2")
+    extra_index_urls = [extra_index_1, extra_index_2]
+
+    index_url = None  # Explicitly set to None to test the scenario
+
+    expected_indexes = ", ".join(extra_index_urls)  # Expected indexes to be included in the error message
+
+    expected_error_message: str = (
+        "Packages this-package-does-not-exist were not "
+        "found in the given indexes. (Looking in indexes: %s)" % expected_indexes
+    )
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected_error_message)):
+        env.process_env.install_for_config(
+            [Requirement.parse("this-package-does-not-exist")],
+            config=PipConfig(index_url=index_url, extra_index_url=extra_index_urls, use_system_config=True),
+        )
+
+
+@pytest.mark.slowtest
+@pytest.mark.parametrize_any("use_indexes_env", [True, False])
+def test_install_package_not_found_in_default_index(
+    tmpvenv_active: tuple[py.path.local, py.path.local], monkeypatch, use_indexes_env: bool
+) -> None:
+    """
+    Tests the installation of a non-existent package, ensuring the system defaults to PyPI
+    and raises the expected error when the index URL is not configured or is explicitly set.
+    """
+    if use_indexes_env:
+        monkeypatch.delenv("PIP_INDEX_URL", raising=False)
+    # The list of non-existent packages to attempt to install
+    not_found_packages = ["nonexistent-package"]
+
+    expected_error_message: str = "Packages %s were not found in the default index (pypi)." % (", ".join(not_found_packages))
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected_error_message)) as e:
+        env.process_env.install_for_config(
+            [Requirement.parse(pkg) for pkg in not_found_packages],
+            config=PipConfig(
+                index_url="https://pypi.python.org/simple" if not use_indexes_env else None,
+                use_system_config=True if use_indexes_env else False,
+            ),
+        )
 
 
 @pytest.mark.slowtest
