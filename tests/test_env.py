@@ -244,7 +244,7 @@ def test_process_env_install_from_index_not_found_env_var(
     use_system_config,
 ) -> None:
     """
-    Attempt to install a package that does not exist from a pip indexes defined in the env vars, in the pip config or in both.
+    Attempt to install a package that does not exist from the pip indexes defined in the env vars, in the pip config or in both.
     This if the system config are used or not.
     Assert the appropriate error is raised.
     """
