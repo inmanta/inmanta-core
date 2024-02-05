@@ -1682,49 +1682,7 @@ def create_local_package_index():
     """
 
     def _create_local_package_index(modules_v2_dir: str, index_name: str = "simple"):
-        """
-        Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
-        :return: The path to the index
-        """
-        cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
-        build_dir = os.path.join(cache_dir, "build")
-        index_dir = os.path.join(build_dir, index_name)
-        timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
 
-        def _should_rebuild_cache() -> bool:
-            if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
-                # Cache doesn't exist
-                return True
-            if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 3:  # #modules + index.html + setuptools + wheel
-                # Modules were added/removed
-                return True
-            # Cache is dirty
-            return any(
-                os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
-                for root, _, files in os.walk(modules_v2_dir)
-                for f in files
-                if "egg-info" not in root
-            )
-
-        if _should_rebuild_cache():
-            logging.info(f"Cache %s is dirty. Rebuilding cache.", cache_dir)
-            if os.path.exists(cache_dir):
-                shutil.rmtree(cache_dir)
-            os.makedirs(build_dir)
-            for module_dir in os.listdir(modules_v2_dir):
-                path = os.path.join(modules_v2_dir, module_dir)
-                ModuleTool().build(path=path, output_dir=build_dir)
-            CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
-                ["pip", "download", "setuptools", "wheel"], cwd=build_dir
-            )
-            dir2pi(argv=["dir2pi", build_dir])
-            open(timestamp_file, "w").close()
-        else:
-            logging.info(f"Using cache %s", cache_dir)
-
-        return index_dir
-
-    yield _create_local_package_index
 
 
 @pytest.fixture(scope="session")
@@ -1733,7 +1691,45 @@ def local_module_package_index(modules_v2_dir: str, create_local_package_index) 
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
-    yield create_local_package_index(modules_v2_dir)
+
+    cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
+    build_dir = os.path.join(cache_dir, "build")
+    index_dir = os.path.join(build_dir, "simple")
+    timestamp_file = os.path.join(cache_dir, "cache_creation_timestamp")
+
+    def _should_rebuild_cache() -> bool:
+        if any(not os.path.exists(f) for f in [build_dir, index_dir, timestamp_file]):
+            # Cache doesn't exist
+            return True
+        if len(os.listdir(index_dir)) != len(os.listdir(modules_v2_dir)) + 3:  # #modules + index.html + setuptools + wheel
+            # Modules were added/removed
+            return True
+        # Cache is dirty
+        return any(
+            os.path.getmtime(os.path.join(root, f)) > os.path.getmtime(timestamp_file)
+            for root, _, files in os.walk(modules_v2_dir)
+            for f in files
+            if "egg-info" not in root
+        )
+
+    if _should_rebuild_cache():
+        logging.info(f"Cache %s is dirty. Rebuilding cache.", cache_dir)
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
+        os.makedirs(build_dir)
+        for module_dir in os.listdir(modules_v2_dir):
+            path = os.path.join(modules_v2_dir, module_dir)
+            ModuleTool().build(path=path, output_dir=build_dir)
+        CommandRunner(logging.getLogger(__name__)).run_command_and_log_output(
+            ["pip", "download", "setuptools", "wheel"], cwd=build_dir
+        )
+        dir2pi(argv=["dir2pi", build_dir])
+        open(timestamp_file, "w").close()
+    else:
+        logging.info(f"Using cache %s", cache_dir)
+
+    yield index_dir
+
 
 
 @pytest.fixture
