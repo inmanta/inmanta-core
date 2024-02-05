@@ -117,7 +117,7 @@ def ensure_future_and_handle_exception(
     logger: Logger, msg: str, action: Awaitable[T], notify_done_callback: Callable[[asyncio.Task[T]], None]
 ) -> asyncio.Task[T]:
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
-    future = ensure_future(action)
+    future: Task[T] = ensure_future(action)
 
     def handler(task: Task[T]) -> None:
         try:
@@ -594,7 +594,7 @@ class TaskHandler(Generic[T]):
             LOGGER.warning("Not adding background task because we are stopping.")
             raise StoppedException("A background tasks are not added to the event loop while stopping")
 
-        task = ensure_future(future)
+        task: Task[T] = ensure_future(future)
 
         def handle_result(task: Task[T]) -> None:
             try:
