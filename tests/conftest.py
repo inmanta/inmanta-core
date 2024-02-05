@@ -1729,7 +1729,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         )
 
     if _should_rebuild_cache():
-        logger.info(f"Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
+        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
@@ -1747,7 +1747,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:
-        logger.info(f"Using cache %s", cache_dir)
+        logger.info("Using cache %s", cache_dir)
 
     yield index_dir
 

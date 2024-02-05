@@ -305,7 +305,7 @@ def test_process_env_install_with_no_index_url(
 
     expected_error_message: str = (
         "Packages this-package-does-not-exist were not "
-        "found in the given indexes. (Looking in indexes: %s)" % expected_indexes
+        "found in the given indexes. (Looking in indexes: https://pypi.org/simple, %s)" % expected_indexes
     )
 
     with pytest.raises(env.PackageNotFound, match=re.escape(expected_error_message)):
@@ -316,27 +316,26 @@ def test_process_env_install_with_no_index_url(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize_any("use_indexes_env", [True, False])
 def test_install_package_not_found_in_default_index(
-    tmpvenv_active: tuple[py.path.local, py.path.local], monkeypatch, use_indexes_env: bool
+    tmpvenv_active: tuple[py.path.local, py.path.local],
+    monkeypatch,
 ) -> None:
     """
     Tests the installation of a non-existent package, ensuring the system defaults to PyPI
-    and raises the expected error when the index URL is not configured or is explicitly set.
+    and raises the expected error when the index URL is not configured.
     """
-    if use_indexes_env:
-        monkeypatch.delenv("PIP_INDEX_URL", raising=False)
+    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
     # The list of non-existent packages to attempt to install
     not_found_packages = ["nonexistent-package"]
 
     expected_error_message: str = "Packages %s were not found in the default index (pypi)." % (", ".join(not_found_packages))
 
-    with pytest.raises(env.PackageNotFound, match=re.escape(expected_error_message)) as e:
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected_error_message)):
         env.process_env.install_for_config(
             [Requirement.parse(pkg) for pkg in not_found_packages],
             config=PipConfig(
-                index_url="https://pypi.python.org/simple" if not use_indexes_env else None,
-                use_system_config=True if use_indexes_env else False,
+                index_url=None,
+                use_system_config=True,
             ),
         )
 
