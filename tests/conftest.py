@@ -1720,7 +1720,7 @@ def create_local_package_index():
             dir2pi(argv=["dir2pi", build_dir])
             open(timestamp_file, "w").close()
         else:
-            logging.info(f"Using cache {cache_dir}")
+            logging.info(f"Using cache %s", cache_dir)
 
         return index_dir
 
