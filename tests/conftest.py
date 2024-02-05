@@ -1707,7 +1707,7 @@ def create_local_package_index():
             )
 
         if _should_rebuild_cache():
-            logging.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
+            logging.info(f"Cache %s is dirty. Rebuilding cache.", cache_dir)
             if os.path.exists(cache_dir):
                 shutil.rmtree(cache_dir)
             os.makedirs(build_dir)
