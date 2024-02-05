@@ -1702,7 +1702,7 @@ def create_local_package_index_factory():
 
 
 @pytest.fixture(scope="session")
-def local_module_package_index(modules_v2_dir: str, create_local_package_index) -> Iterator[str]:
+def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
