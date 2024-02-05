@@ -239,9 +239,9 @@ def test_process_env_install_from_index_not_found_env_var(
     tmpvenv_active: tuple[py.path.local, py.path.local],
     monkeypatch,
     create_local_package_index,
-    use_extra_indexes,
-    use_extra_indexes_env,
-    use_system_config,
+    use_extra_indexes: bool,
+    use_extra_indexes_env: bool,
+    use_system_config: bool,
 ) -> None:
     """
     Attempt to install a package that does not exist from the pip indexes defined in the env vars, in the pip config or in both.
