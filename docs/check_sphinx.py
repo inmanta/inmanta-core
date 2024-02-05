@@ -3,6 +3,7 @@ import subprocess
 
 import pytest
 
+
 @pytest.fixture(scope="session")
 def build_docs(tmpdir_factory):
     tmpdir = tmpdir_factory.mktemp("doctest")
@@ -32,4 +33,3 @@ def test_linkcheck(build_docs):
     assert os.path.exists(openapi_html_file)
     openapi_json_file = htmldir.join("_specs/openapi.json")
     assert os.path.exists(openapi_json_file)
-
