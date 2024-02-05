@@ -1675,14 +1675,30 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
 
 
 @pytest.fixture(scope="session")
-def create_local_package_index():
+def create_local_package_index_factory():
     """
-    A fixture that provides a function to create a local pip package index
-    from all v2 modules in a specified directory. A name can also be given to the index
+    A fixture that acts as a factory to create empty local pip package indexes
+    during a test session. Each call creates a new index in a temporary directory.
     """
 
-    def _create_local_package_index(modules_v2_dir: str, index_name: str = "simple"):
-        pass
+    created_directories = []
+
+    def _create_local_package_index(index_name: str = "simple"):
+        """
+        Creates an empty pip index with the given index_name.
+        """
+        tmpdir = tempfile.mkdtemp()
+        created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
+        index_dir = os.path.join(tmpdir, index_name)
+        os.makedirs(index_dir)
+        dir2pi(argv=["dir2pi", str(tmpdir)])
+        return index_dir
+
+    yield _create_local_package_index
+
+    # Cleanup after the session ends
+    for directory in created_directories:
+        shutil.rmtree(directory)
 
 
 @pytest.fixture(scope="session")
