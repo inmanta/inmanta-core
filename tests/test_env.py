@@ -286,8 +286,7 @@ def test_process_env_install_from_index_not_found(
     use_extra_indexes: bool,
 ) -> None:
     """
-    Attempt to install a package that does not exist.
-    Assert the appropriate error is raised.
+    Attempt to install a package that does not exist from a pip index. Assert the appropriate error is raised.
     """
     index_urls = []
     if not use_env_url:
