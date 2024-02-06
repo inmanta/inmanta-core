@@ -507,7 +507,7 @@ class Pip(PipCommandBuilder):
         if return_code != 0:
             not_found: list[str] = []
             conflicts: list[str] = []
-            indexes = ""
+            indexes: str = ""
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
