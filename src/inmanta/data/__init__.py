@@ -79,7 +79,7 @@ In general, locks should be acquired consistently with delete cascade lock order
 are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
 - Code -> ConfigurationModel
-- Agent -> Agentprocess -> Agentinstance
+- Agentprocess -> Agentinstance -> Agent
 """
 
 
@@ -2846,7 +2846,8 @@ class Environment(BaseDocument):
         """
         async with self.get_connection(connection=connection) as con:
             await Agent.delete_all(environment=self.id, connection=con)
-            await AgentProcess.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on agentinstance
+            await AgentInstance.delete_all(tid=self.id, connection=con)
+            await AgentProcess.delete_all(environment=self.id, connection=con)
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
