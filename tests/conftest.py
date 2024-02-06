@@ -1677,8 +1677,8 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
 @pytest.fixture
 def create_empty_local_package_index_factory() -> Callable[[], str]:
     """
-    A fixture that acts as a factory to create empty local pip package indexes
-    during a test session. Each call creates a new index in a different temporary directory.
+    A fixture that acts as a factory to create empty local pip package indexes.
+    Each call creates a new index in a different temporary directory.
     """
 
     created_directories: list[str] = []
