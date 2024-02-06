@@ -1,6 +1,6 @@
 import asyncio
+import socket
 import struct
-from socket import socket
 
 import pytest
 
@@ -11,7 +11,7 @@ def test_package_reassembly():
     class IPCSpy(IPCClient):
         def __init__(self):
             self.blocks = []
-            super().__init__()
+            super().__init__("SPY")
 
         def _block_received(self, block: bytes):
             self.blocks.append(block)
@@ -20,10 +20,12 @@ def test_package_reassembly():
     base_block_and_length = struct.pack("!L", len(base_block)) + base_block
     twice = base_block_and_length * 2
 
+    # Send one block
     ipc = IPCSpy()
     ipc.data_received(base_block_and_length)
     assert ipc.blocks == [base_block]
 
+    # Send two blocks at once
     ipc = IPCSpy()
     ipc.data_received(base_block_and_length * 2)
     assert ipc.blocks == [base_block, base_block]
@@ -44,41 +46,42 @@ def test_package_reassembly():
     ipc.data_received(twice[cutpoint:])
     assert ipc.blocks == [base_block, base_block]
 
+
 async def test_normal_flow(request):
     loop = asyncio.get_running_loop()
     parent_conn, child_conn = socket.socketpair()
 
     class TestIPC(IPCServer):
+        def __init__(self):
+            super().__init__("SERVER")
 
         def get_method(self, name: str):
-            if name=="fastraise":
+            if name == "fastraise":
                 raise Exception("Fastraise")
 
             if name == "raise":
-                def func():
+
+                async def func(*args):
                     raise Exception("raise")
+
                 return func
 
+            async def echo(*args):
+                return list(args)
 
+            return echo
 
     server_transport, server_protocol = await loop.connect_accepted_socket(TestIPC, parent_conn)
     request.addfinalizer(server_transport.close)
-    client_transport, client_protocol = await loop.connect_accepted_socket(IPCClient, parent_conn)
+    client_transport, client_protocol = await loop.connect_accepted_socket(lambda: IPCClient("Client"), child_conn)
     request.addfinalizer(client_transport.close)
 
     with pytest.raises(Exception, match="raise"):
-        await client_protocol.call("raise")
+        await client_protocol.call("raise", [])
 
+    with pytest.raises(Exception, match="Fastraise"):
+        await client_protocol.call("fastraise", [])
 
-
-async def main():
-    server = asyncio.create_task(serve())
-    await asyncio.sleep(1)
-
-    loop = asyncio.get_running_loop()
-    transport, protocol = await loop.create_connection(IPCClient, "127.0.0.1", 1456)
-
-    print(await asyncio.gather(*[protocol.call("test", ["a.a.a", "a" * 10]) for i in range(5)]))
-
-    await server
-
+    args = [1, 2, 3, 4]
+    result = await client_protocol.call("echo", args)
+    assert args == result

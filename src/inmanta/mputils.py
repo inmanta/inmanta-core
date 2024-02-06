@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import multiprocessing
 import socket
 from multiprocessing import Process
@@ -6,13 +7,13 @@ from multiprocessing import Process
 from inmanta.protocol.ipc_light import IPCClient, IPCServer
 
 
-def worker(socket):
+def mp_worker_entrypoint(socket):
     """Entry point for child processes"""
 
     async def serve():
         # Start serving
         loop = asyncio.get_running_loop()
-        server = await loop.connect_accepted_socket(IPCServer, socket)
+        server = await loop.connect_accepted_socket(functools.partial(IPCServer, "Child"), socket)
         stop = loop.create_future()
         await stop
 
@@ -33,12 +34,13 @@ async def make_child_and_connect():
     # Start child
     process, parent_conn = await loop.run_in_executor(None, make_child)
     # Hook up the connection
-    transport, protocol = await loop.connect_accepted_socket(IPCClient, parent_conn)
+    transport, protocol = await loop.connect_accepted_socket(functools.partial(IPCClient, "C"), parent_conn)
 
-    print(await asyncio.gather(*[protocol.call("test", ["a.a.a", "a" * 1000]) for i in range(5)]))
+    print(await asyncio.gather(*[protocol.call("test", ["a.a.a", "a" * 10]) for i in range(5)]))
 
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("forkserver")
+    multiprocessing.set_forkserver_preload(["inmanta", "inmanta.config"])
     assert not asyncio.get_event_loop().is_running()
     asyncio.run(make_child_and_connect())

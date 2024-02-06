@@ -540,7 +540,7 @@ def reset_metrics():
     pyformance.set_global_registry(MetricsRegistry())
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
