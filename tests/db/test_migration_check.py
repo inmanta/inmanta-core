@@ -18,7 +18,7 @@
 from pathlib import Path
 
 
-def test_migration_check(clean_reset):
+def test_migration_check():
     """
     Make sure there is a database dump for the latest version of the db and
     that a migration test exists for this dump.
