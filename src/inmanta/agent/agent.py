@@ -177,6 +177,7 @@ class ResourceAction(ResourceActionBase):
 
             if response.code != 200:
                 LOGGER.error("Resource status update failed %s", response.result)
+            return
 
         ctx = handler.HandlerContext(resource, logger=self.logger)
 
