@@ -523,7 +523,7 @@ class Pip(PipCommandBuilder):
                 if indexes:
                     msg = "Packages %s were not found in the given indexes. (%s)" % (", ".join(not_found), indexes)
                 else:
-                    msg = "Packages %s were not found in the default index (pypi)." % (", ".join(not_found))
+                    msg = "Packages %s were not found at PyPI." % (", ".join(not_found))
                 raise PackageNotFound(msg)
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
