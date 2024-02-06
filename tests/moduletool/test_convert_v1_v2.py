@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import configparser
 import logging
 import os

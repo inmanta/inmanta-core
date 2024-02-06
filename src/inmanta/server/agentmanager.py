@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import logging
 import os
@@ -494,18 +495,20 @@ class AgentManager(ServerSlice, SessionListener):
         """
         async with data.AgentProcess.get_connection() as connection:
             async with connection.transaction():
-                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
+                # Make sure to access the database tables in the order defined in docs string of inmanta/data/__init__.py
+                # to prevent deadlock issues.
                 await data.AgentProcess.expire_process(session.id, now, connection)
                 await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now, connection)
+                await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)
 
     async def _expire_all_sessions_in_db(self) -> None:
         async with self.session_lock:
             LOGGER.debug("Cleaning server session DB")
             async with data.AgentProcess.get_connection() as connection:
                 async with connection.transaction():
-                    await data.Agent.mark_all_as_non_primary(connection=connection)
                     await data.AgentProcess.expire_all(now=datetime.now().astimezone(), connection=connection)
                     await data.AgentInstance.expire_all(now=datetime.now().astimezone(), connection=connection)
+                    await data.Agent.mark_all_as_non_primary(connection=connection)
 
     # Util
     async def _use_new_active_session_for_agent(self, tid: uuid.UUID, endpoint_name: str) -> Optional[protocol.Session]:

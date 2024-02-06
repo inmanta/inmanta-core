@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import json
 import uuid
@@ -50,11 +51,16 @@ async def environments_with_versions(server, client) -> tuple[dict[str, uuid.UUI
             date=cm_timestamps[i - 1],
             total=1,
             released=i in {2, 3, 7},
-            version_info={"export_metadata": {"message": "Recompile model because state transition", "type": "lsm_export"}}
-            if i % 2
-            else {
-                "export_metadata": {"message": "Recompile model because one or more parameters were updated", "type": "param"}
-            },
+            version_info=(
+                {"export_metadata": {"message": "Recompile model because state transition", "type": "lsm_export"}}
+                if i % 2
+                else {
+                    "export_metadata": {
+                        "message": "Recompile model because one or more parameters were updated",
+                        "type": "param",
+                    }
+                }
+            ),
             is_suitable_for_partial_compiles=False,
         )
         await cm.insert()

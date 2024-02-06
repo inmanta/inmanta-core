@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import os
 from collections import abc

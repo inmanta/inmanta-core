@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from inmanta.server.extensions import ApplicationContext
 from inmanta import data
 

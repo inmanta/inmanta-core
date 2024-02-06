@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from collections.abc import Iterable
 
 from inmanta.stable_api import stable_api
