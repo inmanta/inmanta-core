@@ -238,7 +238,7 @@ def test_process_env_install_from_index(
 def test_process_env_install_from_index_not_found_env_var(
     tmpvenv_active: tuple[py.path.local, py.path.local],
     monkeypatch,
-    create_local_package_index_factory,
+    create_local_package_index_factory: Callable[[], str],
     use_extra_indexes: bool,
     use_extra_indexes_env: bool,
     use_system_config: bool,
