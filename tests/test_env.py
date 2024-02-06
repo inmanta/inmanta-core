@@ -281,7 +281,6 @@ def test_process_env_install_from_index(
 @pytest.mark.parametrize_any("use_extra_indexes", [False, True])
 def test_process_env_install_from_index_not_found(
     create_empty_local_package_index_factory: Callable[[], str],
-    tmpvenv_active: tuple[py.path.local, py.path.local],
     monkeypatch,
     use_env_url: bool,
     use_extra_indexes: bool,
