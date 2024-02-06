@@ -1,6 +1,9 @@
 import asyncio
 
+import pytest
+
 from inmanta.agent.executor import MPManager
+from inmanta.protocol.ipc_light import ConnectionLost
 
 
 async def test_executor_server():
@@ -38,5 +41,5 @@ async def test_executor_server_dirty_shutdown():
     await asyncio.get_running_loop().run_in_executor(None, child1.process.join)
     print("Child gone")
 
-    result = await child1.connection.call("echo", ["aaaa"])
-    print(result)
+    with pytest.raises(ConnectionLost):
+        await child1.connection.call("echo", ["aaaa"])
