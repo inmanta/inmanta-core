@@ -4,11 +4,7 @@ import logging
 import multiprocessing
 import os
 import socket
-import sys
-import threading
 import typing
-from asyncio import events
-from multiprocessing import Process
 from typing import Awaitable
 
 import inmanta.const
@@ -26,6 +22,11 @@ Shutdown sequence and responses
 3b. Client: connection_lost calls into force_stop
 4.  Client: send term / join with timeout of grace_time / send kill / join
 5.  Client: clean up process
+
+Scenarios
+Server side stops: go to 3b immediately
+Client side stops: ?
+Pipe break: go to 3a and 3b
 """
 
 
@@ -97,50 +98,6 @@ class FinalizingIPCClient(IPCClient):
             asyncio.get_running_loop().create_task(fin())
 
 
-class BaseForkServerChildWatcher:
-    # based on asyncio's ThreadedChildWatcher, but adapted to forkserver
-
-    def __init__(self) -> None:
-        self._threads: dict[int, threading.Thread] = {}
-
-    def add_child_handler(
-        self, process: multiprocessing.Process, callback: typing.Callable[..., object], *args: object
-    ) -> None:
-        assert process.pid is not None
-        loop = events.get_running_loop()
-        thread = threading.Thread(
-            target=self._do_waitpid,
-            name=f"multiprocessing-waitpid-{process.name}",
-            args=(loop, process, callback, args),
-            daemon=True,
-        )
-        self._threads[process.pid] = thread
-        thread.start()
-
-    def _do_waitpid(
-        self,
-        loop: asyncio.BaseEventLoop,
-        process: multiprocessing.Process,
-        callback: typing.Callable[..., object],
-        *args: object,
-    ):
-        try:
-            process.join()
-        except ValueError:
-            # Already gone!
-            pass
-
-        if loop.is_closed():
-            LOGGER.warning("Loop %r that process %s %d is closed", loop, process.name, process.pid)
-        else:
-            loop.call_soon_threadsafe(callback, process, *args)
-
-        self._threads.pop(process.pid)
-
-
-childwatcher = BaseForkServerChildWatcher()
-
-
 class MPExecutor:
     """A Single Child Executor"""
 
@@ -148,14 +105,6 @@ class MPExecutor:
         self.process = process
         self.connection = connection
         self.connection.finalizers.append(self.force_stop)
-
-        # # Attach to low level api
-        # # this is all we need of the suprocessing sub-system
-        # def process_watcher_callback(pid, returncode, *args):
-        #     print("X", pid, returncode)
-        #     connection.transport.close()
-        #
-        # childwatcher.add_child_handler(process, process_watcher_callback)
 
     async def stop(self) -> None:
         """Stop by shutdown"""
@@ -204,10 +153,10 @@ class MPManager:
         self.children.append(child_handle)
         return child_handle
 
-    def _make_child(self, name: str) -> tuple[Process, socket.socket]:
+    def _make_child(self, name: str) -> tuple[multiprocessing.Process, socket.socket]:
         """Sync code to make a child process and share a socket with it"""
         parent_conn, child_conn = socket.socketpair()
-        p = Process(target=mp_worker_entrypoint, args=(child_conn, name), name=f"agent.executor.{name}")
+        p = multiprocessing.Process(target=mp_worker_entrypoint, args=(child_conn, name), name=f"agent.executor.{name}")
         p.start()
         child_conn.close()
         return p, parent_conn
