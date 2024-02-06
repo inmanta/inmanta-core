@@ -10,6 +10,14 @@ from pickle import Pickler, Unpickler
 from typing import Any, Callable, Coroutine, Optional
 
 
+class IPCException(Exception):
+    pass
+
+
+class ConnectionLost(IPCException):
+    pass
+
+
 @dataclass
 class IPCRequestFrame:
     id: uuid.UUID
@@ -98,6 +106,8 @@ class IPCFrameProtocol(Protocol):
         """
         Helper method to construct and send frames
         """
+        if self.transport.is_closing():
+            raise ConnectionLost()
         buffer = pickle.dumps(frame)
         size = struct.pack("!L", len(buffer))
         self.transport.write(size + buffer)
@@ -180,3 +190,11 @@ class IPCClient(IPCFrameProtocol):
         else:
             self.requests[frame.id].set_result(frame.returnvalue)
         del self.requests[frame.id]
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        excn = ConnectionLost()
+        excn.__cause__ = exc
+        for outstanding_request in self.requests.values():
+            outstanding_request.set_exception(excn)
+        self.requests.clear()
+        super().connection_lost(exc)
