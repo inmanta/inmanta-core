@@ -27,7 +27,7 @@ import tempfile
 from importlib.abc import Loader
 from re import Pattern
 from subprocess import CalledProcessError
-from typing import Optional
+from typing import Callable, Optional
 from unittest.mock import patch
 
 import pkg_resources
@@ -232,13 +232,13 @@ def test_process_env_install_from_index(
 
 
 @pytest.mark.slowtest
-@pytest.mark.parametrize_any("use_extra_indexes_env", [True, False])
-@pytest.mark.parametrize_any("use_extra_indexes", [True, False])
-@pytest.mark.parametrize_any("use_system_config", [True, False])
+@pytest.mark.parametrize_any("use_extra_indexes_env", [False, True])
+@pytest.mark.parametrize_any("use_extra_indexes", [False, True])
+@pytest.mark.parametrize_any("use_system_config", [False, True])
 def test_process_env_install_from_index_not_found_env_var(
     tmpvenv_active: tuple[py.path.local, py.path.local],
     monkeypatch,
-    create_local_package_index_factory: Callable[[], str],
+    create_empty_local_package_index_factory: Callable[[], str],
     use_extra_indexes: bool,
     use_extra_indexes_env: bool,
     use_system_config: bool,
@@ -248,39 +248,43 @@ def test_process_env_install_from_index_not_found_env_var(
     This if the system config are used or not.
     Assert the appropriate error is raised.
     """
-    index_url = create_local_package_index_factory()
+    index_urls = [create_empty_local_package_index_factory()]
 
-    extra_index_urls = []
-    if use_extra_indexes:
-        extra_index_1 = create_local_package_index_factory("extra1")
-        extra_index_2 = create_local_package_index_factory("extra2")
-        extra_index_urls = [extra_index_1, extra_index_2]
-
-    extra_index_urls_env = ""
     if use_extra_indexes_env:
-        extra_index_env1 = create_local_package_index_factory("extra_env1")
-        extra_index_env2 = create_local_package_index_factory("extra_env2")
-        extra_index_urls_env = f"{extra_index_env1} {extra_index_env2}"
+        extra_env_indexes = [
+            create_empty_local_package_index_factory("extra_env1"),
+            create_empty_local_package_index_factory("extra_env2"),
+        ]
+        # Convert list to a space-separated string for the environment variable
+        monkeypatch.setenv("PIP_EXTRA_INDEX_URL", " ".join(extra_env_indexes))
+        if use_system_config:
+            # Include environment extra indexes in the main list for assertion
+            index_urls.extend(extra_env_indexes)
 
-    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", extra_index_urls_env)
+    if use_extra_indexes:
+        index_urls.extend(
+            [
+                create_empty_local_package_index_factory("extra1"),
+                create_empty_local_package_index_factory("extra2"),
+            ]
+        )
 
-    expected_indexes = index_url
-    if use_system_config:
-        env_index_url_env = ", " + extra_index_urls_env.replace(" ", ", ") if use_extra_indexes_env else ""
-        # PIP_EXTRA_INDEX_URL expects the different urls to be given as a string with a single space separating them,
-        # while the output has commas separating the different values.
-        expected_indexes = expected_indexes + env_index_url_env
-
-    expected_indexes = expected_indexes + ", " + ", ".join(extra_index_urls) if extra_index_urls else expected_indexes
-
-    expected: str = (
+    expected = (
         "Packages this-package-does-not-exist were not "
-        "found in the given indexes. (Looking in indexes: %s)" % expected_indexes
+        "found in the given indexes. (Looking in indexes: %s)" % ", ".join(index_urls)
     )
+
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
             [Requirement.parse("this-package-does-not-exist")],
-            config=PipConfig(index_url=index_url, extra_index_url=extra_index_urls, use_system_config=use_system_config),
+            config=PipConfig(
+                index_url=index_urls[0],
+                # The first element should only be passed to the index_url. If there are indexes in the environment
+                # they should not be passed in the extra_index_url as they are already present in PIP_EXTRA_INDEX_URL
+                # (second and third element of index_urls).
+                extra_index_url=index_urls[3:] if (use_system_config and use_extra_indexes_env) else index_urls[1:],
+                use_system_config=use_system_config,
+            ),
         )
 
 
