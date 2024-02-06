@@ -108,7 +108,7 @@ ResourceContainer = namedtuple(
 
 
 @fixture(scope="function")
-def resource_container():
+def resource_container(clean_reset):
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
         """

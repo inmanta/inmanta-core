@@ -135,8 +135,12 @@ class MPManager:
         self.children: list[MPExecutor] = []
 
     def _init_once(self) -> None:
-        multiprocessing.set_start_method("forkserver")
-        multiprocessing.set_forkserver_preload(["inmanta", "inmanta.config"])
+        try:
+            multiprocessing.set_start_method("forkserver")
+            multiprocessing.set_forkserver_preload(["inmanta", "inmanta.config"])
+        except RuntimeError:
+            # already set
+            pass
 
     async def make_child_and_connect(self, name: str) -> MPExecutor:
         """Async code to make a child process as share a socker with it"""
