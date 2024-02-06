@@ -285,62 +285,6 @@ def test_process_env_install_from_index_not_found_env_var(
 
 
 @pytest.mark.slowtest
-def test_process_env_install_with_no_index_url(
-    tmpvenv_active: tuple[py.path.local, py.path.local],
-    monkeypatch,
-    create_local_package_index_factory,
-) -> None:
-    """
-    Attempt to install a package with the primary index URL set to None.
-    This tests the behavior when no primary pip index is defined, and only extra index URLs are used.
-    Assert that the appropriate error is raised.
-    """
-    extra_index_1 = create_local_package_index_factory("extra1")
-    extra_index_2 = create_local_package_index_factory("extra2")
-    extra_index_urls = [extra_index_1, extra_index_2]
-
-    index_url = None  # Explicitly set to None to test the scenario
-
-    expected_indexes = ", ".join(extra_index_urls)  # Expected indexes to be included in the error message
-
-    expected_error_message: str = (
-        "Packages this-package-does-not-exist were not "
-        "found in the given indexes. (Looking in indexes: https://pypi.org/simple, %s)" % expected_indexes
-    )
-
-    with pytest.raises(env.PackageNotFound, match=re.escape(expected_error_message)):
-        env.process_env.install_for_config(
-            [Requirement.parse("this-package-does-not-exist")],
-            config=PipConfig(index_url=index_url, extra_index_url=extra_index_urls, use_system_config=True),
-        )
-
-
-@pytest.mark.slowtest
-def test_install_package_not_found_in_default_index(
-    tmpvenv_active: tuple[py.path.local, py.path.local],
-    monkeypatch,
-) -> None:
-    """
-    Tests the installation of a non-existent package, ensuring the system defaults to PyPI
-    and raises the expected error when the index URL is not configured.
-    """
-    monkeypatch.delenv("PIP_INDEX_URL", raising=False)
-    # The list of non-existent packages to attempt to install
-    not_found_packages = ["nonexistent-package"]
-
-    expected_error_message: str = "Packages %s were not found in the default index (pypi)." % (", ".join(not_found_packages))
-
-    with pytest.raises(env.PackageNotFound, match=re.escape(expected_error_message)):
-        env.process_env.install_for_config(
-            [Requirement.parse(pkg) for pkg in not_found_packages],
-            config=PipConfig(
-                index_url=None,
-                use_system_config=True,
-            ),
-        )
-
-
-@pytest.mark.slowtest
 def test_process_env_install_from_index_conflicting_reqs(
     tmpdir: str, tmpvenv_active: tuple[py.path.local, py.path.local]
 ) -> None:

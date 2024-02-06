@@ -1,4 +1,4 @@
-description: Log which pip indexes were used to install a V2 module or third-party Python dependency if that package could not be found.
+description: Report which pip indexes were used to install a V2 module or third-party Python dependency if that package could not be found.
 issue-nr: 6096
 change-type: patch
 destination-branches: [master, iso7, iso6]
