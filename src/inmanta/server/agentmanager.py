@@ -495,6 +495,8 @@ class AgentManager(ServerSlice, SessionListener):
         """
         async with data.AgentProcess.get_connection() as connection:
             async with connection.transaction():
+                # Make sure to access the database tables in the order defined in docs string of inmanta/data/__init__.py
+                # to prevent deadlock issues.
                 await data.AgentProcess.expire_process(session.id, now, connection)
                 await data.AgentInstance.log_instance_expiry(session.id, session.endpoint_names, now, connection)
                 await data.Agent.update_primary(tid, endpoints_with_new_primary, now, connection)

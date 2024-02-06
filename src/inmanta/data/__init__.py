@@ -87,7 +87,7 @@ In general, locks should be acquired consistently with delete cascade lock order
 are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
 - Code -> ConfigurationModel
-- Agent -> Agentprocess -> Agentinstance
+- Agentprocess -> Agentinstance -> Agent
 """
 
 
