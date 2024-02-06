@@ -143,7 +143,7 @@ class ResourceAction(ResourceActionBase):
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
-        super().__init__(scheduler, resource.id, gid, reason)
+        super().__init__(scheduler, Id.parse_id(resource["id"]), gid, reason)
         self.resource: dict[str, object] = resource
 
     async def send_in_progress(self, action_id: uuid.UUID) -> dict[ResourceIdStr, const.ResourceState]:
@@ -156,24 +156,82 @@ class ResourceAction(ResourceActionBase):
             raise Exception("Failed to report the start of the deployment to the server")
         return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
-    async def _execute(self, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState]) -> None:
-        """
-        :param ctx: The context to use during execution of this deploy
-        :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
-                         state that was not `deploying'.
-        """
+    async def _do_execute(self, ctx: handler.HandlerLogger) -> None:
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=self.gid, resource_id=self.resource_id)
         # TODO: double check: is this required? Is failure handled properly?
         try:
             resource: Resource = Resource.deserialize(self.resource)
         except Exception:
-            ctx.set_status(const.ResourceState.unavailable)
+            # TODO: move back to self.execute (scheduling related)
+            self.status = const.ResourceState.unavailable
+
             ctx.exception("Unable to deserialize %(resource_id)s", resource_id=Id.parse_id(self.resource["id"]).resource_version_str())
-            return
+
+            # TODO clean up duplicate logic between this and below
+            response = await self.scheduler.get_client().resource_deploy_done(
+                tid=self.scheduler._env_id,
+                rvid=Id.parse_id(self.resource["id"]).resource_version_str(),
+                action_id=uuid.uuid4(),
+                status=self.status,
+            )
+
+            if response.code != 200:
+                LOGGER.error("Resource status update failed %s", response.result)
 
         ctx = handler.HandlerContext(resource, logger=self.logger)
 
+        try:
+            requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
+        except Exception:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception("Failed to report the start of the deployment to the server")
+        else:
+            # THis must move to the executor and the surrounding code will have to work
+            # with the dict representation of the resource (since deserialization cannot happen here anymore)
+            await self._execute(resource, ctx=ctx, requires=requires)
 
+        ctx.debug(
+            "End run for resource %(resource)s in deploy %(deploy_id)s",
+            resource=str(Id.parse_id(self.resource["id"])),
+            deploy_id=self.gid,
+        )
+
+        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {
+            Id.parse_id(self.resource["id"]).resource_version_str(): ctx.changes
+        }
+
+        if ctx.facts:
+            ctx.debug("Sending facts to the server")
+            set_fact_response = await self.scheduler.get_client().set_parameters(
+                tid=self.scheduler._env_id, parameters=ctx.facts
+            )
+            if set_fact_response.code != 200:
+                ctx.error("Failed to send facts to the server %s", set_fact_response.result)
+
+        response = await self.scheduler.get_client().resource_deploy_done(
+            tid=self.scheduler._env_id,
+            rvid=Id.parse_id(self.resource["id"]).resource_version_str(),
+            action_id=ctx.action_id,
+            status=ctx.status,
+            messages=ctx.logs,
+            changes=changes,
+            change=ctx.change,
+        )
+
+        if response.code != 200:
+            LOGGER.error("Resource status update failed %s", response.result)
+
+        # TODO: move back to self.execute (scheduling related)
+        self.status = ctx.status
+        self.change = ctx.change
+        self.changes = changes
+
+    async def _execute(self, resource, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState]) -> None:
+        """
+        :param ctx: The context to use during execution of this deploy
+        :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
+                         state that was not `deploying'.
+        """
         # setup provider
         provider: Optional[HandlerAPI[Any]] = None
         try:
@@ -272,50 +330,8 @@ class ResourceAction(ResourceActionBase):
                         # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                         return
 
-                    try:
-                        requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id)
-                    except Exception:
-                        ctx.set_status(const.ResourceState.failed)
-                        ctx.exception("Failed to report the start of the deployment to the server")
-                    else:
-                        # THis must move to the executor and the surrounding code will have to work
-                        # with the dict representation of the resource (since deserialization cannot happen here anymore)
-                        await self._execute(ctx=ctx, requires=requires)
+                    await self._do_execute(ctx=ctx)
 
-                    ctx.debug(
-                        "End run for resource %(resource)s in deploy %(deploy_id)s",
-                        resource=str(Id.parse_id(self.resource["id"])),
-                        deploy_id=self.gid,
-                    )
-
-                    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {
-                        Id.parse_id(self.resource["id"]).resource_version_str(): ctx.changes
-                    }
-
-                    if ctx.facts:
-                        ctx.debug("Sending facts to the server")
-                        set_fact_response = await self.scheduler.get_client().set_parameters(
-                            tid=self.scheduler._env_id, parameters=ctx.facts
-                        )
-                        if set_fact_response.code != 200:
-                            ctx.error("Failed to send facts to the server %s", set_fact_response.result)
-
-                    response = await self.scheduler.get_client().resource_deploy_done(
-                        tid=self.scheduler._env_id,
-                        rvid=Id.parse_id(self.resource["id"]).resource_version_str(),
-                        action_id=ctx.action_id,
-                        status=ctx.status,
-                        messages=ctx.logs,
-                        changes=changes,
-                        change=ctx.change,
-                    )
-
-                    if response.code != 200:
-                        LOGGER.error("Resource status update failed %s", response.result)
-
-                    self.status = ctx.status
-                    self.change = ctx.change
-                    self.changes = changes
                     self.future.set_result(ResourceActionResult(cancel=False))
                 finally:
                     self.running = False

@@ -257,8 +257,8 @@ class HandlerContext(HandlerLogger):
         action_id: Optional[uuid.UUID] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
+        super().__init__(resource.id, logger)
         self._resource = resource
-        self._resource_id = self._resource.id
         self._dry_run = dry_run
         self._cache: dict[str, Any] = {}
 
