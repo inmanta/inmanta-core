@@ -1683,18 +1683,17 @@ def create_empty_local_package_index_factory() -> Callable[[], str]:
 
     created_directories: list[str] = []
 
-    def _create_local_package_index(index_name: str = "simple") -> str:
+    def _create_local_package_index(prefix: str = "test"):
         """
-        Creates an empty pip index. The index_name is used to name the parent directory for clarity and debugging purposes.
-        The actual index directory created by dir2pi is always named 'simple'.
+        Creates an empty pip index. The prefix argument is used as a prefix for the temporary directory name
+        for clarity and debugging purposes. The 'dir2pi' tool will then create a 'simple' directory inside
+        this temporary directory, which contains the index files.
         """
-        tmpdir = tempfile.mkdtemp()
+        tmpdir = tempfile.mkdtemp(prefix=f"{prefix}-")
         created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
-        # The index_name is used for the parent directory name for readability in tests.
-        index_dir_parent = os.path.join(tmpdir, index_name)
-        os.makedirs(index_dir_parent)
-        dir2pi(argv=["dir2pi", index_dir_parent])
-        return os.path.join(index_dir_parent, "simple")
+        dir2pi(argv=["dir2pi", tmpdir])
+        index_dir = os.path.join(tmpdir, "simple")  # The 'simple' directory is created inside the tmpdir by dir2pi
+        return index_dir
 
     yield _create_local_package_index
 
