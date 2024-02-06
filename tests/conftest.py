@@ -1683,7 +1683,7 @@ def create_local_package_index_factory():
 
     created_directories = []
 
-    def _create_local_package_index(index_name: str = "simple"):
+    def _create_local_package_index(index_name: str = "simple") -> str:
         """
         Creates an empty pip index with the given index_name.
         """
