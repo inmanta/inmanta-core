@@ -1742,6 +1742,13 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         Copy all files that have to be packaged into the Python package of the module
         """
         python_pkg_dir = os.path.join(build_path, "inmanta_plugins", self._module.name)
+        model_dir = os.path.join(python_pkg_dir, "model")
+        if os.path.exists(model_dir):
+            raise ModuleBuildFailedError(
+                msg="There is already a model directory in %s"
+                % os.path.join(self._module.path, "inmanta_plugins", self._module.name)
+            )
+
         for dir_name in ["model", "files", "templates"]:
             fq_dir_name = os.path.join(build_path, dir_name)
             if os.path.exists(fq_dir_name):
