@@ -755,7 +755,7 @@ class AgentInstance:
 
         def periodic_schedule(
             kind: str,
-            action: Callable[[], Coroutine[object, object, object]],
+            action: Callable[[], Coroutine[object, None, object]],
             interval: Union[int, str],
             splay_value: int,
             initial_time: datetime.datetime,
