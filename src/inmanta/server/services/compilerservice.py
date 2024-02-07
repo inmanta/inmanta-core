@@ -32,7 +32,7 @@ from collections.abc import AsyncIterator, Awaitable, Hashable, Mapping, Sequenc
 from itertools import chain
 from logging import Logger
 from tempfile import NamedTemporaryFile
-from typing import Optional, Type, cast
+from typing import Optional, cast
 
 import dateutil
 import dateutil.parser
@@ -504,7 +504,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
-        self._recompiles: dict[uuid.UUID, Task[Type[None]]] = {}
+        self._recompiles: dict[uuid.UUID, Task[None]] = {}
         self._global_lock = asyncio.locks.Lock()
         self.listeners: list[CompileStateListener] = []
         self._scheduled_full_compiles: dict[uuid.UUID, tuple[TaskMethod, str]] = {}
