@@ -51,10 +51,10 @@ class LenientConfigParser(ConfigParser):
 class Config:
     __instance: Optional[ConfigParser] = None
     _config_dir: Optional[str] = None  # The directory this config was loaded from
-    __config_definition: dict[str, dict[str, "Option[object]"]] = defaultdict(dict)
+    __config_definition: dict[str, dict[str, "Option"]] = defaultdict(dict)
 
     @classmethod
-    def get_config_options(cls) -> dict[str, dict[str, "Option[object]"]]:
+    def get_config_options(cls) -> dict[str, dict[str, "Option"]]:
         return cls.__config_definition
 
     @classmethod

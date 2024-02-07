@@ -44,7 +44,7 @@ from inmanta import config, const, data, protocol, server
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import CompileReportView
 from inmanta.env import PipCommandBuilder, PythonEnvironment, VenvCreationFailedError, VirtualEnv
-from inmanta.protocol import encode_token, methods, methods_v2
+from inmanta.protocol import encode_token, methods, methods_v2, Result
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, NotFound
 from inmanta.server import SLICE_COMPILER, SLICE_DATABASE, SLICE_ENVIRONMENT, SLICE_SERVER, SLICE_TRANSPORT
@@ -504,7 +504,7 @@ class CompilerService(ServerSlice, environmentservice.EnvironmentListener):
 
     def __init__(self) -> None:
         super().__init__(SLICE_COMPILER)
-        self._recompiles: dict[uuid.UUID, Task[None]] = {}
+        self._recompiles: dict[uuid.UUID, Task[None | Result]] = {}
         self._global_lock = asyncio.locks.Lock()
         self.listeners: list[CompileStateListener] = []
         self._scheduled_full_compiles: dict[uuid.UUID, tuple[TaskMethod, str]] = {}

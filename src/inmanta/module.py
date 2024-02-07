@@ -2007,7 +2007,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 self.virtualenv = env.VirtualEnv(venv_path)
 
         self.loaded = False
-        self.modules: dict[str, Module[ModuleMetadata]] = {}
+        self.modules: dict[str, Module] = {}
         self.root_ns = Namespace("__root__")
         self.autostd = autostd
         if attach_cf_cache:
@@ -2034,7 +2034,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         corresponding name.
         Does not reinstall if the given module requirement is already met.
         """
-        installed_module: Optional[Module[ModuleMetadata]]
+        installed_module: Optional[Module]
         if install_as_v1_module:
             installed_module = self.module_source_v1.install(self, module_spec=[module_req])
         else:
@@ -2205,7 +2205,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         main_ns = Namespace("__config__", self.root_ns)
         return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
 
-    def get_modules(self) -> dict[str, "Module[ModuleMetadata]"]:
+    def get_modules(self) -> dict[str, "Module"]:
         self.load()
         return self.modules
 
@@ -2217,7 +2217,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         install_v1: bool = False,
         install_v2: bool = False,
         bypass_module_cache: bool = False,
-    ) -> "Module[ModuleMetadata]":
+    ) -> "Module":
         """
         Get a module instance for a given module name. Caches modules by top level name for later access. The install parameters
         allow to install the module if it has not been installed yet. If both install parameters are False, the module is
@@ -2304,7 +2304,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 if module_name in ast_by_top_level_mod:
                     del ast_by_top_level_mod[module_name]
 
-        def load_module_v2_requirements(module_like: ModuleLike[ModuleV2Metadata]) -> None:
+        def load_module_v2_requirements(module_like: ModuleLike) -> None:
             """
             Loads all v2 modules explicitly required by the supplied module like instance, installing them if install=True. If
             any of these requirements have already been loaded as v1, queues them for reload.
@@ -2320,7 +2320,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
                 # queue AST reload
                 require_v2(requirement.key)
 
-        def setup_module(module: Module[ModuleMetadata]) -> None:
+        def setup_module(module: Module) -> None:
             """
             Sets up a top level module, making sure all its v2 requirements are loaded correctly. V2 modules do not support
             import-based installation because of security reasons (it would mean we implicitly trust any `inmanta-module-x`
@@ -2336,7 +2336,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
             load_module_v2_requirements(module)
             set_up.add(module.name)
 
-        def load_sub_module(module: Module[ModuleMetadata], imp: DefineImport) -> None:
+        def load_sub_module(module: Module, imp: DefineImport) -> None:
             """
             Loads a submodule's AST and processes its imports. Enforces dependency generation directionality (v1 can depend on
             v2 but not the other way around). If any modules have already been loaded with an incompatible generation, queues
@@ -2414,7 +2414,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         allow_v1: bool = False,
         install_v1: bool = False,
         install_v2: bool = False,
-    ) -> "Module[ModuleMetadata]":
+    ) -> "Module":
         """
         Get a module instance for a given module name. The install parameters allow to install the module if it has not been
         installed yet. If both install parameters are False, the module is expected to be preinstalled.
@@ -2606,7 +2606,7 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         self.virtualenv.use_virtual_env()
 
-    def sorted_modules(self) -> list["Module[ModuleMetadata]"]:
+    def sorted_modules(self) -> list["Module"]:
         """
         Return a list of all modules, sorted on their name
         """
@@ -2625,9 +2625,9 @@ class Project(ModuleLike[ProjectMetadata], ModuleLikeWithYmlMetadataFile):
         """
         LOGGER.info("The following modules are currently installed:")
 
-        sorted_modules: list["Module[ModuleMetadata]"] = self.sorted_modules()
+        sorted_modules: list["Module"] = self.sorted_modules()
 
-        def get_modules_with_gen(gen: ModuleGeneration) -> Sequence["Module[ModuleMetadata]"]:
+        def get_modules_with_gen(gen: ModuleGeneration) -> Sequence["Module"]:
             return list(filter(lambda mod: mod.GENERATION == gen, sorted_modules))
 
         v1_modules: Sequence["ModuleV1"] = cast(list["ModuleV1"], get_modules_with_gen(ModuleGeneration.V1))
@@ -2791,8 +2791,8 @@ class Module(ModuleLike[TModuleMetadata], ABC):
 
     @classmethod
     @abstractmethod
-    def from_path(cls, path: str) -> Optional["Module[ModuleMetadata]"]:
-        subs: tuple[type[Module[ModuleMetadata]], ...] = (ModuleV1, ModuleV2)
+    def from_path(cls, path: str) -> Optional["Module"]:
+        subs: tuple[type[Module], ...] = (ModuleV1, ModuleV2)
         for sub in subs:
             instance: Optional[Module] = sub.from_path(path)
             if instance is not None:
