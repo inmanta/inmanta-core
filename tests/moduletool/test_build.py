@@ -245,7 +245,7 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
     os.makedirs(model_dir_path)
     assert os.path.exists(model_dir_path)  # Ensure the model directory exists
 
-    with pytest.raises(Exception, match=f"There is already a model directory in %s" % python_pkg_dir):
+    with pytest.raises(Exception, match="There is already a model directory in %s" % python_pkg_dir):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
 
 
