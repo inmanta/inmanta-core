@@ -20,10 +20,12 @@ Constants
     :members:
     :undoc-members:
 
-.. data:: inmanta_lsm.const.LSM_ENV_VARS
-    :annotation: : Sequence[str]
+.. only:: iso
 
-    This sequence contains all environment variables passed to the compiler by inmanta-lsm
+    .. data:: inmanta_lsm.const.LSM_ENV_VARS
+        :annotation: : Sequence[str]
+
+        This sequence contains all environment variables passed to the compiler by inmanta-lsm
 
 
 
