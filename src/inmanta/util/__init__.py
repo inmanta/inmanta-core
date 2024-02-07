@@ -584,7 +584,7 @@ class TaskHandler(Generic[T]):
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Awaitable[T]], cancel_on_stop: bool = True) -> Task[T]:
+    def add_background_task(self, future: Awaitable[T], cancel_on_stop: bool = True) -> Task[T]:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
