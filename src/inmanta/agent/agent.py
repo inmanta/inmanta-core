@@ -25,17 +25,18 @@ import os
 import random
 import time
 import uuid
+from abc import ABC
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Mapping, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence, Set
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any, Dict, Optional, Self, Union, cast
 
 import pkg_resources
 
 from inmanta import const, data, env, protocol
-from inmanta.agent import config as cfg, poc
+from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
 from inmanta.agent.handler import HandlerAPI, SkipResource
@@ -43,7 +44,7 @@ from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
-from inmanta.loader import CodeLoader, ModuleSource
+from inmanta.loader import CodeLoader, InstallBlueprint, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
@@ -138,13 +139,289 @@ class DummyResourceAction(ResourceActionBase):
         super().__init__(scheduler, dummy_id, gid, reason)
 
 
+class Executor(ABC):
+    @classmethod
+    @abc.abstractmethod
+    async def get_executor(
+        cls, agent: "AgentInstance", code: Sequence[InstallBlueprint], client: protocol.Client
+    ) -> tuple[Self, Set[str]]:
+        ...
+
+    # TODO: update signature
+    @abc.abstractmethod
+    async def execute(
+        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID
+    ) -> tuple(Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]):
+        ...
+
+
+class OldExecutor(Executor):
+    client: protocol.Client
+
+    def __init__(self, client: protocol.Client):
+        self.client = client
+
+    @classmethod
+    async def get_executor(
+        cls, agent: "AgentInstance", code: Sequence[InstallBlueprint], client: protocol.Client
+    ) -> tuple[Self, Set[str]]:
+        # TODO: make sure `code` is a stable identifier (i.e. order of elements matter)
+        failed_resource_types: Set[str] = await agent.process.ensure_code(code)
+        return cls(client), failed_resource_types
+
+    async def send_in_progress(self, action_id: uuid.UUID, env_id, resource_id) -> dict[ResourceIdStr, const.ResourceState]:
+        result = await self.client.resource_deploy_start(
+            tid=env_id,
+            rvid=resource_id,
+            action_id=action_id,
+        )
+        if result.code != 200 or result.result is None:
+            raise Exception("Failed to report the start of the deployment to the server")
+        return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
+
+    async def _execute(
+        self, resource: Resource, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState]
+    ) -> None:
+        """
+        :param ctx: The context to use during execution of this deploy
+        :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
+                         state that was not `deploying'.
+        """
+        # setup provider
+        provider: Optional[HandlerAPI[Any]] = None
+        try:
+            provider = await self.scheduler.agent.get_provider(resource)
+        except ChannelClosedException as e:
+            ctx.set_status(const.ResourceState.unavailable)
+            ctx.exception(str(e))
+            return
+        except Exception:
+            ctx.set_status(const.ResourceState.unavailable)
+            ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=resource.id.resource_version_str())
+            return
+        else:
+            # main execution
+            try:
+                await asyncio.get_running_loop().run_in_executor(
+                    self.scheduler.agent.thread_pool,
+                    provider.deploy,
+                    ctx,
+                    resource,
+                    requires,
+                )
+                if ctx.status is None:
+                    ctx.set_status(const.ResourceState.deployed)
+            except ChannelClosedException as e:
+                ctx.set_status(const.ResourceState.failed)
+                ctx.exception(str(e))
+            except SkipResource as e:
+                ctx.set_status(const.ResourceState.skipped)
+                ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
+            except Exception as e:
+                ctx.set_status(const.ResourceState.failed)
+                ctx.exception(
+                    "An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource.id,
+                    exception=repr(e),
+                )
+        finally:
+            if provider is not None:
+                provider.close()
+
+    async def execute(
+        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID
+    ) -> tuple(Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]):
+        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
+        # TODO: double check: is this required? Is failure handled properly?
+        try:
+            resource: Resource = Resource.deserialize(resource)
+        except Exception:
+            # TODO: move back to self.execute (scheduling related)
+            self.status = const.ResourceState.unavailable
+
+            ctx.exception(
+                "Unable to deserialize %(resource_id)s", resource_id=Id.parse_id(resource["id"]).resource_version_str()
+            )
+
+            # TODO clean up duplicate logic between this and below
+            response = await self.client.resource_deploy_done(
+                tid=env_id,
+                rvid=Id.parse_id(resource["id"]).resource_version_str(),
+                action_id=uuid.uuid4(),
+                status=self.status,
+            )
+
+            if response.code != 200:
+                LOGGER.error("Resource status update failed %s", response.result)
+            return
+
+        ctx = handler.HandlerContext(resource, logger=ctx.logger)
+
+        try:
+            requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id, env_id, resource_id)
+        except Exception:
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception("Failed to report the start of the deployment to the server")
+        else:
+            # THis must move to the executor and the surrounding code will have to work
+            # with the dict representation of the resource (since deserialization cannot happen here anymore)
+            await self._execute(resource, ctx=ctx, requires=requires)
+
+        ctx.debug(
+            "End run for resource %(r_id)s in deploy %(deploy_id)s",
+            r_id=resource_id,
+            deploy_id=gid,
+        )
+
+        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_id.resource_version_str(): ctx.changes}
+
+        if ctx.facts:
+            ctx.debug("Sending facts to the server")
+            set_fact_response = await self.client.set_parameters(tid=env_id, parameters=ctx.facts)
+            if set_fact_response.code != 200:
+                ctx.error("Failed to send facts to the server %s", set_fact_response.result)
+
+        response = await self.client.resource_deploy_done(
+            tid=env_id,
+            rvid=resource_id.resource_version_str(),
+            action_id=ctx.action_id,
+            status=ctx.status,
+            messages=ctx.logs,
+            changes=changes,
+            change=ctx.change,
+        )
+
+        if response.code != 200:
+            LOGGER.error("Resource status update failed %s", response.result)
+
+        return ctx.status, ctx.change, changes
+
+
+class NewExecutor(Executor):
+    """
+    This class encapsulates a process running the adaptors for an agent for one version
+    adaptors: Set of all handlers/resources within one inmanta module
+    agent: A unit of coordination during the deployment of resources
+    """
+
+    #
+    # def __init__(self, agent: "Agent"):
+    #     # When the agent asks the process manager for an executor with a specific source_version map
+    #     # a new executor with the right env is spawned if no existing one is fitting.
+    #     self.venv = ...
+    #     self.code_dir = ...  # Dir to put module code into
+    #
+    #     self._client = agent._client  # How bad is this ?
+    #
+    # def get_loader_lock(self):
+    #     return contextlib.nullcontext
+    #
+    # async def install(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]):
+    #     """
+    #     New executors are forked with a pre-populated venv -> no need to install
+    #     """
+    #     pass
+    # async def load_adaptors(self, resources: Sequence[Mapping[str, object]], version: int, environment: uuid.UUID):
+    #     for rt in set([res["resource_type"] for res in resources]):
+    #         result: protocol.Result = await self._client.get_source_code(environment, version, rt)
+    #         if result.code == 200 and result.result is not None:
+    #             try:
+    #                 sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
+    #                 LOGGER.debug("Installing handler %s version=%d", rt, version)
+    #                 for source in result.result["data"]:
+    #                     self.load_adaptor_code(
+    #                         ModuleSource(
+    #                             name=source["module_name"],
+    #                             is_byte_code=source["is_byte_code"],
+    #                             hash_value=source["hash"],
+    #                             _client=sync_client,
+    #                         )
+    #                     )
+    #
+    #
+    # def load_adaptor_code(self, module_source: ModuleSource) -> bool:
+    #     """
+    #     Taken from CodeLoader.install_source
+    #     :return: True if this module install requires a reload
+    #     """
+    #     LOGGER.info("Deploying code (hv=%s, module=%s)", module_source.hash_value, module_source.name)
+    #
+    #     all_modules_dir: str = os.path.join(self.code_dir, MODULE_DIR)
+    #     relative_module_path: str = convert_module_to_relative_path(module_source.name)
+    #     # Treat all modules as a package for simplicity: module is a dir with source in __init__.py
+    #     module_dir: str = os.path.join(all_modules_dir, relative_module_path)
+    #
+    #     package_dir: str = os.path.normpath(
+    #         os.path.join(all_modules_dir, pathlib.PurePath(pathlib.PurePath(relative_module_path).parts[0]))
+    #     )
+    #
+    #     if module_source.is_byte_code:
+    #         init_file = "__init__.pyc"
+    #         alternate_file = "__init__.py"
+    #     else:
+    #         init_file = "__init__.py"
+    #         alternate_file = "__init__.pyc"
+    #
+    #     def touch_inits(directory: str) -> None:
+    #         """
+    #         Make sure __init__.py files exist for this package and all parent packages. Required for compatibility
+    #         with pre-2020.4 inmanta clients because they don't necessarily upload the whole package.
+    #         """
+    #         normdir: str = os.path.normpath(directory)
+    #         if normdir == package_dir:
+    #             return
+    #         if not os.path.exists(os.path.join(normdir, "__init__.py")) and not os.path.exists(
+    #             os.path.join(normdir, "__init__.pyc")
+    #         ):
+    #             pathlib.Path(os.path.join(normdir, "__init__.py")).touch()
+    #         touch_inits(os.path.dirname(normdir))
+    #
+    #     # ensure correct package structure
+    #     os.makedirs(module_dir, exist_ok=True)
+    #     touch_inits(os.path.dirname(module_dir))
+    #     source_file = os.path.join(module_dir, init_file)
+    #
+    #     if os.path.exists(os.path.join(module_dir, alternate_file)):
+    #         # A file of the other type exists, we should clean it up
+    #         os.remove(os.path.join(module_dir, alternate_file))
+    #
+    #     if os.path.exists(source_file):
+    #         with open(source_file, "rb") as fh:
+    #             thehash = hash_file_streaming(fh)
+    #         if thehash == module_source.hash_value:
+    #             LOGGER.debug(
+    #                 "Not deploying code (hv=%s, module=%s) because it is already on disk",
+    #                 module_source.hash_value,
+    #                 module_source.name,
+    #             )
+    #             # Force (re)load, because we have it on disk, but not on the in-memory cache
+    #             # We may have not loaded it
+    #             return True
+    #
+    #     # write the new source
+    #     source_code = module_source.get_source_code()
+    #     with open(source_file, "wb+") as fd:
+    #         fd.write(source_code)
+    #     return True
+
+
 class ResourceAction(ResourceActionBase):
-    def __init__(self, scheduler: "ResourceScheduler", resource: dict[str, object], gid: uuid.UUID, reason: str) -> None:
+    def __init__(
+        self,
+        scheduler: "ResourceScheduler",
+        resource: dict[str, object],
+        gid: uuid.UUID,
+        reason: str,
+        executor: Executor,
+        env_id: uuid.UUID,
+    ) -> None:
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         super().__init__(scheduler, Id.parse_id(resource["id"]), gid, reason)
         self.resource: dict[str, object] = resource
+        self.executor: Executor = executor
+        self.env_id: uuid.UUID = env_id
 
     async def send_in_progress(self, action_id: uuid.UUID) -> dict[ResourceIdStr, const.ResourceState]:
         result = await self.scheduler.get_client().resource_deploy_start(
@@ -165,7 +442,9 @@ class ResourceAction(ResourceActionBase):
             # TODO: move back to self.execute (scheduling related)
             self.status = const.ResourceState.unavailable
 
-            ctx.exception("Unable to deserialize %(resource_id)s", resource_id=Id.parse_id(self.resource["id"]).resource_version_str())
+            ctx.exception(
+                "Unable to deserialize %(resource_id)s", resource_id=Id.parse_id(self.resource["id"]).resource_version_str()
+            )
 
             # TODO clean up duplicate logic between this and below
             response = await self.scheduler.get_client().resource_deploy_done(
@@ -227,7 +506,9 @@ class ResourceAction(ResourceActionBase):
         self.change = ctx.change
         self.changes = changes
 
-    async def _execute(self, resource, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState]) -> None:
+    async def _execute(
+        self, resource: Resource, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState]
+    ) -> None:
         """
         :param ctx: The context to use during execution of this deploy
         :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
@@ -331,7 +612,12 @@ class ResourceAction(ResourceActionBase):
                         # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                         return
 
-                    await self._do_execute(ctx=ctx)
+                    status, change, changes = await self.executor.execute(
+                        ctx=ctx, gid=self.gid, resource_id=self.resource_id, resource=self.resource, env_id=self.env_id
+                    )
+                    self.status = status
+                    self.change = change
+                    self.changes = changes
 
                     self.future.set_result(ResourceActionResult(cancel=False))
                 finally:
@@ -544,6 +830,7 @@ class ResourceScheduler:
         resources: list[Mapping[str, object]],
         undeployable: dict[ResourceVersionIdStr, ResourceState],
         new_request: DeployRequest,
+        executor: Executor,
     ) -> None:
         """
         Schedule a new set of resources for execution.
@@ -588,7 +875,10 @@ class ResourceScheduler:
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
-        self.generation: dict[ResourceIdStr: ResourceAction] = {Id.parse_id(r["id"]).resource_str(): ResourceAction(self, r, gid, self.running.reason) for r in resources}
+        self.generation: dict[ResourceIdStr:ResourceAction] = {
+            Id.parse_id(r["id"]).resource_str(): ResourceAction(self, r, gid, self.running.reason, executor, self._env_id)
+            for r in resources
+        }
 
         # mark undeployable
         for key, res in self.generation.items():
@@ -597,7 +887,12 @@ class ResourceScheduler:
                 self.generation[key].undeployable = undeployable[vid]
 
         # hook up Cross Agent Dependencies
-        cross_agent_dependencies: Sequence[Id] = [parsed_id for r in resources for raw in r.get("requires", []) if (parsed_id := Id.parse_id(raw)).get_agent_name() != self.name]
+        cross_agent_dependencies: Sequence[Id] = [
+            parsed_id
+            for r in resources
+            for raw in r.get("requires", [])
+            if (parsed_id := Id.parse_id(raw)).get_agent_name() != self.name
+        ]
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
             self.cad[str(cad)] = ra
@@ -889,13 +1184,14 @@ class AgentInstance:
                 self.logger.warning("Got an error while pulling resources for %s. %s", deploy_request.reason, result.result)
 
             else:
-                undeployable, resources = await self.load_resources(
+                undeployable, resources, executor = await self.load_resources(
                     result.result["version"], const.ResourceAction.deploy, result.result["resources"]
                 )
+                # todo move executor ensurecode here
                 self.logger.debug("Pulled %d resources because %s", len(resources), deploy_request.reason)
 
                 if len(resources) > 0:
-                    self._nq.reload(resources, undeployable, deploy_request)
+                    self._nq.reload(resources, undeployable, deploy_request, executor)
 
     async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
         self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
@@ -1064,38 +1360,43 @@ class AgentInstance:
                     provider.close()
             return 200
 
+    def get_executor(self, code: Sequence[InstallBlueprint], client: protocol.Client) -> Executor:
+        # ultimately:
+        # process_manager.get_executor_for_resouce(version, )
+        return OldExecutor.get_executor(self.name, code, client)
+
     async def load_resources(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[dict[str, object]]]:
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[dict[str, object]], Executor]:
+        # TODO rename this method since the loading moved into executor
+        # TODO refactor wiring of tuples around
+
         """Deserialize all resources and load all handler code. When the code for this type fails to load, the resource
         is marked as failed
         """
         started = datetime.datetime.now().astimezone()
-        # TODO: move this to executor
-        failed_resource_types = await self.process.ensure_code(
+        executor: Executor
+        failed_resource_types: str
+        code: Sequence[InstallBlueprint] = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
+        executor, failed_resource_types = self.get_executor(
+            code, self.get_client()
+        )  # deviation from the diagram (ie not in load resource)
+
         loaded_resources: list[dict[str, object]] = []
         failed_resources: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
         for res in resources:
-            try:
-                res["attributes"]["id"] = res["id"]
-                if res["resource_type"] not in failed_resource_types:
-                    # Trouble -> can't deserialize here since the module code is loaded in the executor
-                    loaded_resources.append(res["attributes"])
+            res["attributes"]["id"] = res["id"]
+            if res["resource_type"] not in failed_resource_types:
+                loaded_resources.append(res["attributes"])
 
-                    state = const.ResourceState[res["status"]]
-                    if state in const.UNDEPLOYABLE_STATES:
-                        undeployable[res["id"]] = state
-                else:
-                    failed_resources.append(res["id"])
-                    # TODO: in practice, no more failed resources at this point because no code loading => clean up!
-                    undeployable[res["id"]] = const.ResourceState.unavailable
-                    loaded_resources.append(res["attributes"])
-
-            except Exception:
+                state = const.ResourceState[res["status"]]
+                if state in const.UNDEPLOYABLE_STATES:
+                    undeployable[res["id"]] = state
+            else:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
                 loaded_resources.append(res["attributes"])
@@ -1115,7 +1416,7 @@ class AgentInstance:
                 messages=[log],
                 status=const.ResourceState.unavailable,
             )
-        return undeployable, loaded_resources
+        return undeployable, loaded_resources, executor
 
 
 class CouldNotConnectToServer(Exception):
@@ -1363,8 +1664,7 @@ class Agent(SessionEndpoint):
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
-    async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> set[str]:
-        """Ensure that the code for the given environment and version is loaded"""
+    async def get_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> list[InstallBlueprint]:
         failed_to_load: set[str] = set()
         if self._loader is None:
             return failed_to_load
@@ -1372,53 +1672,59 @@ class Agent(SessionEndpoint):
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
 
+        blueprints: list[InstallBlueprint] = []
         for rt in set(resource_types):
             # only one logical thread can load a particular resource type at any time
+            # TODO deal with this lock
             async with self._resource_loader_lock.get(rt):
-                # stop if the last successful load was this one
-                # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded[rt] == version:
-                    LOGGER.debug("Code already present for %s version=%d", rt, version)
-                    continue
-                # clear cache, for retry on failure
-                self._last_loaded[rt] = -1
-
                 result: protocol.Result = await self._client.get_source_code(environment, version, rt)
                 if result.code == 200 and result.result is not None:
-                    try:
-                        sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
-                        LOGGER.debug("Installing handler %s version=%d", rt, version)
-                        requirements = set()
-                        sources = []
-                        for source in result.result["data"]:
-                            sources.append(
-                                ModuleSource(
-                                    name=source["module_name"],
-                                    is_byte_code=source["is_byte_code"],
-                                    hash_value=source["hash"],
-                                    _client=sync_client,
-                                )
+                    sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
+                    LOGGER.debug("Installing handler %s version=%d", rt, version)
+                    requirements = set()
+                    sources = []
+                    for source in result.result["data"]:
+                        sources.append(
+                            ModuleSource(
+                                name=source["module_name"],
+                                is_byte_code=source["is_byte_code"],
+                                hash_value=source["hash"],
+                                _client=sync_client,
                             )
-                            requirements.update(source["requirements"])
+                        )
+                        requirements.update(source["requirements"])
 
-                        if pip_config is None:
-                            pip_config = await self._get_pip_config(environment, version)
-                        # To move to the executor ultimately
-                        # Currently install and loading is done in the same place
-                        # We want to move installation to the venv mgr
-                        # ANd loading/importing into the executors
+                    if pip_config is None:
+                        # TODO: what if this fails?
+                        pip_config = await self._get_pip_config(environment, version)
 
+                    blueprints.append(InstallBlueprint(rt, version, pip_config, sources, list(requirements)))
+                else:
+                    # TODO what if server call fails ?
+                    pass
+        return blueprints
 
-
-                        # ultimately we would want an abstraction around 'Install all of these with these versions'
-                        # Passed on to the process mggr and
-                        #   - get an executor back
-                        await self._install(sources, list(requirements), pip_config=pip_config)
-                        LOGGER.debug("Installed handler %s version=%d", rt, version)
-                        self._last_loaded[rt] = version
-                    except Exception:
-                        LOGGER.exception("Failed to install handler %s version=%d", rt, version)
-                        failed_to_load.add(rt)
+    async def ensure_code(self, code: Sequence[InstallBlueprint]) -> Set[str]:
+        """Ensure that the code for the given environment and version is loaded"""
+        failed_to_load: set[str] = []
+        for blueprint in code:
+            # only one logical thread can load a particular resource type at any time
+            async with self._resource_loader_lock.get(blueprint.resource_type):
+                # TODO: is this check in the right place or should it be in get_code()?
+                # stop if the last successful load was this one
+                # The combination of the lock and this check causes the reloads to naturally 'batch up'
+                if self._last_loaded[blueprint.resource_type] == blueprint.version:
+                    LOGGER.debug("Code already present for %s version=%d", blueprint.resource_type, blueprint.version)
+                    continue
+                # clear cache, for retry on failure
+                self._last_loaded[blueprint.resource_type] = -1
+            try:
+                await self._install(blueprint.sources, blueprint.requirements, pip_config=blueprint.pip_config)
+                LOGGER.debug("Installed handler %s version=%d", blueprint.resource_type, blueprint.version)
+                self._last_loaded[blueprint.resource_type] = blueprint.version
+            except Exception:
+                LOGGER.exception("Failed to install handler %s version=%d", blueprint.resource_type, blueprint.version)
+                failed_to_load.add(blueprint.resource_type)
 
         return failed_to_load
 

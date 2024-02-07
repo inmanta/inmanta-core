@@ -34,6 +34,7 @@ from itertools import chain, starmap
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
+from inmanta.data import PipConfig
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -171,6 +172,16 @@ class CodeManager:
     def get_types(self) -> Iterable[tuple[str, list[SourceInfo]]]:
         """Get a list of all registered types"""
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
+
+
+# TODO: can this be cleaned up?
+@dataclass(frozen=True)
+class InstallBlueprint:
+    resource_type: str
+    version: int
+    pip_config: PipConfig
+    sources: list["ModuleSource"]
+    requirements: Sequence[str]
 
 
 @dataclass(frozen=True)
