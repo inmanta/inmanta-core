@@ -66,7 +66,7 @@ class Deploy:
 
     def _check_result(self, result: protocol.Result, fatal: bool = True) -> protocol.Result:
         """Check the result of a call protocol call. If the result is not 200, issue an error"""
-        if result.code != 200:
+        if result.code != 200 and not result.result:
             msg = f"Server request failed with code {result.code} and result {result.result}"
             LOGGER.error(msg)
 
@@ -386,7 +386,6 @@ host=localhost
 
         else:
             result = self._check_result(self._client.dryrun_request(tid=self._environment_id, id=version))
-            assert result.result
             dryrun_id = result.result["dryrun"]["id"]
             if report:
                 self.progress_dryrun_report(dryrun_id)
