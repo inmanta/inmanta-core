@@ -232,7 +232,6 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
     Ensure the module build process raises a proper exception if the model directory
     already exists in inmanta_plugins/<module_name>/
     """
-    # Setup: Copy a minimal module to a temporary directory
     module_name = "minimalv2module"
     module_dir = os.path.join(modules_v2_dir, module_name)
     module_copy_dir = os.path.join(tmpdir, "module")
