@@ -2958,20 +2958,17 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """
-        Generate a list of all Python files in the given plugin directory.
-        This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
-        and only considers directories that are Python packages.
-        """
+        """Generate a list of all python files, including namespace packages and excluding the model directory."""
         # Return cached results if this directory has been processed before
+        model_dir_path = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
 
         for dirpath, dirnames, filenames in os.walk(plugin_dir):
-            # Skip non-package directories (those without an __init__.py or __init__.pyc file)
-            if not any(fname for fname in filenames if fname in ["__init__.py", "__init__.pyc"]):
+            # Explicitly skip the model directory
+            if dirpath.startswith(model_dir_path):
                 continue
 
             # Skip this directory if it's already in the cache
