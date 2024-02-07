@@ -71,7 +71,7 @@ class provider:  # noqa: N801
         self._resource_type = resource_type
         self._name = name
 
-    def __call__(self, function: type["ResourceHandler[Any]"]) -> "type[ResourceHandler[Any]]":
+    def __call__(self, function: type["ResourceHandler[TResource]"]) -> "type[ResourceHandler[TResource]]":
         """
         The wrapping
         """

@@ -183,7 +183,7 @@ class ModuleLikeTool:
             if not dev:
                 outversion = baseversion
             else:
-                outversion = cast(Version, parse_version("%s.dev%d" % (baseversion, time.time())))
+                outversion = Version("%s.dev%d" % (baseversion, time.time()))
         else:
             opts = [x for x in [major, minor, patch] if x]
             if version is not None:
@@ -207,9 +207,9 @@ class ModuleLikeTool:
                     outversion = str(VersionOperation.set_version_tag(old_version, version_tag=""))
 
             if dev:
-                outversion = cast(Version, parse_version("%s.dev%d" % (outversion, time.time())))
+                outversion = Version("%s.dev%d" % (outversion, time.time()))
 
-        outversion = cast(Version, parse_version(outversion))
+        outversion = Version(outversion)
         if outversion <= old_version:
             LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
             return None

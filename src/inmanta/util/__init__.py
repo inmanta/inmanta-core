@@ -507,7 +507,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
-def add_future(future: Union[Future[T], Coroutine[Any, Any, T]]) -> Task[T]:
+def add_future(future: Awaitable[T]) -> Task[T]:
     """
     Add a future to the ioloop to be handled, but do not require the result.
     """
@@ -584,7 +584,7 @@ class TaskHandler(Generic[T]):
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Union[Future[T], Coroutine[Any, Any, T]], cancel_on_stop: bool = True) -> Task[T]:
+    def add_background_task(self, future: Awaitable[T]], cancel_on_stop: bool = True) -> Task[T]:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
