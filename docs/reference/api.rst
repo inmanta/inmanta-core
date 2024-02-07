@@ -23,7 +23,7 @@ Constants
 .. data:: inmanta_lsm.const.LSM_ENV_VARS
     :annotation: : Sequence[str]
 
-    This sequence contains a list of all environment variables passed to the compiler by inmanta-lsm
+    This sequence contains all environment variables passed to the compiler by inmanta-lsm
 
 
 
