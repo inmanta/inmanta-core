@@ -2960,7 +2960,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     def _list_python_files(self, plugin_dir: str) -> list[str]:
         """Generate a list of all python files, including namespace packages and excluding the model directory."""
         # Return cached results if this directory has been processed before
-        model_dir_path = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
+        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
