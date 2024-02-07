@@ -80,7 +80,7 @@ def mp_worker_entrypoint(socket, name):
         await protocol.stopped.wait()
 
     asyncio.run(serve())
-    logger.info(f"Started with PID: {os.getpid()}")
+    logger.info(f"Stopped with PID: {os.getpid()}")
     exit(0)
 
 

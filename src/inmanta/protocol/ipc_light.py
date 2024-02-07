@@ -149,7 +149,8 @@ class IPCServer(IPCFrameProtocol, abc.ABC):
                 self.send_frame(IPCReplyFrame(frame.id, return_value, is_exception=False))
         except Exception as e:
             self.logger.debug("Exception on rpc call", exc_info=True)
-            self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
+            if frame.id is not None:
+                self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
 
 
 class IPCClient(IPCFrameProtocol):
