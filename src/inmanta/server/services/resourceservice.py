@@ -1135,29 +1135,28 @@ class ResourceService(protocol.ServerSlice):
             attribute_value: Optional[str] = None,
             log_severity: Optional[str] = None,
             limit: Optional[int] = 0,
-        ) -> dict[str, None | str | int]:
+        ) -> dict[str, str]:
             query_params = {
                 "resource_type": resource_type,
                 "agent": agent,
                 "attribute": attribute,
                 "attribute_value": attribute_value,
                 "log_severity": log_severity,
-                "limit": limit,
+                "limit": str(limit) if limit else None,
             }
-            query_params = {param_key: param_value for param_key, param_value in query_params.items() if param_value}
-            return query_params
+            return {param_key: param_value for param_key, param_value in query_params.items() if param_value is not None}
 
         if limit and resource_action_dtos:
             base_url = "/api/v2/resource_actions"
             common_query_params = _get_query_params(resource_type, agent, attribute, attribute_value, log_severity, limit)
             # Next is always earlier with regards to 'started' time
             next_params = common_query_params.copy()
-            next_params["last_timestamp"] = resource_action_dtos[-1].started
-            next_params["action_id"] = resource_action_dtos[-1].action_id
+            next_params["last_timestamp"] = resource_action_dtos[-1].started.isoformat(timespec="microseconds")
+            next_params["action_id"] = str(resource_action_dtos[-1].action_id)
             links["next"] = url_concat(base_url, next_params)
             previous_params = common_query_params.copy()
-            previous_params["first_timestamp"] = resource_action_dtos[0].started
-            previous_params["action_id"] = resource_action_dtos[0].action_id
+            previous_params["first_timestamp"] = resource_action_dtos[0].started.isoformat(timespec="microseconds")
+            previous_params["action_id"] = str(resource_action_dtos[0].action_id)
             links["prev"] = url_concat(base_url, previous_params)
         return_value = ReturnValue(response=resource_action_dtos, links=links if links else None)
         return return_value
