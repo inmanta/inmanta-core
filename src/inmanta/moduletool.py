@@ -45,7 +45,7 @@ import more_itertools
 import texttable
 import yaml
 from cookiecutter.main import cookiecutter
-from pkg_resources import Requirement, parse_version
+from pkg_resources import Requirement
 
 import build
 import inmanta
@@ -163,12 +163,13 @@ class ModuleLikeTool:
         return project
 
     def determine_new_version(
-        self, old_version: Version, version: Version, major: bool, minor: bool, patch: bool, dev: bool
+        self, old_version: Version, version: Optional[Version], major: bool, minor: bool, patch: bool, dev: bool
     ) -> Optional[Version]:
         """
         Only used by the `inmanta module commit` command.
         """
         was_dev = old_version.is_prerelease
+        outversion: Version
 
         if was_dev:
             if major or minor or patch:
@@ -178,7 +179,7 @@ class ModuleLikeTool:
             if version is not None:
                 baseversion = version
             else:
-                baseversion = old_version.base_version
+                baseversion = Version(old_version.base_version)
 
             if not dev:
                 outversion = baseversion
@@ -188,7 +189,7 @@ class ModuleLikeTool:
             opts = [x for x in [major, minor, patch] if x]
             if version is not None:
                 if len(opts) > 0:
-                    LOGGER.warn("when using the --version option, --major, --minor and --patch are ignored")
+                    LOGGER.warning("when using the --version option, --major, --minor and --patch are ignored")
                 outversion = version
             else:
                 if len(opts) == 0:
@@ -202,14 +203,13 @@ class ModuleLikeTool:
                 revision = False
                 change_type: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
                 if change_type:
-                    outversion = str(VersionOperation.bump_version(change_type, old_version, version_tag=""))
+                    outversion = Version(str(VersionOperation.bump_version(change_type, old_version, version_tag="")))
                 else:
-                    outversion = str(VersionOperation.set_version_tag(old_version, version_tag=""))
+                    outversion = Version(str(VersionOperation.set_version_tag(old_version, version_tag="")))
 
             if dev:
                 outversion = Version("%s.dev%d" % (outversion, time.time()))
 
-        outversion = Version(outversion)
         if outversion <= old_version:
             LOGGER.error(f"new versions ({outversion}) is not larger then old version ({old_version}), aborting")
             return None
@@ -558,10 +558,6 @@ class ModuleTool(ModuleLikeTool):
     """
     A tool to manage configuration modules
     """
-
-    def __init__(self) -> None:
-        self._mod_handled_list = set()
-
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
@@ -1087,9 +1083,9 @@ version: 0.0.1dev0"""
         if not isinstance(mod, ModuleV1):
             raise CLIException(f"{mod.name} is a v2 module and does not support this operation.", exitcode=1)
         # get version
-        old_version = parse_version(str(mod.version))
+        old_version = Version(str(mod.version))
 
-        outversion = self.determine_new_version(old_version, version, major, minor, patch, dev)
+        outversion = self.determine_new_version(old_version, Version(version) if version else None, major, minor, patch, dev)
 
         if outversion is None:
             return
