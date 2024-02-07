@@ -558,6 +558,7 @@ class ModuleTool(ModuleLikeTool):
     """
     A tool to manage configuration modules
     """
+
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser, parent_parsers: abc.Sequence[ArgumentParser]) -> None:
         parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
