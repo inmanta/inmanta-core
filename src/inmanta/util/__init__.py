@@ -35,7 +35,7 @@ import warnings
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Iterator
+from collections.abc import Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
@@ -114,8 +114,8 @@ def is_call_ok(result: Union[int, tuple[int, JsonType]]) -> bool:
 
 
 def ensure_future_and_handle_exception(
-    logger: Logger, msg: str, action: Awaitable[T], notify_done_callback: Callable[[asyncio.Task[T]], None]
-) -> asyncio.Task[T]:
+    logger: Logger, msg: str, action: Coroutine[object, object, T], notify_done_callback: Callable[[Task[T]], None]
+) -> Task[T]:
     """Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message"""
     future: Task[T] = ensure_future(action)
 
@@ -133,7 +133,7 @@ def ensure_future_and_handle_exception(
     return future
 
 
-TaskMethod = Callable[[], Awaitable[object]]
+TaskMethod = Callable[[], Coroutine[object, object, object]]
 
 
 @stable_api
@@ -507,7 +507,7 @@ def _custom_json_encoder(o: object) -> Union[ReturnTypes, "JSONSerializable"]:
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
-def add_future(future: Awaitable[T]) -> Task[T]:
+def add_future(future: Coroutine[object, object, T]) -> Task[T]:
     """
     Add a future to the ioloop to be handled, but do not require the result.
     """
@@ -584,7 +584,7 @@ class TaskHandler(Generic[T]):
     def is_running(self) -> bool:
         return not self._stopped
 
-    def add_background_task(self, future: Awaitable[T], cancel_on_stop: bool = True) -> Task[T]:
+    def add_background_task(self, future: Coroutine[object, object, T], cancel_on_stop: bool = True) -> Task[T]:
         """Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
