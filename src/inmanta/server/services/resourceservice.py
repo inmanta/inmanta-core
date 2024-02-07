@@ -30,7 +30,7 @@ from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 from tornado.httputil import url_concat
 
-from inmanta import const, data, util
+from inmanta import const, data, util, config
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
@@ -149,7 +149,7 @@ class ResourceService(protocol.ServerSlice):
         :param environment: The environment id to get the file for
         :return: The path to the logfile
         """
-        return os.path.join(opt.log_dir.get(), opt.server_resource_action_log_prefix.get() + str(environment) + ".log")
+        return os.path.join(config.log_dir.get(), opt.server_resource_action_log_prefix.get() + str(environment) + ".log")
 
     def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
         """Get the resource action logger for the given environment. If the logger was not created, create it.

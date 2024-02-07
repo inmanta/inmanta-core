@@ -38,7 +38,7 @@ from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
-from typing import IO, TYPE_CHECKING, Any, Optional, cast
+from typing import IO, TYPE_CHECKING, Any, Optional
 
 import click
 import more_itertools

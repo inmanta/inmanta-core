@@ -33,14 +33,14 @@ import time
 import uuid
 import warnings
 from abc import ABC, abstractmethod
-from asyncio import CancelledError, Future, Lock, Task, ensure_future, gather
+from asyncio import CancelledError, Lock, Task, ensure_future, gather
 from collections import abc, defaultdict
-from collections.abc import Awaitable, Coroutine, Iterator
+from collections.abc import Awaitable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
 from types import TracebackType
-from typing import Any, BinaryIO, Callable, Generic, Optional, TypeVar, Union
+from typing import BinaryIO, Callable, Generic, Optional, TypeVar, Union
 
 import asyncpg
 from tornado import gen
