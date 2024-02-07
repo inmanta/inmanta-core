@@ -30,7 +30,7 @@ from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 from tornado.httputil import url_concat
 
-from inmanta import const, data, util, config
+from inmanta import config, const, data, util
 from inmanta.const import STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES, VALID_STATES_ON_STATE_UPDATE, Change, ResourceState
 from inmanta.data import APILIMIT, InvalidSort
 from inmanta.data.dataview import (
