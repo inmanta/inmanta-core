@@ -49,6 +49,17 @@ PLUGIN_DIR = "plugins"
 LOGGER = logging.getLogger(__name__)
 
 
+def get_inmanta_module_name(python_module_name: str) -> str:
+    """Small utility to convert python module into inmanta module"""
+    module_parts = python_module_name.split(".")
+    if module_parts[0] != const.PLUGINS_PACKAGE:
+        raise Exception(
+            "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
+            "%s does not match" % python_module_name
+        )
+    return module_parts[1]
+
+
 class SourceNotFoundException(Exception):
     """This exception is raised when the source of the provided type is not found"""
 
@@ -87,14 +98,7 @@ class SourceInfo:
 
     def _get_module_name(self) -> str:
         """Get the name of the inmanta module, derived from the python module name"""
-        module_parts = self.module_name.split(".")
-        if module_parts[0] != const.PLUGINS_PACKAGE:
-            raise Exception(
-                "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
-                "%s does not match" % self.module_name
-            )
-
-        return module_parts[1]
+        return get_inmanta_module_name(self.module_name)
 
     @property
     def requires(self) -> list[str]:
@@ -141,17 +145,7 @@ class CodeManager:
             return
 
         # get the module
-        def get_inmanta_module_name(instance: object) -> str:
-            module_name = instance.__module__
-            module_parts = module_name.split(".")
-            if module_parts[0] != const.PLUGINS_PACKAGE:
-                raise Exception(
-                    "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
-                    "%s does not match" % module_name
-                )
-            return module_parts[1]
-
-        module_name = get_inmanta_module_name(instance)
+        module_name = get_inmanta_module_name(instance.__module__)
 
         all_plugin_files = self._get_source_info_for_module(module_name)
 
