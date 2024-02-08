@@ -20,11 +20,10 @@ import logging
 import pkgutil
 import re
 from collections.abc import Coroutine
-from itertools import takewhile
 from types import ModuleType
 from typing import Any, Callable, Optional
 
-from asyncpg import Connection, UndefinedColumnError, UndefinedTableError
+from asyncpg import Connection, UndefinedTableError
 from asyncpg.protocol import Record
 
 # Name of core schema in the DB schema verions
