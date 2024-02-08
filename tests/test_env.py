@@ -288,15 +288,17 @@ def test_process_env_install_from_index_not_found_env_var(
         )
 
 
-def test_process_env_install_no_index(tmpdir: py.path.local) -> None:
+@pytest.mark.parametrize_any("use_system_config", [True])
+def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool) -> None:
     """
     Attempt to install a package that does not exist with --no-index.
     To have --no-index set in the pip cmd, the config should not contain an index_url,
     we should not be using the system config and a path needs to be specified.
+    it can also be set in the env_vars
     Assert the appropriate error is raised.
     """
-
-    # Setup a temporary directory as project_dir
+    if use_system_config:
+        monkeypatch.setenv("PIP_NO_INDEX", "true")
 
     setup_py_content = """
 from setuptools import setup
@@ -312,8 +314,8 @@ setup(name="test")
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_for_config(
             requirements=[Requirement.parse("this-package-does-not-exist")],
-            paths=[env.LocalPackagePath(path=tmpdir)],
-            config=PipConfig(use_system_config=False),
+            paths=[env.LocalPackagePath(path=str(tmpdir))],
+            config=PipConfig(use_system_config=use_system_config),
         )
 
 
