@@ -75,7 +75,6 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
@@ -2960,17 +2959,28 @@ class Module(ModuleLike[TModuleMetadata], ABC):
     def _list_python_files(self, plugin_dir: str) -> list[str]:
         """Generate a list of all python files, including namespace packages and excluding the model directory."""
         # Return cached results if this directory has been processed before
-        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
+        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
 
-        for dirpath, dirnames, filenames in os.walk(plugin_dir):
-            # Explicitly skip the model directory
-            if dirpath.startswith(model_dir_path):
-                continue
+        def exclude_dir_walk(top, exclude_dirs: list[str]):
+            """
+            An os.walk that can stop descending into specific directories.
 
+            :param top: The root directory from which to start walking.
+            :param exclude_dirs: A list of paths of directories to stop descending into.
+            """
+            for dirpath, dirnames, filenames in os.walk(top, topdown=True):
+                # Check if the current directory matches any path in exclude_dirs
+                if any(dirpath.startswith(stop_dir) for stop_dir in exclude_dirs):
+                    # Modify dirnames in-place to stop os.walk from descending into any more subdirectories
+                    dirnames[:] = []
+                    continue
+                yield dirpath, dirnames, filenames
+
+        for dirpath, dirnames, filenames in exclude_dir_walk(plugin_dir, [model_dir_path]):
             # Skip this directory if it's already in the cache
             if dirpath in self._dir_cache:
                 cached_files = self._dir_cache[dirpath]
