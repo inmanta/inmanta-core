@@ -100,6 +100,8 @@ def test_import_module(import_entry_point) -> None:
 
 def test_import_protocol(import_entry_point) -> None:
     assert import_entry_point("inmanta.protocol") == 0
+    assert import_entry_point("inmanta.protocol.auth") == 0
+    assert import_entry_point("inmanta.protocol.common") == 0
     assert import_entry_point("inmanta.protocol.exceptions") == 0
 
 
