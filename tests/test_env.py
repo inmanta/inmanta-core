@@ -301,7 +301,7 @@ def test_process_env_install_no_index(modules_v2_dir) -> None:
         project_dir = temp_dir
         setup_py_content = """
 from setuptools import setup
-setup()
+setup(name="test")
 """
         # Write the minimal setup.py content to the temporary directory
         setup_py_path = os.path.join(project_dir, "setup.py")
