@@ -508,6 +508,7 @@ class Pip(PipCommandBuilder):
             not_found: list[str] = []
             conflicts: list[str] = []
             indexes: str = ""
+            no_index = "--no-index" in cmd
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
@@ -520,10 +521,12 @@ class Pip(PipCommandBuilder):
                 if "Looking in indexes:" in line:
                     indexes = line
             if not_found:
-                if indexes:
+                if no_index:
+                    msg = "Packages %s were not found. No indexes were used." % ", ".join(not_found)
+                elif indexes:
                     msg = "Packages %s were not found in the given indexes. (%s)" % (", ".join(not_found), indexes)
                 else:
-                    msg = "Packages %s were not found at PyPI." % (", ".join(not_found))
+                    msg = "Packages %s were not found at PyPI." % ", ".join(not_found)
                 raise PackageNotFound(msg)
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
