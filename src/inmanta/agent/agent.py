@@ -151,7 +151,7 @@ class Executor(ABC):
     @abc.abstractmethod
     async def execute(
         self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID
-    ) -> tuple(Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]):
+    ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         ...
 
 
@@ -230,7 +230,7 @@ class OldExecutor(Executor):
 
     async def execute(
         self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID
-    ) -> tuple(Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]):
+    ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
         # TODO: double check: is this required? Is failure handled properly?
         try:
@@ -1360,10 +1360,10 @@ class AgentInstance:
                     provider.close()
             return 200
 
-    def get_executor(self, code: Sequence[InstallBlueprint], client: protocol.Client) -> Executor:
+    async def get_executor(self, code: Sequence[InstallBlueprint], client: protocol.Client) -> Executor:
         # ultimately:
         # process_manager.get_executor_for_resouce(version, )
-        return OldExecutor.get_executor(self.name, code, client)
+        return await OldExecutor.get_executor(self.name, code, client)
 
     async def load_resources(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
@@ -1380,7 +1380,7 @@ class AgentInstance:
         code: Sequence[InstallBlueprint] = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
-        executor, failed_resource_types = self.get_executor(
+        executor, failed_resource_types = await self.get_executor(
             code, self.get_client()
         )  # deviation from the diagram (ie not in load resource)
 
