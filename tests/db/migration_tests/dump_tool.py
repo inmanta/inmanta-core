@@ -25,7 +25,7 @@ import shutil
 from uuid import UUID
 
 from inmanta import const
-from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES, Parameter
+from inmanta.data import CORE_SCHEMA_NAME, PACKAGE_WITH_UPDATE_FILES
 from inmanta.data.schema import DBSchema
 from inmanta.protocol import methods
 from inmanta.server import SLICE_SERVER
@@ -40,58 +40,57 @@ def check_result(result):
     assert result.code == 200
 
 
-async def populate_facts_and_parameters(env_id):
+async def populate_facts_and_parameters(client, env_id: str):
     parameters: list[dict[str, str]] = [
         {
-            "name": "fact1",
+            "id": "fact1",
             "source": const.ParameterSource.fact,
             "value": "value1",
             "resource_id": "std::File[localhost,path=/tmp/test1]",
             "expires": False,
-            "environment": UUID(env_id),
         },
         {
-            "name": "fact2",
+            "id": "fact2",
             "source": const.ParameterSource.fact,
             "value": "value2",
             "resource_id": "std::File[localhost,path=/tmp/test2]",
             "expires": None,
-            "environment": UUID(env_id),
         },
         {
-            "name": "fact3",
+            "id": "fact3",
             "source": const.ParameterSource.fact,
             "value": "value3",
             "resource_id": "std::File[localhost,path=/tmp/test3]",
             "expires": True,
-            "environment": UUID(env_id),
         },
         {
-            "name": "parameter1",
+            "id": "parameter1",
             "source": const.ParameterSource.fact,
             "value": "value1",
             "expires": False,
-            "environment": UUID(env_id),
         },
         {
-            "name": "parameter2",
+            "id": "parameter2",
             "source": const.ParameterSource.fact,
             "value": "value2",
             "expires": None,
-            "environment": UUID(env_id),
         },
         {
-            "name": "parameter3",
+            "id": "parameter3",
             "source": const.ParameterSource.fact,
             "value": "value3",
             "expires": True,
-            "environment": UUID(env_id),
         },
     ]
     for param_data in parameters:
-        param = Parameter(**param_data)
-
-        await param.insert()
+        await client.set_param(
+            tid=UUID(env_id),
+            id=param_data["id"],
+            source=param_data["source"],
+            value=param_data["value"],
+            resource_id=param_data.get("resource_id", None),
+            expires=param_data.get("expires", None),
+        )
 
 
 async def test_dump_db(server, client, postgres_db, database_name):
@@ -134,7 +133,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     await client.notify_change(id=env_id_1)
 
-    versions = await wait_for_version(client, env_id_1, env_1_version)
+    versions = await wait_for_version(client, env_id_1, env_1_version, compile_timeout=40)
     v1 = versions["versions"][0]["version"]
 
     await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
@@ -161,7 +160,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
         env_id_1, env_1_version, push=False, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
     )
 
-    await populate_facts_and_parameters(env_id_1)
+    await populate_facts_and_parameters(client, env_id_1)
 
     await wait_for_version(client, env_id_1, env_1_version)
 
