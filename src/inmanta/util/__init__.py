@@ -78,6 +78,22 @@ def is_sub_dict(subdct: dict[PrimitiveTypes, PrimitiveTypes], dct: dict[Primitiv
     return not any(True for k, v in subdct.items() if k not in dct or dct[k] != v)
 
 
+def strtobool(val: str) -> bool:
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
+    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
+    'val' is anything else.
+    """
+    val = val.lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return True
+    elif val in ("n", "no", "f", "false", "off", "0"):
+        return False
+    else:
+        raise ValueError("invalid truth value %r" % (val,))
+
+
 def hash_file(content: bytes) -> str:
     """
     Create a hash from the given content

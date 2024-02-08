@@ -29,7 +29,6 @@ import venv
 from collections import abc
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from distutils.util import strtobool
 from functools import reduce
 from importlib.abc import Loader
 from importlib.machinery import ModuleSpec
@@ -47,6 +46,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
+from inmanta.util import strtobool
 from packaging import version
 
 LOGGER = logging.getLogger(__name__)
@@ -511,7 +511,7 @@ class Pip(PipCommandBuilder):
             not_found: list[str] = []
             conflicts: list[str] = []
             indexes: str = ""
-            no_index: bool = "--no-index" in cmd or bool(strtobool(env.get("PIP_NO_INDEX", False).lower()))
+            no_index: bool = "--no-index" in cmd or strtobool(env.get("PIP_NO_INDEX", False).lower())
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
