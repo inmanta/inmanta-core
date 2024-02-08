@@ -308,7 +308,7 @@ setup()
         with open(setup_py_path, "w") as setup_file:
             setup_file.write(setup_py_content)
 
-        expected = "Packages this-package-does-not-exist were not " "found. No indexes were used."
+        expected = "Packages this-package-does-not-exist were not found. No indexes were used."
 
         with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
             env.process_env.install_for_config(
