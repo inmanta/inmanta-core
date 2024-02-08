@@ -38,7 +38,6 @@ from pkg_resources import Requirement
 from inmanta import env, loader, module
 from inmanta.data.model import PipConfig
 from inmanta.env import Pip
-from inmanta.moduletool import ModuleTool
 from packaging import version
 from utils import LogSequence, PipIndex, create_python_package
 
@@ -291,8 +290,8 @@ def test_process_env_install_from_index_not_found_env_var(
 
 def test_process_env_install_no_index(modules_v2_dir) -> None:
     """
-    Attempt to install a package that does not exist with --no-index
-    to have --no-index set, the config should not contain an index_url,
+    Attempt to install a package that does not exist with --no-index.
+    To have --no-index set in the pip cmd, the config should not contain an index_url,
     we should not be using the system config and a path needs to be specified.
     Assert the appropriate error is raised.
     """
@@ -314,7 +313,7 @@ setup()
         with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
             env.process_env.install_for_config(
                 requirements=[Requirement.parse("this-package-does-not-exist")],
-                paths=[env.LocalPackagePath(path=project_dir, editable=True)],
+                paths=[env.LocalPackagePath(path=project_dir)],
                 config=PipConfig(use_system_config=False),
             )
 
