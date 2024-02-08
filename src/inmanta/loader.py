@@ -35,6 +35,7 @@ from itertools import chain, starmap
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
+from inmanta.module import Module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
@@ -95,12 +96,6 @@ class SourceInfo:
 
         return module_parts[1]
 
-    def get_siblings(self) -> Iterator["SourceInfo"]:
-        """
-        Returns an iterator over SourceInfo objects for all plugin source files in this Inmanta module (including this one).
-        """
-        return starmap(SourceInfo, module.Project.get().modules[self._get_module_name()].get_plugin_files())
-
     @property
     def requires(self) -> list[str]:
         """List of python requirements associated with this source file"""
@@ -120,8 +115,13 @@ class CodeManager:
     """
 
     def __init__(self) -> None:
+        # Old implementation
+        # Use by external code
         self.__type_file: dict[str, set[str]] = {}
         self.__file_info: dict[str, SourceInfo] = {}
+
+        # Cache of module to source info
+        self.__module_to_source_info: dict[str, list[SourceInfo]] = {}
 
     def register_code(self, type_name: str, instance: object) -> None:
         """Register the given type_object under the type_name and register the source associated with this type object.
@@ -140,15 +140,38 @@ class CodeManager:
         if file_name in self.__type_file[type_name]:
             return
 
-        # don't just store this file, but all plugin files in its Inmanta module to allow for importing helper modules
-        all_plugin_files: list[SourceInfo] = list(SourceInfo(file_name, instance.__module__).get_siblings())
+        # get the module
+        def get_inmanta_module_name(instance: object) -> str:
+            module_name = instance.__module__
+            module_parts = module_name.split(".")
+            if module_parts[0] != const.PLUGINS_PACKAGE:
+                raise Exception(
+                    "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
+                    "%s does not match" % module_name
+                )
+            return module_parts[1]
+
+        module_name = get_inmanta_module_name(instance)
+
+        all_plugin_files = self._get_source_info_for_module(module_name)
+
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
-        if file_name in self.__file_info:
-            return
+    def _get_source_info_for_module(self, module_name: str) -> list[SourceInfo]:
+        if module_name in self.__module_to_source_info:
+            return self.__module_to_source_info[module_name]
 
-        for file_info in all_plugin_files:
+        sources = [
+            SourceInfo(path, module_name) for path, module_name in module.Project.get().modules[module_name].get_plugin_files()
+        ]
+
+        self.__module_to_source_info[module_name] = sources
+
+        # Register files
+        for file_info in sources:
             self.__file_info[file_info.path] = file_info
+
+        return sources
 
     def get_object_source(self, instance: object) -> Optional[str]:
         """Get the path of the source file in which type_object is defined"""
