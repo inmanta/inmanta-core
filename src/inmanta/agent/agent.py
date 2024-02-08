@@ -150,7 +150,7 @@ class Executor(ABC):
     # TODO: update signature
     @abc.abstractmethod
     async def execute(
-        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID
+        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID, agent:"Agent"
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         ...
 
@@ -180,7 +180,7 @@ class OldExecutor(Executor):
         return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
     async def _execute(
-        self, resource: Resource, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState]
+        self, resource: Resource, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState], agent: "Agent"
     ) -> None:
         """
         :param ctx: The context to use during execution of this deploy
@@ -190,7 +190,7 @@ class OldExecutor(Executor):
         # setup provider
         provider: Optional[HandlerAPI[Any]] = None
         try:
-            provider = await self.scheduler.agent.get_provider(resource)
+            provider = await agent.get_provider(resource)
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
@@ -203,7 +203,7 @@ class OldExecutor(Executor):
             # main execution
             try:
                 await asyncio.get_running_loop().run_in_executor(
-                    self.scheduler.agent.thread_pool,
+                    agent.thread_pool,
                     provider.deploy,
                     ctx,
                     resource,
@@ -229,7 +229,7 @@ class OldExecutor(Executor):
                 provider.close()
 
     async def execute(
-        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID
+        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID, agent: "Agent"
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
         # TODO: double check: is this required? Is failure handled properly?
@@ -265,7 +265,7 @@ class OldExecutor(Executor):
         else:
             # THis must move to the executor and the surrounding code will have to work
             # with the dict representation of the resource (since deserialization cannot happen here anymore)
-            await self._execute(resource, ctx=ctx, requires=requires)
+            await self._execute(resource, ctx=ctx, requires=requires, agent=agent)
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
@@ -613,7 +613,7 @@ class ResourceAction(ResourceActionBase):
                         return
 
                     status, change, changes = await self.executor.execute(
-                        ctx=ctx, gid=self.gid, resource_id=self.resource_id, resource=self.resource, env_id=self.env_id
+                        ctx=ctx, gid=self.gid, resource_id=self.resource_id, resource=self.resource, env_id=self.env_id, agent=self.scheduler.agent
                     )
                     self.status = status
                     self.change = change
@@ -1360,10 +1360,10 @@ class AgentInstance:
                     provider.close()
             return 200
 
-    async def get_executor(self, code: Sequence[InstallBlueprint], client: protocol.Client) -> Executor:
+    async def get_executor(self, code: Sequence[InstallBlueprint], client: protocol.Client) -> tuple[Executor, Set[str]]:
         # ultimately:
         # process_manager.get_executor_for_resouce(version, )
-        return await OldExecutor.get_executor(self.name, code, client)
+        return await OldExecutor.get_executor(self, code, client)
 
     async def load_resources(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
