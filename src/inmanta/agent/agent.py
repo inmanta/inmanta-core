@@ -150,7 +150,13 @@ class Executor(ABC):
     # TODO: update signature
     @abc.abstractmethod
     async def execute(
-        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID, agent:"Agent"
+        self,
+        ctx: handler.HandlerLogger,
+        gid: uuid.UUID,
+        resource_id: Id,
+        resource: dict[str, object],
+        env_id: uuid.UUID,
+        agent: "Agent",
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         ...
 
@@ -180,7 +186,11 @@ class OldExecutor(Executor):
         return {Id.parse_id(key).resource_str(): const.ResourceState[value] for key, value in result.result["data"].items()}
 
     async def _execute(
-        self, resource: Resource, ctx: handler.HandlerContext, requires: dict[ResourceIdStr, const.ResourceState], agent: "Agent"
+        self,
+        resource: Resource,
+        ctx: handler.HandlerContext,
+        requires: dict[ResourceIdStr, const.ResourceState],
+        agent: "Agent",
     ) -> None:
         """
         :param ctx: The context to use during execution of this deploy
@@ -229,7 +239,13 @@ class OldExecutor(Executor):
                 provider.close()
 
     async def execute(
-        self, ctx: handler.HandlerLogger, gid: uuid.UUID, resource_id: Id, resource: dict[str, object], env_id: uuid.UUID, agent: "Agent"
+        self,
+        ctx: handler.HandlerLogger,
+        gid: uuid.UUID,
+        resource_id: Id,
+        resource: dict[str, object],
+        env_id: uuid.UUID,
+        agent: "Agent",
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
         # TODO: double check: is this required? Is failure handled properly?
@@ -613,7 +629,12 @@ class ResourceAction(ResourceActionBase):
                         return
 
                     status, change, changes = await self.executor.execute(
-                        ctx=ctx, gid=self.gid, resource_id=self.resource_id, resource=self.resource, env_id=self.env_id, agent=self.scheduler.agent
+                        ctx=ctx,
+                        gid=self.gid,
+                        resource_id=self.resource_id,
+                        resource=self.resource,
+                        env_id=self.env_id,
+                        agent=self.scheduler.agent,
                     )
                     self.status = status
                     self.change = change
