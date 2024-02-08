@@ -147,7 +147,7 @@ class CodeManager:
         # get the module
         module_name = get_inmanta_module_name(instance.__module__)
 
-        all_plugin_files = self._get_source_info_for_module(module_name)
+        all_plugin_files: list[SourceInfo] = self._get_source_info_for_module(module_name)
 
         self.__type_file[type_name].update(source_info.path for source_info in all_plugin_files)
 
