@@ -146,7 +146,7 @@ class Executor(ABC):
     async def get_executor(
         cls, agent: "AgentInstance", code: Sequence[InstallBlueprint], client: protocol.Client
     ) -> tuple[Self, Set[str]]:
-        ...
+        pass
 
     # TODO: update signature
     @abc.abstractmethod
@@ -159,7 +159,7 @@ class Executor(ABC):
         env_id: uuid.UUID,
         agent: "AgentInstance",
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
-        ...
+        pass
 
 
 class OldExecutor(Executor):
@@ -176,7 +176,9 @@ class OldExecutor(Executor):
         failed_resource_types: Set[str] = await agent.process.ensure_code(code)
         return cls(client), failed_resource_types
 
-    async def send_in_progress(self, action_id: uuid.UUID, env_id: uuid.UUID, resource_id: ResourceVersionIdStr) -> dict[ResourceIdStr, const.ResourceState]:
+    async def send_in_progress(
+        self, action_id: uuid.UUID, env_id: uuid.UUID, resource_id: ResourceVersionIdStr
+    ) -> dict[ResourceIdStr, const.ResourceState]:
         result = await self.client.resource_deploy_start(
             tid=env_id,
             rvid=resource_id,
@@ -246,7 +248,6 @@ class OldExecutor(Executor):
         resource_status: const.ResourceState,
         resource_change: const.Change,
         ctx: Optional[handler.HandlerContext] = None,
-
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {}
         if ctx:
@@ -289,9 +290,7 @@ class OldExecutor(Executor):
             resource: Resource = Resource.deserialize(resource)
         except Exception:
 
-            ctx.exception(
-                "Unable to deserialize %(resource_id)s", resource_id=resource_id.resource_version_str()
-            )
+            ctx.exception("Unable to deserialize %(resource_id)s", resource_id=resource_id.resource_version_str())
             return await self._report_resource_status(
                 env_id=env_id,
                 resource_id=resource_id,
@@ -302,7 +301,9 @@ class OldExecutor(Executor):
         ctx = handler.HandlerContext(resource, logger=ctx.logger)
 
         try:
-            requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(ctx.action_id, env_id, resource_id.resource_version_str())
+            requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
+                ctx.action_id, env_id, resource_id.resource_version_str()
+            )
         except Exception:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("Failed to report the start of the deployment to the server")
@@ -322,23 +323,19 @@ class OldExecutor(Executor):
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
         return await self._report_resource_status(
-            env_id=env_id,
-            resource_id=resource_id,
-            resource_status=ctx.status,
-            resource_change=ctx.change,
-            ctx=ctx
+            env_id=env_id, resource_id=resource_id, resource_status=ctx.status, resource_change=ctx.change, ctx=ctx
         )
 
-       #
-       # response = await self.scheduler.get_client().resource_deploy_done(
-       #          tid=self.scheduler._env_id,
-       #          rvid=Id.parse_id(self.resource["id"]).resource_version_str(),
-       #          action_id=ctx.action_id,
-       #          status=ctx.status,
-       #          messages=ctx.logs,
-       #          changes=changes,
-       #          change=ctx.change,
-       #      )
+    #
+    # response = await self.scheduler.get_client().resource_deploy_done(
+    #          tid=self.scheduler._env_id,
+    #          rvid=Id.parse_id(self.resource["id"]).resource_version_str(),
+    #          action_id=ctx.action_id,
+    #          status=ctx.status,
+    #          messages=ctx.logs,
+    #          changes=changes,
+    #          change=ctx.change,
+    #      )
 
 
 class NewExecutor(Executor):
@@ -347,7 +344,6 @@ class NewExecutor(Executor):
     adaptors: Set of all handlers/resources within one inmanta module
     agent: A unit of coordination during the deployment of resources
     """
-
 
 
 class ResourceAction(ResourceActionBase):
