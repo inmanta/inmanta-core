@@ -511,7 +511,7 @@ class Pip(PipCommandBuilder):
             not_found: list[str] = []
             conflicts: list[str] = []
             indexes: str = ""
-            no_index: bool = "--no-index" in cmd or strtobool(env.get("PIP_NO_INDEX", "false").lower())
+            no_index: bool = "--no-index" in cmd or strtobool(env.get("PIP_NO_INDEX", "false"))
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
