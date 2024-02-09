@@ -457,7 +457,7 @@ class Pip(PipCommandBuilder):
             if "PIP_PRE" in sub_env:
                 del sub_env["PIP_PRE"]
             if "PIP_NO_INDEX" in sub_env:
-                del sub_env["PIP_PRE"]
+                del sub_env["PIP_NO_INDEX"]
 
             # setting this env_var to os.devnull disables the loading of all pip configuration file
             sub_env["PIP_CONFIG_FILE"] = os.devnull
