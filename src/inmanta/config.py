@@ -51,10 +51,10 @@ class LenientConfigParser(ConfigParser):
 class Config:
     __instance: Optional[ConfigParser] = None
     _config_dir: Optional[str] = None  # The directory this config was loaded from
-    __config_definition: dict[str, dict[str, "Option"]] = defaultdict(dict)
+    __config_definition: dict[str, dict[str, "Option[object]"]] = defaultdict(dict)
 
     @classmethod
-    def get_config_options(cls) -> dict[str, dict[str, "Option"]]:
+    def get_config_options(cls) -> dict[str, dict[str, "Option[object]"]]:
         return cls.__config_definition
 
     @classmethod
@@ -171,7 +171,7 @@ class Config:
         cls.get_instance().set(section, name, value)
 
     @classmethod
-    def register_option(cls, option: "Option") -> None:
+    def register_option(cls, option: "Option[object]") -> None:
         cls.__config_definition[option.section][option.name] = option
 
     @classmethod
@@ -306,7 +306,7 @@ class Option(Generic[T]):
         default: Union[T, None, Callable[[], T]],
         documentation: str,
         validator: Callable[[Optional[str | T]], T] = is_str,
-        predecessor_option: Optional["Option"] = None,
+        predecessor_option: Optional["Option[object]"] = None,
     ) -> None:
         self.section = section
         self.name = _normalize_name(name)
