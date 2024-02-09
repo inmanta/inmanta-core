@@ -79,7 +79,7 @@ def is_sub_dict(subdct: dict[PrimitiveTypes, PrimitiveTypes], dct: dict[Primitiv
 
 
 def strtobool(val: str) -> bool:
-    """Convert a string representation of truth to true (1) or false (0).
+    """Convert a string representation of truth to True or False.
 
     True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
     are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
