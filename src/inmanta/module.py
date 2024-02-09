@@ -2778,6 +2778,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
         self._dir_cache: Dict[str, list[str]] = {}  # Cache containing all the filepaths present in a dir
+        self._plugin_file_cache: Optional[list[tuple[Path, ModuleName]]] = None
 
     @classmethod
     @abstractmethod
@@ -3012,6 +3013,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
+        if self._plugin_file_cache is not None:
+            return iter(self._plugin_file_cache)
+
         plugin_dir: Optional[str] = self.get_plugin_dir()
 
         if plugin_dir is None:
@@ -3022,13 +3026,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         ):
             raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
 
-        return (
+        self._plugin_file_cache = [
             (
                 Path(file_name),
                 ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
             )
             for file_name in self._list_python_files(plugin_dir)
-        )
+        ]
+
+        return iter(self._plugin_file_cache)
 
     def load_plugins(self) -> None:
         """
