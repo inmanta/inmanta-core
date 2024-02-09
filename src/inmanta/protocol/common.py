@@ -150,7 +150,7 @@ class Request:
         return req
 
 
-T = TypeVar("T", bound=Union[None, ArgumentTypes])
+T = TypeVar("T", bound=Union[None, ArgumentTypes], covariant=True)
 
 
 class ReturnValue(Generic[T]):
