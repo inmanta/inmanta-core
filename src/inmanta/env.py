@@ -520,6 +520,7 @@ class Pip(PipCommandBuilder):
                 if "versions have conflicting dependencies" in line:
                     conflicts.append(line)
                 # Get the indexes line from full_output
+                # This is not printed when not using any index or when only using PyPi
                 if "Looking in indexes:" in line:
                     indexes = line
             if not_found:
