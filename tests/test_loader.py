@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import hashlib
 import importlib.abc
 import importlib.machinery

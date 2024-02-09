@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 from collections.abc import AsyncIterator, Awaitable
 from typing import Callable

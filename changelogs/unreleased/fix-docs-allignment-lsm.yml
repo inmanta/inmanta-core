@@ -1,0 +1,3 @@
+description: Run black on the .py files of the docs to realign due to the same changes on lsm
+change-type: patch
+destination-branches: [master, iso7]
