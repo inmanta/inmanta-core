@@ -21,7 +21,7 @@ import time
 import uuid
 from collections import defaultdict, namedtuple
 from threading import Condition
-from typing import Generic
+from typing import Any, Generic
 
 from pytest import fixture
 
@@ -204,6 +204,18 @@ def resource_container():
         """
 
         fields = ("key", "value", "set_state_to_deployed", "purged")
+
+    @resource("test::EventResource", agent="agent", id_attribute="key")
+    class EventResource(PurgeableResource):
+        """
+        Raise a SkipResource exception in the deploy() handler method.
+        """
+
+        fields = ("key", "value", "change", "purged")
+
+        @classmethod
+        def get_change(cls, _, r):
+            return False
 
     # Remote control state, shared over all resources
     _STATE = defaultdict(dict)
@@ -549,6 +561,61 @@ def resource_container():
                 raise Exception("Timeout occurred")
             logger.info("Releasing waiter %s", self.traceid)
             super().deploy(ctx, resource, requires)
+
+    @provider("test::EventResource", name="test_event_processing")
+    class EventResourceProvider(CRUDHandler[EventResource]):
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
+
+        def read_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            logger.info("Hanging waiter %s", self.traceid)
+            waiter.acquire()
+            notified_before_timeout = waiter.wait(timeout=10)
+            waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout occurred")
+            logger.info("Releasing waiter %s", self.traceid)
+
+            Provider.read(resource.id.get_agent_name(), resource.key)
+            environment = self._agent._env_id
+
+            async def should_redeploy() -> bool:
+                client = self._agent.get_client()
+                result = await client.get_resource_events(
+                    environment,
+                    resource.id.resource_version_str(),
+                    const.Change.nochange,
+                )
+                if result.code != 200:
+                    raise RuntimeError(
+                        f"Unexpected response code when checking for events: received {result.code} "
+                        f"(expected 200): {result.result}"
+                    )
+                changed_dependencies = result.result["data"]
+                assert isinstance(changed_dependencies, dict)
+
+                actual_changes = {k: v for k, v in changed_dependencies.items() if v}
+                if actual_changes:
+                    ctx.debug("Change found: %(changes)s, deploying", changes=actual_changes)
+                else:
+                    ctx.debug("No changes, not deploying")
+
+                return bool(actual_changes)
+
+            resource.change = self.run_sync(should_redeploy)
+
+        def create_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_created()
+
+        def update_resource(self, ctx: HandlerContext, changes: dict[str, dict[str, Any]], resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_updated()
+
+        def delete_resource(self, ctx: HandlerContext, resource: EventResource) -> None:
+            Provider.touch(resource.id.get_agent_name(), resource.key)
+            ctx.set_purged()
 
     @provider("test::Deploy", name="test_wait")
     class Deploy(Provider):
