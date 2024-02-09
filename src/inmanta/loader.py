@@ -31,11 +31,10 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from importlib.abc import FileLoader, MetaPathFinder
 from importlib.machinery import ModuleSpec, SourcelessFileLoader
-from itertools import chain, starmap
+from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 from inmanta import const, module
-from inmanta.module import Module
 from inmanta.stable_api import stable_api
 from inmanta.util import hash_file_streaming
 
