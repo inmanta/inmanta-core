@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import abc
 import asyncio
 import dataclasses
@@ -645,7 +646,7 @@ class VirtualEnvironmentManager:
         return self.create_environment(env_id)
 
 
-class Process:  # Executor
+class Executor:
     def __init__(
         self, process_id: str, agent_id: str, code_version: str, venv: ProcessVirtualEnvironment, resources: list[Resource]
     ):
@@ -666,27 +667,15 @@ class Process:  # Executor
 
 class ProcessManager:
     def __init__(self, environment_manager: VirtualEnvironmentManager):
-        self.process_map: dict["str", Process] = {}
+        self.process_map: dict["str", Executor] = {}
         self.environment_manager = environment_manager
 
     def create_process(self, agent_name: str, code_version: str, resources: list[Resource]):
         env = self.environment_manager.get_environment(code_version)
         process_id = str(hash(agent_name + code_version))
-        process = Process(process_id, agent_name, code_version, env, resources)
+        process = Executor(process_id, agent_name, code_version, env, resources)
         self.process_map[process_id] = process
         return process_id
-
-    def dryrun(self, agent_name, code_version, resources):
-        process_id = str(hash(agent_name + code_version))
-        if process_id not in self.process_map:
-            self.create_process(agent_name, code_version, resources)
-        self.process_map[process_id].start_dryrun()
-
-    def deploy(self, agent_name, code_version, resources):
-        process_id = str(hash(agent_name + code_version))
-        if process_id not in self.process_map:
-            self.create_process(agent_name, code_version, resources)
-        self.process_map[process_id].start_deploy()
 
     def print_process_map(self):
         print("\nProcess Map:")

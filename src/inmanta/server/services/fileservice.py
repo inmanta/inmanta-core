@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import base64
 import difflib
 import logging

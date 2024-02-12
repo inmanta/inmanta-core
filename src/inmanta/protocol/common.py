@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import enum
 import gzip
 import importlib

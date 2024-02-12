@@ -234,9 +234,9 @@ async def test_process_manager(environment):
     venv_manager = VirtualEnvironmentManager()
     process_manager = ProcessManager(venv_manager)
 
-    process_manager.deploy(agent_name="agent1", code_version="code_1", resources=resources)
-    process_manager.deploy(agent_name="agent1", code_version="code_2", resources=resources)
-    process_manager.dryrun(agent_name="agent1", code_version="code_1", resources=resources)
+    process_manager.deploy(agent_name="agent1", resources=resources)
+    process_manager.deploy(agent_name="agent1", resources=resources)
+    process_manager.dryrun(agent_name="agent1", resources=resources)
 
     process_manager.print_process_map()
 

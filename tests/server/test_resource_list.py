@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import json
 from datetime import datetime
 from operator import itemgetter

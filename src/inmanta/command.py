@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import argparse
 from collections import abc
 from typing import Callable, Optional

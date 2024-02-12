@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 """
     These tests make sure that for each module mentioned in the compiler API docs, using it as an entry point for importing
     does not result in an import loop (see #2341 and #2342).
