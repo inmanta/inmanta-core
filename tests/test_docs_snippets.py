@@ -79,8 +79,7 @@ async def test_docs_snippet_partial_compile(
         """
         Add handlers for the base model and set up the snippetcompiler.
         """
-        handlers_addition: str = (
-            f"""
+        handlers_addition: str = f"""
             import {handler_module_name} as handler
 
             # add dummy agent attribute for the handler
@@ -90,7 +89,6 @@ async def test_docs_snippet_partial_compile(
             end
             implement Host using bind_agent
         """.strip()
-        )
         full_model: str = "\n".join((base, handlers_addition))
         snippetcompiler.setup_for_snippet(full_model, add_to_module_path=[str(tmpdir)])
 
