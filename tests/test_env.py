@@ -288,7 +288,7 @@ def test_process_env_install_from_index_not_found_env_var(
         )
 
 
-@pytest.mark.parametrize_any("use_system_config", [True])
+@pytest.mark.parametrize_any("use_system_config", [True, False])
 def test_process_env_install_no_index(tmpdir: py.path.local, monkeypatch, use_system_config: bool) -> None:
     """
     Attempt to install a package that does not exist with --no-index.
