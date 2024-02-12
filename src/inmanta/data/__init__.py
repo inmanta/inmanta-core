@@ -5290,7 +5290,7 @@ class ConfigurationModel(BaseDocument):
                 $4,
                 $5,
                 (
-                    SELECT coalesce(array_agg(rid), '{{}}')
+                    SELECT coalesce(array_agg(rid), ARRAY[]::character varying[])
                     FROM (
                         -- Undeployables in previous version of the model that are not part of the partial compile.
                         (
@@ -5306,7 +5306,7 @@ class ConfigurationModel(BaseDocument):
                     ) AS all_undeployable
                 ),
                 (
-                    SELECT coalesce(array_agg(rid), '{{}}')
+                    SELECT coalesce(array_agg(rid), ARRAY[]::character varying[])
                     FROM (
                         -- skipped_for_undeployables in previous version of the model that are not part of the partial
                         -- compile.
