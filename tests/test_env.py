@@ -280,7 +280,7 @@ def test_process_env_install_from_index(
 @pytest.mark.parametrize_any("use_env_url", [False, True])
 @pytest.mark.parametrize_any("use_extra_indexes", [False, True])
 def test_process_env_install_from_index_not_found(
-    create_empty_local_package_index_factory: Callable[[], str],
+    create_empty_local_package_index_factory: Callable[[str], str],
     monkeypatch,
     use_env_url: bool,
     use_extra_indexes: bool,
@@ -318,6 +318,31 @@ def test_process_env_install_from_index_not_found(
     with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
         env.process_env.install_from_index(
             [Requirement.parse("this-package-does-not-exist")], index_urls=None if use_env_url else index_urls
+        )
+
+
+@pytest.mark.parametrize_any("has_index_url", [True, False])
+def test_process_env_install_no_index(
+    tmpdir: py.path.local, create_empty_local_package_index_factory: Callable[[str], str], monkeypatch, has_index_url: bool
+) -> None:
+    """
+    Attempt to install a package that does not exist with --no-index.
+    To have --no-index set in the pip cmd, index_urls needs to be an empty list
+    it can also be set in the env_vars:
+    If index_urls is set to none, the env vars are used and if PIP_NO_INDEX is true
+    --no-index is used.
+    """
+    index_urls: Optional[list[str]] = []  # explicitly set to [] to have --no-index in the pip command
+    if not has_index_url:
+        # If index_urls is set to none, the env vars are used.
+        index_urls = None
+        monkeypatch.setenv("PIP_NO_INDEX", "true")
+
+    expected = "Packages this-package-does-not-exist were not found. No indexes were used."
+
+    with pytest.raises(env.PackageNotFound, match=re.escape(expected)):
+        env.process_env.install_from_index(
+            requirements=[Requirement.parse("this-package-does-not-exist")], index_urls=index_urls
         )
 
 
