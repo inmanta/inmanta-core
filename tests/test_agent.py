@@ -20,18 +20,19 @@ import asyncio
 import concurrent
 import logging
 import uuid
-from typing import Any
 
 import pytest
 
+from agent_server.test_agent_code_loading import make_source_structure
 from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
-from inmanta.agent.agent import ProcessManager, ResourceAction, VirtualEnvironmentManager
+from inmanta.agent.agent import ExecutorManager, VirtualEnvironmentManager
 from inmanta.agent.handler import HandlerContext, InvalidOperation
-from inmanta.data.model import AttributeStateChange
+from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.resources import Id, PurgeableResource, resource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.util import get_compiler_version
 from utils import retry_limited
 
 logger = logging.getLogger(__name__)
@@ -221,23 +222,71 @@ async def test_update_agent_map(server, environment, agent_factory):
     assert agent1._instances["node1"].is_enabled()
 
 
-async def test_process_manager(environment):
-    @resource(name="aa::Aa", id_attribute="aa", agent="aa")
-    class TestResource(PurgeableResource):
+async def test_process_manager(environment, caplog, server, agent_factory, client, monkeypatch, clienthelper) -> None:
+    codea = """
+    def test():
+        return 10
+
+    import inmanta
+    inmanta.test_agent_code_loading = 5
+        """
+
+    codeb = """
+    def test():
+        return 10
+    def xx():
+        pass
+
+    import inmanta
+    inmanta.test_agent_code_loading = 10
+        """
+
+    sources = {}
+    sources2 = {}
+    await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", codea, client=client)
+    await make_source_structure(sources2, "inmanta_plugins/tests/__init__.py", "inmanta_plugins.tests", codeb, client=client)
+
+    async def get_version() -> int:
+        version = await clienthelper.get_version()
+        res = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[],
+            pip_config=PipConfig(),
+            compiler_version=get_compiler_version(),
+        )
+        assert res.code == 200
+        return version
+
+    version_1 = await get_version()
+    version_2 = await get_version()
+
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test": sources})
+    assert res.code == 200
+
+    # two distinct versions
+    res = await client.upload_code_batched(tid=environment, id=version_1, resources={"test::Test2": sources})
+    assert res.code == 200
+    res = await client.upload_code_batched(tid=environment, id=version_2, resources={"test::Test2": sources2})
+    assert res.code == 200
+
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
+    )
+
+    @resource(name="test::Test", id_attribute="aa", agent="agent1")
+    class TestResource1(PurgeableResource):
         fields = ("value",)
 
-    res1 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 1))
-    res2 = TestResource(Id("aa::Aa", "agent1", "aa", "aa", 1))
+    @resource(name="test::Test2", id_attribute="aa", agent="agent1")
+    class TestResource2(PurgeableResource):
+        fields = ("value",)
+
+    res1 = TestResource1(Id("test::Test", "agent1", "aa", "aa", 1))
+    res2 = TestResource2(Id("test::Test2", "agent1", "aa", "aa", 1))
 
     resources = [res1, res2]
 
     venv_manager = VirtualEnvironmentManager()
-    process_manager = ProcessManager(venv_manager)
-
-    process_manager.deploy(agent_name="agent1", resources=resources)
-    process_manager.deploy(agent_name="agent1", resources=resources)
-    process_manager.dryrun(agent_name="agent1", resources=resources)
-
-    process_manager.print_process_map()
-
-    assert len(process_manager.process_map) == 2
+    executor_manager = ExecutorManager(agent, venv_manager, environment)
+    executor_1 = await executor_manager.get_executor("agent1", version_1, resources, client)
