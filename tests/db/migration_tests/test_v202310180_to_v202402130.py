@@ -41,8 +41,8 @@ async def test_add_non_null_constraint(
 
     query = """
         SELECT undeployable, skipped_for_undeployable FROM public.configurationmodel
-        WHERE environment ='138898f0-adaa-4018-ba0a-733a23847318'
-        AND version=6;
+        WHERE environment ='35707199-1500-4ff4-a853-51413de9e736'
+        AND version=5;
     """
     result = await postgresql_client.fetch(query)
 

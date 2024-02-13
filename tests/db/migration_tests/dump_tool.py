@@ -74,7 +74,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     await client.notify_change(id=env_id_1)
 
-    versions = await wait_for_version(client, env_id_1, 1)
+    versions = await wait_for_version(client, env_id_1, 1, compile_timeout=40)
     v1 = versions["versions"][0]["version"]
 
     await client.release_version(env_id_1, v1, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
