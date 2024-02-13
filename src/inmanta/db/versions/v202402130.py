@@ -26,7 +26,7 @@ async def update(connection: Connection) -> None:
         CASE
             WHEN undeployable IS NULL
             -- Set default to empty array
-            THEN ARRAY[]::character varying[]
+            THEN '{}'
             -- Keep current value
             ELSE undeployable
         END
@@ -35,7 +35,7 @@ async def update(connection: Connection) -> None:
         CASE
             WHEN skipped_for_undeployable IS NULL
             -- Set default to empty array
-            THEN ARRAY[]::character varying[]
+            THEN '{}'
             -- Keep current value
             ELSE skipped_for_undeployable
         END
@@ -44,8 +44,8 @@ async def update(connection: Connection) -> None:
      -- change the type of the 'undeployable' and 'skipped_for_undeployable' columns to disallow null values
 
      ALTER TABLE public.configurationmodel
-     ALTER COLUMN undeployable SET NOT NULL,
-     ALTER COLUMN skipped_for_undeployable SET NOT NULL;
+         ALTER COLUMN undeployable SET NOT NULL,
+         ALTER COLUMN skipped_for_undeployable SET NOT NULL;
      """
 
     await connection.execute(schema)
