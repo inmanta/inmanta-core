@@ -1562,7 +1562,38 @@ class VirtualEnvironmentManager:
     def __init__(self):
         self._environment_map: dict[InstallBlueprint, ExecutorVirtualEnvironment] = {}
 
-    async def create_environment(self, blueprint: InstallBlueprint, storage: dict[str, str]):
+    def create_storage(self, blueprint_id: int) -> dict[str, str]:
+        state_dir = cfg.state_dir.get()
+
+        if not os.path.exists(state_dir):
+            os.mkdir(state_dir)
+
+        agent_state_dir = os.path.join(state_dir, "agent")
+
+        if not os.path.exists(agent_state_dir):
+            os.mkdir(agent_state_dir)
+
+        dir_map = {"agent": agent_state_dir}
+
+        blueprint_id_dir = os.path.join(state_dir, str(blueprint_id))
+        if not os.path.exists(blueprint_id_dir):
+            os.mkdir(blueprint_id_dir)
+
+        code_dir = os.path.join(blueprint_id_dir, "code")
+        dir_map["code"] = code_dir
+        if not os.path.exists(code_dir):
+            os.mkdir(code_dir)
+
+        env_dir = os.path.join(blueprint_id_dir, "env")
+        dir_map["env"] = env_dir
+        if not os.path.exists(env_dir):
+            os.mkdir(env_dir)
+
+        return dir_map
+
+    async def create_environment(self, blueprint: InstallBlueprint):
+        # create a new storage for the new environment
+        storage: dict[str, str] = self.create_storage(blueprint.__hash__())
         process_environment = ExecutorVirtualEnvironment(storage)
         await process_environment.create_and_install_environment(blueprint)
         self._environment_map[blueprint] = process_environment
@@ -1601,73 +1632,44 @@ class ExecutorManager:
             return LEGACY_PIP_DEFAULT
         return PipConfig(**pip_config)
 
-    async def create_blueprint(
-        self, resources: list[Resource], config_model_version: int, client: protocol.Client
-    ) -> InstallBlueprint:
-        # This is for testing purposes
-        resource_types = [res.model._get_instance().get_type() for res in resources]  # fix this
-        pip_config: Optional[PipConfig] = None
-        requirements: set[str] = set()
-        sources: list[ModuleSource] = []
-
-        for resource_type in set(resource_types):
-            resource_sources: list[model.Source] = await client.get_source_code(
-                self.env_id, config_model_version, resource_type
-            )
-            for source in resource_sources:
-                requirements.update(source.requirements)
-                sources.append(ModuleSource(name=source.module_name, hash_value=source.hash, is_byte_code=source.is_byte_code))
-                if pip_config is None:
-                    pip_config = await self.get_pip_config(self.env_id, config_model_version, client)
-
-        return InstallBlueprint(pip_config=pip_config, sources=tuple(sources), requirements=tuple(requirements))
-
-    def create_storage(self, executor_id: int) -> dict[str, str]:
-        state_dir = cfg.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
-        agent_state_dir = os.path.join(state_dir, "agent")
-
-        if not os.path.exists(agent_state_dir):
-            os.mkdir(agent_state_dir)
-
-        dir_map = {"agent": agent_state_dir}
-
-        executor_id_dir = os.path.join(state_dir, str(executor_id))
-        if not os.path.exists(executor_id_dir):
-            os.mkdir(executor_id_dir)
-
-        code_dir = os.path.join(executor_id_dir, "code")
-        dir_map["code"] = code_dir
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
-
-        env_dir = os.path.join(executor_id_dir, "env")
-        dir_map["env"] = env_dir
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
-        return dir_map
+    # async def create_blueprint(
+    #     self, resources: list[Resource], config_model_version: int, client: protocol.Client
+    # ) -> InstallBlueprint:
+    #     # This is for testing purposes
+    #     resource_types = [res.model._get_instance().get_type() for res in resources]
+    #     pip_config: Optional[PipConfig] = None
+    #     requirements: set[str] = set()
+    #     sources: list[ModuleSource] = []
+    #
+    #     for resource_type in set(resource_types):
+    #         resource_sources: list[model.Source] = await client.get_source_code(
+    #             self.env_id, config_model_version, resource_type
+    #         )
+    #         for source in resource_sources:
+    #             requirements.update(source.requirements)
+    #             sources.append(ModuleSource(name=source.module_name, hash_value=source.hash, is_byte_code=source.is_byte_code))
+    #             if pip_config is None:
+    #                 pip_config = await self.get_pip_config(self.env_id, config_model_version, client)
+    #
+    #     return InstallBlueprint(pip_config=pip_config, sources=tuple(sources), requirements=tuple(requirements))
 
     async def create_executor(
-        self, config_model_version: int, agent_name: str, resources: list[Resource], client: protocol.Client
-    ):
-        executor_id = ExecutorId(agent_name, config_model_version)
-        blueprint: InstallBlueprint = await self.create_blueprint(resources, config_model_version, client)
+        self,
+        config_model_version: int,
+        agent_name: str,
+        blueprint: InstallBlueprint,
+    ) -> Executor:
+        executor_id: ExecutorId = ExecutorId(agent_name, config_model_version)
+        # blueprint: InstallBlueprint = await self.create_blueprint(resources, config_model_version, client)
         # get existing env or create on based on source, requirements and pip_config
-        storage = self.create_storage(executor_id.__hash__())
-        venv = await self.environment_manager.get_environment(blueprint, storage)
+        venv = await self.environment_manager.get_environment(blueprint)
         # create Executor with env
         executor = Executor(agent_name, venv)
         self.executor_map[executor_id] = executor
         return executor
 
-    async def get_executor(
-        self, agent_name: str, config_model_version: int, resources: list[Resource], client: protocol.Client
-    ):
-        executor_id = ExecutorId(agent_name, config_model_version)
+    async def get_executor(self, agent_name: str, config_model_version: int, blueprint: InstallBlueprint) -> Executor:
+        executor_id: ExecutorId = ExecutorId(agent_name, config_model_version)
         if executor_id in self.executor_map:
             return self.executor_map[executor_id]
-        return await self.create_executor(executor_id.config_model_version, executor_id.agent_name, resources, client)
+        return await self.create_executor(executor_id.config_model_version, executor_id.agent_name, blueprint)
