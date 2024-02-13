@@ -1274,7 +1274,7 @@ async def test_compileservice_auto_recompile_wait(
     """
     with caplog.at_level(logging.DEBUG):
         if auto_recompile_wait == "0":
-            config.Config._get_instance().remove_option("server", "auto-recompile-wait")
+            config.Config.get_instance().remove_option("server", "auto-recompile-wait")
         else:
             config.Config.set("server", "auto-recompile-wait", auto_recompile_wait)
 
@@ -1345,7 +1345,7 @@ async def test_compileservice_api(client, environment):
     # Exceed max value for limit
     result = await client.get_reports(environment, limit=APILIMIT + 1)
     assert result.code == 400
-    assert result.result["message"] == f"Invalid request: limit parameter can not exceed {APILIMIT}, got {APILIMIT+1}."
+    assert result.result["message"] == f"Invalid request: limit parameter can not exceed {APILIMIT}, got {APILIMIT + 1}."
 
     result = await client.get_reports(environment, limit=APILIMIT)
     assert result.code == 200

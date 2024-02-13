@@ -16,26 +16,17 @@
     Contact: code@inmanta.com
 """
 
-import base64
-import json
 import logging
 import os
 import re
-import ssl
 import sys
 import uuid
 import warnings
 from collections import abc, defaultdict
-from configparser import ConfigParser, Interpolation, SectionProxy
+from configparser import ConfigParser, Interpolation
 from typing import Callable, Generic, Optional, TypeVar, Union, overload
-from urllib import error, request
-
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from crontab import CronTab
-from inmanta import const
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,6 +98,11 @@ class Config:
         return cls.__instance
 
     @classmethod
+    def get_instance(cls) -> ConfigParser:
+        """Get the singleton instance of the ConfigParser. In case it did not load the config yet, it will be loaded."""
+        return cls._get_instance()
+
+    @classmethod
     def _reset(cls) -> None:
         cls.__instance = None
         cls._config_dir = None
@@ -126,7 +122,7 @@ class Config:
         Get the entire config or get a value directly
         """
         if section is None:
-            return cls._get_instance()
+            return cls.get_instance()
 
         assert name is not None
         name = _normalize_name(name)
@@ -141,7 +137,7 @@ class Config:
 
     @classmethod
     def _get_value(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]:
-        cfg: ConfigParser = cls._get_instance()
+        cfg: ConfigParser = cls.get_instance()
         val: Optional[str] = _get_from_env(section, name)
         if val is not None:
             LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
@@ -153,7 +149,7 @@ class Config:
     @classmethod
     def is_set(cls, section: str, name: str) -> bool:
         """Check if a certain config option was specified in the config file."""
-        return section in cls._get_instance() and name in cls._get_instance()[section]
+        return section in cls.get_instance() and name in cls.get_instance()[section]
 
     @classmethod
     def getboolean(cls, section: str, name: str, default_value: Optional[bool] = None) -> bool:
@@ -161,7 +157,7 @@ class Config:
         Return a boolean from the configuration
         """
         cls.validate_option_request(section, name, default_value)
-        return cls._get_instance().getboolean(section, name, fallback=default_value)
+        return cls.get_instance().getboolean(section, name, fallback=default_value)
 
     @classmethod
     def set(cls, section: str, name: str, value: str) -> None:
@@ -170,9 +166,9 @@ class Config:
         """
         name = _normalize_name(name)
 
-        if section not in cls._get_instance():
-            cls._get_instance().add_section(section)
-        cls._get_instance().set(section, name, value)
+        if section not in cls.get_instance():
+            cls.get_instance().add_section(section)
+        cls.get_instance().set(section, name, value)
 
     @classmethod
     def register_option(cls, option: "Option") -> None:
@@ -229,7 +225,7 @@ def is_bool(value: Union[bool, str]) -> bool:
     """Boolean value, represented as any of true, false, on, off, yes, no, 1, 0. (Case-insensitive)"""
     if isinstance(value, bool):
         return value
-    boolean_states: abc.Mapping[str, bool] = Config._get_instance().BOOLEAN_STATES
+    boolean_states: abc.Mapping[str, bool] = Config.get_instance().BOOLEAN_STATES
     if value.lower() not in boolean_states:
         raise ValueError("Not a boolean: %s" % value)
     return boolean_states[value.lower()]
@@ -440,205 +436,3 @@ class TransportConfig:
 compiler_transport = TransportConfig("compiler")
 TransportConfig("client")
 cmdline_rest_transport = TransportConfig("cmdline")
-
-
-#############################
-# auth
-#############################
-AUTH_JWT_PREFIX = "auth_jwt_"
-
-
-class AuthJWTConfig:
-    """
-    Auth JWT configuration manager
-    """
-
-    sections: dict[str, "AuthJWTConfig"] = {}
-    issuers: dict[str, "AuthJWTConfig"] = {}
-
-    validate_cert: bool
-
-    @classmethod
-    def reset(cls) -> None:
-        cls.sections = {}
-        cls.issuers = {}
-
-    @classmethod
-    def list(cls) -> list[str]:
-        """
-        Return a list of all defined auth jwt configurations. This method will load new sections if they were added
-        since the last invocation.
-        """
-        cfg = Config._get_instance()
-        prefix_len = len(AUTH_JWT_PREFIX)
-
-        for section in cfg.keys():
-            if section[:prefix_len] == AUTH_JWT_PREFIX:
-                name = section[prefix_len:]
-                if name not in cls.sections:
-                    obj = cls(name, section, cfg[section])
-                    cls.sections[name] = obj
-                    if obj.issuer in cls.issuers:
-                        raise ValueError("Only oner configuration per issuer is supported")
-
-                    cls.issuers[obj.issuer] = obj
-
-        # Verify that only one has sign set to true
-        sign = False
-        for name, cfg in cls.sections.items():
-            if cfg.sign:
-                if sign:
-                    raise ValueError("Only one auth_jwt section may have sign set to true")
-                else:
-                    sign = True
-
-        if len(cls.sections.keys()) > 0 and not sign:
-            raise ValueError("One auth_jwt section should have sign set to true")
-
-        return list(cls.sections.keys())
-
-    @classmethod
-    def get(cls, name: str) -> Optional["AuthJWTConfig"]:
-        """
-        Get the config with the given name
-        """
-        cls.list()
-        if name in cls.sections:
-            return cls.sections[name]
-        return None
-
-    @classmethod
-    def get_sign_config(cls) -> Optional["AuthJWTConfig"]:
-        """
-        Get the configuration with sign is true
-        """
-        cls.list()
-        for cfg in cls.sections.values():
-            if cfg.sign:
-                return cfg
-        return None
-
-    @classmethod
-    def get_issuer(cls, issuer: str) -> Optional["AuthJWTConfig"]:
-        """
-        Get the config for the given issuer. Only when no auth config has been loaded yet, the configuration will be loaded
-        again. For loading additional configuration, call list() first. This method is in the auth path for each API
-        request.
-        """
-        if len(cls.issuers) == 0:
-            cls.list()
-        if issuer in cls.issuers:
-            return cls.issuers[issuer]
-        return None
-
-    def __init__(self, name: str, section: str, config: SectionProxy):
-        self.name = name
-        self.section = section
-        self._config = config
-        if "algorithm" not in config:
-            raise ValueError("algorithm is required in %s section" % self.section)
-
-        self.algo = config["algorithm"]
-        self.validate_generic()
-
-        if self.algo.lower() == "hs256":
-            self.validate_hs265()
-        elif self.algo.lower() == "rs256":
-            self.validate_rs265()
-        else:
-            raise ValueError(f"Algorithm {self.algo} in {self.section} is not support ")
-
-    def validate_generic(self) -> None:
-        """
-        Validate  and parse the generic options that are valid for all algorithms
-        """
-        if "sign" in self._config:
-            self.sign = is_bool(self._config["sign"])
-        else:
-            self.sign = False
-
-        if "client_types" not in self._config:
-            raise ValueError("client_types is a required options for %s" % self.section)
-
-        self.client_types = is_list(self._config["client_types"])
-        for ct in self.client_types:
-            if ct not in [client_type for client_type in const.ClientType]:
-                raise ValueError(f"invalid client_type {ct} in {self.section}")
-
-        if "expire" in self._config:
-            self.expire = is_int(self._config["expire"])
-        else:
-            self.expire = 0
-
-        if "issuer" in self._config:
-            self.issuer = is_str(self._config["issuer"])
-        else:
-            self.issuer = "https://localhost:8888/"
-
-        if "audience" in self._config:
-            self.audience = is_str(self._config["audience"])
-        else:
-            self.audience = self.issuer
-
-    def validate_hs265(self) -> None:
-        """
-        Validate and parse HS256 algorithm configuration
-        """
-        if "key" not in self._config:
-            raise ValueError(f"key is required in {self.section} for algorithm {self.algo}")
-
-        self.key = base64.urlsafe_b64decode((self._config["key"] + "==").encode("ascii"))
-        if len(self.key) < 32:
-            raise ValueError("HS256 requires a key of 32 bytes (256 bits) or longer in " + self.section)
-
-    def _load_public_key(self, e: str, n: str) -> str:
-        def to_int(x: str) -> int:
-            bs = base64.urlsafe_b64decode(x + "==")
-            return int.from_bytes(bs, byteorder="big")
-
-        ei = to_int(e)
-        ni = to_int(n)
-        numbers = RSAPublicNumbers(ei, ni)
-        public_key = numbers.public_key(backend=default_backend())
-        pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        return pem
-
-    def validate_rs265(self) -> None:
-        """
-        Validate and parse RS256 algorithm configuration
-        """
-        if "jwks_uri" not in self._config:
-            raise ValueError("jwks_uri is required for RS256 based providers in section %s" % self.section)
-
-        self.jwks_uri = self._config["jwks_uri"]
-
-        if "validate_cert" in self._config:
-            self.validate_cert = self._config.getboolean("validate_cert")
-        else:
-            self.validate_cert = True
-
-        ctx = None
-        if not self.validate_cert:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-        jwks_timeout = self._config.getfloat("jwks_request_timeout", 30.0)
-        try:
-            with request.urlopen(self.jwks_uri, timeout=jwks_timeout, context=ctx) as response:
-                key_data = json.loads(response.read().decode("utf-8"))
-        except error.URLError as e:
-            # HTTPError is raised for non-200 responses; the response
-            # can be found in e.response.
-            raise ValueError(
-                "Unable to load key data for %s using the provided jwks_uri %s. Got error: %s"
-                % (self.section, self.jwks_uri, e.reason)
-            )
-        except Exception as e:
-            # Other errors are possible, such as IOError.
-            raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))
-
-        self.keys: dict[str, str] = {}
-        for key in key_data["keys"]:
-            self.keys[key["kid"]] = self._load_public_key(key["e"], key["n"])
