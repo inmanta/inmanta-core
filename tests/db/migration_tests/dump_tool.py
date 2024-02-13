@@ -198,7 +198,6 @@ async def test_dump_db(server, client, postgres_db, database_name):
     )
     assert result.code == 200
 
-
     proc = await asyncio.create_subprocess_exec(
         "pg_dump", "-h", "127.0.0.1", "-p", str(postgres_db.port), "-f", outfile, "-O", "-U", postgres_db.user, database_name
     )
