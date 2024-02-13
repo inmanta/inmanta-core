@@ -1560,6 +1560,11 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     assert rid_to_resource[rid1].attributes["requires"] == []
     assert rid_to_resource[rid2].provides == []
 
+    # Test for: https://github.com/inmanta/inmanta-core/issues/7065
+    # Make sure dryrun succeeds after a put_partial call
+    result = await client.dryrun_trigger(tid=environment, version=2)
+    assert result.code == 200
+
 
 async def test_put_partial_dep_on_non_existing_resource(server, client, environment, clienthelper) -> None:
     """
