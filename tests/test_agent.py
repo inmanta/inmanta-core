@@ -18,21 +18,19 @@
 
 import asyncio
 import concurrent
+import hashlib
 import logging
 import os
 import uuid
 
 import pytest
-from pkg_resources import Requirement
 
-from agent_server.test_agent_code_loading import make_source_structure
-from inmanta import config, data, module, protocol
+from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
-from inmanta.agent.agent import ExecutorManager, VirtualEnvironmentManager
+from inmanta.agent.agent import ExecutorId, ExecutorManager, VirtualEnvironmentManager
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange, PipConfig
-from inmanta.loader import ExecutorBlueprint, ModuleSource
-from inmanta.module import InmantaModuleRequirement
+from inmanta.loader import EnvBlueprint, ModuleSource
 from inmanta.resources import Id, PurgeableResource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
@@ -227,49 +225,82 @@ async def test_update_agent_map(server, environment, agent_factory):
 
 
 async def test_process_manager(environment, server, client, agent_factory, tmpdir) -> None:
-    code = """
-    def test():
-        return 10
-
-    import inmanta
-    inmanta.test_agent_code_loading = 5
-        """
-
-    sources = {}
-    hv = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", code, client=client)
-
-    result = await client.upload_code_batched(tid=environment, id=1, resources={"test::Resource": sources})
-    assert result.code == 200
-
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
     )
 
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     create_python_package(
-        name="pkg",
+        name="pkg1",
         pkg_version=version.Version("1.0.0"),
-        path=os.path.join(tmpdir, "pkg"),
+        path=os.path.join(tmpdir, "pkg1"),
+        publish_index=pip_index,
+    )
+    create_python_package(
+        name="pkg2",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg2"),
         publish_index=pip_index,
     )
 
-    requirements = ("pkg",)
+    requirements1 = ("pkg1",)
+    requirements2 = ("pkg1", "pkg2")
     pip_config = PipConfig(index_url=pip_index.url)
 
-    module_source1 = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
-        source=code,
-    )
-    sources = (module_source1,)
-
-    blueprint = ExecutorBlueprint(
-        pip_config=pip_config,
-        sources=sources,
-        requirements=requirements,
-    )
-
+    blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
+    blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
     venv_manager = VirtualEnvironmentManager()
     executor_manager = ExecutorManager(agent, venv_manager, environment)
-    executor_1 = await executor_manager.get_executor("agent1", 1, blueprint)
+
+    # Getting a first executor will create it
+    executor_1, executor_1_id = await executor_manager.get_executor("agent1", 1, blueprint1)
+
+    assert executor_1
+
+    assert len(executor_manager.executor_map) == 1
+    assert ExecutorId("agent1", 1) == executor_1_id
+    assert executor_1_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_1_id] == executor_1
+
+    assert len(venv_manager._environment_map) == 1
+    assert blueprint1 in venv_manager._environment_map
+    assert venv_manager._environment_map[blueprint1] == executor_1.venv
+
+    # Getting it again will reuse the same one
+    executor_1, executor_1_id = await executor_manager.get_executor("agent1", 1, blueprint1)
+
+    assert executor_1
+
+    assert len(executor_manager.executor_map) == 1
+    assert ExecutorId("agent1", 1) == executor_1_id
+    assert executor_1_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_1_id] == executor_1
+
+    assert len(venv_manager._environment_map) == 1
+    assert blueprint1 in venv_manager._environment_map
+    assert venv_manager._environment_map[blueprint1] == executor_1.venv
+
+    # changing the config_model_version will create a new executor
+    # Keeping the same blueprint will not create a new venv: same venv is used.
+    executor_2, executor_2_id = await executor_manager.get_executor("agent1", 2, blueprint1)
+
+    assert len(executor_manager.executor_map) == 2
+    assert ExecutorId("agent1", 2) == executor_2_id
+    assert executor_2_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_2_id] == executor_2
+
+    assert len(venv_manager._environment_map) == 1
+    assert blueprint1 in venv_manager._environment_map
+    assert venv_manager._environment_map[blueprint1] == executor_2.venv
+
+    # The requirements change: a new venv is needed
+    executor_3, executor_3_id = await executor_manager.get_executor("agent1", 3, blueprint2)
+
+    assert len(executor_manager.executor_map) == 3
+    assert ExecutorId("agent1", 3) == executor_3_id
+    assert executor_3_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_3_id] == executor_3
+
+    assert len(venv_manager._environment_map) == 2
+    assert blueprint2 in venv_manager._environment_map
+    assert venv_manager._environment_map[blueprint2] == executor_3.venv

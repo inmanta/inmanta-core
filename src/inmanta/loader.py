@@ -198,11 +198,6 @@ class EnvBlueprint:
 
 
 @dataclass(frozen=True)
-class ExecutorBlueprint(EnvBlueprint):
-    sources: Sequence["ModuleSource"]
-
-
-@dataclass(frozen=True)
 class ModuleSource:
     """
     :param name: the name of the python module. e.g. inmanta_plugins.model.x
