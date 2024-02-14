@@ -224,7 +224,7 @@ async def test_update_agent_map(server, environment, agent_factory):
     assert agent1._instances["node1"].is_enabled()
 
 
-async def test_process_manager(environment, server, client, agent_factory, tmpdir) -> None:
+async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
     )
@@ -250,7 +250,7 @@ async def test_process_manager(environment, server, client, agent_factory, tmpdi
     blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
     blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
     venv_manager = VirtualEnvironmentManager()
-    executor_manager = ExecutorManager(agent, venv_manager, environment)
+    executor_manager = ExecutorManager(agent, venv_manager)
 
     # Getting a first executor will create it
     executor_1, executor_1_id = await executor_manager.get_executor("agent1", 1, blueprint1)

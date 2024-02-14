@@ -192,12 +192,6 @@ class CodeManager:
 
 
 @dataclass(frozen=True)
-class EnvBlueprint:
-    pip_config: PipConfig
-    requirements: Sequence[str]
-
-
-@dataclass(frozen=True)
 class ModuleSource:
     """
     :param name: the name of the python module. e.g. inmanta_plugins.model.x

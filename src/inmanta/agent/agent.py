@@ -1530,9 +1530,16 @@ class Agent(SessionEndpoint):
         return 200, collect_report(self)
 
 
+@dataclasses.dataclass(frozen=True)
+class EnvBlueprint:
+    pip_config: PipConfig
+    requirements: Sequence[str]
+
+
 class ExecutorVirtualEnvironment:
     def __init__(self, storage: str, threadpool: ThreadPoolExecutor):
         self.env = env.VirtualEnv(storage)
+        self.path = storage
         self.thread_pool = threadpool
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint):
@@ -1554,16 +1561,12 @@ class VirtualEnvironmentManager:
 
     def create_env_storage(self, storage):
         envs_dir = storage
-        id = uuid.uuid4()
-        new_env_dir = os.path.join(envs_dir, str(id))
-        if not os.path.exists(new_env_dir):
-            os.mkdir(new_env_dir)
-        else:
-            raise Exception("There is already an env with this blueprint stored")
+        new_env_dir = os.path.join(envs_dir, str(uuid.uuid4()))
+        os.mkdir(new_env_dir)
         return new_env_dir
 
     async def create_environment(self, blueprint: EnvBlueprint, storage: str, threadpool: ThreadPoolExecutor):
-        # create a new storage for the new environment
+        # create a new storage location for the new environment
         env_storage = self.create_env_storage(storage)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         await process_environment.create_and_install_environment(blueprint)
@@ -1596,10 +1599,9 @@ class Executor:
 
 
 class ExecutorManager:
-    def __init__(self, agent: Agent, environment_manager: VirtualEnvironmentManager, env_id):
+    def __init__(self, agent: Agent, environment_manager: VirtualEnvironmentManager):
         self.executor_map: dict[ExecutorId, Executor] = {}
         self.environment_manager = environment_manager
-        self.env_id = env_id
         self.agent = agent  # for now the executorManager lives in an agent
         self.storage = self.create_storage()
 
@@ -1610,7 +1612,7 @@ class ExecutorManager:
         blueprint: EnvBlueprint,
     ) -> tuple[Executor, ExecutorId]:
         executor_id: ExecutorId = ExecutorId(agent_name, config_model_version)
-        # get existing env or create on based on requirements and pip_config
+        # get existing env or create one based on requirements and pip_config
         venv = await self.environment_manager.get_environment(blueprint, self.storage["envs"], self.agent.thread_pool)
         # create Executor with env
         executor = Executor(agent_name, venv, self.storage["codes"])
