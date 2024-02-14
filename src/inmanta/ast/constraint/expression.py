@@ -87,14 +87,16 @@ class IsDefined(ReferenceStatement):
         self.attr = attr
         self.name = str(name)
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> dict[object, VariableABC]:
         requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         # construct waiter
         gradual_helper: IsDefinedGradual = IsDefinedGradual(owner=self, target=temp)
         hook: VariableReferenceHook = VariableReferenceHook(
-            instance=self.attr,
+            instance_expression=self.attr,
             name=self.name,
             variable_resumer=gradual_helper,
         )
@@ -245,7 +247,9 @@ class LazyBooleanOperator(BinaryOperator, Resumer):
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         return chain(self._own_eager_promises, self.children[0].get_all_eager_promises())
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> dict[object, VariableABC]:
         requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
         # introduce temp variable to contain the eventual result of this stmt
         temp: ResultVariable = ResultVariable()

@@ -201,7 +201,7 @@ class RequiresEmitStatement(DynamicStatement):
 
 @dataclass(frozen=True)
 class AttributeAssignmentLHS:
-    instance: "Reference"
+    instance_expression: "ExpressionStatement"
     attribute: str
     type_hint: Optional["Type"] = None
 
@@ -222,6 +222,15 @@ class ExpressionStatement(RequiresEmitStatement):
         :param requires: A dictionary mapping names to values.
         """
         raise DirectExecuteException(self, f"The statement {str(self)} can not be executed in this context")
+
+    def requires_emit(
+        self,
+        resolver: Resolver,
+        queue: QueueScheduler,
+        *,
+        propagate_unset: bool = False,
+    ) -> dict[object, VariableABC[object]]:
+        return super().requires_emit(resolver, queue)
 
     def requires_emit_gradual(
         self, resolver: Resolver, queue: QueueScheduler, resultcollector: ResultCollector[object]
@@ -309,41 +318,44 @@ class VariableReferenceHook(RawResumer):
     This class is not a full AST node, rather it is a Resumer only. It is meant to delegate common resumer behavior that would
     otherwise need to be implemented as custom resumer logic in each class that needs it.
 
-    :param instance: The instance this variable is an attribute of, if any. Can be a reference to a nested relation instance.
+    :param instance_expression: The expression that resolves to the instance this variable is an attribute of, if any.
+                                Can be a reference to a nested relation instance.
     :param name: The name of the variable or instance attribute.
     :param variable_resumer: The resumer that should be called when a value becomes available.
-    :param propagate_unset: If True, propagate unset exceptions during instance execution to the resumer.
+    :param propagate_unset: If True, propagate unset exceptions during execution to the resumer.
     """
 
-    __slots__ = ("instance", "name", "variable_resumer", "propagate_unset")
+    __slots__ = ("instance_expression", "name", "variable_resumer", "propagate_unset")
 
     def __init__(
         self,
-        instance: Optional["Reference"],
+        instance_expression: Optional["ExpressionStatement"],
         name: str,
         variable_resumer: "VariableResumer",
         *,
         propagate_unset: bool = False,
     ) -> None:
         super().__init__()
-        self.instance: Optional["Reference"] = instance
+        self.instance_expression: Optional["ExpressionStatement"] = instance_expression
         self.name: str = name
         self.variable_resumer: "VariableResumer" = variable_resumer
         self.propagate_unset: bool = propagate_unset
 
     def schedule(self, resolver: Resolver, queue: QueueScheduler) -> None:
         """
-        Schedules this instance for execution. Waits for the variable's requirements before resuming.
+        Schedules this expression for execution. Waits for the variable's requirements before resuming.
         """
-        if self.instance is None:
+        if self.instance_expression is None:
             self.resume({}, resolver, queue)
         else:
             RawUnit(
                 queue,
                 resolver,
-                # no need for gradual execution here because this class represents an attribute reference on self.instance,
-                # which is not allowed on multi variables (the only kind of variables that would benefit from gradual execution)
-                self.instance.requires_emit(resolver, queue, propagate_unset=self.propagate_unset),
+                # This code schedules the execution of `self.instance_expression`. instance_expression cannot be
+                # a multi-relationship, because an attribute reference is not allowed on a multi-relationship
+                # (i.e. A.b.c is only allowed if A.b is a non-multi relationship). As such, there is no need for gradual
+                # execution here, as gradual execution is only relevant on multi variables.
+                self.instance_expression.requires_emit(resolver, queue, propagate_unset=self.propagate_unset),
                 self,
             )
 
@@ -352,13 +364,13 @@ class VariableReferenceHook(RawResumer):
         Fetches the variable when it's available and calls variable resumer.
         """
         variable: VariableABC[object]
-        if self.instance is not None:
-            # get the Instance
-            instance_requires: dict[object, object] = {}
+        if self.instance_expression is not None:
+            # Resolve the expression
+            expression_requires: dict[object, object] = {}
             unset: Optional[VariableABC] = None
             for k, v in requires.items():
                 try:
-                    instance_requires[k] = v.get_value()
+                    expression_requires[k] = v.get_value()
                 except (OptionalValueException,) if self.propagate_unset else ():
                     unset = v
                     break
@@ -367,8 +379,8 @@ class VariableReferenceHook(RawResumer):
                 # propagate unset variable up the attribute reference chain
                 variable = unset
             else:
-                # all requires are present, execute instance
-                instance: object = self.instance.execute(instance_requires, resolver, queue)
+                # all requires are present, execute expression
+                instance: object = self.instance_expression.execute(expression_requires, resolver, queue)
 
                 if isinstance(instance, list):
                     raise RuntimeException(self, f"can not get attribute {self.name}, {instance} is not an entity but a list")
@@ -376,7 +388,7 @@ class VariableReferenceHook(RawResumer):
                     raise RuntimeException(
                         self,
                         "can not get attribute %s, %s is not an entity but a %s with value '%s'"
-                        % (self.name, self.instance, type(instance).__name__, instance),
+                        % (self.name, self.instance_expression, type(instance).__name__, instance),
                     )
 
                 # get the attribute result variable
@@ -396,11 +408,11 @@ class VariableReferenceHook(RawResumer):
         raise RuntimeException(self, "%s is not an actual AST node, it should never be executed" % self.__class__.__name__)
 
     def __str__(self) -> str:
-        return f"{self.instance}.{self.name}"
+        return f"{self.instance_expression}.{self.name}"
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}({self.instance!r}, "
+            f"{self.__class__.__name__}({self.instance_expression!r}, "
             f"{self.name}, {self.variable_resumer!r}, propagate_unset={self.propagate_unset!r})"
         )
 
@@ -529,9 +541,11 @@ class ReferenceStatement(ExpressionStatement):
     def requires(self) -> list[str]:
         return [req for v in self.children for req in v.requires()]
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> dict[object, VariableABC]:
         try:
-            requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
+            requires: dict[object, VariableABC] = super().requires_emit(resolver, queue, propagate_unset=propagate_unset)
             requires.update({rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()})
             return requires
         except RuntimeException as e:
@@ -546,9 +560,9 @@ class AssignStatement(DynamicStatement):
 
     __slots__ = ("lhs", "rhs")
 
-    def __init__(self, lhs: Optional["Reference"], rhs: ExpressionStatement) -> None:
+    def __init__(self, lhs: Optional[ExpressionStatement], rhs: ExpressionStatement) -> None:
         DynamicStatement.__init__(self)
-        self.lhs: Optional["Reference"] = lhs
+        self.lhs: Optional[ExpressionStatement] = lhs
         self.rhs: ExpressionStatement = rhs
 
     def normalize(self) -> None:

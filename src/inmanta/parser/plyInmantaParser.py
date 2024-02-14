@@ -663,7 +663,7 @@ def p_boolean_expression_not(p: YaccProduction) -> None:
 
 
 def p_boolean_expression_is_defined(p: YaccProduction) -> None:
-    """boolean_expression : var_ref '.' ID IS DEFINED"""
+    """boolean_expression : expression '.' ID IS DEFINED"""
     p[0] = IsDefined(p[1], p[3])
     attach_lnr(p, 2)
 
@@ -1209,8 +1209,20 @@ def p_var_ref(p: YaccProduction) -> None:
 
 
 def p_attr_ref(p: YaccProduction) -> None:
-    "attr_ref : var_ref '.' ID"
-    p[0] = AttributeReference(p[1], p[3])
+    "attr_ref : expression '.' ID"
+    expression: ExpressionStatement = p[1]
+    attribute: LocatableString = p[3]
+    # range: Range = Range(
+    #     instance.locatable_name.location.file,
+    #     instance.locatable_name.lnr,
+    #     instance.locatable_name.start,
+    #     attribute.elnr,
+    #     attribute.end,
+    # )
+    # reference: LocatableString = LocatableString(
+    #     f"{instance.full_name}.{attribute}", range, instance.locatable_name.lexpos, instance.namespace
+    # )
+    p[0] = AttributeReference(None, expression, attribute)
     attach_lnr(p, 2)
 
 
@@ -1345,7 +1357,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
             data = data + "\n"
             lexer.lineno = 1
             lexer.linestart = 0
-            return parser.parse(data, lexer=lexer, debug=False)
+            return parser.parse(data, lexer=lexer, debug=True)
     else:
         data = content
         if len(data) == 0:
@@ -1354,7 +1366,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         data = data + "\n"
         lexer.lineno = 1
         lexer.linestart = 0
-        return parser.parse(data, lexer=lexer, debug=False)
+        return parser.parse(data, lexer=lexer, debug=True)
 
 
 cache_manager = CacheManager()

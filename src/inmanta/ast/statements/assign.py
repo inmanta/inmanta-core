@@ -213,44 +213,58 @@ class SetAttribute(AssignStatement, Resumer):
     Set an attribute of a given instance to a given value
     """
 
-    __slots__ = ("instance", "attribute_name", "value", "list_only", "_assignment_promise")
+    __slots__ = ("instance_expression", "attribute_name", "value", "list_only", "_assignment_promise")
 
-    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool = False) -> None:
-        AssignStatement.__init__(self, instance, value)
-        self.instance = instance
+    def __init__(
+        self,
+        instance_expression: "ExpressionStatement",
+        attribute_name: str,
+        value: ExpressionStatement,
+        list_only: bool = False,
+    ) -> None:
+        AssignStatement.__init__(self, instance_expression, value)
+        self.instance_expression = instance_expression
         self.attribute_name = attribute_name
         self.value = value
         self.list_only = list_only
-        self._assignment_promise: StaticEagerPromise = StaticEagerPromise(self.instance, self.attribute_name, self)
+        self._assignment_promise: Optional[StaticEagerPromise] = None
+        from inmanta.ast.variables import Reference
+        if isinstance(self.instance_expression, Reference):
+            self._assignment_promise = StaticEagerPromise(self.instance_expression, self.attribute_name, self)
 
     def normalize(self, *, lhs_attribute: Optional[AttributeAssignmentLHS] = None) -> None:
         # register this assignment as left hand side to the value on the right hand side
-        self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance, self.attribute_name))
+        self.rhs.normalize(lhs_attribute=AttributeAssignmentLHS(self.instance_expression, self.attribute_name))
         self.anchors.extend(self.rhs.get_anchors())
         if self.lhs is not None:
             self.anchors.extend(self.lhs.get_anchors())
 
     def get_all_eager_promises(self) -> abc.Iterator["StaticEagerPromise"]:
         # propagate this attribute assignment's promise to parent blocks
-        return chain(super().get_all_eager_promises(), [self._assignment_promise])
+        return chain(super().get_all_eager_promises(), [self._assignment_promise] if self._assignment_promise else [])
 
     def _add_to_dataflow_graph(self, graph: typing.Optional[DataflowGraph]) -> None:
         if graph is None:
             return
-        node: dataflow.AttributeNodeReference = self.instance.get_dataflow_node(graph).get_attribute(self.attribute_name)
+        node: dataflow.AttributeNodeReference = (
+            self.instance_expression.get_dataflow_node(graph).get_attribute(self.attribute_name)
+            if isinstance(self.instance_expression, Reference)
+            else dataflow.AssignableNode("__stub__").reference()
+        )
         node.assign(self.value.get_dataflow_node(graph), self, graph)
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         self._add_to_dataflow_graph(resolver.dataflow_graph)
-        reqs = self.instance.requires_emit(resolver, queue)
+        reqs = self.instance_expression.requires_emit(resolver, queue)
         # This class still implements custom attribute resolution, rather than using the new VariableReferenceHook mechanism
         HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
     def resume(self, requires: dict[object, object], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
-        instance = self.instance.execute(requires, resolver, queue)
+        instance = self.instance_expression.execute(requires, resolver, queue)
         if not isinstance(instance, Instance):
             raise TypingException(
-                self, f"The object at {self.instance} is not an Entity but a {type(instance)} with value {instance}"
+                self,
+                f"The object at {self.instance_expression} is not an Entity but a {type(instance)} with value {instance}"
             )
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
@@ -269,10 +283,10 @@ class SetAttribute(AssignStatement, Resumer):
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 
     def pretty_print(self) -> str:
-        return f"{self.instance.pretty_print()}.{self.attribute_name} = {self.value.pretty_print()}"
+        return f"{self.instance_expression.pretty_print()}.{self.attribute_name} = {self.value.pretty_print()}"
 
     def __str__(self) -> str:
-        return f"{str(self.instance)}.{self.attribute_name} = {str(self.value)}"
+        return f"{str(self.instance_expression)}.{self.attribute_name} = {str(self.value)}"
 
 
 class GradualSetAttributeHelper(ResultCollector[T]):
@@ -444,8 +458,12 @@ class IndexLookup(ReferenceStatement, Resumer):
         self.type = self.namespace.get_type(self.index_type)
         self.anchors.append(TypeAnchor(self.index_type, self.type))
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC]:
-        requires: dict[object, VariableABC] = RequiresEmitStatement.requires_emit(self, resolver, queue)
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> dict[object, VariableABC]:
+        requires: dict[object, VariableABC] = RequiresEmitStatement.requires_emit(
+            self, resolver, queue, propagate_unset=propagate_unset
+        )
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)

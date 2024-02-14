@@ -304,7 +304,12 @@ class ListComprehension(RawResumer, ExpressionStatement):
         return list(set(self.value_expression.requires()) - {str(self.loop_var)} | set(self.iterable.requires()))
 
     def requires_emit(
-        self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
+        self,
+        resolver: Resolver,
+        queue: QueueScheduler,
+        *,
+        lhs: Optional[ResultCollector[object]] = None,
+        propagate_unset: bool = False,
     ) -> dict[object, VariableABC[object]]:
         """
         Sets up gradual or non-gradual execution (depending on the lhs) of the list comprehension. Additionally sets up a
@@ -317,7 +322,9 @@ class ListComprehension(RawResumer, ExpressionStatement):
             -> wait for iterable completion -> `resume()` -> finalize helper input
             -> wait for helper completion -> `execute()` -> return complete value
         """
-        base_requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+        base_requires: dict[object, VariableABC[object]] = super().requires_emit(
+            resolver, queue, propagate_unset=propagate_unset
+        )
 
         # set up gradual execution
         collector_helper: ListComprehensionCollector = ListComprehensionCollector(
@@ -691,9 +698,14 @@ class ConditionalExpression(ExpressionStatement):
         return list(chain.from_iterable(sub.requires() for sub in [self.condition, self.if_expression, self.else_expression]))
 
     def requires_emit(
-        self, resolver: Resolver, queue: QueueScheduler, *, lhs: Optional[ResultCollector[object]] = None
+        self,
+        resolver: Resolver,
+        queue: QueueScheduler,
+        *,
+        lhs: Optional[ResultCollector[object]] = None,
+        propagate_unset: bool = False,
     ) -> dict[object, VariableABC[object]]:
-        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue, propagate_unset=propagate_unset)
 
         # This ResultVariable will receive the result of this expression
         result: ResultVariable[object] = ResultVariable()
@@ -1001,8 +1013,10 @@ class Constructor(ExpressionStatement):
         out.extend(req for (k, v) in self.get_default_values().items() for req in v.requires())
         return out
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
-        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> dict[object, VariableABC[object]]:
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue, propagate_unset=propagate_unset)
         # direct
         direct = [x for x in self._direct_attributes.items()]
 
@@ -1013,7 +1027,7 @@ class Constructor(ExpressionStatement):
         if self._lhs_attribute is not None:
             direct_requires.update(
                 # if lhs_attribute is set, it is likely required for construction (only exception is if it is in kwargs)
-                self._lhs_attribute.instance.requires_emit(resolver, queue)
+                self._lhs_attribute.instance_expression.requires_emit(resolver, queue)
             )
         LOGGER.log(
             LOG_LEVEL_TRACE, "emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires
@@ -1055,7 +1069,7 @@ class Constructor(ExpressionStatement):
         lhs_inverse_assignment: Optional[tuple[str, object]] = None
         # add inverse relation if it is part of an index
         if self._lhs_attribute is not None:
-            lhs_instance: object = self._lhs_attribute.instance.execute(requires, resolver, queue)
+            lhs_instance: object = self._lhs_attribute.instance_expression.execute(requires, resolver, queue)
             if not isinstance(lhs_instance, Instance):
                 # bug in internal implementation
                 raise Exception("Invalid state: received lhs_attribute that is not an instance")
@@ -1260,8 +1274,10 @@ class WrappedKwargs(ExpressionStatement):
     def requires(self) -> list[str]:
         return self.dictionary.requires()
 
-    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> dict[object, VariableABC[object]]:
-        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue)
+    def requires_emit(
+        self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
+    ) -> dict[object, VariableABC[object]]:
+        requires: dict[object, VariableABC[object]] = super().requires_emit(resolver, queue, propagate_unset=propagate_unset)
         requires.update(self.dictionary.requires_emit(resolver, queue))
         return requires
 

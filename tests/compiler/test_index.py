@@ -605,3 +605,59 @@ The constructor `A(id=1,left='LL',right='RR',other_id=3)` ({snippetcompiler.proj
 - index A(other_id) matches __config__::A (instantiated at {snippetcompiler.project_dir}/main.cf:17)
 """  # noqa: E501
     )
+
+
+def test_attribute_dereference_on_index_lookup(snippetcompiler) -> None:
+    """
+    Verify that it's possible to de-reference an attribute on an index lookup.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+end
+
+entity B:
+    string name
+    string attr
+end
+
+A.bees [0:] -- B.a [1]
+
+index B(a, name)
+
+obj = A()
+obj.bees = B(name="b1", attr="a")
+obj.bees = B(name="b2", attr="b")
+
+implement A using std::none
+implement B using std::none
+
+result = obj.bees[name="b1"].attr
+"""
+    )
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    z = root.lookup("result").get_value()
+    assert z == "a"
+
+
+def test_attribute_dereference_on_constructor(snippetcompiler) -> None:
+    """
+    Verify that it's possible to de-reference an attribute on a constructor call.
+    """
+    snippetcompiler.setup_for_snippet(
+        """
+entity A:
+    string name
+    string attr
+end
+
+implement A using std::none
+
+result = A(name="a", attr="test").name
+"""
+    )
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    z = root.lookup("result").get_value()
+    assert z == "a"

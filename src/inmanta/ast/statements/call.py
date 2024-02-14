@@ -92,9 +92,9 @@ class FunctionCall(ReferenceStatement):
         else:
             raise RuntimeException(self, "Can not call '%s', can only call plugin or primitive type cast" % self.name)
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver, queue, *, propagate_unset: bool = False):
         requires: dict[object, VariableABC] = self._requires_emit_promises(resolver, queue)
-        sub = ReferenceStatement.requires_emit(self, resolver, queue)
+        sub = ReferenceStatement.requires_emit(self, resolver, queue, propagate_unset=propagate_unset)
         # add lazy vars
         temp = ResultVariable()
         FunctionUnit(queue, resolver, temp, sub, self)

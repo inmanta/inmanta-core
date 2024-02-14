@@ -1643,11 +1643,11 @@ a = b.c["test"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, MapLookup)
     assert isinstance(stmt.value.themap, AttributeReference)
-    assert stmt.value.themap.instance.name == "b"
-    assert str(stmt.value.themap.instance.locatable_name) == "b"
+    assert stmt.value.themap.instance_expression.name == "b"
+    assert str(stmt.value.themap.instance_expression.locatable_name) == "b"
     assert str(stmt.value.themap.attribute) == "c"
     assert stmt.value.themap.locatable_name.location == Range("test", 2, 5, 2, 8)
-    assert stmt.value.themap.instance.locatable_name.location == Range("test", 2, 5, 2, 6)
+    assert stmt.value.themap.instance_expression.locatable_name.location == Range("test", 2, 5, 2, 6)
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
 

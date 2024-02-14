@@ -85,7 +85,7 @@ class Reference(ExpressionStatement):
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
     ) -> dict[object, VariableABC]:
-        requires: dict[object, VariableABC] = super().requires_emit(resolver, queue)
+        requires: dict[object, VariableABC] = super().requires_emit(resolver, queue, propagate_unset=propagate_unset)
         # FIXME: may be done more efficient?
         requires[self.name] = resolver.lookup(self.full_name)
         return requires
@@ -110,7 +110,7 @@ class Reference(ExpressionStatement):
             raise NotFoundException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[self.name]
 
-    def get_root_variable(self) -> "Reference":
+    def get_root_variable(self) -> Optional["Reference"]:
         """
         Returns the root reference node. e.g. for a.b.c.d, returns the reference for a.
         """
@@ -137,16 +137,6 @@ class Reference(ExpressionStatement):
         if list_only:
             raise ParserException(self.location, "+=", "Can not perform += on variable %s" % self.name)
         return Assign(self.locatable_name, value)
-
-    def root_in_self(self) -> "Reference":
-        if self.name == "self":
-            return self
-        else:
-            ref = Reference("self")
-            self.copy_location(ref)
-            attr_ref = AttributeReference(ref, self.locatable_name)
-            self.copy_location(attr_ref)
-            return attr_ref
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AssignableNodeReference:
         return graph.resolver.get_dataflow_node(self.name)
@@ -260,27 +250,18 @@ class AttributeReference(Reference):
     attributes of a class or class instance.
     """
 
-    __slots__ = ("attribute", "instance")
+    __slots__ = ("attribute", "instance_expression")
 
-    def __init__(self, instance: Reference, attribute: LocatableString) -> None:
-        range: Range = Range(
-            instance.locatable_name.location.file,
-            instance.locatable_name.lnr,
-            instance.locatable_name.start,
-            attribute.elnr,
-            attribute.end,
-        )
-        reference: LocatableString = LocatableString(
-            f"{instance.full_name}.{attribute}", range, instance.locatable_name.lexpos, instance.namespace
-        )
-        Reference.__init__(self, reference)
+    def __init__(
+        self, expression_location: LocatableString, instance_expression: ExpressionStatement, attribute: LocatableString
+    ) -> None:
+        Reference.__init__(self, expression_location)
         self.attribute = attribute
 
-        # a reference to the instance
-        self.instance = instance
+        self.instance_expression = instance_expression
 
     def requires(self) -> list[str]:
-        return self.instance.requires()
+        return self.instance_expression.requires()
 
     def requires_emit(
         self, resolver: Resolver, queue: QueueScheduler, *, propagate_unset: bool = False
@@ -306,7 +287,7 @@ class AttributeReference(Reference):
         # construct waiter
         reader: VariableReader = VariableReader(target=proxy)
         hook: VariableReferenceHook = VariableReferenceHook(
-            self.instance,
+            self.instance_expression,
             str(self.attribute),
             variable_resumer=reader,
             propagate_unset=propagate_unset,
@@ -322,23 +303,28 @@ class AttributeReference(Reference):
         # helper returned: return result
         return requires[self]
 
-    def get_root_variable(self) -> "Reference":
+    def get_root_variable(self) -> Optional["Reference"]:
         """
         Returns the root reference node. e.g. for a.b.c.d, returns the reference for a.
         """
-        return self.instance.get_root_variable()
+        if isinstance(self.instance_expression, Reference):
+            return self.instance_expression.get_root_variable()
+        return None
 
     def as_assign(self, value: ExpressionStatement, list_only: bool = False) -> AssignStatement:
-        return SetAttribute(self.instance, str(self.attribute), value, list_only)
-
-    def root_in_self(self) -> Reference:
-        out = AttributeReference(self.instance.root_in_self(), str(self.attribute))
-        self.copy_location(out)
-        return out
+        return SetAttribute(self.instance_expression, str(self.attribute), value, list_only)
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AttributeNodeReference:
-        assert self.instance is not None
-        return dataflow.AttributeNodeReference(self.instance.get_dataflow_node(graph), str(self.attribute))
+        assert self.instance_expression is not None
+        return dataflow.AttributeNodeReference(
+            (
+                self.instance_expression.get_dataflow_node(graph)
+                if isinstance(self.instance_expression, Reference)
+                # not supported at the moment => create dangling variable reference
+                else dataflow.AssignableNode("__stub__").reference()
+            ),
+            str(self.attribute)
+        )
 
     def __repr__(self) -> str:
-        return f"{repr(self.instance)}.{self.attribute}"
+        return f"{repr(self.instance_expression)}.{self.attribute}"
