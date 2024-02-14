@@ -773,11 +773,12 @@ class PipConfig(BaseModel):
         # allow use of aliases
         populate_by_name=True,
         extra="ignore",
+        frozen=True,
     )
 
     index_url: Optional[str] = None
     # Singular to be consistent with pip itself
-    extra_index_url: Sequence[str] = []
+    extra_index_url: Sequence[str] = tuple()
     pre: Optional[bool] = None
     use_system_config: bool = False
 

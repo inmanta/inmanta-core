@@ -19,22 +19,25 @@
 import asyncio
 import concurrent
 import logging
+import os
 import uuid
 
 import pytest
+from pkg_resources import Requirement
 
 from agent_server.test_agent_code_loading import make_source_structure
-from inmanta import config, data, protocol
+from inmanta import config, data, module, protocol
 from inmanta.agent import Agent, reporting
 from inmanta.agent.agent import ExecutorManager, VirtualEnvironmentManager
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange, PipConfig
-from inmanta.loader import InstallBlueprint, ModuleSource
+from inmanta.loader import ExecutorBlueprint, ModuleSource
+from inmanta.module import InmantaModuleRequirement
 from inmanta.resources import Id, PurgeableResource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
-from tests.test_loader import get_module_source
-from utils import retry_limited
+from packaging import version
+from utils import PipIndex, create_python_package, retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +226,7 @@ async def test_update_agent_map(server, environment, agent_factory):
     assert agent1._instances["node1"].is_enabled()
 
 
-async def test_process_manager(environment, caplog, server, agent_factory, client, monkeypatch, clienthelper) -> None:
+async def test_process_manager(environment, server, client, agent_factory, tmpdir) -> None:
     code = """
     def test():
         return 10
@@ -233,7 +236,7 @@ async def test_process_manager(environment, caplog, server, agent_factory, clien
         """
 
     sources = {}
-    await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", code, client=client)
+    hv = await make_source_structure(sources, "inmanta_plugins/test/__init__.py", "inmanta_plugins.test", code, client=client)
 
     result = await client.upload_code_batched(tid=environment, id=1, resources={"test::Resource": sources})
     assert result.code == 200
@@ -242,12 +245,26 @@ async def test_process_manager(environment, caplog, server, agent_factory, clien
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
     )
 
-    pip_config = PipConfig(
-        use_system_config=True,  # we need an upstream for some packages
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    create_python_package(
+        name="pkg",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg"),
+        publish_index=pip_index,
     )
-    sources =
-    requirements =
-    blueprint = InstallBlueprint(
+
+    requirements = ("pkg",)
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    module_source1 = ModuleSource(
+        name="inmanta_plugins.test",
+        hash_value=hv,
+        is_byte_code=False,
+        source=code,
+    )
+    sources = (module_source1,)
+
+    blueprint = ExecutorBlueprint(
         pip_config=pip_config,
         sources=sources,
         requirements=requirements,

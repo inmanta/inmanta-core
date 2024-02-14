@@ -1270,8 +1270,9 @@ import sys
         constraint_files: Optional[list[str]] = None,
         upgrade_strategy: PipUpgradeStrategy = PipUpgradeStrategy.ONLY_IF_NEEDED,
         paths: list[LocalPackagePath] = [],
+        should_be_using: bool = True,
     ) -> None:
-        if not self._using_venv:
+        if not self._using_venv and should_be_using:
             raise Exception(f"Not using venv {self.env_path}. use_virtual_env() should be called first.")
         super().install_for_config(requirements, config, upgrade, constraint_files, upgrade_strategy, paths)
 

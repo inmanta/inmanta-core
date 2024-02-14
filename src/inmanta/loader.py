@@ -192,10 +192,14 @@ class CodeManager:
 
 
 @dataclass(frozen=True)
-class InstallBlueprint:
+class EnvBlueprint:
     pip_config: PipConfig
-    sources: Sequence["ModuleSource"]
     requirements: Sequence[str]
+
+
+@dataclass(frozen=True)
+class ExecutorBlueprint(EnvBlueprint):
+    sources: Sequence["ModuleSource"]
 
 
 @dataclass(frozen=True)
