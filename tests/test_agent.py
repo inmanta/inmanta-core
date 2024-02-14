@@ -18,7 +18,6 @@
 
 import asyncio
 import concurrent
-import hashlib
 import logging
 import os
 import uuid
@@ -27,10 +26,9 @@ import pytest
 
 from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
-from inmanta.agent.agent import ExecutorId, ExecutorManager, VirtualEnvironmentManager
+from inmanta.agent.agent import EnvBlueprint, ExecutorId, ExecutorManager, VirtualEnvironmentManager
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange, PipConfig
-from inmanta.loader import EnvBlueprint, ModuleSource
 from inmanta.resources import Id, PurgeableResource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
@@ -253,54 +251,58 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     executor_manager = ExecutorManager(agent, venv_manager)
 
     # Getting a first executor will create it
-    executor_1, executor_1_id = await executor_manager.get_executor("agent1", 1, blueprint1)
+    executor_1 = await executor_manager.get_executor("agent1", 1, blueprint1)
 
     assert executor_1
 
     assert len(executor_manager.executor_map) == 1
-    assert ExecutorId("agent1", 1) == executor_1_id
-    assert executor_1_id in executor_manager.executor_map
-    assert executor_manager.executor_map[executor_1_id] == executor_1
+    assert executor_1.executor_id == ExecutorId("agent1", 1)
+    assert executor_1.executor_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_1.executor_id] == executor_1
 
     assert len(venv_manager._environment_map) == 1
     assert blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[blueprint1] == executor_1.venv
+    assert venv_manager._environment_map[blueprint1] == executor_1.executor_virtual_env
+
+    assert executor_1.executor_virtual_env.env.are_installed(list(requirements1))
 
     # Getting it again will reuse the same one
-    executor_1, executor_1_id = await executor_manager.get_executor("agent1", 1, blueprint1)
+    executor_1_reuse = await executor_manager.get_executor("agent1", 1, blueprint1)
 
-    assert executor_1
+    assert executor_1_reuse == executor_1
 
     assert len(executor_manager.executor_map) == 1
-    assert ExecutorId("agent1", 1) == executor_1_id
-    assert executor_1_id in executor_manager.executor_map
-    assert executor_manager.executor_map[executor_1_id] == executor_1
+    assert executor_1_reuse.executor_id == ExecutorId("agent1", 1)
+    assert executor_1_reuse.executor_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_1_reuse.executor_id] == executor_1_reuse
 
     assert len(venv_manager._environment_map) == 1
     assert blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[blueprint1] == executor_1.venv
+    assert venv_manager._environment_map[blueprint1] == executor_1_reuse.executor_virtual_env
 
-    # changing the config_model_version will create a new executor
+    # Changing the config_model_version will create a new executor
     # Keeping the same blueprint will not create a new venv: same venv is used.
-    executor_2, executor_2_id = await executor_manager.get_executor("agent1", 2, blueprint1)
+    executor_2 = await executor_manager.get_executor("agent1", 2, blueprint1)
 
     assert len(executor_manager.executor_map) == 2
-    assert ExecutorId("agent1", 2) == executor_2_id
-    assert executor_2_id in executor_manager.executor_map
-    assert executor_manager.executor_map[executor_2_id] == executor_2
+    assert executor_2.executor_id == ExecutorId("agent1", 2)
+    assert executor_2.executor_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_2.executor_id] == executor_2
 
     assert len(venv_manager._environment_map) == 1
     assert blueprint1 in venv_manager._environment_map
-    assert venv_manager._environment_map[blueprint1] == executor_2.venv
+    assert venv_manager._environment_map[blueprint1] == executor_2.executor_virtual_env
 
     # The requirements change: a new venv is needed
-    executor_3, executor_3_id = await executor_manager.get_executor("agent1", 3, blueprint2)
+    executor_3 = await executor_manager.get_executor("agent1", 3, blueprint2)
 
     assert len(executor_manager.executor_map) == 3
-    assert ExecutorId("agent1", 3) == executor_3_id
-    assert executor_3_id in executor_manager.executor_map
-    assert executor_manager.executor_map[executor_3_id] == executor_3
+    assert executor_3.executor_id == ExecutorId("agent1", 3)
+    assert executor_3.executor_id in executor_manager.executor_map
+    assert executor_manager.executor_map[executor_3.executor_id] == executor_3
 
     assert len(venv_manager._environment_map) == 2
     assert blueprint2 in venv_manager._environment_map
-    assert venv_manager._environment_map[blueprint2] == executor_3.venv
+    assert venv_manager._environment_map[blueprint2] == executor_3.executor_virtual_env
+
+    assert executor_3.executor_virtual_env.env.are_installed(list(requirements2))

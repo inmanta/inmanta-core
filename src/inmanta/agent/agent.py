@@ -44,9 +44,8 @@ from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
-from inmanta.data import model
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
-from inmanta.loader import CodeLoader, EnvBlueprint, ModuleSource
+from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
 from inmanta.types import Apireturn, JsonType
@@ -1542,7 +1541,7 @@ class ExecutorVirtualEnvironment:
         self.path = storage
         self.thread_pool = threadpool
 
-    async def create_and_install_environment(self, blueprint: EnvBlueprint):
+    async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         loop = asyncio.get_running_loop()
         req = list(blueprint.requirements)
         self.env.init_env()
@@ -1559,13 +1558,15 @@ class VirtualEnvironmentManager:
     def __init__(self):
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
 
-    def create_env_storage(self, storage):
+    def create_env_storage(self, storage: str) -> str:
         envs_dir = storage
         new_env_dir = os.path.join(envs_dir, str(uuid.uuid4()))
         os.mkdir(new_env_dir)
         return new_env_dir
 
-    async def create_environment(self, blueprint: EnvBlueprint, storage: str, threadpool: ThreadPoolExecutor):
+    async def create_environment(
+        self, blueprint: EnvBlueprint, storage: str, threadpool: ThreadPoolExecutor
+    ) -> ExecutorVirtualEnvironment:
         # create a new storage location for the new environment
         env_storage = self.create_env_storage(storage)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
@@ -1573,7 +1574,9 @@ class VirtualEnvironmentManager:
         self._environment_map[blueprint] = process_environment
         return process_environment
 
-    async def get_environment(self, blueprint: EnvBlueprint, storage: str, threadpool: ThreadPoolExecutor):
+    async def get_environment(
+        self, blueprint: EnvBlueprint, storage: str, threadpool: ThreadPoolExecutor
+    ) -> ExecutorVirtualEnvironment:
         if blueprint in self._environment_map:
             return self._environment_map[blueprint]
         return await self.create_environment(blueprint, storage, threadpool)
@@ -1586,9 +1589,9 @@ class ExecutorId:
 
 
 class Executor:
-    def __init__(self, agent_id: str, venv: ExecutorVirtualEnvironment, storage: str):
-        self.agent_id = agent_id
-        self.venv = venv
+    def __init__(self, executor_id: ExecutorId, executor_virtual_env: ExecutorVirtualEnvironment, storage: str):
+        self.executor_id = executor_id
+        self.executor_virtual_env: ExecutorVirtualEnvironment = executor_virtual_env
         self.storage = storage
 
     def load_code(self, sources: Sequence["ModuleSource"], threadpool: ThreadPoolExecutor):
@@ -1605,27 +1608,18 @@ class ExecutorManager:
         self.agent = agent  # for now the executorManager lives in an agent
         self.storage = self.create_storage()
 
-    async def create_executor(
-        self,
-        config_model_version: int,
-        agent_name: str,
-        blueprint: EnvBlueprint,
-    ) -> tuple[Executor, ExecutorId]:
-        executor_id: ExecutorId = ExecutorId(agent_name, config_model_version)
-        # get existing env or create one based on requirements and pip_config
+    async def create_executor(self, agent_name: str, config_model_version: int, blueprint: EnvBlueprint) -> Executor:
+        executor_id = ExecutorId(agent_name, config_model_version)
         venv = await self.environment_manager.get_environment(blueprint, self.storage["envs"], self.agent.thread_pool)
-        # create Executor with env
-        executor = Executor(agent_name, venv, self.storage["codes"])
+        executor = Executor(executor_id, venv, self.storage["codes"])
         self.executor_map[executor_id] = executor
-        return executor, executor_id
+        return executor
 
-    async def get_executor(
-        self, agent_name: str, config_model_version: int, blueprint: EnvBlueprint
-    ) -> tuple[Executor, ExecutorId]:
-        executor_id: ExecutorId = ExecutorId(agent_name, config_model_version)
+    async def get_executor(self, agent_name: str, config_model_version: int, blueprint: EnvBlueprint) -> Executor:
+        executor_id = ExecutorId(agent_name, config_model_version)
         if executor_id in self.executor_map:
-            return self.executor_map[executor_id], executor_id
-        return await self.create_executor(executor_id.config_model_version, executor_id.agent_name, blueprint)
+            return self.executor_map[executor_id]
+        return await self.create_executor(agent_name, config_model_version, blueprint)
 
     async def execute(
         self,
@@ -1636,8 +1630,8 @@ class ExecutorManager:
         resources: list[Resource],
     ):
         executor = await self.get_executor(agent_name, config_model_version, blueprint)
-        executor[0].load_code(sources, self.agent.thread_pool)
-        executor[0].execute(resources)
+        executor.load_code(sources, self.agent.thread_pool)
+        executor.execute(resources)
 
     def create_storage(self) -> dict[str, str]:
         state_dir = cfg.state_dir.get()
