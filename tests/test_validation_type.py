@@ -96,6 +96,6 @@ def test_cache(snippetcompiler):
     )
 
     compiler.do_compile()
-    # One miss, 19 hits
+    # For each field: One miss, 19 hits
     assert _cachable_validate_type.cache_info().hits == 19 * 2
     assert _cachable_validate_type.cache_info().misses == 2
