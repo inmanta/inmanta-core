@@ -231,7 +231,7 @@ class ExpressionStatement(RequiresEmitStatement):
 
         It is very similar to self.execute_direct({}) with the difference that:
          - This method can be called prior to normalization
-         - It is expected to not call plugins
+         - It is expected to not have side effects (e.g. call plugins, construct entities, ....)
 
         Because it is more restrictive, it can be called during the typing stage more safely
 
