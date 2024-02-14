@@ -1250,7 +1250,7 @@ def p_class_ref(p: YaccProduction) -> None:
 
 
 def p_class_ref_err_dot(p: YaccProduction) -> None:
-    "class_ref : var_ref '.' CID"
+    "class_ref : expression '.' CID"
     var: Union[LocatableString, Reference] = p[1]
     var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
     cid: LocatableString = p[3]
