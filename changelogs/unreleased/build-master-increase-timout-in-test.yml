@@ -1,0 +1,3 @@
+description: Increase deploy timeout limit in ``test_s_incremental_deploy_interrupts_full_deploy``.
+change-type: patch
+destination-branches: [master, iso7, iso6]
