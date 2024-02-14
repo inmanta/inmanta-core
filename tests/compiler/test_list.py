@@ -592,7 +592,7 @@ def test_list_duplicates(snippetcompiler):
 
 
 def test_nested_list_on_as_constant(snippetcompiler):
-    """Primitive lists retain duplicates"""
+    """Constant lists are flattened in typedefs"""
     snippetcompiler.setup_for_snippet(
         """
         typedef thestring as string matching self in [["a","b"],"c", ["d"]]
@@ -610,7 +610,7 @@ def test_nested_list_on_as_constant(snippetcompiler):
 
 
 def test_nested_list_on_execute_direct(snippetcompiler):
-    """Primitive lists retain duplicates"""
+    """Conditional lists are flattened in typedefs"""
     snippetcompiler.setup_for_snippet(
         """
         typedef thestring as string matching self in [1==1?["a","b"]:[],"c", ["d"]]
