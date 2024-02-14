@@ -107,12 +107,13 @@ class HashKeyContainer:
 
         self.validation_parameters = validation_parameters
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         # We favor speed over accuracy here
         # We mostly get calls from the model, where the dict is effectively the same
         return id(self.validation_parameters)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        assert isinstance(other, HashKeyContainer)
         return self.validation_parameters == other.validation_parameters
 
 

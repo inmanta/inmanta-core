@@ -741,12 +741,15 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
 
 def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
+    node = CreateList(p[2])
     try:
-        # if we can, shortcut to a constant
-        p[0] = Literal([v.as_constant() for v in p[2]])
+        node = Literal(node.as_constant())
     except RuntimeException:
         # Can't shortcut
-        p[0] = CreateList(p[2])
+        pass
+
+    p[0] = node
+
     attach_lnr(p, 1)
 
 
