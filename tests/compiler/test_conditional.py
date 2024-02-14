@@ -453,7 +453,8 @@ entity A:
 end
 implement A using std::none
         """,
-        "Invalid right hand value `null`: `or` expects a boolean (reported in ((self in ['a', 'b']) or null) ({dir}/main.cf:2))",
+        "Invalid right hand value `null`: `or` expects a boolean "
+        "(reported in ((self in ['a', 'b']) or null) ({dir}/main.cf:2))",
     )
 
 
