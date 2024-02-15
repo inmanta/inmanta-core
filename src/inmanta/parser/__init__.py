@@ -65,11 +65,11 @@ class InvalidNamespaceAccess(ParserException):
     Exception raised when a namespace access is attempted with '.' rather than '::'.
     """
 
-    def __init__(self, invalid: LocatableString) -> None:
-        self.invalid: LocatableString = invalid
+    def __init__(self, invalid: str, location: Location) -> None:
+        self.invalid = invalid
         super().__init__(
-            location=invalid.location,
-            value=str(invalid),
+            location=location,
+            value=invalid,
             msg=(
                 f"invalid namespace access `{invalid}`. Namespaces should be accessed with '::' rather than '.'. "
                 f"The '.' separator is reserved for attribute and relation access. Did you mean: `{self.suggest_replacement()}`"
@@ -80,4 +80,4 @@ class InvalidNamespaceAccess(ParserException):
         """
         Returns the suggested replacement to fix this error.
         """
-        return str(self.invalid).replace(".", "::")
+        return self.invalid.replace(".", "::")

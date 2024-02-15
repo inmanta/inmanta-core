@@ -85,6 +85,7 @@ precedence = (
     ("nonassoc", "NOT"),
     ("left", "IN"),
     ("left", "CID", "ID"),
+    ("left", "."),
     ("left", "(", "["),
     ("left", "MLS"),
 )
@@ -112,6 +113,17 @@ def expand_range(start: Range, end: Range) -> Range:
     """
     Returns a new range from the start of `start` to the end of `end`. Assumes both ranges are on the same file.
     """
+    return Range(start.file, start.lnr, start.start_char, end.end_lnr, end.end_char)
+
+
+def expand_range_or_location(start: Range|Location, end: Range|Location) -> Range|Location:
+    """
+    Returns a new range from the start of `start` to the end of `end`. Assumes both ranges are on the same file.
+
+    If end is a location, we just return start
+    """
+    if not isinstance(end, Range):
+        return start
     return Range(start.file, start.lnr, start.start_char, end.end_lnr, end.end_char)
 
 
@@ -549,7 +561,6 @@ def p_relation_annotated_unidir(p: YaccProduction) -> None:
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
-
 def p_multi_1(p: YaccProduction) -> None:
     "multi : '[' INT ']'"
     p[0] = (p[2], p[2])
@@ -736,7 +747,8 @@ def p_function_call(p: YaccProduction) -> None:
 
 def p_function_call_err_dot(p: YaccProduction) -> None:
     "function_call : attr_ref '(' function_param_list ')'"
-    raise InvalidNamespaceAccess(p[1].locatable_name)
+    name = p[1].locatable_name
+    raise InvalidNamespaceAccess(str(name), name.location)
 
 
 def p_list_def(p: YaccProduction) -> None:
@@ -1254,21 +1266,6 @@ def p_class_ref(p: YaccProduction) -> None:
     merge_lnr_to_string(p, 1, 3)
 
 
-def p_class_ref_err_dot(p: YaccProduction) -> None:
-    "class_ref : var_ref '.' CID"
-    var: Union[LocatableString, Reference] = p[1]
-    var_str: LocatableString = var if isinstance(var, LocatableString) else var.locatable_name
-    cid: LocatableString = p[3]
-    assert namespace
-    full_string: LocatableString = LocatableString(
-        f"{var_str}.{cid}",
-        expand_range(var_str.location, cid.location),
-        var_str.lexpos,
-        namespace,
-    )
-    raise InvalidNamespaceAccess(full_string)
-
-
 def p_class_ref_list_collect(p: YaccProduction) -> None:
     """class_ref_list : class_ref ',' class_ref_list"""
     p[3].insert(0, p[1])
@@ -1327,6 +1324,12 @@ def p_error(p: YaccProduction) -> None:
         if hasattr(p.value, "location"):
             r = p.value.location
         raise ParserException(r, str(p.value), "invalid identifier, %s is a reserved keyword" % p.value)
+
+    if p.type == "CID" and parser.symstack[-1].type == ".":
+        var: ExpressionStatement = parser.symstack[-2].value
+        location = var.get_location()
+        cid: LocatableString = p.value
+        raise InvalidNamespaceAccess( f"{repr(var)}.{cid}", expand_range_or_location(location, cid.location))
 
     if parser.symstack[-1].type in reserved.values():
         if hasattr(parser.symstack[-1].value, "location"):
