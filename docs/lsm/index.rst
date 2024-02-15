@@ -97,11 +97,11 @@
 
     It's also possible to define a service identity for a service. For more information, see :ref:`service_identity`.
 
-..
-    TODO:
-    Updating service entities
-    =========================
-    How to update the definition of a service entity and keeping the instance in the inventory stable
+    ..
+        TODO:
+        Updating service entities
+        =========================
+        How to update the definition of a service entity and keeping the instance in the inventory stable
 
     Service Inventory
     -----------------
@@ -134,8 +134,8 @@
     Lifecycle Manager
     -----------------
 
-..
-    TODO: add example/default lifecycle
+    ..
+        TODO: add example/default lifecycle
 
 
     .. _fsm:
