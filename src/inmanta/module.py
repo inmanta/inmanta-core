@@ -71,7 +71,6 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
@@ -2888,17 +2887,19 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Generate a list of all Python files in the given plugin directory.
         This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
-        and only considers directories that are Python packages.
+        includes namespace packages and excludes the model directory.
         """
         # Return cached results if this directory has been processed before
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
+        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
 
-        for dirpath, dirnames, filenames in os.walk(plugin_dir):
-            # Skip non-package directories (those without an __init__.py or __init__.pyc file)
-            if not any(fname for fname in filenames if fname in ["__init__.py", "__init__.pyc"]):
+        for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
+            # Modify dirnames in-place to stop os.walk from descending into any more subdirectories of the model directory
+            if dirpath.startswith(model_dir_path):
+                dirnames[:] = []
                 continue
 
             # Skip this directory if it's already in the cache
