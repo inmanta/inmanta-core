@@ -1,4 +1,4 @@
-.. only:: oss
+.. only:: iso
 
     Inmanta Lifecycle Service Manager
     *********************************
