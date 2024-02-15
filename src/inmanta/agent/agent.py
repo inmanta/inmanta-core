@@ -1338,8 +1338,8 @@ class Agent(SessionEndpoint):
          - Storing the pipconfig once and reusing it for all the handlers that will be installed.
          - Going through all the resource_types and retrieves the corresponding source code by using
             the ``get_source_code``API endpoint (async).
-         - Encapsulating Source code details in ``ModuleSource`` objects. It also gathers all the module requirements and
-            calls the ``self._install`` function to install required dependencies and the provided list
+         - Encapsulating Source code details in ``ModuleSource`` objects.
+         - calling the ``self._install`` function to install required python packages and the list
             of ``ModuleSource`` with the provided pip config.
          - Updating the ``_last_loaded`` cache to indicate that the given resource type's code was loaded successfully
             at the specified version.
