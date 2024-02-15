@@ -21,8 +21,8 @@ import warnings
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
-from inmanta.config import AuthJWTConfig
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.protocol import auth
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -578,7 +578,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
-    AuthJWTConfig.reset()
+    auth.AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 
@@ -630,7 +630,7 @@ def inmanta_config(clean_reset) -> Iterator[ConfigParser]:
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    yield config.Config._get_instance()
+    yield config.Config.get_instance()
 
 
 @pytest.fixture
@@ -1675,7 +1675,7 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
 
 
 @pytest.fixture
-def create_empty_local_package_index_factory() -> Callable[[], str]:
+def create_empty_local_package_index_factory() -> Callable[[str], str]:
     """
     A fixture that acts as a factory to create empty local pip package indexes.
     Each call creates a new index in a different temporary directory.

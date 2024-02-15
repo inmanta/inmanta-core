@@ -5250,7 +5250,7 @@ class ConfigurationModel(BaseDocument):
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
         """
-        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigururationModel will
+        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigurationModel will
         contain all the undeployables and skipped_for_undeployables present in the partial_base version that are not part of
         the partial compile, i.e. not present in rids_in_partial_compile.
         """
@@ -5290,7 +5290,7 @@ class ConfigurationModel(BaseDocument):
                 $4,
                 $5,
                 (
-                    SELECT array_agg(rid)
+                    SELECT coalesce(array_agg(rid), '{{}}')
                     FROM (
                         -- Undeployables in previous version of the model that are not part of the partial compile.
                         (
@@ -5306,7 +5306,7 @@ class ConfigurationModel(BaseDocument):
                     ) AS all_undeployable
                 ),
                 (
-                    SELECT array_agg(rid)
+                    SELECT coalesce(array_agg(rid), '{{}}')
                     FROM (
                         -- skipped_for_undeployables in previous version of the model that are not part of the partial
                         -- compile.
