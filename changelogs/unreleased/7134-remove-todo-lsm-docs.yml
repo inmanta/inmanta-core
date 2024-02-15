@@ -1,5 +1,6 @@
-description: Update lsm annotation documentation
+description: Remove the visible todos from the lsm docs.
 change-type: patch
 destination-branches:
   - master
   - iso7
+  - iso6
