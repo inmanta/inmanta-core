@@ -447,13 +447,14 @@ end
 def test_1808_non_boolean_condition_direct_exec(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
-typedef mytype as string matching self in ["a", "b"] or null
+typedef mytype as string matching self in ["a","b"] or null
 entity A:
     mytype myvalue = "x"
 end
 implement A using std::none
         """,
-        "Invalid right hand value `null`: `or` expects a boolean (reported in ((self in ['a','b']) or null) ({dir}/main.cf:2))",
+        "Invalid right hand value `null`: `or` expects a boolean "
+        "(reported in ((self in ['a', 'b']) or null) ({dir}/main.cf:2))",
     )
 
 

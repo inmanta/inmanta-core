@@ -173,6 +173,14 @@ def test_resultcollector_receive_result_flatten(snippetcompiler) -> None:
                     assert.success = false
                 end
             end
+
+            # Test composed lists as well as constant lists
+             a = "test"
+             for x in [["test"], a, [a]]:
+                if x != "test":
+                    assert.success = false
+                end
+            end
             """
         )
     )
