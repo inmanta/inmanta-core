@@ -1,4 +1,4 @@
-.. only:: iso
+.. only:: oss
 
     Inmanta Lifecycle Service Manager
     *********************************
@@ -47,9 +47,9 @@
 
     - The name of the service entity
     - A list of attributes that have a name, a type (number, string, ...) and a modifier. This modifier determines whether the attribute is:
-        - r / readonly: readonly from the client perspective and allocated server side by the LSM
-        - rw / read-write: Attributes can be set at creation time, but are readonly after the creation
-        - rw+ / read-write always: Attribute can be set at creation time and modified when the service state allows it
+        - ``r`` / readonly: readonly from the client perspective and allocated server side by the LSM
+        - ``rw`` / read-write: Attributes can be set at creation time, but are readonly after the creation
+        - ``rw+`` / read-write always: Attribute can be set at creation time and modified when the service state allows it
     - The :ref:`fsm` that defines the lifecycle of the service.
 
     For each service entity the lifecycle service manager will create an REST API endpoint on the service inventory to perform create,
@@ -57,16 +57,50 @@
 
     Creating service entities
     =========================
+    Service entities are :ref:`entities <lang-entity>` that extend ``lsm::ServiceEntity``
+    We define attributes for the service entity the same way as for entities. We can also define a modifier for the attribute.
+    If no modifier is defined for an attribute, it will be ``rw`` by default.
+    Here is an example of an entity definition where the modifier of the ``address`` attribute is set to ``rw+``.
 
-    TODO:
-    How to define a new service entity. "Exported" entity is high level entity in a service model.
+    .. code-block:: inmanta
+
+        entity InterfaceIPAssignment extends lsm::ServiceEntity:
+            """
+                Interface details.
+
+                :attr router_ip: The IP address of the SR linux router that should be configured.
+                :attr router_name: The name of the SR linux router that should be configured.
+                :attr interface_name: The name of the interface of the router that should be configured.
+                :attr address: The IP-address to assign to the given interface.
+            """
+
+            std::ipv_any_address router_ip
+            string router_name
+            string interface_name
+
+            std::ipv_any_interface address
+            lsm::attribute_modifier address__modifier="rw+"
+        end
+
+        implement InterfaceIPAssignment using parents
+
+    We also need to add a lifecycle to the entity. This is done by using ``ServiceEntityBinding``. By using the ``ServiceEntityBinding``
+    we can add a lifecycle to the entity and give it a name:
+
+    .. code-block:: inmanta
+
+        binding = lsm::ServiceEntityBinding(
+            service_entity="__config__::InterfaceIPAssignment",
+            lifecycle=lsm::fsm::simple,
+            service_entity_name="interface-ip-assignment",
+        )
 
     It's also possible to define a service identity for a service. For more information, see :ref:`service_identity`.
 
+..
+    TODO:
     Updating service entities
     =========================
-
-    TODO:
     How to update the definition of a service entity and keeping the instance in the inventory stable
 
     Service Inventory
@@ -89,11 +123,18 @@
 
     The state machine attached to the lifecycle will determine whether the API call is successful or not.
 
-    TODO: Three set of attributes
+    Each service instance defines 3 sets of its attributes that are used in different situations:
+
+    - ``candidate_attributes``: The set of attributes used when the service instance model state is candidate or designed.
+    - ``active_attributes``: The set of attributes when the model is evaluated with only active instances.
+    - ``rollback_attributes``: The set of attributes that can be used to rollback active attributes that result in an error
+                                state.
+
 
     Lifecycle Manager
     -----------------
 
+..
     TODO: add example/default lifecycle
 
 
