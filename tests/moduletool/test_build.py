@@ -246,8 +246,9 @@ def test_build_with_existing_model_directory(tmpdir, modules_v2_dir: str):
 
     with pytest.raises(
         Exception,
-        match="There is already a model directory in %s, which is not supported. "
-        "Please remove the model directory from this location." % python_pkg_dir,
+        match="There is already a model directory in %s. "
+        "The `inmanta_plugins.minimalv2module.model` package is reserved for bundling the inmanta model files. "
+        "Please use a different name for this Python package." % python_pkg_dir,
     ):
         V2ModuleBuilder(module_copy_dir).build(os.path.join(module_copy_dir, "dist"))
 

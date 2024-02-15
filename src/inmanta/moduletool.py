@@ -1745,9 +1745,10 @@ setup(name="{ModuleV2Source.get_package_name_for(self._module.name)}",
         model_dir: str = os.path.join(python_pkg_dir, "model")
         if os.path.exists(model_dir):
             raise ModuleBuildFailedError(
-                msg="There is already a model directory in %s, which is not supported. "
-                "Please remove the model directory from this location."
-                % os.path.join(self._module.path, "inmanta_plugins", self._module.name)
+                msg="There is already a model directory in %s. "
+                "The `inmanta_plugins.%s.model` package is reserved for bundling the inmanta model files. "
+                "Please use a different name for this Python package."
+                % (os.path.join(self._module.path, "inmanta_plugins", self._module.name), self._module.name)
             )
 
         for dir_name in ["model", "files", "templates"]:

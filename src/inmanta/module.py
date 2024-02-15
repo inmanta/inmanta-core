@@ -2957,7 +2957,11 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         raise NotImplementedError()
 
     def _list_python_files(self, plugin_dir: str) -> list[str]:
-        """Generate a list of all python files, including namespace packages and excluding the model directory."""
+        """
+        Generate a list of all Python files in the given plugin directory.
+        This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
+        includes namespace packages and excludes the model directory.
+        """
         # Return cached results if this directory has been processed before
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
