@@ -1333,7 +1333,18 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> set[str]:
-        """Ensure that the code for the given environment and version is loaded"""
+        """
+        Ensure that the code for the given environment and version is loaded by:
+         - Storing the pipconfig once and reusing it for all the handlers that will be installed.
+         - Going through all the resource_types and retrieves the corresponding source code by using
+            the ``get_source_code``API endpoint (async).
+         - Encapsulating Source code details in ``ModuleSource`` objects. It also gathers all the module requirements and
+            calls the ``self._install`` function to install required dependencies and the provided list
+            of ``ModuleSource`` with the provided pip config.
+         - Updating the ``_last_loaded`` cache to indicate that the given resource type's code was loaded successfully
+            at the specified version.
+         - Returning a list of all the ``resource_types`` that it failed to load.
+        """
         failed_to_load: set[str] = set()
         if self._loader is None:
             return failed_to_load
