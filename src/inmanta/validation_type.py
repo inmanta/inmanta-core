@@ -19,10 +19,12 @@
 import importlib
 import inspect
 from collections import abc
+from functools import lru_cache
 from typing import Annotated, Optional
 
 import pydantic
 
+from inmanta.execute.proxy import DictProxy
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
 
@@ -97,6 +99,24 @@ def parametrize_type(
     return parametrized_type if not custom_annotations else Annotated[parametrized_type, *custom_annotations]
 
 
+class HashKeyContainer:
+
+    def __init__(self, validation_parameters: Optional[abc.Mapping[str, object]] = None):
+        if isinstance(validation_parameters, DictProxy):
+            validation_parameters = validation_parameters.unwrap(validation_parameters)
+
+        self.validation_parameters = validation_parameters
+
+    def __hash__(self) -> int:
+        # We favor speed over accuracy here
+        # We mostly get calls from the model, where the dict is effectively the same
+        return id(self.validation_parameters)
+
+    def __eq__(self, other: object) -> bool:
+        assert isinstance(other, HashKeyContainer)
+        return self.validation_parameters == other.validation_parameters
+
+
 @stable_api
 def validate_type(
     fq_type_name: str, value: PrimitiveTypes, validation_parameters: Optional[abc.Mapping[str, object]] = None
@@ -140,12 +160,18 @@ def validate_type(
         or fq_type_name.startswith("uuid.")
     ):
         raise ValueError(f"Unknown fq_type_name: {fq_type_name}")
+    validation_type = _cachable_validate_type(fq_type_name, HashKeyContainer(validation_parameters))
+    validation_type.validate_python(value)
 
+
+@lru_cache(maxsize=4096)
+def _cachable_validate_type(fq_type_name: str, validation_parameters: HashKeyContainer) -> pydantic.TypeAdapter[object]:
     module_name, type_name = fq_type_name.split(".", 1)
     module = importlib.import_module(module_name)
     requested_type: object = getattr(module, type_name)
 
     validation_type: pydantic.TypeAdapter[object] = pydantic.TypeAdapter(
-        parametrize_type(requested_type, validation_parameters, type_name=fq_type_name)
+        parametrize_type(requested_type, validation_parameters.validation_parameters, type_name=fq_type_name)
     )
-    validation_type.validate_python(value)
+
+    return validation_type

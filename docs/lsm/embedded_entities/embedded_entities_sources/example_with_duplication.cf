@@ -1,6 +1,5 @@
 import lsm
 import lsm::fsm
-import ip
 
 entity ServiceX extends lsm::ServiceEntity:
     """
@@ -21,13 +20,13 @@ entity ServiceX extends lsm::ServiceEntity:
     string service_id
 
     string customer_router_name
-    ip::ip customer_router_system_ip
+    std::ipv4_address customer_router_system_ip
     lsm::attribute_modifier customer_router_system_ip__modifier="rw+"
     string customer_router_vendor
     string customer_router_chassis
 
     string provider_router_name
-    ip::ip provider_router_system_ip
+    std::ipv4_address provider_router_system_ip
     lsm::attribute_modifier provider_router_system_ip__modifier="rw+"
     string provider_router_vendor
     string provider_router_chassis

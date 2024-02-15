@@ -145,15 +145,22 @@ class CreateList(ReferenceStatement):
 
     def execute_direct(self, requires: abc.Mapping[str, object]) -> object:
         qlist = []
-
         for i in range(len(self.items)):
             value = self.items[i]
-            qlist.append(value.execute_direct(requires))
+            item = value.execute_direct(requires)
+            if isinstance(item, list):
+                # flatten cfr BaseListVariable._set_value
+                qlist.extend(item)
+            else:
+                qlist.append(item)
 
         return qlist
 
     def as_constant(self) -> list[object]:
-        return [item.as_constant() for item in self.items]
+        list_result = (v.as_constant() for v in self.items)
+        # flatten cfr BaseListVariable._set_value
+        flat_result = [item for element in list_result for item in ((element,) if not isinstance(element, list) else element)]
+        return flat_result
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.NodeReference:
         return dataflow.NodeStub("CreateList.get_node() placeholder for %s" % self).reference()

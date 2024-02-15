@@ -613,7 +613,7 @@ typedef abc as string matching self in ["a","b","c"]
     assert str(stmt.name) == "abc"
     assert str(stmt.basetype) == "string"
     assert isinstance(stmt.get_expression(), In)
-    assert [x.value for x in stmt.get_expression().children[1].items] == ["a", "b", "c"]
+    assert stmt.get_expression().children[1].value == ["a", "b", "c"]
 
 
 def test_index():
@@ -823,8 +823,8 @@ a=["a]","b"]
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateList)
-    assert [x.value for x in stmt.value.items] == ["a]", "b"]
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == ["a]", "b"]
 
 
 def test_list_def_trailing_comma():
@@ -837,8 +837,8 @@ a=["a]","b",]
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateList)
-    assert [x.value for x in stmt.value.items] == ["a]", "b"]
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == ["a]", "b"]
 
 
 def test_map_def():
@@ -851,8 +851,8 @@ a={ "a":"b", "b":1}
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateDict)
-    assert [(x[0], x[1].value) for x in stmt.value.items] == [("a", "b"), ("b", 1)]
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == {"a": "b", "b": 1}
 
 
 def test_map_def_var():
@@ -869,8 +869,7 @@ def test_map_def_list():
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateDict)
-    assert isinstance(stmt.value.items[0][1], CreateList)
+    assert isinstance(stmt.value, Literal)
 
 
 def test_map_def_map():
@@ -878,8 +877,7 @@ def test_map_def_map():
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, CreateDict)
-    assert isinstance(stmt.value.items[0][1], CreateDict)
+    assert isinstance(stmt.value, Literal)
 
 
 def test_booleans():
@@ -1182,19 +1180,9 @@ end"""
     assert len(stmt.attributes) == 5
 
     compare_attr(stmt.attributes[0], "bar", "dict", assert_is_none)
-    compare_attr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
-
-    def compare_default(list):
-        def comp(x):
-            assert len(list) == len(x.items)
-            for (ok, ov), (k, v) in zip(list, x.items):
-                assert k == ok
-                assert ov == v.value
-
-        return comp
-
-    compare_attr(stmt.attributes[2], "blah", "dict", compare_default([("a", "a")]))
-    compare_attr(stmt.attributes[3], "xxx", "dict", compare_default([("a", "a")]), opt=True)
+    compare_attr(stmt.attributes[1], "foo", "dict", lambda x: x.value == {})
+    compare_attr(stmt.attributes[2], "blah", "dict", lambda x: x.value == {"a": "a"})
+    compare_attr(stmt.attributes[3], "xxx", "dict", lambda x: x.value == {"a": "a"}, opt=True)
     compare_attr(stmt.attributes[4], "xxxx", "dict", assert_is_non_value, opt=True)
 
 
@@ -2049,8 +2037,8 @@ end
             (
                 Or,
                 [
-                    (In, [(Literal, 42), (CreateList, [(Literal, 12), (Literal, 42)])]),
-                    (In, [(Literal, "test"), (CreateList, [])]),
+                    (In, [(Literal, 42), (Literal, [12, 42])]),
+                    (In, [(Literal, "test"), (Literal, [])]),
                 ],
             ),
         ),
@@ -2317,8 +2305,8 @@ def test_expression_as_statements():
 "hello"
 file(b)
 File(host = 5, path = "Jos")
-[1,2]
-{ "a":"b", "b":1}
+[1,2, z]
+{ "a":"b", "b":1, "c":b}
 File[host = 5, path = "Jos"]
 y > 0 ? y : y < 0 ? -1 : 0
     """
