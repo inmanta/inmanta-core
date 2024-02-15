@@ -28,7 +28,7 @@ from typing import Optional, Union
 import ply.yacc as yacc
 from ply.yacc import YaccProduction
 
-from inmanta.ast import LocatableString, Location, Namespace, Range
+from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.constraint.expression import And, In, IsDefined, Not, NotEqual, Operator
 from inmanta.ast.statements import ExpressionStatement, Literal, Statement
@@ -741,7 +741,15 @@ def p_function_call_err_dot(p: YaccProduction) -> None:
 
 def p_list_def(p: YaccProduction) -> None:
     "list_def : '[' operand_list ']'"
-    p[0] = CreateList(p[2])
+    node = CreateList(p[2])
+    try:
+        node = Literal(node.as_constant())
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
+    p[0] = node
+
     attach_lnr(p, 1)
 
 
@@ -843,7 +851,16 @@ def p_pair_list_empty(p: YaccProduction) -> None:
 
 def p_map_def(p: YaccProduction) -> None:
     "map_def : '{' pair_list '}'"
+
+    # the constructor does duplicate check
     p[0] = CreateDict(p[2])
+    try:
+        # if we can, shortcut to a constant
+        p[0] = Literal({k: v.as_constant() for k, v in p[2]})
+    except RuntimeException:
+        # Can't shortcut
+        pass
+
     attach_lnr(p, 1)
 
 

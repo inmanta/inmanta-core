@@ -1,0 +1,7 @@
+description: Add inmanta_lsm.const.LSM_ENV_VARS to the Programmatic API reference.
+change-type: patch
+issue-nr: 6732
+destination-branches:
+  - master
+  - iso7
+  - iso6
