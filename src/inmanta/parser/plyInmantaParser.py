@@ -726,9 +726,7 @@ def p_operand(p: YaccProduction) -> None:
 
 
 def p_map_lookup(p: YaccProduction) -> None:
-    """map_lookup : attr_ref '[' operand ']'
-    | var_ref '[' operand ']'
-    | map_lookup '[' operand ']'"""
+    """map_lookup : expression '[' operand ']' """
     p[0] = MapLookup(p[1], p[3])
 
 
@@ -744,11 +742,11 @@ def p_function_call(p: YaccProduction) -> None:
     (args, kwargs, wrapped_kwargs) = p[3]
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
-
-def p_function_call_err_dot(p: YaccProduction) -> None:
-    "function_call : attr_ref '(' function_param_list ')'"
-    name = p[1].locatable_name
-    raise InvalidNamespaceAccess(str(name), name.location)
+#
+# def p_function_call_err_dot(p: YaccProduction) -> None:
+#     "function_call : attr_ref '(' function_param_list ')'"
+#     name = p[1].locatable_name
+#     raise InvalidNamespaceAccess(str(name), name.location)
 
 
 def p_list_def(p: YaccProduction) -> None:
@@ -883,8 +881,10 @@ def p_index_lookup(p: YaccProduction) -> None:
 
 
 def p_short_index_lookup(p: YaccProduction) -> None:
-    "index_lookup : attr_ref '[' param_list ']'"
+    "index_lookup : expression '[' param_list ']'"
     attref = p[1]
+    # TODO: ....
+    assert isinstance(attref, AttributeReference)
     p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
 
@@ -1231,23 +1231,24 @@ def p_operand_list_term_2(p: YaccProduction) -> None:
     "operand_list : empty"
     p[0] = []
 
+def p_var_ref_2(p: YaccProduction) -> None:
+    "var_ref : ns_ref empty"
+    p[0] = Reference(p[1])
+    attach_from_string(p, 1)
 
 def p_var_ref(p: YaccProduction) -> None:
     "var_ref : attr_ref empty"
     p[0] = p[1]
-
 
 def p_attr_ref(p: YaccProduction) -> None:
     "attr_ref : var_ref '.' ID"
     p[0] = AttributeReference(p[1], p[3])
     attach_lnr(p, 2)
 
-
-def p_var_ref_2(p: YaccProduction) -> None:
-    "var_ref : ns_ref empty"
-    p[0] = Reference(p[1])
-    attach_from_string(p, 1)
-
+def p_attr_ref2(p: YaccProduction) -> None:
+    "attr_ref : expression '.' ID"
+    p[0] = AttributeReference(p[1], p[3])
+    attach_lnr(p, 2)
 
 def p_class_ref_direct(p: YaccProduction) -> None:
     "class_ref : CID"
@@ -1272,21 +1273,21 @@ def p_class_ref_list_collect(p: YaccProduction) -> None:
     p[0] = p[3]
 
 
-def p_class_ref_list_collect_err(p: YaccProduction) -> None:
-    """class_ref_list : var_ref ',' class_ref_list"""
-    raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
-
-
+# def p_class_ref_list_collect_err(p: YaccProduction) -> None:
+#     """class_ref_list : var_ref ',' class_ref_list"""
+#     raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
+#
+#
 def p_class_ref_list_term(p: YaccProduction) -> None:
     "class_ref_list : class_ref"
     p[0] = [p[1]]
-
-
-def p_class_ref_list_term_err(p: YaccProduction) -> None:
-    "class_ref_list : var_ref"
-
-    raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
-
+#
+#
+# def p_class_ref_list_term_err(p: YaccProduction) -> None:
+#     "class_ref_list : var_ref"
+#
+#     raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
+#
 
 def p_ns_ref(p: YaccProduction) -> None:
     "ns_ref : ns_ref SEP ID"
@@ -1365,7 +1366,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
             data = data + "\n"
             lexer.lineno = 1
             lexer.linestart = 0
-            return parser.parse(data, lexer=lexer, debug=False)
+            return parser.parse(data, lexer=lexer, debug=True)
     else:
         data = content
         if len(data) == 0:
@@ -1374,7 +1375,7 @@ def base_parse(ns: Namespace, tfile: str, content: Optional[str]) -> list[Statem
         data = data + "\n"
         lexer.lineno = 1
         lexer.linestart = 0
-        return parser.parse(data, lexer=lexer, debug=False)
+        return parser.parse(data, lexer=lexer, debug=True)
 
 
 cache_manager = CacheManager()
