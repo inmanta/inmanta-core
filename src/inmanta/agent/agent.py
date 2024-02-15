@@ -1578,10 +1578,10 @@ class VirtualEnvironmentManager:
 
         # Check if the directory already exists and create it if not
         if not os.path.exists(new_env_dir):
-            LOGGER.info("Found existing venv for blueprint")
             os.makedirs(new_env_dir)
             return new_env_dir, True  # Returning the path and True for newly created directory
         else:
+            LOGGER.info("Found existing venv for blueprint")
             return new_env_dir, False  # Returning the path and False for existing directory
 
     async def create_environment(
@@ -1592,7 +1592,7 @@ class VirtualEnvironmentManager:
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         if is_new:
             await process_environment.create_and_install_environment(blueprint)
-            self._environment_map[blueprint] = process_environment
+        self._environment_map[blueprint] = process_environment
 
         return process_environment
 

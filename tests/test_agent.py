@@ -35,7 +35,7 @@ from inmanta.resources import Id, PurgeableResource
 from inmanta.server import SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from inmanta.server.bootloader import InmantaBootloader
 from packaging import version
-from utils import PipIndex, create_python_package, retry_limited
+from utils import PipIndex, create_python_package, log_contains, log_doesnt_contain, retry_limited
 
 logger = logging.getLogger(__name__)
 
@@ -348,43 +348,29 @@ async def test_process_manager_restart(environment, agent_factory, tmpdir, caplo
     )
 
     pip_index = PipIndex(artifact_dir=str(tmpdir))
-    create_python_package(
-        name="pkg1",
-        pkg_version=version.Version("1.0.0"),
-        path=os.path.join(tmpdir, "pkg1"),
-        publish_index=pip_index,
-    )
-
-    requirements1 = ("pkg1",)
+    requirements1 = ()
     pip_config = PipConfig(index_url=pip_index.url)
-
-    code = "".encode()
-    sha1sum = hashlib.new("sha1")
-    sha1sum.update(code)
-    hv: str = sha1sum.hexdigest()
-    module_source1 = ModuleSource(
-        name="inmanta_plugins.test",
-        hash_value=hv,
-        is_byte_code=False,
-        source=code,
-    )
     sources1 = ()
 
     blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
-    env_blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
 
-    # Getting a first executor will create it
-    venv_manager = VirtualEnvironmentManager()
-    executor_manager = ExecutorManager(agent, venv_manager)
-    await executor_manager.get_executor("agent1", blueprint1)
-    assert len(executor_manager.executor_map) == 1
-    assert len(venv_manager._environment_map) == 1
+    with caplog.at_level(logging.INFO):
+        # Getting a first executor will create it
+        venv_manager = VirtualEnvironmentManager()
+        executor_manager = ExecutorManager(agent, venv_manager)
+        await executor_manager.get_executor("agent1", blueprint1)
+        assert len(executor_manager.executor_map) == 1
+        assert len(venv_manager._environment_map) == 1
 
-    assert "" in caplog.text
+        log_doesnt_contain(caplog, "inmanta.agent.agent", logging.INFO, "Found existing venv for blueprint")
 
-    # restarting the ExecutorManager (creating a new one) will find back the old venv
-    venv_manager2 = VirtualEnvironmentManager()
-    executor_manager2 = ExecutorManager(agent, venv_manager2)
-    assert len(executor_manager.executor_map) == 0
-    assert len(venv_manager._environment_map) == 0
-    await executor_manager.get_executor("agent1", blueprint1)
+        # restarting the ExecutorManager (creating a new one) will find back the old venv
+        venv_manager2 = VirtualEnvironmentManager()
+        executor_manager2 = ExecutorManager(agent, venv_manager2)
+        assert len(executor_manager2.executor_map) == 0
+        assert len(venv_manager2._environment_map) == 0
+        await executor_manager2.get_executor("agent1", blueprint1)
+        assert len(executor_manager2.executor_map) == 1
+        assert len(venv_manager2._environment_map) == 1
+
+        log_contains(caplog, "inmanta.agent.agent", logging.INFO, "Found existing venv for blueprint")
