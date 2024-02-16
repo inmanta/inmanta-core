@@ -163,7 +163,11 @@ class ResourceInstallSpec:
 
 class Executor(ABC):
     """
-    TODO
+    This class encapsulates abstraction around a process able to deploy a resource.
+    This requires the following behaviours:
+
+    - Ability to set up prior to deploy: install and load specific version of handler code (+ requirements) for this resource
+    - Ability to perform the deployment itself: execute the loaded handler code to push desired state
     """
 
     @classmethod
@@ -181,23 +185,33 @@ class Executor(ABC):
         resource_id: Id,
         resource: dict[str, object],
         env_id: uuid.UUID,
-        agent: "AgentInstance",
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
+        """
+        Perform the actual deployment of the resource by calling the loaded handler code
+
+        :param ctx: context used for logging purposes
+        :param gid: unique id for this deploy
+        :param resource_id: the resource id
+        :param resource: desired state for this resource as a dictionary
+        :param env_id: the environment
+        """
         pass
 
 
-class OldExecutor(Executor):
-    client: protocol.Client
-
-    def __init__(self, client: protocol.Client):
-        self.client = client
+class InProcessExecutor(Executor):
+    """
+    This executor is running in the same process as the agent
+    """
+    def __init__(self, client: protocol.Client, agent: "AgentInstance"):
+        self.client: protocol.Client = client
+        self.agent: AgentInstance = agent
 
     @classmethod
     async def get_executor(
         cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client
     ) -> tuple[Self, Set[str]]:
         failed_resource_types: Set[str] = await agent.process.ensure_code(code)
-        return cls(client), failed_resource_types
+        return cls(client, agent), failed_resource_types
 
     async def send_in_progress(
         self, action_id: uuid.UUID, env_id: uuid.UUID, resource_id: ResourceVersionIdStr
@@ -216,7 +230,6 @@ class OldExecutor(Executor):
         resource: Resource,
         ctx: handler.HandlerContext,
         requires: dict[ResourceIdStr, const.ResourceState],
-        agent: "AgentInstance",
     ) -> None:
         """
         :param ctx: The context to use during execution of this deploy
@@ -226,7 +239,7 @@ class OldExecutor(Executor):
         # setup provider
         provider: Optional[HandlerAPI[Any]] = None
         try:
-            provider = await agent.get_provider(resource)
+            provider = await self.agent.get_provider(resource)
         except ChannelClosedException as e:
             ctx.set_status(const.ResourceState.unavailable)
             ctx.exception(str(e))
@@ -239,7 +252,7 @@ class OldExecutor(Executor):
             # main execution
             try:
                 await asyncio.get_running_loop().run_in_executor(
-                    agent.thread_pool,
+                    self.agent.thread_pool,
                     provider.deploy,
                     ctx,
                     resource,
@@ -304,7 +317,6 @@ class OldExecutor(Executor):
         resource_id: Id,
         resource: dict[str, object],
         env_id: uuid.UUID,
-        agent: "AgentInstance",
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
         # TODO: double check: is this required? Is failure handled properly?
@@ -331,7 +343,7 @@ class OldExecutor(Executor):
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("Failed to report the start of the deployment to the server")
         else:
-            await self._execute(resource, ctx=ctx, requires=requires, agent=agent)
+            await self._execute(resource, ctx=ctx, requires=requires)
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
@@ -439,7 +451,6 @@ class ResourceAction(ResourceActionBase):
                         resource_id=self.resource_id,
                         resource=self.resource,
                         env_id=self.env_id,
-                        agent=self.scheduler.agent,
                     )
                     self.status = status
                     self.change = change
@@ -1185,7 +1196,7 @@ class AgentInstance:
             return 200
 
     async def get_executor(self, code: Sequence[ResourceInstallSpec], client: protocol.Client) -> tuple[Executor, Set[str]]:
-        return await OldExecutor.get_executor(self, code, client)
+        return await InProcessExecutor.get_executor(self, code, client)
 
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
