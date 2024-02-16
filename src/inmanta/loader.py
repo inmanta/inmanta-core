@@ -175,14 +175,7 @@ class CodeManager:
         return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 
 
-# TODO: can this be cleaned up?
-@dataclass(frozen=True)
-class InstallBlueprint:
-    resource_type: str
-    version: int
-    pip_config: PipConfig
-    sources: list["ModuleSource"]
-    requirements: Sequence[str]
+
 
 
 @dataclass(frozen=True)
