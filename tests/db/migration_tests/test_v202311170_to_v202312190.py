@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import os
 import re
 from collections import abc
@@ -24,7 +23,7 @@ from collections import abc
 import pytest
 
 from inmanta import const
-from inmanta.data import ConfigurationModel, Environment, Resource, ResourceAction, ResourcePersistentState
+from inmanta.data import Environment, ResourceAction, ResourcePersistentState
 
 file_name_regex = re.compile("test_v([0-9]{9})_to_v[0-9]{9}")
 part = file_name_regex.match(__name__)[1]

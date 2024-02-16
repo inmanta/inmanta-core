@@ -4878,7 +4878,6 @@ class Resource(BaseDocument):
             resource_type=self.resource_type,
             resource_id_value=self.resource_id_value,
             agent=self.agent,
-            last_deploy=None,
             attributes=self.attributes.copy(),
             attribute_hash=self.attribute_hash,
             status=new_resource_state,
@@ -4905,12 +4904,12 @@ class Resource(BaseDocument):
         query = f"""
         SELECT DISTINCT ON (resource_id) first.resource_id, cm.date as first_generated_time,
         first.model as first_model, latest.model AS latest_model, latest.resource_id as latest_resource_id,
-        latest.resource_type, latest.agent, latest.resource_id_value, latest.last_deploy as latest_deploy, latest.attributes,
+        latest.resource_type, latest.agent, latest.resource_id_value, ps.last_deploy as latest_deploy, latest.attributes,
         latest.status
         FROM resource first
         INNER JOIN
             /* 'latest' is the latest released version of the resource */
-            (SELECT distinct on (resource_id) resource_id, attribute_hash, model, last_deploy, attributes,
+            (SELECT distinct on (resource_id) resource_id, attribute_hash, model, attributes,
                 resource_type, agent, resource_id_value, {status_subquery}
                 FROM resource
                 JOIN configurationmodel cm ON resource.model = cm.version AND resource.environment = cm.environment
@@ -4921,6 +4920,7 @@ class Resource(BaseDocument):
             the 'latest' released version */
         ON first.resource_id = latest.resource_id AND first.attribute_hash = latest.attribute_hash
         INNER JOIN configurationmodel cm ON first.model = cm.version AND first.environment = cm.environment
+        INNER JOIN resource_persistent_state ps on ps.resource_id = first.resource_id AND first.environment = ps.environment
         WHERE first.environment = $1 AND first.resource_id = $2 AND cm.released = TRUE
         ORDER BY first.resource_id, first.model asc;
         """
@@ -5157,7 +5157,6 @@ class Resource(BaseDocument):
             resource_type=self.resource_type,
             resource_version_id=resources.Id.set_version_in_id(self.resource_id, self.model),
             agent=self.agent,
-            last_deploy=self.last_deploy,
             attributes=attributes,
             status=self.status,
             resource_id_value=self.resource_id_value,

@@ -1007,7 +1007,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             environment=env.id,
             resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
             status=const.ResourceState.deployed,
-            last_deploy=datetime.now() + timedelta(minutes=i),
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -1333,7 +1332,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["last_deploy"] is None
     assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)
@@ -1422,7 +1420,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["last_deploy"] is not None
     assert result.result["resource"]["status"] == const.ResourceState.deployed
 
     result = await client.get_version(tid=env_id, id=1)

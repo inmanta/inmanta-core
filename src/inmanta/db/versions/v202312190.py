@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
     PRIMARY KEY(environment, resource_id)
 );
 
-INSERT INTO public.resource_persistent_state (environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events)
+INSERT INTO public.resource_persistent_state
+ (environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events)
  SELECT environment, resource_id, last_deploy, last_success, last_non_deploying_status, last_produced_events
  FROM public.resource
  WHERE (environment, model) IN (
