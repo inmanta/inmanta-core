@@ -33,7 +33,7 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
-from inmanta.data import AUTO_DEPLOY
+from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
@@ -217,18 +217,56 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     for _ in range(n_versions_to_create):
         version = (await client.reserve_version(env_1_id)).result["data"]
 
+        resources = [
+            # First one is fixed
+            {
+                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v={version}",
+                "owner": "root",
+                "path": "/etc/sysconfig/network",
+                "permissions": 644,
+                "purged": False,
+                "requires": [],
+            },
+            # This one changes ID every version
+            {
+                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network{version}],v={version}",
+                "owner": "root",
+                "path": "/etc/sysconfig/network",
+                "permissions": 644,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
         res = await client.put_version(
-            tid=env_1_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+            tid=env_1_id,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
         )
         assert res.code == 200
 
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == n_versions_to_create
 
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == n_versions_to_create + 1
+
+    # Ensure we don't clean too much
+    await ResourcePersistentState.trim()
+
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == n_versions_to_create + 1
+
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
+
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == min(n_versions_to_keep, n_versions_to_create) + 1
 
 
 async def test_n_versions_env_setting_scope(client, server):

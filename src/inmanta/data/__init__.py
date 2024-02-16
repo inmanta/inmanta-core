@@ -4455,6 +4455,15 @@ class ResourcePersistentState(BaseDocument):
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
+    @classmethod
+    async def trim(cls) -> None:
+        """Remove all records that have no corresponding resource anymore"""
+        selector_query = f"""FROM {cls.table_name()} rps WHERE NOT EXISTS
+            (SELECT r.resource_id FROM {Resource.table_name()} r
+                WHERE r.resource_id = rps.resource_id and r.environment=rps.environment
+            )"""
+        await cls._execute_query("DELETE " + selector_query)
+
 
 @stable_api
 class Resource(BaseDocument):
