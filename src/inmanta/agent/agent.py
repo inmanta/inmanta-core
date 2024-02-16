@@ -147,17 +147,17 @@ class ResourceInstallSpec:
     This class encapsulates the requirements for a specific resource type for a specific model version.
 
     :ivar resource_type: fully qualified name for this resource type e.g. std::File
-    :ivar version: the version of the model to use
-    :ivar pip_config: the pip config to use during installation
-    :ivar sources:
-    :ivar requirements:
+    :ivar model_version: the version of the model to use
+    :ivar pip_config: the pip config to use during requirements installation
+    :ivar requirements: python packages that must be installed prior to executing the module sources
+    :ivar sources: list of ModuleSource containing the code for deployment of this resource
 
     """
     resource_type: str
-    version: int
+    model_version: int
     pip_config: PipConfig
-    sources: Sequence["ModuleSource"]
     requirements: Sequence[str]
+    sources: Sequence["ModuleSource"]
 
 class Executor(ABC):
     """
@@ -1510,7 +1510,7 @@ class Agent(SessionEndpoint):
                 if result.code == 200 and result.result is not None:
                     sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
                     LOGGER.debug("Installing handler %s version=%d", resource_type, version)
-                    requirements = set()
+                    requirements: set[str] = set()
                     sources:  list["ModuleSource"] = []
                     for source in result.result["data"]:
                         sources.append(
@@ -1527,7 +1527,7 @@ class Agent(SessionEndpoint):
                         # TODO: what if this fails?
                         pip_config = await self._get_pip_config(environment, version)
 
-                    resource_install_specs.append(ResourceInstallSpec(resource_type, version, pip_config, sources, list(requirements)))
+                    resource_install_specs.append(ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources))
                 else:
                     # TODO what if server call fails ?
                     pass
