@@ -31,7 +31,7 @@ from tornado import gen, queues, routing, web
 
 import inmanta.protocol.endpoints
 from inmanta.data.model import ExtensionStatus
-from inmanta.protocol import Client, common, endpoints, handle, methods, Result
+from inmanta.protocol import Client, Result, common, endpoints, handle, methods
 from inmanta.protocol.exceptions import ShutdownInProgress
 from inmanta.protocol.rest import server
 from inmanta.server import SLICE_SESSION_MANAGER, SLICE_TRANSPORT
