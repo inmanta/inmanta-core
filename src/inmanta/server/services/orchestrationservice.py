@@ -1136,12 +1136,12 @@ class OrchestrationService(protocol.ServerSlice):
                         )
 
                 if latest_version:
-                    increments: tuple[
-                        abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]
-                    ] = await self.resource_service.get_increment(
-                        env,
-                        version_id,
-                        connection=connection,
+                    increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = (
+                        await self.resource_service.get_increment(
+                            env,
+                            version_id,
+                            connection=connection,
+                        )
                     )
 
                     increment_ids, neg_increment = increments
