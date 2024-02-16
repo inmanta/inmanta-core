@@ -118,7 +118,7 @@ def create_instance(cls: type[T]) -> T:
         if annotation in (str, "str"):
             return "dummy"
         if annotation in (int, "int"):
-            return 0
+            return 2
         if inspect.isclass(annotation):
             if issubclass(annotation, Statement):
                 instance: T = create_instance(annotation)

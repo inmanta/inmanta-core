@@ -231,8 +231,8 @@ implement A using std::none
 implement B using std::none
 implement C using std::none
 
-A.b [1] -- B [1]
-B.c [1] -- C [1]
+A.b [1] -- B
+B.c [1] -- C
 
 a = A(b=b)
 b = B(c=c)

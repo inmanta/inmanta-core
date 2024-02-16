@@ -812,7 +812,7 @@ def test_list_comprehension_type_error(snippetcompiler) -> None:
     Verify that a list comprehension applied to something other than a list raises a clear exception
     """
     snippetcompiler.setup_for_error(
-        "[x for x in 'Hello World']",
+        "a = [x for x in 'Hello World']",
         (
             "A list comprehension can only be applied to lists and relations, got str"
             " (reported in [x for x in 'Hello World'] ({dir}/main.cf:1))"

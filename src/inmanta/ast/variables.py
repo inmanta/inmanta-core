@@ -145,7 +145,6 @@ class Reference(ExpressionStatement):
             ref = Reference("self")
             self.copy_location(ref)
             attr_ref = AttributeReference(ref, self.locatable_name)
-            self.copy_location(attr_ref)
             return attr_ref
 
     def get_dataflow_node(self, graph: DataflowGraph) -> dataflow.AssignableNodeReference:
@@ -278,6 +277,7 @@ class AttributeReference(Reference):
 
         # a reference to the instance
         self.instance = instance
+        self.location = attribute.get_location()
 
     def requires(self) -> list[str]:
         return self.instance.requires()

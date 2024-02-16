@@ -19,7 +19,7 @@
 from typing import Optional
 
 import inmanta.ast.export as ast_export
-from inmanta.ast import CompilerException, LocatableString, Location, Range
+from inmanta.ast import CompilerException, Location, Range
 from inmanta.stable_api import stable_api
 from inmanta.warnings import InmantaWarning
 

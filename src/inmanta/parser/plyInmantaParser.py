@@ -116,13 +116,16 @@ def expand_range(start: Range, end: Range) -> Range:
     return Range(start.file, start.lnr, start.start_char, end.end_lnr, end.end_char)
 
 
-def expand_range_or_location(start: Range|Location, end: Range|Location) -> Range|Location:
+def expand_range_or_location(start: Range | Location, end: Range | Location) -> Range | Location:
     """
     Returns a new range from the start of `start` to the end of `end`. Assumes both ranges are on the same file.
 
     If end is a location, we just return start
     """
     if not isinstance(end, Range):
+        return start
+
+    if not isinstance(start, Range):
         return start
     return Range(start.file, start.lnr, start.start_char, end.end_lnr, end.end_char)
 
@@ -217,7 +220,16 @@ def p_stmt(p: YaccProduction) -> None:
     """statement : assign
     | for
     | if
-    | expression empty"""
+    | boolean_expression
+    | constant
+    | function_call
+    | var_ref empty
+    | constructor
+    | map_def
+    | map_lookup empty
+    | index_lookup
+    | conditional_expression
+    | arithmetic_expression"""  # Can't do anything starting with `[` as it breaks dict lookup
     p[0] = p[1]
 
 
@@ -243,19 +255,19 @@ def p_stmt_list_empty(p: YaccProduction) -> None:
 
 
 def p_assign(p: YaccProduction) -> None:
-    "assign : var_ref '=' operand"
+    "assign : var_ref '=' expression"
     p[0] = p[1].as_assign(p[3])
     attach_lnr(p, 2)
 
 
 def p_assign_extend(p: YaccProduction) -> None:
-    "assign : var_ref PEQ operand"
+    "assign : var_ref PEQ expression"
     p[0] = p[1].as_assign(p[3], list_only=True)
     attach_lnr(p, 2)
 
 
 def p_for(p: YaccProduction) -> None:
-    "for : FOR ID IN operand ':' block"
+    "for : FOR ID IN expression ':' block"
     assert namespace
     p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))
     attach_lnr(p, 1)
@@ -499,12 +511,6 @@ def p_implementation_def(p: YaccProduction) -> None:
     p[0] = DefineImplementation(namespace, p[2], p[4], BasicBlock(namespace, stmts), docstr)
 
 
-# def p_implementation_def_2(p):
-#     "implementation_def : IMPLEMENTATION ID implementation"
-#     p[0] = DefineImplementation(namespace, p[2], None, BasicBlock(namespace, p[3]))
-#     attach_lnr(p)
-
-
 def p_implementation(p: YaccProduction) -> None:
     "implementation : implementation_head block"
     p[0] = (p[1], p[2])
@@ -560,6 +566,7 @@ def p_relation_annotated_unidir(p: YaccProduction) -> None:
     "relation_def : class_ref '.' ID multi operand_list class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
+
 
 def p_multi_1(p: YaccProduction) -> None:
     "multi : '[' INT ']'"
@@ -720,13 +727,8 @@ def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
     p[0] = out
 
 
-def p_operand(p: YaccProduction) -> None:
-    """operand : expression empty"""
-    p[0] = p[1]
-
-
 def p_map_lookup(p: YaccProduction) -> None:
-    """map_lookup : expression '[' operand ']' """
+    """map_lookup : expression '[' expression ']'"""
     p[0] = MapLookup(p[1], p[3])
 
 
@@ -742,11 +744,12 @@ def p_function_call(p: YaccProduction) -> None:
     (args, kwargs, wrapped_kwargs) = p[3]
     p[0] = FunctionCall(p[1], args, kwargs, wrapped_kwargs, Location(file, p.lineno(2)), namespace)
 
+
 #
-# def p_function_call_err_dot(p: YaccProduction) -> None:
-#     "function_call : attr_ref '(' function_param_list ')'"
-#     name = p[1].locatable_name
-#     raise InvalidNamespaceAccess(str(name), name.location)
+def p_function_call_err_dot(p: YaccProduction) -> None:
+    "function_call : attr_ref '(' function_param_list ')'"
+    name = p[1].locatable_name
+    raise InvalidNamespaceAccess(str(name), name.location)
 
 
 def p_list_def(p: YaccProduction) -> None:
@@ -844,8 +847,8 @@ def p_string_dict_key(p: YaccProduction) -> None:
 
 
 def p_pair_list_collect(p: YaccProduction) -> None:
-    """pair_list : dict_key ':' operand ',' pair_list
-    | dict_key ':' operand empty pair_list_empty"""
+    """pair_list : dict_key ':' expression ',' pair_list
+    | dict_key ':' expression empty pair_list_empty"""
 
     key, val = str(p[1]), p[3]
 
@@ -1104,7 +1107,6 @@ def convert_to_references(variables: list[tuple[str, LocatableString]]) -> list[
             for attr in var_parts[1:]:
                 attr_locatable_string: LocatableString = normalize(attr, var, offset=offset)
                 ref = AttributeReference(ref, attr_locatable_string)
-                ref.location = attr_locatable_string.location
                 ref.namespace = namespace
                 offset += len(attr) + 1
             # For a composite variable e.g. 'a.b.c', we only add the reference to the innermost attribute (e.g. 'c')
@@ -1137,14 +1139,14 @@ def p_constants_collect(p: YaccProduction) -> None:
 
 
 def p_wrapped_kwargs(p: YaccProduction) -> None:
-    "wrapped_kwargs : DOUBLE_STAR operand"
+    "wrapped_kwargs : DOUBLE_STAR expression"
     p[0] = WrappedKwargs(p[2])
     attach_lnr(p, 1)
 
 
 def p_param_list_element_explicit(p: YaccProduction) -> None:
     # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
-    "param_list_element : ID '=' operand"
+    "param_list_element : ID '=' expression"
     p[0] = ((p[1], p[3]), None)
 
 
@@ -1186,7 +1188,7 @@ def p_function_param_list_element(p: YaccProduction) -> None:
 
 def p_function_param_list_element_arg(p: YaccProduction) -> None:
     # function_param_list_element: Tuple[Optional[argument], Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
-    """function_param_list_element : operand"""
+    """function_param_list_element : expression"""
     p[0] = (p[1], None, None)
 
 
@@ -1217,13 +1219,13 @@ def p_function_param_list_nonempty(p: YaccProduction) -> None:
 
 
 def p_operand_list_collect(p: YaccProduction) -> None:
-    """operand_list : operand ',' operand_list"""
+    """operand_list : expression ',' operand_list"""
     p[3].insert(0, p[1])
     p[0] = p[3]
 
 
 def p_operand_list_term(p: YaccProduction) -> None:
-    "operand_list : operand"
+    "operand_list : expression"
     p[0] = [p[1]]
 
 
@@ -1231,24 +1233,29 @@ def p_operand_list_term_2(p: YaccProduction) -> None:
     "operand_list : empty"
     p[0] = []
 
+
 def p_var_ref_2(p: YaccProduction) -> None:
     "var_ref : ns_ref empty"
     p[0] = Reference(p[1])
     attach_from_string(p, 1)
 
+
 def p_var_ref(p: YaccProduction) -> None:
     "var_ref : attr_ref empty"
     p[0] = p[1]
 
+
 def p_attr_ref(p: YaccProduction) -> None:
     "attr_ref : var_ref '.' ID"
     p[0] = AttributeReference(p[1], p[3])
-    attach_lnr(p, 2)
+    p[0].namespace = namespace
+
 
 def p_attr_ref2(p: YaccProduction) -> None:
     "attr_ref : expression '.' ID"
     p[0] = AttributeReference(p[1], p[3])
-    attach_lnr(p, 2)
+    p[0].namespace = namespace
+
 
 def p_class_ref_direct(p: YaccProduction) -> None:
     "class_ref : CID"
@@ -1273,21 +1280,23 @@ def p_class_ref_list_collect(p: YaccProduction) -> None:
     p[0] = p[3]
 
 
-# def p_class_ref_list_collect_err(p: YaccProduction) -> None:
-#     """class_ref_list : var_ref ',' class_ref_list"""
-#     raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
-#
-#
+def p_class_ref_list_collect_err(p: YaccProduction) -> None:
+    """class_ref_list : var_ref ',' class_ref_list"""
+    raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
+
+
 def p_class_ref_list_term(p: YaccProduction) -> None:
     "class_ref_list : class_ref"
     p[0] = [p[1]]
+
+
 #
 #
-# def p_class_ref_list_term_err(p: YaccProduction) -> None:
-#     "class_ref_list : var_ref"
-#
-#     raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
-#
+def p_class_ref_list_term_err(p: YaccProduction) -> None:
+    "class_ref_list : var_ref"
+
+    raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
+
 
 def p_ns_ref(p: YaccProduction) -> None:
     "ns_ref : ns_ref SEP ID"
@@ -1326,11 +1335,19 @@ def p_error(p: YaccProduction) -> None:
             r = p.value.location
         raise ParserException(r, str(p.value), "invalid identifier, %s is a reserved keyword" % p.value)
 
-    if p.type == "CID" and parser.symstack[-1].type == ".":
+    # Capture a CID after a `.` probably should be `:`
+    is_bad_class_reference = p.type == "CID" and parser.symstack[-1].type == "."
+    # in relation definitions, we crash one token early
+    is_bad_relation = p.type == "." and parser.symstack[-3].type == "multi"
+    if is_bad_class_reference:
         var: ExpressionStatement = parser.symstack[-2].value
         location = var.get_location()
         cid: LocatableString = p.value
-        raise InvalidNamespaceAccess( f"{repr(var)}.{cid}", expand_range_or_location(location, cid.location))
+        raise InvalidNamespaceAccess(f"{repr(var)}.{cid}", expand_range_or_location(location, cid.location))
+    if is_bad_relation:
+        var = parser.symstack[-1].value
+        location = var.get_location()
+        raise InvalidNamespaceAccess(f"{repr(var)}", location)
 
     if parser.symstack[-1].type in reserved.values():
         if hasattr(parser.symstack[-1].value, "location"):

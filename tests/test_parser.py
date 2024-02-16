@@ -29,7 +29,6 @@ from inmanta.ast.statements import ExpressionStatement, Literal, ReferenceStatem
 from inmanta.ast.statements.assign import (
     Assign,
     CreateDict,
-    CreateList,
     IndexLookup,
     MapLookup,
     SetAttribute,
@@ -2284,7 +2283,7 @@ def test_invalid_namespace_ref(snippet: str) -> None:
 @pytest.mark.parametrize_any(
     "snippet, invalid, valid, location",
     [
-        ("x = mymod.submod.MyEntity()", "mymod.submod.MyEntity", "mymod::submod::MyEntity", "1:5"),
+        ("x = mymod.submod.MyEntity()", "mymod.submod.MyEntity", "mymod::submod::MyEntity", "1:11"),
         ("x = mymod.submod.my_plugin()", "mymod.submod.my_plugin", "mymod::submod::my_plugin", "1:5"),
     ],
 )
@@ -2305,7 +2304,7 @@ def test_expression_as_statements():
 "hello"
 file(b)
 File(host = 5, path = "Jos")
-[1,2, z]
+a=[1,2, z] # can't allow this as it conflict with dict lookup
 { "a":"b", "b":1, "c":b}
 File[host = 5, path = "Jos"]
 y > 0 ? y : y < 0 ? -1 : 0
@@ -2316,7 +2315,7 @@ y > 0 ? y : y < 0 ? -1 : 0
     constant = statements[1]
     function_call = statements[2]
     constructor = statements[3]
-    list_def = statements[4]
+    # list_def = statements[4]
     map_def = statements[5]
     index_lookup = statements[6]
     conditional_expression = statements[7]
@@ -2324,7 +2323,7 @@ y > 0 ? y : y < 0 ? -1 : 0
     assert isinstance(constant, Literal)
     assert isinstance(function_call, FunctionCall)
     assert isinstance(constructor, Constructor)
-    assert isinstance(list_def, CreateList)
+    # assert isinstance(list_def, CreateList)
     assert isinstance(map_def, CreateDict)
     assert isinstance(index_lookup, IndexLookup)
     assert isinstance(conditional_expression, ConditionalExpression)

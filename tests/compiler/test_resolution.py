@@ -234,7 +234,7 @@ h = std::Host(name="test", os=std::linux)
 std::print(h.name.test)
 """,
         "can not get attribute test, h.name is not an entity but a str with value 'test'"
-        " (reported in h.name.test ({dir}/main.cf:3))",
+        " (reported in h.name.test ({dir}/main.cf:3:19))",
     )
 
 
