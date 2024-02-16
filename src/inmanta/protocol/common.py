@@ -150,10 +150,10 @@ class Request:
         return req
 
 
-T = TypeVar("T", bound=Union[None, ArgumentTypes])
+T_co = TypeVar("T_co", bound=Union[None, ArgumentTypes], covariant=True)
 
 
-class ReturnValue(Generic[T]):
+class ReturnValue(Generic[T_co]):
     """
     An object that handlers can return to provide a response to a method call.
     """
@@ -162,7 +162,7 @@ class ReturnValue(Generic[T]):
         self,
         status_code: int = 200,
         headers: MutableMapping[str, str] = {},
-        response: Optional[T] = None,
+        response: Optional[T_co] = None,
         content_type: str = JSON_CONTENT,
         links: Optional[dict[str, str]] = None,
     ) -> None:
