@@ -4421,7 +4421,6 @@ class ResourceAction(BaseDocument):
 class ResourcePersistentState(BaseDocument):
     @classmethod
     def table_name(cls) -> str:
-        # TODO is this a good name?
         return "resource_persistent_state"
 
     __primary_key__ = ("environment", "resource_id")
@@ -4685,7 +4684,6 @@ class Resource(BaseDocument):
         This method generates a report of all resources in the given environment,
         with their latest version and when they are last deployed.
         """
-        # TODO phase 2
         query_resource_ids = f"""
                 SELECT DISTINCT resource_id
                 FROM {Resource.table_name()}
