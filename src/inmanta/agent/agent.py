@@ -49,6 +49,7 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConf
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
+from inmanta.server.services.resourceservice import ResourceActionLogLine
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import (
     CronSchedule,
@@ -283,28 +284,18 @@ class InProcessExecutor(Executor):
         resource_id: Id,
         resource_status: const.ResourceState,
         resource_change: const.Change,
-        ctx: Optional[handler.HandlerContext] = None,
+        ctx: handler.HandlerContext,
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {}
-        if ctx:
-            changes = {resource_id.resource_version_str(): ctx.changes}
-            response = await self.client.resource_deploy_done(
-                tid=env_id,
-                rvid=resource_id.resource_version_str(),
-                action_id=ctx.action_id,
-                status=resource_status,
-                messages=ctx.logs,
-                changes=changes,
-                change=resource_change,
-            )
-        else:
-            response = await self.client.resource_deploy_done(
-                tid=env_id,
-                rvid=resource_id.resource_version_str(),
-                action_id=uuid.uuid4(),
-                status=resource_status,
-            )
-
+        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_id.resource_version_str(): ctx.changes}
+        response = await self.client.resource_deploy_done(
+            tid=env_id,
+            rvid=resource_id.resource_version_str(),
+            action_id=ctx.action_id,
+            status=resource_status,
+            messages=ctx.logs,
+            changes=changes,
+            change=resource_change,
+        )
         if response.code != 200:
             LOGGER.error("Resource status update failed %s", response.result)
 
@@ -318,22 +309,27 @@ class InProcessExecutor(Executor):
         resource: dict[str, object],
         env_id: uuid.UUID,
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
-        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
+        started: datetime.datetime = datetime.datetime.now().astimezone()
         # TODO: double check: is this required? Is failure handled properly?
 
         try:
             resource: Resource = Resource.deserialize(resource)
         except Exception:
+            msg = data.LogLine.log(level=const.LogLevel.ERROR, msg="Unable to deserialize %(resource_id)s", resource_id=resource_id.resource_version_str(), timestamp=datetime.datetime.now().astimezone()),
 
-            ctx.exception("Unable to deserialize %(resource_id)s", resource_id=resource_id.resource_version_str())
-            return await self._report_resource_status(
-                env_id=env_id,
-                resource_id=resource_id,
-                resource_status=const.ResourceState.unavailable,
-                resource_change=const.Change.nochange,
+            await self.client.resource_action_update(
+                tid=env_id,
+                resource_ids=[resource_id.resource_version_str()],
+                action_id=uuid.uuid4(),
+                action=const.ResourceAction.deploy,
+                started=started,
+                finished=datetime.datetime.now().astimezone(),
+                status=const.ResourceState.unavailable,
+                messages=[msg]
             )
 
         ctx = handler.HandlerContext(resource, logger=ctx.logger)
+        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
 
         try:
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
@@ -357,18 +353,43 @@ class InProcessExecutor(Executor):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        return await self._report_resource_status(
-            env_id=env_id, resource_id=resource_id, resource_status=ctx.status, resource_change=ctx.change, ctx=ctx
+
+        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_id.resource_version_str(): ctx.changes}
+        response = await self.client.resource_deploy_done(
+            tid=env_id,
+            rvid=resource_id.resource_version_str(),
+            action_id=ctx.action_id,
+            status=ctx.status,
+            messages=ctx.logs,
+            changes=changes,
+            change=ctx.change,
         )
+        if response.code != 200:
+            LOGGER.error("Resource status update failed %s", response.result)
+
+        return ctx.status, ctx.change, changes
 
 
-class NewExecutor(Executor):
+class ExternalExecutor(Executor):
     """
-    This class encapsulates a process running the adaptors for an agent for one version
-    adaptors: Set of all handlers/resources within one inmanta module
-    agent: A unit of coordination during the deployment of resources
+    This class encapsulates an executor running in a separate process from the agent.
+    The AgentSupervisor is responsible for spawning and managing these executors
+    on demand of the ResourceScheduler.
     """
 
+    async def execute(
+        self,
+        ctx: handler.HandlerLogger,
+        gid: uuid.UUID,
+        resource_id: Id,
+        resource: dict[str, object],
+        env_id: uuid.UUID,
+        ):
+        raise NotImplementedError
+
+    @classmethod
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client):
+        raise NotImplementedError
 
 class ResourceAction(ResourceActionBase):
     def __init__(
