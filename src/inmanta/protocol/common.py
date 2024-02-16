@@ -596,11 +596,7 @@ class MethodProperties:
                 self._validate_type_arg(arg, sub_arg, strict=strict, allow_none_type=allow_none_type, in_url=in_url)
 
                 if typing_inspect.is_generic_type(sub_arg):
-                    # there is a difference between python 3.6 and >=3.7
-                    if hasattr(sub_arg, "__name__"):
-                        cnt[sub_arg.__name__] += 1
-                    else:
-                        cnt[sub_arg._name] += 1
+                    cnt[sub_arg.__name__] += 1
 
             for name, n in cnt.items():
                 if n > 1:
