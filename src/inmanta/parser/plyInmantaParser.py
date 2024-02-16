@@ -220,16 +220,7 @@ def p_stmt(p: YaccProduction) -> None:
     """statement : assign
     | for
     | if
-    | boolean_expression
-    | constant
-    | function_call
-    | var_ref empty
-    | constructor
-    | map_def
-    | map_lookup empty
-    | index_lookup
-    | conditional_expression
-    | arithmetic_expression"""  # Can't do anything starting with `[` as it breaks dict lookup
+    | stmt_expression"""  # Can't do anything starting with `[` as it breaks dict lookup
     p[0] = p[1]
 
 
@@ -255,19 +246,23 @@ def p_stmt_list_empty(p: YaccProduction) -> None:
 
 
 def p_assign(p: YaccProduction) -> None:
-    "assign : var_ref '=' expression"
+    """assign : var_ref '=' expression
+             | var_ref '=' stmt_expression """
     p[0] = p[1].as_assign(p[3])
     attach_lnr(p, 2)
 
 
 def p_assign_extend(p: YaccProduction) -> None:
-    "assign : var_ref PEQ expression"
+    """assign : var_ref PEQ expression
+              | var_ref PEQ stmt_expression"""
     p[0] = p[1].as_assign(p[3], list_only=True)
     attach_lnr(p, 2)
 
 
 def p_for(p: YaccProduction) -> None:
-    "for : FOR ID IN expression ':' block"
+    """for : FOR ID IN expression ':' block
+           |  FOR ID IN stmt_expression ':' block
+        """
     assert namespace
     p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))
     attach_lnr(p, 1)
@@ -280,7 +275,8 @@ def p_if_start(p: YaccProduction) -> None:
 
 
 def p_if_body(p: YaccProduction) -> None:
-    "if_body : expression ':' stmt_list if_next"
+    """if_body : expression ':' stmt_list if_next
+               | stmt_expression ':' stmt_list if_next """
     assert namespace
     p[0] = If(p[1], BasicBlock(namespace, p[3]), p[4])
     attach_lnr(p, 2)
@@ -495,7 +491,10 @@ def p_implement(p: YaccProduction) -> None:
 
 def p_implement_when(p: YaccProduction) -> None:
     """implement_def : IMPLEMENT class_ref USING implement_ns_list WHEN expression empty
-    | IMPLEMENT class_ref USING implement_ns_list WHEN expression MLS"""
+                    | IMPLEMENT class_ref USING implement_ns_list WHEN expression MLS
+                    | IMPLEMENT class_ref USING implement_ns_list WHEN stmt_expression empty
+                    | IMPLEMENT class_ref USING implement_ns_list WHEN stmt_expression MLS
+                    """
     (inherit, implementations) = p[4]
     p[0] = DefineImplement(p[2], implementations, p[6], inherit=inherit, comment=p[7])
     attach_lnr(p)
@@ -604,7 +603,8 @@ def p_typedef_outer_comment(p: YaccProduction) -> None:
 
 
 def p_typedef_1(p: YaccProduction) -> None:
-    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression"""
+    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING expression
+                     | TYPEDEF ID AS ns_ref MATCHING stmt_expression"""
     assert namespace
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p, 2)
@@ -636,23 +636,32 @@ def p_index(p: YaccProduction) -> None:
 
 
 def p_expression(p: YaccProduction) -> None:
-    """expression : boolean_expression
-    | constant
-    | function_call
-    | var_ref empty
-    | constructor
-    | list_def
+    """expression : list_def
     | list_comprehension
-    | map_def
+    | boolean_expression
     | map_lookup empty
+    | var_ref empty
     | index_lookup
     | conditional_expression
-    | arithmetic_expression"""
+    | arithmetic_expression
+    """
     p[0] = p[1]
 
+def p_stmt_expression(p: YaccProduction) -> None:
+    """stmt_expression :
+    | constant
+    | function_call
+    | constructor
+    | map_def
+    """
+    # expression that are safe to use as stmt
+    # i.e. not starting with '[' or NOT
+    p[0] = p[1]
 
 def p_expression_parentheses(p: YaccProduction) -> None:
-    """expression : '(' expression ')'"""
+    """expression : '(' expression ')'
+                  | '(' stmt_expression ')'
+                 """
     p[0] = p[2]
 
 
@@ -660,7 +669,19 @@ def p_boolean_expression(p: YaccProduction) -> None:
     """boolean_expression : expression CMP_OP expression
     | expression IN expression
     | expression AND expression
-    | expression OR expression"""
+    | expression OR expression
+    | stmt_expression CMP_OP expression
+    | stmt_expression IN expression
+    | stmt_expression AND expression
+    | stmt_expression OR expression
+    | expression CMP_OP stmt_expression
+    | expression IN stmt_expression
+    | expression AND stmt_expression
+    | expression OR stmt_expression
+    | stmt_expression CMP_OP stmt_expression
+    | stmt_expression IN stmt_expression
+    | stmt_expression AND stmt_expression
+    | stmt_expression OR stmt_expression"""
     operator = Operator.get_operator_class(str(p[2]))
     if operator is None:
         raise ParserException(p[1].location, str(p[1]), f"Invalid operator {str(p[1])}")
@@ -669,13 +690,17 @@ def p_boolean_expression(p: YaccProduction) -> None:
 
 
 def p_boolean_expression_not_in(p: YaccProduction) -> None:
-    """boolean_expression : expression NOT IN expression"""
+    """boolean_expression : expression NOT IN expression
+        | stmt_expression NOT IN expression
+        | expression NOT IN stmt_expression
+        | stmt_expression NOT IN stmt_expression """
     p[0] = Not(In(p[1], p[4]))
     attach_lnr(p, 2)
 
 
 def p_boolean_expression_not(p: YaccProduction) -> None:
-    """boolean_expression : NOT expression"""
+    """boolean_expression : NOT expression
+                        | NOT stmt_expression"""
     p[0] = Not(p[2])
     attach_lnr(p)
 
@@ -699,6 +724,24 @@ def p_arithmetic_expression(p: YaccProduction) -> None:
     | expression '*' expression
     | expression '%' expression
     | expression DOUBLE_STAR expression
+    | stmt_expression PLUS_OP expression
+    | stmt_expression MINUS_OP expression
+    | stmt_expression DIVISION_OP expression
+    | stmt_expression '*' expression
+    | stmt_expression '%' expression
+    | stmt_expression DOUBLE_STAR expression
+    | expression PLUS_OP stmt_expression
+    | expression MINUS_OP stmt_expression
+    | expression DIVISION_OP stmt_expression
+    | expression '*' stmt_expression
+    | expression '%' stmt_expression
+    | expression DOUBLE_STAR stmt_expression
+    | stmt_expression PLUS_OP stmt_expression
+    | stmt_expression MINUS_OP stmt_expression
+    | stmt_expression DIVISION_OP stmt_expression
+    | stmt_expression '*' stmt_expression
+    | stmt_expression '%' stmt_expression
+    | stmt_expression DOUBLE_STAR stmt_expression
     """
     operator = Operator.get_operator_class(str(p[2]))
     if operator is None:
@@ -728,7 +771,11 @@ def p_boolean_expression_is_defined_map_lookup(p: YaccProduction) -> None:
 
 
 def p_map_lookup(p: YaccProduction) -> None:
-    """map_lookup : expression '[' expression ']'"""
+    """map_lookup : expression '[' expression ']'
+        | stmt_expression '[' expression ']'
+        | expression '[' stmt_expression ']'
+        | stmt_expression '[' stmt_expression ']'
+        """
     p[0] = MapLookup(p[1], p[3])
 
 
@@ -774,7 +821,8 @@ class ForSpecifier:
 
 
 def p_list_comprehension(p: YaccProduction) -> None:
-    "list_comprehension : '[' expression list_comprehension_for list_comprehension_guard ']'"
+    """list_comprehension : '[' expression list_comprehension_for list_comprehension_guard ']'
+                        | '[' stmt_expression list_comprehension_for list_comprehension_guard ']' """
 
     def create_list_comprehension(value_expression: ExpressionStatement, for_specifier: ForSpecifier) -> ListComprehension:
         result: ListComprehension = ListComprehension(
@@ -805,7 +853,9 @@ def p_list_comprehension_for_empty(p: YaccProduction) -> None:
 
 def p_list_comprehension_for(p: YaccProduction) -> None:
     """list_comprehension_for : FOR ID IN expression list_comprehension_for_empty
-    | FOR ID IN expression list_comprehension_for"""
+    | FOR ID IN expression list_comprehension_for
+    | FOR ID IN stmt_expression list_comprehension_for_empty
+    | FOR ID IN stmt_expression list_comprehension_for"""
     p[0] = p[5]  # list[ForSpecifier]
     # for-specifiers in reverse order
     p[0].append(ForSpecifier(variable=p[2], iterable=p[4]))
@@ -817,7 +867,8 @@ def p_list_comprehension_guard_empty(p: YaccProduction) -> None:
 
 
 def p_list_comprehension_guard(p: YaccProduction) -> None:
-    "list_comprehension_guard : IF expression list_comprehension_guard"
+    """list_comprehension_guard : IF expression list_comprehension_guard
+        | IF stmt_expression list_comprehension_guard """
     if p[3] is None:
         p[0] = p[2]
     else:
@@ -848,7 +899,10 @@ def p_string_dict_key(p: YaccProduction) -> None:
 
 def p_pair_list_collect(p: YaccProduction) -> None:
     """pair_list : dict_key ':' expression ',' pair_list
-    | dict_key ':' expression empty pair_list_empty"""
+    | dict_key ':' expression empty pair_list_empty
+    | dict_key ':' stmt_expression ',' pair_list
+    | dict_key ':' stmt_expression empty pair_list_empty
+    """
 
     key, val = str(p[1]), p[3]
 
@@ -884,7 +938,8 @@ def p_index_lookup(p: YaccProduction) -> None:
 
 
 def p_short_index_lookup(p: YaccProduction) -> None:
-    "index_lookup : expression '[' param_list ']'"
+    """index_lookup : expression '[' param_list ']'
+                    | stmt_expression '[' param_list ']'"""
     attref = p[1]
     if not isinstance(attref, AttributeReference):
         raise ParserException(
@@ -897,7 +952,15 @@ def p_short_index_lookup(p: YaccProduction) -> None:
 
 
 def p_conditional_expression(p: YaccProduction) -> None:
-    "conditional_expression : expression '?' expression ':' expression"
+    """conditional_expression : expression '?' expression ':' expression
+        | stmt_expression '?' expression ':' expression
+        | expression '?' stmt_expression ':' expression
+        | expression '?' expression ':' stmt_expression
+        | stmt_expression '?' stmt_expression ':' expression
+        | expression '?' stmt_expression ':' stmt_expression
+        | stmt_expression '?' expression ':' stmt_expression
+        | stmt_expression '?' stmt_expression ':' stmt_expression
+        """
     p[0] = ConditionalExpression(p[1], p[3], p[5])
     attach_from_string(p, 1)
 
@@ -1143,14 +1206,17 @@ def p_constants_collect(p: YaccProduction) -> None:
 
 
 def p_wrapped_kwargs(p: YaccProduction) -> None:
-    "wrapped_kwargs : DOUBLE_STAR expression"
+    """wrapped_kwargs : DOUBLE_STAR expression
+                      | DOUBLE_STAR stmt_expression
+    """
     p[0] = WrappedKwargs(p[2])
     attach_lnr(p, 1)
 
 
 def p_param_list_element_explicit(p: YaccProduction) -> None:
     # param_list_element: Tuple[Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
-    "param_list_element : ID '=' expression"
+    """param_list_element : ID '=' expression
+                        | ID '=' stmt_expression """
     p[0] = ((p[1], p[3]), None)
 
 
@@ -1192,7 +1258,8 @@ def p_function_param_list_element(p: YaccProduction) -> None:
 
 def p_function_param_list_element_arg(p: YaccProduction) -> None:
     # function_param_list_element: Tuple[Optional[argument], Optional[Tuple[ID, operand]], Optional[wrapped_kwargs]]
-    """function_param_list_element : expression"""
+    """function_param_list_element : expression
+                                  | stmt_expression"""
     p[0] = (p[1], None, None)
 
 
@@ -1223,13 +1290,15 @@ def p_function_param_list_nonempty(p: YaccProduction) -> None:
 
 
 def p_operand_list_collect(p: YaccProduction) -> None:
-    """operand_list : expression ',' operand_list"""
+    """operand_list : expression ',' operand_list
+                    | stmt_expression ',' operand_list """
     p[3].insert(0, p[1])
     p[0] = p[3]
 
 
 def p_operand_list_term(p: YaccProduction) -> None:
-    "operand_list : expression"
+    """operand_list : expression
+     | stmt_expression"""
     p[0] = [p[1]]
 
 
@@ -1256,7 +1325,8 @@ def p_attr_ref(p: YaccProduction) -> None:
 
 
 def p_attr_ref2(p: YaccProduction) -> None:
-    "attr_ref : expression '.' ID"
+    """attr_ref : expression '.' ID
+        | stmt_expression '.' ID """
     p[0] = AttributeReference(p[1], p[3])
     p[0].namespace = namespace
 
