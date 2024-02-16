@@ -33,7 +33,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence, Se
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from typing import Any, Dict, Optional, Self, Union, cast, Iterator
+from typing import Any, Dict, Iterator, Optional, Self, Union, cast
 
 import pkg_resources
 
@@ -153,16 +153,19 @@ class ResourceInstallSpec:
     :ivar sources: list of ModuleSource containing the code for deployment of this resource
 
     """
+
     resource_type: str
     model_version: int
     pip_config: PipConfig
     requirements: Sequence[str]
     sources: Sequence["ModuleSource"]
 
+
 class Executor(ABC):
     """
     TODO
     """
+
     @classmethod
     @abc.abstractmethod
     async def get_executor(
@@ -356,8 +359,15 @@ class NewExecutor(Executor):
 
 
 class ResourceAction(ResourceActionBase):
-    def __init__(self, scheduler: "ResourceScheduler", executor: Executor, env_id: uuid.UUID, resource: dict[str, object],
-                 gid: uuid.UUID, reason: str) -> None:
+    def __init__(
+        self,
+        scheduler: "ResourceScheduler",
+        executor: Executor,
+        env_id: uuid.UUID,
+        resource: dict[str, object],
+        gid: uuid.UUID,
+        reason: str,
+    ) -> None:
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
@@ -365,7 +375,6 @@ class ResourceAction(ResourceActionBase):
         self.resource: dict[str, object] = resource
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
-
 
     async def execute(
         self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
@@ -693,7 +702,9 @@ class ResourceScheduler:
 
         # re-generate generation
         self.generation: dict[ResourceIdStr, ResourceAction] = {
-            Id.parse_id(resource["id"]).resource_str(): ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
+            Id.parse_id(resource["id"]).resource_str(): ResourceAction(
+                self, executor, self._env_id, resource, gid, self.running.reason
+            )
             for resource in resources
         }
 
@@ -704,16 +715,8 @@ class ResourceScheduler:
                 self.generation[key].undeployable = undeployable[vid]
 
         # hook up Cross Agent Dependencies
-        all_dependencies: Iterator[Id] = (
-            Id.parse_id(raw)
-            for r in resources
-            for raw in r.get("requires", [])
-        )
-        cross_agent_dependencies: Sequence[Id] = [
-            rid
-            for rid in all_dependencies
-            if rid.get_agent_name() != self.name
-        ]
+        all_dependencies: Iterator[Id] = (Id.parse_id(raw) for r in resources for raw in r.get("requires", []))
+        cross_agent_dependencies: Sequence[Id] = [rid for rid in all_dependencies if rid.get_agent_name() != self.name]
 
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
@@ -1205,9 +1208,7 @@ class AgentInstance:
         code: Sequence[ResourceInstallSpec] = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
-        executor, failed_resource_types = await self.get_executor(
-            code, self.get_client()
-        )
+        executor, failed_resource_types = await self.get_executor(code, self.get_client())
 
         loaded_resources: list[dict[str, object]] = []
         failed_resources: list[ResourceVersionIdStr] = []
@@ -1511,7 +1512,7 @@ class Agent(SessionEndpoint):
                     sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
                     LOGGER.debug("Installing handler %s version=%d", resource_type, version)
                     requirements: set[str] = set()
-                    sources:  list["ModuleSource"] = []
+                    sources: list["ModuleSource"] = []
                     for source in result.result["data"]:
                         sources.append(
                             ModuleSource(
@@ -1527,7 +1528,9 @@ class Agent(SessionEndpoint):
                         # TODO: what if this fails?
                         pip_config = await self._get_pip_config(environment, version)
 
-                    resource_install_specs.append(ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources))
+                    resource_install_specs.append(
+                        ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
+                    )
                 else:
                     # TODO what if server call fails ?
                     pass
@@ -1546,11 +1549,21 @@ class Agent(SessionEndpoint):
                 # clear cache, for retry on failure
                 self._last_loaded[resource_install_spec.resource_type] = -1
             try:
-                await self._install(resource_install_spec.sources, resource_install_spec.requirements, pip_config=resource_install_spec.pip_config)
-                LOGGER.debug("Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.version)
+                await self._install(
+                    resource_install_spec.sources,
+                    resource_install_spec.requirements,
+                    pip_config=resource_install_spec.pip_config,
+                )
+                LOGGER.debug(
+                    "Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.version
+                )
                 self._last_loaded[resource_install_spec.resource_type] = resource_install_spec.version
             except Exception:
-                LOGGER.exception("Failed to install handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.version)
+                LOGGER.exception(
+                    "Failed to install handler %s version=%d",
+                    resource_install_spec.resource_type,
+                    resource_install_spec.version,
+                )
                 failed_to_load.add(resource_install_spec.resource_type)
 
         return failed_to_load
