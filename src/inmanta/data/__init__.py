@@ -4437,12 +4437,15 @@ class ResourcePersistentState(BaseDocument):
 
     # ID related
     resource_id: m.ResourceIdStr
-    last_deployed_attribute_hash: Optional[str] = None
 
     # Field based on content from the resource actions
     last_deploy: Optional[datetime.datetime] = None
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
     # i.e. the end time of the last deploy
+    last_deployed_attribute_hash: Optional[str] = None
+    # Hash used in for last_deploy
+    last_deployed_version: Optional[int] = None
+    # Model version of  last_deploy
     last_success: Optional[datetime.datetime] = None
     # last actual deployment completed without failure. i.e start time of the last deploy where status == ResourceState.deployed
     last_produced_events: Optional[datetime.datetime] = None
@@ -4481,10 +4484,6 @@ class Resource(BaseDocument):
     resource_id_value: str
 
     agent: str
-
-    # Field based on content from the resource actions
-    # TODO: remove, used in get_resource_details
-    last_deploy: Optional[datetime.datetime] = None
 
     # State related
     attributes: dict[str, object] = {}
@@ -4693,35 +4692,24 @@ class Resource(BaseDocument):
         with their latest version and when they are last deployed.
         """
         query_resource_ids = f"""
-                SELECT DISTINCT resource_id
-                FROM {Resource.table_name()}
+                SELECT resource_id, last_deployed_version as deployed_version, last_deploy
+                FROM {ResourcePersistentState.table_name()}
                 WHERE environment=$1
         """
         query_latest_version = f"""
-                SELECT resource_id, model AS latest_version, agent AS latest_agent
+                SELECT resource_id, model AS latest_version
                 FROM {Resource.table_name()}
                 WHERE environment=$1 AND
                       resource_id=r1.resource_id
                 ORDER BY model DESC
                 LIMIT 1
         """
-        query_latest_deployed_version = f"""
-                SELECT resource_id, model AS deployed_version, last_deploy AS last_deploy
-                FROM {Resource.table_name()}
-                WHERE environment=$1 AND
-                      resource_id=r1.resource_id AND
-                      status != $2
-                ORDER BY model DESC
-                LIMIT 1
-        """
         query = f"""
-                SELECT r1.resource_id, r2.latest_version, r2.latest_agent, r3.deployed_version, r3.last_deploy
+                SELECT r1.resource_id, r2.latest_version, r1.deployed_version, r1.last_deploy
                 FROM ({query_resource_ids}) AS r1 INNER JOIN LATERAL ({query_latest_version}) AS r2
                       ON (r1.resource_id = r2.resource_id)
-                      LEFT OUTER JOIN LATERAL ({query_latest_deployed_version}) AS r3
-                      ON (r1.resource_id = r3.resource_id)
         """
-        values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
+        values = [cls._get_value(environment)]
         result = []
         async with cls.get_connection() as con:
             async with con.transaction():
@@ -4732,7 +4720,7 @@ class Resource(BaseDocument):
                         {
                             "resource_id": resource_id,
                             "resource_type": parsed_id.entity_type,
-                            "agent": record["latest_agent"],
+                            "agent": parsed_id.agent_name,
                             "latest_version": record["latest_version"],
                             "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
                             "last_deploy": record["last_deploy"] if "last_deploy" in record else None,
@@ -5170,6 +5158,7 @@ class Resource(BaseDocument):
     async def update_persistent_state(
         self,
         last_deploy: Optional[datetime.datetime] = None,
+        last_deployed_version: Optional[int] = None,
         last_non_deploying_status: Optional[const.NonDeployingResourceState] = None,
         last_success: Optional[datetime.datetime] = None,
         last_produced_events: Optional[datetime.datetime] = None,
@@ -5186,6 +5175,7 @@ class Resource(BaseDocument):
             "last_success": last_success,
             "last_produced_events": last_produced_events,
             "last_deployed_attribute_hash": last_deployed_attribute_hash,
+            "last_deployed_version": last_deployed_version,
         }
         query_parts = [f"{k}={args(v)}" for k, v in invalues.items() if v is not None]
         if not query_parts:

@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.resource_persistent_state (
     last_success timestamp with time zone,
     last_produced_events timestamp with time zone,
     last_deployed_attribute_hash character varying,
+    last_deployed_version integer,
     last_non_deploying_status public.non_deploying_resource_state
         DEFAULT 'available'::public.non_deploying_resource_state NOT NULL,
     PRIMARY KEY(environment, resource_id)
@@ -44,6 +45,7 @@ INSERT INTO public.resource_persistent_state (environment, resource_id, last_dep
 ALTER TABLE public.resource DROP COLUMN last_success;
 ALTER TABLE public.resource DROP COLUMN last_non_deploying_status;
 ALTER TABLE public.resource DROP COLUMN last_produced_events;
+ALTER TABLE public.resource DROP COLUMN last_deploy;
 
 """
     )

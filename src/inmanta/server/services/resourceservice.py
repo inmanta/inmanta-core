@@ -545,14 +545,14 @@ class ResourceService(protocol.ServerSlice):
                 self.clear_env_cache(env)
 
                 await resource.update_fields(
-                    last_deploy=timestamp,
                     status=status,
                     connection=connection,
                 )
                 await resource.update_persistent_state(
                     last_deploy=timestamp,
+                    last_deployed_version=version,
+                    last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
-                    attribute_hash=resource.attribute_hash,
                     connection=connection,
                 )
 
@@ -695,14 +695,14 @@ class ResourceService(protocol.ServerSlice):
                     extra_fields["last_produced_events"] = finished
 
                 await resource.update_fields(
-                    last_deploy=finished,
                     status=status,
                     connection=connection,
                 )
                 await resource.update_persistent_state(
                     last_deploy=finished,
-                    last_non_deploying_status=const.NonDeployingResourceState(status),
+                    last_deployed_version=resource_id.version,
                     last_deployed_attribute_hash=resource.attribute_hash,
+                    last_non_deploying_status=const.NonDeployingResourceState(status),
                     **extra_fields,
                     connection=connection,
                 )
@@ -923,7 +923,6 @@ class ResourceService(protocol.ServerSlice):
                         model_version = None
                         for res in resources:
                             await res.update_fields(
-                                last_deploy=finished,
                                 status=status,
                                 connection=connection,
                             )
@@ -937,10 +936,12 @@ class ResourceService(protocol.ServerSlice):
                                     extra_fields["last_success"] = resource_action.started
                                 if status != ResourceState.deploying:
                                     extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
-                                extra_fields["last_deploy"] = finished
 
                             await res.update_persistent_state(
-                                **extra_fields, last_deployed_attribute_hash=res.attribute_hash, connection=connection
+                                **extra_fields,
+                                last_deploy=finished,
+                                last_deployed_attribute_hash=res.attribute_hash,
+                                connection=connection,
                             )
 
                             model_version = res.model

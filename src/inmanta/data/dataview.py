@@ -486,7 +486,6 @@ class ResourceView(DataView[ResourceOrder, model.LatestReleasedResource]):
         return {"deploy_summary": str(self.deploy_summary)}
 
     def get_base_query(self) -> SimpleQueryBuilder:
-        # TODO: we could replace the scan query with a join if we write the last released version to the shared state
         def subquery_latest_version_for_single_resource(higher_than: Optional[str]) -> str:
             """
             Returns a subquery to select a single row from a resource table:
