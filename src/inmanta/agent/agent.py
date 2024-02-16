@@ -1334,16 +1334,8 @@ class Agent(SessionEndpoint):
 
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> set[str]:
         """
-        Ensure that the code for the given environment and version is loaded by:
-         - Storing the pipconfig once and reusing it for all the handlers that will be installed.
-         - Going through all the resource_types and retrieves the corresponding source code by using
-            the ``get_source_code``API endpoint (async).
-         - Encapsulating Source code details in ``ModuleSource`` objects.
-         - calling the ``self._install`` function to install required python packages and the list
-            of ``ModuleSource`` with the provided pip config.
-         - Updating the ``_last_loaded`` cache to indicate that the given resource type's code was loaded successfully
-            at the specified version.
-         - Returning a list of all the ``resource_types`` that it failed to load.
+        Ensure that the code for the given environment and version is loaded.
+        Return a list of all the ``resource_types`` that it failed to load.
         """
         failed_to_load: set[str] = set()
         if self._loader is None:
@@ -1370,6 +1362,7 @@ class Agent(SessionEndpoint):
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
                         requirements = set()
                         sources = []
+                        # Encapsulate source code details in ``ModuleSource`` objects
                         for source in result.result["data"]:
                             sources.append(
                                 ModuleSource(
@@ -1383,8 +1376,11 @@ class Agent(SessionEndpoint):
 
                         if pip_config is None:
                             pip_config = await self._get_pip_config(environment, version)
+                        # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                         await self._install(sources, list(requirements), pip_config=pip_config)
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
+                        # Update the ``_last_loaded`` cache to indicate that the given resource type's code
+                        # was loaded successfully at the specified version.
                         self._last_loaded[rt] = version
                     except Exception:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)
