@@ -486,7 +486,7 @@ class CallArguments:
 
 
 # Shared
-class RESTBase(util.TaskHandler):
+class RESTBase(util.TaskHandler[None]):
     """
     Base class for REST based client and servers
     """

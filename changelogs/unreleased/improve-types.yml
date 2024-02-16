@@ -1,0 +1,5 @@
+description: Improve typing of various code
+change-type: patch
+destination-branches:
+  - master
+  - iso7

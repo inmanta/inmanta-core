@@ -329,21 +329,27 @@ class GitProvider:
     def fetch(self, repo: str) -> None:
         pass
 
+    @abstractmethod
     def status(self, repo: str, untracked_files_mode: Optional[UntrackedFilesMode] = None) -> str:
         pass
 
+    @abstractmethod
     def get_all_tags(self, repo: str) -> list[str]:
         pass
 
+    @abstractmethod
     def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[version.Version]:
         pass
 
+    @abstractmethod
     def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
         pass
 
+    @abstractmethod
     def checkout_tag(self, repo: str, tag: str) -> None:
         pass
 
+    @abstractmethod
     def commit(
         self,
         repo: str,
@@ -357,15 +363,19 @@ class GitProvider:
     def tag(self, repo: str, tag: str) -> None:
         pass
 
+    @abstractmethod
     def push(self, repo: str) -> str:
         pass
 
+    @abstractmethod
     def pull(self, repo: str) -> str:
         pass
 
+    @abstractmethod
     def get_remote(self, repo: str) -> Optional[str]:
         pass
 
+    @abstractmethod
     def is_git_repository(self, repo: str) -> bool:
         pass
 
