@@ -181,20 +181,20 @@ class Executor(ABC):
     @abc.abstractmethod
     async def execute(
         self,
-        ctx: handler.HandlerLogger,
         gid: uuid.UUID,
         resource_id: Id,
         resource: dict[str, object],
         env_id: uuid.UUID,
+        reason: str,
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
-        :param ctx: context used for logging purposes
         :param gid: unique id for this deploy
         :param resource_id: the resource id
         :param resource: desired state for this resource as a dictionary
         :param env_id: the environment
+        :param reason: textual reason for this deploy
         """
         pass
 
@@ -229,6 +229,7 @@ class InProcessExecutor(Executor):
     async def _execute(
         self,
         resource: Resource,
+        gid: uuid.UUID,
         ctx: handler.HandlerContext,
         requires: dict[ResourceIdStr, const.ResourceState],
     ) -> None:
@@ -238,6 +239,8 @@ class InProcessExecutor(Executor):
                          state that was not `deploying'.
         """
         # setup provider
+        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource.id)
+
         provider: Optional[HandlerAPI[Any]] = None
         try:
             provider = await self.agent.get_provider(resource)
@@ -303,11 +306,11 @@ class InProcessExecutor(Executor):
 
     async def execute(
         self,
-        ctx: handler.HandlerLogger,
         gid: uuid.UUID,
         resource_id: Id,
         resource: dict[str, object],
         env_id: uuid.UUID,
+        reason: str,
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         started: datetime.datetime = datetime.datetime.now().astimezone()
         # TODO: double check: is this required? Is failure handled properly?
@@ -328,8 +331,14 @@ class InProcessExecutor(Executor):
                 messages=[msg]
             )
 
-        ctx = handler.HandlerContext(resource, logger=ctx.logger)
-        ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s", deploy_id=gid, resource_id=resource_id)
+        ctx = handler.HandlerContext(resource)
+        ctx.debug(
+            "Start run for resource %(resource)s because %(reason)s",
+            resource=str(resource_id),
+            deploy_id=gid,
+            agent=self.agent.name,
+            reason=reason,
+        )
 
         try:
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
@@ -379,7 +388,6 @@ class ExternalExecutor(Executor):
 
     async def execute(
         self,
-        ctx: handler.HandlerLogger,
         gid: uuid.UUID,
         resource_id: Id,
         resource: dict[str, object],
@@ -442,15 +450,6 @@ class ResourceAction(ResourceActionBase):
 
             async with self.scheduler.ratelimiter:
 
-                ctx = handler.HandlerLogger(self.resource_id, logger=self.logger)
-
-                ctx.debug(
-                    "Start run for resource %(resource)s because %(reason)s",
-                    resource=str(self.resource_id),
-                    deploy_id=self.gid,
-                    agent=self.scheduler.agent.name,
-                    reason=self.reason,
-                )
                 self.running = True
 
                 try:
@@ -467,11 +466,11 @@ class ResourceAction(ResourceActionBase):
                         return
 
                     status, change, changes = await self.executor.execute(
-                        ctx=ctx,
                         gid=self.gid,
                         resource_id=self.resource_id,
                         resource=self.resource,
                         env_id=self.env_id,
+                        reason=self.reason,
                     )
                     self.status = status
                     self.change = change
