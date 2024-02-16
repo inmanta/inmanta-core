@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import uuid
 from collections import abc
@@ -1593,6 +1594,11 @@ async def test_put_partial_dep_on_specific_set_removed(server, client, environme
     rid_to_resource = {res.resource_id: res for res in resources_in_model}
     assert rid_to_resource[rid1].attributes["requires"] == []
     assert rid_to_resource[rid2].provides == []
+
+    # Test for: https://github.com/inmanta/inmanta-core/issues/7065
+    # Make sure dryrun succeeds after a put_partial call
+    result = await client.dryrun_trigger(tid=environment, version=2)
+    assert result.code == 200
 
 
 async def test_put_partial_dep_on_non_existing_resource(server, client, environment, clienthelper) -> None:

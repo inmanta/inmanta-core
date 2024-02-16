@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import dataclasses
 import logging
@@ -3614,6 +3615,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
     param2 = data.Parameter(
         name="key2",
@@ -3621,6 +3623,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
 
     version = await clienthelper.get_version()
@@ -3659,6 +3662,7 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key1]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
     param4 = data.Parameter(
         name="returned_fact_key2",
@@ -3666,10 +3670,120 @@ async def test_set_fact_in_handler(server, client, environment, agent, clienthel
         environment=uuid.UUID(environment),
         resource_id="test::SetFact[agent1,key=key2]",
         source=ParameterSource.fact.value,
+        expires=True,
     )
 
     params = await data.Parameter.get_list()
     compare_params(params, [param1, param2, param3, param4])
+
+
+async def test_set_non_expiring_fact_in_handler_6560(
+    server, client, environment, agent, clienthelper, resource_container, no_agent_backoff
+):
+    """
+    Check that getting a non expiring fact doesn't trigger a parameter request from the agent.
+    In this test:
+        - create 2 facts, one that expires, one that doesn't expire
+        - wait for the _fact_expire delay
+        - when getting the facts back, check that only the fact that does expire triggers a refresh from the agent
+    """
+
+    # Setup a high fact expiry rate:
+    param_service = server.get_slice(SLICE_PARAM)
+    param_service._fact_expire = 0.1
+
+    def get_resources(version: str, params: list[data.Parameter]) -> list[dict[str, Any]]:
+        return [
+            {
+                "key": param.name,
+                "value": param.value,
+                "metadata": param.metadata,
+                "id": f"{param.resource_id},v={version}",
+                "send_event": False,
+                "purged": False,
+                "purge_on_delete": False,
+                "requires": [],
+            }
+            for param in params
+        ]
+
+    def compare_params(actual_params: list[data.Parameter], expected_params: list[data.Parameter]) -> None:
+        actual_params = sorted(actual_params, key=lambda p: p.name)
+        expected_params = sorted(expected_params, key=lambda p: p.name)
+        assert len(expected_params) == len(actual_params), f"{expected_params=} {actual_params=}"
+        for i in range(len(expected_params)):
+            for attr_name in ["name", "value", "environment", "resource_id", "source", "metadata", "expires"]:
+                expected = getattr(expected_params[i], attr_name)
+                actual = getattr(actual_params[i], attr_name)
+                assert expected == actual, f"{expected=} {actual=}"
+
+    # Assert initial state
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+
+    param1 = data.Parameter(
+        name="non_expiring",
+        value="value1",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]",
+        source=ParameterSource.fact.value,
+        expires=False,
+    )
+    param2 = data.Parameter(
+        name="expiring",
+        value="value2",
+        environment=uuid.UUID(environment),
+        resource_id="test::SetNonExpiringFact[agent1,key=expiring]",
+        source=ParameterSource.fact.value,
+        expires=True,
+    )
+
+    version = await clienthelper.get_version()
+    resources = get_resources(version, [param1, param2])
+
+    # Ensure that facts are pushed when ctx.set_fact() is called during resource deployment
+    await _deploy_resources(client, environment, resources, version, push=True)
+    await wait_for_n_deployed_resources(client, environment, version, n=2, timeout=10)
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2])
+
+    # Ensure that:
+    # * Facts set in the handler.facts() method via ctx.set_fact() method are pushed to the Inmanta server.
+    # * Facts returned via the handler.facts() method are pushed to the Inmanta server.
+    await asyncio.gather(*[p.delete() for p in params])
+    params = await data.Parameter.get_list()
+    assert len(params) == 0
+
+    result = await client.get_param(
+        tid=environment, id="non_expiring", resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]"
+    )
+    assert result.code == 503
+    result = await client.get_param(tid=environment, id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
+    assert result.code == 503
+
+    async def _wait_until_facts_are_available():
+        params = await data.Parameter.get_list()
+        return len(params) == 2
+
+    await retry_limited(_wait_until_facts_are_available, 10)
+
+    # Wait for a bit to let facts expire
+    await asyncio.sleep(0.5)
+
+    # Non expiring fact is returned straight away
+    result = await client.get_param(
+        tid=environment, id="non_expiring", resource_id="test::SetNonExpiringFact[agent1,key=non_expiring]"
+    )
+    assert result.code == 200
+    # Expired fact has to be refreshed
+    result = await client.get_param(tid=environment, id="expiring", resource_id="test::SetNonExpiringFact[agent1,key=expiring]")
+    assert result.code == 503
+
+    await retry_limited(_wait_until_facts_are_available, 10)
+
+    params = await data.Parameter.get_list()
+    compare_params(params, [param1, param2])
 
 
 async def test_deploy_handler_method(server, client, environment, agent, clienthelper, resource_container, no_agent_backoff):

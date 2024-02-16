@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 from collections import defaultdict
 
 from inmanta import const, resources

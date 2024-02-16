@@ -55,7 +55,7 @@ Example
 
 .. code-block:: inmanta
 
-    typedef lowercase as string matching "/^[a-z]+$/"
+    typedef lowercase as string matching /^[a-z]+$/
 
 ------------
 
@@ -86,7 +86,7 @@ Example
 std::validate_type()
 ~~~~~~~~~~~~~~~~~~~~
 
-The `std::validate_type() <../../../reference/modules/std.html#std.validate_type>`_
+The `std::validate_type() <../../reference/modules/std.html#std.validate_type>`_
 function allows for finer grained type definition.
 
 These three forms are supported:

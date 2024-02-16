@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 """
     These tests make sure that for each module mentioned in the compiler API docs, using it as an entry point for importing
     does not result in an import loop (see #2341 and #2342).
@@ -99,6 +100,8 @@ def test_import_module(import_entry_point) -> None:
 
 def test_import_protocol(import_entry_point) -> None:
     assert import_entry_point("inmanta.protocol") == 0
+    assert import_entry_point("inmanta.protocol.auth") == 0
+    assert import_entry_point("inmanta.protocol.common") == 0
     assert import_entry_point("inmanta.protocol.exceptions") == 0
 
 

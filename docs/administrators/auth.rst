@@ -336,3 +336,39 @@ the examples above this url is http://localhost:8080/realms/inmanta/.well-known/
 
 .. warning:: When the certificate of keycloak is not trusted by the system on which inmanta is installed, set ``validate_cert``
     to false in the ``auth_jwt_keycloak`` block for keycloak.
+
+Custom claims
+*************
+
+Access to the orchestrator can be controlled using claim match expressions. In the section of the identity provider that
+you want to restrict you can configure the ``claims`` options. This is a multiline option where each line contains a match
+expression. There are two operators available:
+
+- ``in`` for exact string match on a claim that contains a list of string values
+- ``is`` for exact string match on a claim that is a string
+
+You can use them as follows, for example each user gets two additional claims:
+
+- ``my:environments`` which is a list of network environments the user is allowed to access. For example: lab and prod
+- ``my:scope`` which indicates the scope of automation the orchestrator does. For example: network and dc
+
+A user is allowed to have multiple environments but they can only have one scope. So that is why the environments is a list and
+scope is single string value.
+
+On the lab orchestrator for the datacenter we can then configure it as follows:
+
+.. code-block:: ini
+
+   [auth_jwt_keycloak]
+   algorithm=RS256
+   sign=false
+   client_types=api
+   issuer=http://localhost:8080/realms/inmanta
+   audience=inmantaso
+   jwks_uri=http://keycloak:8080/realms/inmanta/protocol/openid-connect/certs
+   validate_cert=false
+   claims=
+     lab in my:environments
+     my:scope is dc
+
+This will only allow users with ``lab`` in the ``my:environments`` claim and ``my:scope`` equal to ``dc``.

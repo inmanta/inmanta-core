@@ -72,10 +72,14 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 environment:
                     POSTGRES_USER: inmanta
                     POSTGRES_PASSWORD: inmanta
+                    PGDATA: /var/lib/postgresql/data/pgdata
                 networks:
                     inm_net:
                         ipv4_address: 172.30.0.2
-
+                volumes:
+                    - type: volume
+                      source: pgdata
+                      target: /var/lib/postgresql/data
             inmanta-server:
                 container_name: inmanta_orchestrator
                 image: ghcr.io/inmanta/orchestrator:latest
@@ -94,6 +98,9 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                     driver: default
                     config:
                         - subnet: 172.30.0.0/16
+        volumes:
+            pgdata:
+
 
 .. only:: iso
 
@@ -108,10 +115,14 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 environment:
                     POSTGRES_USER: inmanta
                     POSTGRES_PASSWORD: inmanta
+                    PGDATA: /var/lib/postgresql/data/pgdata
                 networks:
                     inm_net:
                         ipv4_address: 172.30.0.2
-
+                volumes:
+                    - type: volume
+                      source: pgdata
+                      target: /var/lib/postgresql/data
             inmanta-server:
                 container_name: inmanta_orchestrator
                 image: containers.inmanta.com/containers/service-orchestrator:|version_major|
@@ -126,14 +137,14 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
                 depends_on:
                     - "postgres"
                 command: "server --wait-for-host inmanta_db --wait-for-port 5432"
-
         networks:
             inm_net:
                 ipam:
                     driver: default
                     config:
                         - subnet: 172.30.0.0/16
-
+        volumes:
+            pgdata:
 
     You can paste this script in a file named `docker-compose.yml` and ensure you have you license files available.
     With the proposed config, they should be located in a ``resources/`` folder on the side of the docker-compose file you create,
@@ -146,6 +157,10 @@ Here is a minimalistic docker-compose file content that can be used to deploy th
     docker-compose up
 
 You should be able to reach the orchestrator to this address: `http://172.30.0.3:8888 <http://172.30.0.3:8888>`_.
+
+The PostgreSQL server started by the above-mentioned docker-compose file has a named volume ``pgdata`` attached. This
+means that no data will be lost when the PostgreSQL container restarts. Pass the ``-v`` option to the
+``docker-compose down`` to remove the volume.
 
 The default server config included in the container images assumes that the orchestrator can reach a database server
 with hostname ``inmanta_db`` and that it can authenticate to it using the username ``inmanta``

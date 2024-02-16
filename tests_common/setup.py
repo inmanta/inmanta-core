@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 from os import path
 
 from setuptools import find_namespace_packages, setup
 
-version = "11.0.2"
+version = "11.1.0"
 
 requires = [
     "asyncpg",

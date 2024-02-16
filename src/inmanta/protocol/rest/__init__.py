@@ -15,11 +15,12 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 import json
 import logging
 import uuid
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, cast  # noqa: F401
 
 import pydantic
@@ -28,7 +29,7 @@ from tornado import escape
 
 from inmanta import const, util
 from inmanta.data.model import BaseModel
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import auth, common, exceptions
 from inmanta.protocol.common import ReturnValue
 from inmanta.types import Apireturn, JsonType
 
@@ -47,7 +48,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 def authorize_request(
-    auth_data: Optional[MutableMapping[str, str]], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
+    auth_data: Optional[auth.claim_type], metadata: dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
     Authorize a request based on the given data
@@ -516,7 +517,7 @@ class RESTBase(util.TaskHandler):
         config: common.UrlMethod,
         message: dict[str, object],
         request_headers: Mapping[str, str],
-        auth: Optional[MutableMapping[str, str]] = None,
+        auth: Optional[auth.claim_type] = None,
     ) -> common.Response:
         try:
             if kwargs is None or config is None:
@@ -526,10 +527,10 @@ class RESTBase(util.TaskHandler):
             message.update(kwargs)
 
             if config.properties.validate_sid:
-                if "sid" not in message:
+                if "sid" not in message or not isinstance(message["sid"], str):
                     raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
-                sid = uuid.UUID(message["sid"])
+                sid = uuid.UUID(str(message["sid"]))
                 if not isinstance(sid, uuid.UUID) or not self.validate_sid(sid):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 

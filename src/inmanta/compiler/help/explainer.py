@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 import re
 from abc import ABC, abstractmethod
@@ -57,7 +58,7 @@ class ExplainerABC(ABC):
 
     @abstractmethod
     def explain(self, problem: CompilerException) -> list[str]:
-        ...
+        pass
 
 
 Explainable = TypeVar("Explainable", bound=CompilerException)

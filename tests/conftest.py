@@ -15,13 +15,14 @@
 
     Contact: code@inmanta.com
 """
+
 import warnings
 
 from tornado.httpclient import AsyncHTTPClient
 
 import toml
-from inmanta.config import AuthJWTConfig
 from inmanta.logging import InmantaLoggerConfig
+from inmanta.protocol import auth
 
 """
 About the use of @parametrize_any and @slowtest:
@@ -579,7 +580,7 @@ def reset_all_objects():
     InmantaBootloader.AVAILABLE_EXTENSIONS = None
     V2ModuleBuilder.DISABLE_DEFAULT_ISOLATED_ENV_CACHED = False
     compiler.Finalizers.reset_finalizers()
-    AuthJWTConfig.reset()
+    auth.AuthJWTConfig.reset()
     InmantaLoggerConfig.clean_instance()
     AsyncHTTPClient.configure(None)
 
@@ -631,7 +632,7 @@ def inmanta_config() -> Iterator[ConfigParser]:
     config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
-    yield config.Config._get_instance()
+    yield config.Config.get_instance()
 
 
 @pytest.fixture
@@ -767,11 +768,14 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -862,12 +866,15 @@ async def server_multi(
                 token = protocol.encode_token(ct)
                 config.Config.set(x, "token", token)
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -1675,12 +1682,41 @@ def tmpvenv_active_inherit(deactive_venv, tmpdir: py.path.local) -> Iterator[env
     loader.unload_modules_for_path(venv.site_packages_dir)
 
 
+@pytest.fixture
+def create_empty_local_package_index_factory() -> Callable[[str], str]:
+    """
+    A fixture that acts as a factory to create empty local pip package indexes.
+    Each call creates a new index in a different temporary directory.
+    """
+
+    created_directories: list[str] = []
+
+    def _create_local_package_index(prefix: str = "test"):
+        """
+        Creates an empty pip index. The prefix argument is used as a prefix for the temporary directory name
+        for clarity and debugging purposes. The 'dir2pi' tool will then create a 'simple' directory inside
+        this temporary directory, which contains the index files.
+        """
+        tmpdir = tempfile.mkdtemp(prefix=f"{prefix}-")
+        created_directories.append(tmpdir)  # Keep track of the tempdir for cleanup
+        dir2pi(argv=["dir2pi", tmpdir])
+        index_dir = os.path.join(tmpdir, "simple")  # The 'simple' directory is created inside the tmpdir by dir2pi
+        return index_dir
+
+    yield _create_local_package_index
+
+    # Cleanup after the session ends
+    for directory in created_directories:
+        shutil.rmtree(directory)
+
+
 @pytest.fixture(scope="session")
 def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
     """
     Creates a local pip index for all v2 modules in the modules v2 dir. The modules are built and published to the index.
     :return: The path to the index
     """
+
     cache_dir = os.path.abspath(os.path.join(os.path.dirname(modules_v2_dir), f"{os.path.basename(modules_v2_dir)}.cache"))
     build_dir = os.path.join(cache_dir, "build")
     index_dir = os.path.join(build_dir, "simple")
@@ -1702,8 +1738,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         )
 
     if _should_rebuild_cache():
-        logger.info(f"Cache {cache_dir} is dirty. Rebuilding cache.")
-        # Remove cache
+        logger.info("Cache %s is dirty. Rebuilding cache.", cache_dir)  # Remove cache
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
         os.makedirs(build_dir)
@@ -1721,7 +1756,7 @@ def local_module_package_index(modules_v2_dir: str) -> Iterator[str]:
         # Update timestamp file
         open(timestamp_file, "w").close()
     else:
-        logger.info(f"Using cache {cache_dir}")
+        logger.info("Using cache %s", cache_dir)
 
     yield index_dir
 
@@ -1741,6 +1776,7 @@ async def migrate_db_from(
     # restore old version
     with open(marker.args[0]) as fh:
         await PGRestore(fh.readlines(), postgresql_client).run()
+        logger.debug("Restored %s", marker.args[0])
 
     bootloader: InmantaBootloader = InmantaBootloader()
 

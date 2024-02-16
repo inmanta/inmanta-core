@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import datetime
 import typing
 import uuid
@@ -556,6 +557,7 @@ class Parameter(BaseModel):
 
 class Fact(Parameter):
     resource_id: ResourceIdStr
+    expires: bool = True
 
 
 class Agent(BaseModel):

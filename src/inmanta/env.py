@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import enum
 import importlib.util
 import json
@@ -45,6 +46,7 @@ from inmanta.ast import CompilerException
 from inmanta.data.model import LEGACY_PIP_DEFAULT, PipConfig
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.stable_api import stable_api
+from inmanta.util import strtobool
 from packaging import version
 
 LOGGER = logging.getLogger(__name__)
@@ -454,6 +456,8 @@ class Pip(PipCommandBuilder):
                 del sub_env["PIP_INDEX_URL"]
             if "PIP_PRE" in sub_env:
                 del sub_env["PIP_PRE"]
+            if "PIP_NO_INDEX" in sub_env:
+                del sub_env["PIP_NO_INDEX"]
 
             # setting this env_var to os.devnull disables the loading of all pip configuration file
             sub_env["PIP_CONFIG_FILE"] = os.devnull
@@ -506,6 +510,7 @@ class Pip(PipCommandBuilder):
         if return_code != 0:
             not_found: list[str] = []
             conflicts: list[str] = []
+            indexes: str = ""
             for line in full_output:
                 m = re.search(r"No matching distribution found for ([\S]+)", line)
                 if m:
@@ -514,8 +519,19 @@ class Pip(PipCommandBuilder):
 
                 if "versions have conflicting dependencies" in line:
                     conflicts.append(line)
+                # Get the indexes line from full_output
+                # This is not printed when not using any index or when only using PyPi
+                if "Looking in indexes:" in line:
+                    indexes = line
             if not_found:
-                raise PackageNotFound("Packages %s were not found in the given indexes." % ", ".join(not_found))
+                no_index: bool = "--no-index" in cmd or strtobool(env.get("PIP_NO_INDEX", "false"))
+                if no_index:
+                    msg = "Packages %s were not found. No indexes were used." % ", ".join(not_found)
+                elif indexes:
+                    msg = "Packages %s were not found in the given indexes. (%s)" % (", ".join(not_found), indexes)
+                else:
+                    msg = "Packages %s were not found at PyPI." % ", ".join(not_found)
+                raise PackageNotFound(msg)
             if conflicts:
                 raise ConflictingRequirements("\n".join(conflicts))
             raise PipInstallError(

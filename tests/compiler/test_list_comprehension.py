@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import textwrap
 
 import pytest
@@ -848,7 +849,7 @@ def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> 
     snippetcompiler.setup_for_error(
         textwrap.dedent(
             """
-            typedef mytype as int matching self in [x for x in [1, 2] if 42]
+            typedef mytype as int matching self in [x for x in [1,2] if 42]
             entity A:
                 mytype n = 0
             end
@@ -858,7 +859,7 @@ def test_list_comprehension_type_error_direct_execute_guard(snippetcompiler) -> 
         ),
         (
             "Invalid value `42`: the guard condition for a list comprehension must be a boolean expression"
-            " (reported in [x for x in [1,2] if 42] ({dir}/main.cf:1))"
+            " (reported in [x for x in [1, 2] if 42] ({dir}/main.cf:1))"
         ),
     )
 

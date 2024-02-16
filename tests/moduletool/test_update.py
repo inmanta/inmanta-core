@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import os
 
 import py.path
@@ -124,9 +125,9 @@ def test_module_update_with_v2_module(
                 dest_dir=module_dir,
                 new_version=Version(current_version),
                 new_name=module_name,
-                new_requirements=[InmantaModuleRequirement(Requirement.parse("module2<3.0.0"))]
-                if module_name == "module1"
-                else None,
+                new_requirements=(
+                    [InmantaModuleRequirement(Requirement.parse("module2<3.0.0"))] if module_name == "module1" else None
+                ),
                 install=False,
                 publish_index=pip_index,
                 new_content_init_cf="import module2" if module_name == "module1" else None,

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import asyncio
 import copy
 import datetime
@@ -86,7 +87,7 @@ In general, locks should be acquired consistently with delete cascade lock order
 are as follows. This list should be extended when new locks (explicit or implicit) are introduced. The rules below are written
 as `A -> B`, meaning A should be locked before B in any transaction that acquires a lock on both.
 - Code -> ConfigurationModel
-- Agent -> Agentprocess -> Agentinstance
+- Agentprocess -> Agentinstance -> Agent
 """
 
 
@@ -2814,7 +2815,8 @@ class Environment(BaseDocument):
         """
         async with self.get_connection(connection=connection) as con:
             await Agent.delete_all(environment=self.id, connection=con)
-            await AgentProcess.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on agentinstance
+            await AgentInstance.delete_all(tid=self.id, connection=con)
+            await AgentProcess.delete_all(environment=self.id, connection=con)
             await Compile.delete_all(environment=self.id, connection=con)  # Triggers cascading delete on report table
             await Parameter.delete_all(environment=self.id, connection=con)
             await Notification.delete_all(environment=self.id, connection=con)
@@ -2985,6 +2987,7 @@ class Parameter(BaseDocument):
     :param source: The source of the parameter
     :param resource_id: An optional resource id
     :param updated: When was the parameter updated last
+    :param expires: Boolean denoting whether this parameter expires.
 
     :todo Add history
     """
@@ -2999,20 +3002,24 @@ class Parameter(BaseDocument):
     resource_id: m.ResourceIdStr = ""
     updated: Optional[datetime.datetime] = None
     metadata: Optional[JsonType] = None
+    expires: bool
 
     @classmethod
     async def get_updated_before_active_env(cls, updated_before: datetime.datetime) -> list["Parameter"]:
         """
         Retrieve the list of parameters that were updated before a specified datetime for environments that are not halted
+
         """
         query = f"""
-         WITH non_halted_envs AS (
-          SELECT id FROM public.environment WHERE NOT halted
+        WITH non_halted_envs AS (
+            SELECT id FROM public.environment WHERE NOT halted
         )
         SELECT * FROM {cls.table_name()}
         WHERE environment IN (
-          SELECT id FROM non_halted_envs
-        ) and updated < $1;
+            SELECT id FROM non_halted_envs
+        )
+        AND updated < $1
+        AND expires = true;
         """
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
@@ -3042,6 +3049,7 @@ class Parameter(BaseDocument):
             source=self.source,
             updated=self.updated,
             metadata=self.metadata,
+            expires=self.expires,
         )
 
 
@@ -3907,9 +3915,9 @@ class Compile(BaseDocument):
             do_export=requested_compile["do_export"],
             force_update=requested_compile["force_update"],
             metadata=json.loads(requested_compile["metadata"]) if requested_compile["metadata"] else {},
-            environment_variables=json.loads(requested_compile["environment_variables"])
-            if requested_compile["environment_variables"]
-            else {},
+            environment_variables=(
+                json.loads(requested_compile["environment_variables"]) if requested_compile["environment_variables"] else {}
+            ),
             partial=requested_compile["partial"],
             removed_resource_sets=requested_compile["removed_resource_sets"],
             exporter_plugin=requested_compile["exporter_plugin"],
@@ -5259,7 +5267,7 @@ class ConfigurationModel(BaseDocument):
         connection: Optional[Connection] = None,
     ) -> "ConfigurationModel":
         """
-        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigururationModel will
+        Create and insert a new configurationmodel that is the result of a partial compile. The new ConfigurationModel will
         contain all the undeployables and skipped_for_undeployables present in the partial_base version that are not part of
         the partial compile, i.e. not present in rids_in_partial_compile.
         """
@@ -5299,7 +5307,7 @@ class ConfigurationModel(BaseDocument):
                 $4,
                 $5,
                 (
-                    SELECT array_agg(rid)
+                    SELECT coalesce(array_agg(rid), '{{}}')
                     FROM (
                         -- Undeployables in previous version of the model that are not part of the partial compile.
                         (
@@ -5315,7 +5323,7 @@ class ConfigurationModel(BaseDocument):
                     ) AS all_undeployable
                 ),
                 (
-                    SELECT array_agg(rid)
+                    SELECT coalesce(array_agg(rid), '{{}}')
                     FROM (
                         -- skipped_for_undeployables in previous version of the model that are not part of the partial
                         -- compile.

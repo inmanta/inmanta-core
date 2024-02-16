@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
 import pytest
 
 import inmanta.ast.type as inmanta_type
@@ -35,8 +34,8 @@ from inmanta.execute.dataflow import (
 @pytest.mark.parametrize(
     "value_string,other_stmts",
     [
-        ("[1,2,3]", []),
-        ("{'a': 1}", []),
+        ("[1,2,a]", ["a=5"]),
+        ("{'a': a}", ["a=5"]),
         ("std::replace('Hello World?', '?', '!')", []),
         ("true or true", []),
         ("true and true", []),
