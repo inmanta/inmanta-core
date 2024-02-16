@@ -34,7 +34,7 @@ import time
 import zipfile
 from argparse import ArgumentParser, RawTextHelpFormatter
 from collections import abc
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from configparser import ConfigParser
 from functools import total_ordering
 from re import Pattern
