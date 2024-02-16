@@ -886,8 +886,12 @@ def p_index_lookup(p: YaccProduction) -> None:
 def p_short_index_lookup(p: YaccProduction) -> None:
     "index_lookup : expression '[' param_list ']'"
     attref = p[1]
-    # TODO: ....
-    assert isinstance(attref, AttributeReference)
+    if not isinstance(attref, AttributeReference):
+        raise ParserException(
+            attref.location,
+            attref,
+            f"Short index lookup must start with an attribute reference (`<expression>.<id>`), but got `{repr(attref)}`",
+        )
     p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3][0], p[3][1])
     attach_lnr(p, 2)
 

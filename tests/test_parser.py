@@ -739,6 +739,20 @@ a = vm.files[path="/etc/motd"]
     assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
 
 
+def test_short_index_lookup_wrong():
+    with pytest.raises(
+        ParserException,
+        match=re.escape(
+            "Short index lookup must start with an attribute reference (`<expression>.<id>`), but got `files` (test:2:9)"
+        ),
+    ):
+        parse_code(
+            """
+    a = files[path="/etc/motd"]
+    """
+        )
+
+
 def test_short_index_lookup_kwargs():
     statements = parse_code(
         """
