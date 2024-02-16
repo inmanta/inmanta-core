@@ -28,7 +28,7 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Callable, Coroutine, Iterable, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Dict, Optional, Union, cast
@@ -755,7 +755,7 @@ class AgentInstance:
 
         def periodic_schedule(
             kind: str,
-            action: Callable[[], Awaitable[object]],
+            action: Callable[[], Coroutine[object, None, object]],
             interval: Union[int, str],
             splay_value: int,
             initial_time: datetime.datetime,
