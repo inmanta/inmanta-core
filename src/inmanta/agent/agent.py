@@ -346,6 +346,7 @@ class InProcessExecutor(Executor):
                 status=const.ResourceState.unavailable,
                 messages=[msg],
             )
+            return
 
         ctx = handler.HandlerContext(resource)
         ctx.debug(
@@ -390,8 +391,6 @@ class InProcessExecutor(Executor):
         )
         if response.code != 200:
             LOGGER.error("Resource status update failed %s", response.result)
-
-        return None
 
     def cache(self, model_version: int) -> CacheVersionContext:
         return self.agent._cache.manager(model_version)
@@ -1071,11 +1070,13 @@ class AgentInstance:
                 if len(resources) > 0:
                     self._nq.reload(resources, undeployable, deploy_request, executor)
 
-    async def dryrun(self, dry_run_id: uuid.UUID, version: int) -> Apireturn:
-        self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
+    async def dryrun(self, dry_run_id: uuid.UUID, env_id: uuid.UUID, version: int) -> Apireturn:
+        self.process.add_background_task(self.do_run_dryrun(version, dry_run_id, env_id))
         return 200
 
-    async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID) -> None:
+    async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID, env_id: uuid.UUID) -> None:
+        started = datetime.datetime.now().astimezone()
+
         async with self.dryrunlock:
             async with self.ratelimiter:
                 response = await self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
@@ -1089,12 +1090,35 @@ class AgentInstance:
 
                 # this only works with InProcessExecutor
                 # TODO: adapt for ExternalExecutor
-                undeployable, resources, _ = await self.setup_executor(
+                undeployable, resource_refs, _ = await self.setup_executor(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
 
                 self._cache.open_version(version)
-                for resource in resources:
+                for resource_ref in resource_refs:
+                    try:
+                        resource: Resource = Resource.deserialize(resource_ref)
+                    except Exception:
+                        msg = (
+                            data.LogLine.log(
+                                level=const.LogLevel.ERROR,
+                                msg="Unable to deserialize %(resource_id)s",
+                                resource_id=resource_ref["id"].resource_version_str(),
+                                timestamp=datetime.datetime.now().astimezone(),
+                            ),
+                        )
+
+                        await self.get_client().resource_action_update(
+                            tid=env_id,
+                            resource_ids=[resource_ref["id"].resource_version_str()],
+                            action_id=uuid.uuid4(),
+                            action=const.ResourceAction.dryrun,
+                            started=started,
+                            finished=datetime.datetime.now().astimezone(),
+                            status=const.ResourceState.unavailable,
+                            messages=[msg],
+                        )
+                        return
                     ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now().astimezone()
                     provider = None
@@ -1183,9 +1207,11 @@ class AgentInstance:
         async with self.ratelimiter:
             # this only works with InProcessExecutor
             # TODO: adapt for ExternalExecutor
-            undeployable, resources, _ = await self.setup_executor(resource["model"], const.ResourceAction.getfact, [resource])
+            undeployable, resource_refs, _ = await self.setup_executor(
+                resource["model"], const.ResourceAction.getfact, [resource]
+            )
 
-            if undeployable or not resources:
+            if undeployable or not resource_refs:
                 self.logger.warning(
                     "Cannot retrieve fact for %s because resource is undeployable or code could not be loaded", resource["id"]
                 )
@@ -1194,7 +1220,8 @@ class AgentInstance:
             started = datetime.datetime.now().astimezone()
             provider = None
             try:
-                resource_obj = resources[0]
+                resource_obj: Resource = Resource.deserialize(resource_refs[0])
+
                 ctx = handler.HandlerContext(resource_obj)
 
                 version = resource_obj.id.get_version()
@@ -1729,7 +1756,7 @@ class Agent(SessionEndpoint):
 
         LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, dry_run_id, version, env)
 
-        return await instance.dryrun(dry_run_id, version)
+        return await instance.dryrun(dry_run_id, env, version)
 
     def check_storage(self) -> dict[str, str]:
         """
