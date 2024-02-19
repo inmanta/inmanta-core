@@ -84,8 +84,7 @@
 
         implement InterfaceIPAssignment using parents
 
-    We also need to add a lifecycle to the entity. This is done by using ``ServiceEntityBinding``. By using the ``ServiceEntityBinding``
-    we can add a lifecycle to the entity and give it a name:
+    We also need to add a lifecycle and a name to the service. This is done by creating an instance of the ``ServiceEntityBinding`` entity:
 
     .. code-block:: inmanta
 
