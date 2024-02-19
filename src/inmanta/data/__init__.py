@@ -4478,8 +4478,6 @@ class Resource(BaseDocument):
     :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                            used to determine if a resource describes the same state across versions
     :param resource_id_value: The attribute value from the resource id
-    :param last_non_deploying_status: The last status of this resource that is not the 'deploying' status.
-    :param last_success: The last time this resource (with this ID) was deployed successfully, across versions and hashes
     """
 
     __primary_key__ = ("environment", "model", "resource_id")
