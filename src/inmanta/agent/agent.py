@@ -164,7 +164,7 @@ class ResourceInstallSpec:
 
 class Executor(ABC):
     """
-    This class encapsulates abstraction around a process able to deploy a resource.
+    This class represents a process able to deploy a resource.
     This requires the following behaviours:
 
     - Ability to set up prior to deploy: install and load specific version of handler code (+ requirements) for this resource
