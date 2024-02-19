@@ -88,7 +88,7 @@ class ResourceActionBase(abc.ABC):
     future: ResourceActionResultFuture
     dependencies: list["ResourceActionBase"]
     # resourceid -> attribute -> {current: , desired:}
-    changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
+    # changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
 
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         """
@@ -101,8 +101,8 @@ class ResourceActionBase(abc.ABC):
         # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False
         self.gid: uuid.UUID = gid
-        self.status: Optional[const.ResourceState] = None
-        self.change: Optional[const.Change] = const.Change.nochange
+        # self.status: Optional[const.ResourceState] = None
+        # self.change: Optional[const.Change] = const.Change.nochange
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -162,6 +162,12 @@ class ResourceInstallSpec:
     sources: Sequence["ModuleSource"]
 
 
+class ResourceReference(dict[str, object]):
+    """
+    In memory dict representation of the desired state of a resource
+    """
+
+
 class Executor(ABC):
     """
     This class represents a process able to deploy a resource.
@@ -183,10 +189,10 @@ class Executor(ABC):
         self,
         gid: uuid.UUID,
         resource_id: Id,
-        resource: dict[str, object],
+        resource: ResourceReference,
         env_id: uuid.UUID,
         reason: str,
-    ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
+    ) -> None:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
@@ -311,7 +317,7 @@ class InProcessExecutor(Executor):
         resource: dict[str, object],
         env_id: uuid.UUID,
         reason: str,
-    ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
+    ) -> None:
         started: datetime.datetime = datetime.datetime.now().astimezone()
         # TODO: double check: is this required? Is failure handled properly?
 
@@ -348,7 +354,7 @@ class InProcessExecutor(Executor):
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("Failed to report the start of the deployment to the server")
         else:
-            await self._execute(resource, ctx=ctx, requires=requires)
+            await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
@@ -376,7 +382,7 @@ class InProcessExecutor(Executor):
         if response.code != 200:
             LOGGER.error("Resource status update failed %s", response.result)
 
-        return ctx.status, ctx.change, changes
+        return None
 
 
 class ExternalExecutor(Executor):
@@ -392,11 +398,13 @@ class ExternalExecutor(Executor):
         resource_id: Id,
         resource: dict[str, object],
         env_id: uuid.UUID,
-        ):
+        reason: str,
+        ) -> None:
         raise NotImplementedError
 
     @classmethod
     async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client):
+        # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
 
 class ResourceAction(ResourceActionBase):
@@ -405,7 +413,7 @@ class ResourceAction(ResourceActionBase):
         scheduler: "ResourceScheduler",
         executor: Executor,
         env_id: uuid.UUID,
-        resource: dict[str, object],
+        resource: ResourceReference,
         gid: uuid.UUID,
         reason: str,
     ) -> None:
@@ -413,7 +421,7 @@ class ResourceAction(ResourceActionBase):
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         super().__init__(scheduler, Id.parse_id(resource["id"]), gid, reason)
-        self.resource: dict[str, object] = resource
+        self.resource: ResourceReference = resource
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
 
@@ -440,9 +448,9 @@ class ResourceAction(ResourceActionBase):
                         # self.running will be set to false when self.cancel is called
                         # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                         return
-                    self.status = self.undeployable
-                    self.change = const.Change.nochange
-                    self.changes = {}
+                    # self.status = self.undeployable
+                    # self.change = const.Change.nochange
+                    # self.changes = {}
                     self.future.set_result(ResourceActionResult(cancel=False))
                     return
                 finally:
@@ -473,8 +481,8 @@ class ResourceAction(ResourceActionBase):
                         reason=self.reason,
                     )
                     self.status = status
-                    self.change = change
-                    self.changes = changes
+                    # self.change = change
+                    # self.changes = changes
 
                     self.future.set_result(ResourceActionResult(cancel=False))
                 finally:
@@ -684,7 +692,7 @@ class ResourceScheduler:
 
     def reload(
         self,
-        resources: Sequence[Mapping[str, object]],
+        resources: Sequence[ResourceReference],
         undeployable: dict[ResourceVersionIdStr, ResourceState],
         new_request: DeployRequest,
         executor: Executor,
@@ -1220,7 +1228,7 @@ class AgentInstance:
 
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[dict[str, object]], Executor]:
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceReference], Executor]:
         # TODO refactor wiring of tuples around -> not sure how
 
         """
@@ -1241,14 +1249,14 @@ class AgentInstance:
         )
         executor, failed_resource_types = await self.get_executor(code, self.get_client())
 
-        loaded_resources: list[dict[str, object]] = []
+        loaded_resources: list[ResourceReference] = []
         failed_resources: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
         for res in resources:
             res["attributes"]["id"] = res["id"]
             if res["resource_type"] not in failed_resource_types:
-                loaded_resources.append(res["attributes"])
+                loaded_resources.append(ResourceReference(res["attributes"]))
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
@@ -1256,7 +1264,7 @@ class AgentInstance:
             else:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
-                loaded_resources.append(res["attributes"])
+                loaded_resources.append(ResourceReference(res["attributes"]))
 
         if len(failed_resources) > 0:
             log = data.LogLine.log(
@@ -1566,7 +1574,7 @@ class Agent(SessionEndpoint):
                     # TODO what if server call fails ?
                     pass
 
-        return sorted(resource_install_specs, key=lambda resource_install_spec: resource_install_spec.resource_type)
+        return resource_install_specs
 
     async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> Set[str]:
         """Ensure that the code for the given environment and version is loaded"""
