@@ -94,6 +94,7 @@ class Config:
     def _get_instance(cls) -> ConfigParser:
         if cls.__instance is None:
             cls.load_config()
+            assert cls.__instance is not None
 
         return cls.__instance
 

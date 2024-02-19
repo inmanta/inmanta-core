@@ -543,7 +543,7 @@ def reset_metrics():
     pyformance.set_global_registry(MetricsRegistry())
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
@@ -622,7 +622,7 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config() -> Iterator[ConfigParser]:
+def inmanta_config(clean_reset) -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -1436,7 +1436,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 
 @pytest.fixture(scope="function")
 def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
@@ -1447,7 +1447,7 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
