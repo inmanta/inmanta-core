@@ -53,7 +53,7 @@ from inmanta.server import config as opt
 from inmanta.server import protocol
 from inmanta.server.protocol import ReturnClient, ServerSlice, SessionListener, SessionManager
 from inmanta.server.server import Server
-from inmanta.types import Apireturn, ArgumentTypes
+from inmanta.types import Apireturn, ArgumentTypes, ReturnTupple
 
 from ..data.dataview import AgentView
 from . import config as server_config
@@ -295,7 +295,7 @@ class AgentManager(ServerSlice, SessionListener):
         should_be_unpaused_on_resume: bool,
         endpoint: Optional[str] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ):
+    ) -> None:
         """
         Set the unpause_on_resume field of an agent (or all agents in an environment when the endpoint is set to None)
         so that the agent is paused or unpaused after the environment is resumed
@@ -812,7 +812,7 @@ class AgentManager(ServerSlice, SessionListener):
             return 200, {"enabled": True}
         return 200, {"enabled": False}
 
-    async def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
+    async def get_agent_process_report(self, agent_sid: uuid.UUID) -> ReturnTupple:
         ap = await data.AgentProcess.get_one(sid=agent_sid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}
@@ -869,7 +869,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             return 404, {"message": "resource_id parameter is required."}
 
-    @protocol.handle(methods_v2.get_agents, env="tid")
+    @handle(methods_v2.get_agents, env="tid")
     async def get_agents(
         self,
         env: data.Environment,
@@ -897,7 +897,7 @@ class AgentManager(ServerSlice, SessionListener):
         except (InvalidFilter, InvalidSort, data.InvalidQueryParameter, data.InvalidFieldNameException) as e:
             raise BadRequest(e.message) from e
 
-    @protocol.handle(methods_v2.get_agent_process_details, env="tid")
+    @handle(methods_v2.get_agent_process_details, env="tid")
     async def get_agent_process_details(self, env: data.Environment, id: uuid.UUID, report: bool = False) -> model.AgentProcess:
         agent_process = await data.AgentProcess.get_one(environment=env.id, sid=id)
         if not agent_process:

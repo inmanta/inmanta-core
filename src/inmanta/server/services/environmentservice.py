@@ -174,7 +174,7 @@ class EnvironmentService(protocol.ServerSlice):
         if setting is None or setting.name == data.AUTO_FULL_COMPILE:
             if setting is not None:
                 LOGGER.info("Environment setting %s changed. Rescheduling full compiles.", setting.name)
-            self.compiler_service.schedule_full_compile(env, await env.get(data.AUTO_FULL_COMPILE))
+            self.compiler_service.schedule_full_compile(env, str(await env.get(data.AUTO_FULL_COMPILE)))
 
     def _disable_schedules(self, env: data.Environment) -> None:
         """
@@ -424,7 +424,7 @@ class EnvironmentService(protocol.ServerSlice):
         if len(envs) > 0 and envs[0].id != environment_id:
             raise BadRequest(f"Project with id={project} already has an environment with name {name}")
 
-        fields = {"name": name}
+        fields: dict[str, str | int | uuid.UUID] = {"name": name}
         if repository is not None:
             fields["repo_url"] = repository
 

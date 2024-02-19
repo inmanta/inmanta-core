@@ -104,7 +104,7 @@ class CallTarget:
         return url_map
 
 
-class Endpoint(TaskHandler):
+class Endpoint(TaskHandler[None]):
     """
     An end-point in the rpc framework
     """
