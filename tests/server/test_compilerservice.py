@@ -36,9 +36,7 @@ from pytest import approx
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 import utils
-from inmanta import config
-from inmanta import config as inmanta_config
-from inmanta import data
+from inmanta import config, data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
@@ -791,7 +789,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.result["count"] == 5
 
     # clear the environment
-    state_dir = inmanta_config.state_dir.get()
+    state_dir = config.state_dir.get()
     project_dir = os.path.join(state_dir, "server", "environments", environment)
     assert os.path.exists(project_dir)
 
