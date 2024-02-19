@@ -4887,9 +4887,6 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resource_details(cls, env: uuid.UUID, resource_id: m.ResourceIdStr) -> Optional[m.ReleasedResourceDetails]:
-        # TODO: we could replace the scan query with a join if we write the last released version to the shared state
-        # we could similarly get rid of first_generated
-
         status_subquery = """
         (CASE WHEN
             (SELECT resource.model < MAX(configurationmodel.version)
@@ -5174,7 +5171,6 @@ class Resource(BaseDocument):
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> None:
         """Update the data in the resource_persistent_state table"""
-        # TODO: link with instance is weak
         args = ArgumentCollector(2)
 
         invalues = {

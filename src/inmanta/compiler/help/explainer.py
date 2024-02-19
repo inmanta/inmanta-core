@@ -57,8 +57,7 @@ class ExplainerABC(ABC):
     """
 
     @abstractmethod
-    def explain(self, problem: CompilerException) -> list[str]:
-        pass
+    def explain(self, problem: CompilerException) -> list[str]: ...
 
 
 Explainable = TypeVar("Explainable", bound=CompilerException)
