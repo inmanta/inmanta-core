@@ -1,0 +1,43 @@
+import lsm
+import lsm::fsm
+import ip
+
+entity InterfaceIPAssignment extends lsm::ServiceEntity:
+    """
+        Interface details.
+
+        :attr service_id: A unique ID for this service.
+
+        :attr router_ip: The IP address of the SR linux router that should be configured.
+        :attr router_name: The name of the SR linux router that should be configured.
+        :attr interface_name: The name of the interface of the router that should be configured.
+        :attr address: The IP-address to assign to the given interface.
+    """
+    string service_id
+
+    string router_ip
+    string router_name
+    string interface_name
+
+    string address
+    lsm::attribute_modifier address__modifier="rw+"
+
+end
+
+index InterfaceIPAssignment(service_id)
+
+implement InterfaceIPAssignment using parents
+
+binding = lsm::ServiceEntityBindingV2(
+    service_entity="__config__::InterfaceIPAssignment",
+    lifecycle=lsm::fsm::service,
+    service_entity_name="service_simple",
+)
+
+for instance in lsm::all(binding):
+    InterfaceIPAssignment(
+        instance_id=instance["id"],
+        entity_binding=binding,
+        **instance["attributes"],
+    )
+end
