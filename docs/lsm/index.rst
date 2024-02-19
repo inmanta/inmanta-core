@@ -103,8 +103,6 @@
 
     The state machine attached to the lifecycle will determine whether the API call is successful or not.
 
-    Each service instance defines 3 sets of its attributes that are used in different situations:
-
     ..
         TODO: Three set of attributes
 
