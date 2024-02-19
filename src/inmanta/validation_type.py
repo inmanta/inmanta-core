@@ -105,7 +105,7 @@ def parametrize_type(
     if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
         regex: object = validation_parameters["regex"]
         if regex is not None:
-            custom_annotations.append(regex_string(str(validation_parameters["regex"])))
+            custom_annotations.append(Regex(str(regex)))
         del validation_parameters["regex"]
 
     parametrized_type: object
