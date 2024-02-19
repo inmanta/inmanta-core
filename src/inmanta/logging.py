@@ -131,7 +131,6 @@ class InmantaLoggerConfig:
         logging.root.handlers = []
         logging.root.addHandler(self._handler)
 
-
         self._inmanta_plugin_pkg_regex = re.compile(r"^inmanta_plugins\.(?P<module_name>[^.]+)")
         # Regex that extracts the name of the module from a fully qualified import of a Python
         # module inside an Inmanta module.
