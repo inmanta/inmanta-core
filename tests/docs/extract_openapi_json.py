@@ -17,6 +17,7 @@
 """
 
 import json
+import os
 
 
 async def test_extract_openapi_for_docs(server, client):
@@ -26,5 +27,6 @@ async def test_extract_openapi_for_docs(server, client):
     content["servers"][0]["url"] = "http://<inmanta-server-address>"
     content["info"]["description"] = "Back to <a href='./index.html'>Main documentation</a> for more information"
     json_content = json.dumps(content)
-    with open("openapi.json", "w") as json_file:
+    output_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../..", "docs", "openapi.json"))
+    with open(output_file, "w") as json_file:
         json_file.write(json_content)
