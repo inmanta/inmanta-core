@@ -124,10 +124,8 @@
 
     Each service instance defines 3 sets of its attributes that are used in different situations:
 
-    - ``candidate_attributes``: The set of attributes used when the service instance model state is candidate or designed.
-    - ``active_attributes``: The set of attributes when the model is evaluated with only active instances.
-    - ``rollback_attributes``: The set of attributes that can be used to rollback active attributes that result in an error
-                                state.
+    ..
+        TODO: Three set of attributes
 
 
     Lifecycle Manager
