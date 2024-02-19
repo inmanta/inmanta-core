@@ -18,7 +18,9 @@
 
 import importlib
 import inspect
+import re
 from collections import abc
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Annotated, Optional
 
@@ -27,23 +29,40 @@ import pydantic
 from inmanta.execute.proxy import DictProxy
 from inmanta.stable_api import stable_api
 from inmanta.types import PrimitiveTypes
+from pydantic_core import CoreSchema, PydanticCustomError, core_schema
 
 
-def _regex_validator(regex: str) -> pydantic.AfterValidator:
-    """
-    Returns an AfterValidator for regex validation.
-    """
-    # python-re engine can only be selected on model/TypeAdapter level
-    # => add custom validator that delegates to TypeAdapter
-    return pydantic.AfterValidator(
-        pydantic.TypeAdapter(
-            Annotated[
-                str,
-                pydantic.StringConstraints(pattern=regex),
-            ],
-            config=pydantic.ConfigDict(regex_engine="python-re"),
-        ).validate_python
-    )
+@dataclass
+class Regex:
+    pattern: str
+
+    def __get_pydantic_core_schema__(self, source_type: object, handler: pydantic.GetCoreSchemaHandler) -> CoreSchema:
+        regex = re.compile(self.pattern)
+
+        def match(v: str) -> str:
+            if not regex.match(v):
+                raise PydanticCustomError(
+                    "string_pattern_mismatch",
+                    "String should match pattern '{pattern}'",
+                    {"pattern": self.pattern},
+                )
+            return v
+
+        return core_schema.no_info_after_validator_function(
+            match,
+            handler(source_type),
+        )
+
+    def __get_pydantic_json_schema__(
+        self, core_schema: CoreSchema, handler: pydantic.GetJsonSchemaHandler
+    ) -> pydantic.json_schema.JsonSchemaValue:
+        json_schema = handler(core_schema)
+        json_schema["pattern"] = self.pattern
+        return json_schema
+
+    def __hash__(self) -> int:
+        """The hash of the type is equal to the hash of the regex. Typing does deduplication, requiring this to be hashable."""
+        return hash(self.pattern)
 
 
 @stable_api
@@ -51,10 +70,7 @@ def regex_string(regex: str) -> object:
     """
     Returns a pydantic-compatible string type that validates values with the given Python regex.
     """
-    return Annotated[
-        str,
-        _regex_validator(regex),
-    ]
+    return Annotated[str, Regex(regex)]
 
 
 @stable_api
@@ -85,7 +101,7 @@ def parametrize_type(
     if base_type is pydantic.constr and validation_parameters is not None and "regex" in validation_parameters:
         regex: object = validation_parameters["regex"]
         if regex is not None:
-            custom_annotations.append(_regex_validator(str(validation_parameters["regex"])))
+            custom_annotations.append(regex_string(str(validation_parameters["regex"])))
         del validation_parameters["regex"]
 
     parametrized_type: object
