@@ -36,17 +36,16 @@ from pytest import approx
 import inmanta.ast.export as ast_export
 import inmanta.data.model as model
 import utils
-from inmanta import config, data
+from inmanta import config
+from inmanta import config as inmanta_config
+from inmanta import data
 from inmanta.const import ParameterSource
 from inmanta.data import APILIMIT, Compile, Report
 from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.export import cfg_env
 from inmanta.protocol import Result
-from inmanta.server import SLICE_COMPILER, SLICE_SERVER
-from inmanta.server import config as server_config
-from inmanta import config as inmanta_config
-from inmanta.server import protocol
+from inmanta.server import SLICE_COMPILER, SLICE_SERVER, protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
 from inmanta.server.services.compilerservice import CompilerService, CompileRun, CompileStateListener
