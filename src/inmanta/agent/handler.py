@@ -71,7 +71,7 @@ class provider:  # noqa: N801
         self._resource_type = resource_type
         self._name = name
 
-    def __call__(self, function):
+    def __call__(self, function: type["ResourceHandler[TResource]"]) -> "type[ResourceHandler[TResource]]":
         """
         The wrapping
         """
@@ -134,15 +134,15 @@ def cache(
             with the value as argument.
     """
 
-    def actual(f: Callable) -> T_FUNC:
+    def actual(f: Callable[..., object]) -> T_FUNC:
         myignore = set(ignore)
         sig = inspect.signature(f)
         myargs = list(sig.parameters.keys())[1:]
 
-        def wrapper(self, *args: object, **kwds: object) -> object:
+        def wrapper(self: HandlerAPI[TResource], *args: object, **kwds: object) -> object:
             kwds.update(dict(zip(myargs, args)))
 
-            def bound(**kwds):
+            def bound(**kwds: object) -> object:
                 return f(self, **kwds)
 
             return self.cache.get_or_else(

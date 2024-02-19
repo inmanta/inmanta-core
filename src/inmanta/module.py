@@ -75,7 +75,6 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-
 LOGGER = logging.getLogger(__name__)
 
 Path = NewType("Path", str)
@@ -330,21 +329,27 @@ class GitProvider:
     def fetch(self, repo: str) -> None:
         pass
 
+    @abstractmethod
     def status(self, repo: str, untracked_files_mode: Optional[UntrackedFilesMode] = None) -> str:
         pass
 
+    @abstractmethod
     def get_all_tags(self, repo: str) -> list[str]:
         pass
 
+    @abstractmethod
     def get_version_tags(self, repo: str, only_return_stable_versions: bool = False) -> list[version.Version]:
         pass
 
+    @abstractmethod
     def get_file_for_version(self, repo: str, tag: str, file: str) -> str:
         pass
 
+    @abstractmethod
     def checkout_tag(self, repo: str, tag: str) -> None:
         pass
 
+    @abstractmethod
     def commit(
         self,
         repo: str,
@@ -358,15 +363,19 @@ class GitProvider:
     def tag(self, repo: str, tag: str) -> None:
         pass
 
+    @abstractmethod
     def push(self, repo: str) -> str:
         pass
 
+    @abstractmethod
     def pull(self, repo: str) -> str:
         pass
 
+    @abstractmethod
     def get_remote(self, repo: str) -> Optional[str]:
         pass
 
+    @abstractmethod
     def is_git_repository(self, repo: str) -> bool:
         pass
 
@@ -2778,6 +2787,7 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         self._ast_cache: dict[str, tuple[list[Statement], BasicBlock]] = {}  # Cache for expensive method calls
         self._import_cache: dict[str, list[DefineImport]] = {}  # Cache for expensive method calls
         self._dir_cache: Dict[str, list[str]] = {}  # Cache containing all the filepaths present in a dir
+        self._plugin_file_cache: Optional[list[tuple[Path, ModuleName]]] = None
 
     @classmethod
     @abstractmethod
@@ -2961,17 +2971,19 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Generate a list of all Python files in the given plugin directory.
         This method prioritizes .pyc files over .py files, uses caching to avoid duplicate directory walks,
-        and only considers directories that are Python packages.
+        includes namespace packages and excludes the model directory.
         """
         # Return cached results if this directory has been processed before
         if plugin_dir in self._dir_cache:
             return self._dir_cache[plugin_dir]
 
         files: dict[str, str] = {}
+        model_dir_path: str = os.path.join(plugin_dir, "inmanta_plugins", self.name, "model")
 
-        for dirpath, dirnames, filenames in os.walk(plugin_dir):
-            # Skip non-package directories (those without an __init__.py or __init__.pyc file)
-            if not any(fname for fname in filenames if fname in ["__init__.py", "__init__.pyc"]):
+        for dirpath, dirnames, filenames in os.walk(plugin_dir, topdown=True):
+            # Modify dirnames in-place to stop os.walk from descending into any more subdirectories of the model directory
+            if dirpath.startswith(model_dir_path):
+                dirnames[:] = []
                 continue
 
             # Skip this directory if it's already in the cache
@@ -3012,6 +3024,9 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         """
         Returns a tuple (absolute_path, fq_mod_name) of all python files in this module.
         """
+        if self._plugin_file_cache is not None:
+            return iter(self._plugin_file_cache)
+
         plugin_dir: Optional[str] = self.get_plugin_dir()
 
         if plugin_dir is None:
@@ -3022,13 +3037,15 @@ class Module(ModuleLike[TModuleMetadata], ABC):
         ):
             raise InvalidModuleException(f"Directory {plugin_dir} should be a valid python package with a __init__.py file")
 
-        return (
+        self._plugin_file_cache = [
             (
                 Path(file_name),
                 ModuleName(self._get_fq_mod_name_for_py_file(file_name, plugin_dir, self.name)),
             )
             for file_name in self._list_python_files(plugin_dir)
-        )
+        ]
+
+        return iter(self._plugin_file_cache)
 
     def load_plugins(self) -> None:
         """
