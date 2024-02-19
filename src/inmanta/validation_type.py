@@ -34,6 +34,10 @@ from pydantic_core import CoreSchema, PydanticCustomError, core_schema
 
 @dataclass
 class Regex:
+    """Custom regex class that uses python regexes. This implementation also ensure that a json schema is generated
+    for the regex.
+    """
+
     pattern: str
 
     def __get_pydantic_core_schema__(self, source_type: object, handler: pydantic.GetCoreSchemaHandler) -> CoreSchema:
