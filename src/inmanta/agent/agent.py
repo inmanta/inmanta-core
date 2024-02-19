@@ -18,6 +18,7 @@
 
 import abc
 import asyncio
+import contextlib
 import dataclasses
 import datetime
 import enum
@@ -49,7 +50,6 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConf
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
-from inmanta.server.services.resourceservice import ResourceActionLogLine
 from inmanta.types import Apireturn, JsonType
 from inmanta.util import (
     CronSchedule,
@@ -204,11 +204,17 @@ class Executor(ABC):
         """
         pass
 
+    @abc.abstractmethod
+    async def cache(self, model_version: int) -> contextlib.AbstractContextManager:
+        # Todo: properly type return value -> create sibling class ExecutorCache from AgentCache?
+        pass
+
 
 class InProcessExecutor(Executor):
     """
     This executor is running in the same process as the agent
     """
+
     def __init__(self, client: protocol.Client, agent: "AgentInstance"):
         self.client: protocol.Client = client
         self.agent: AgentInstance = agent
@@ -324,7 +330,14 @@ class InProcessExecutor(Executor):
         try:
             resource: Resource = Resource.deserialize(resource)
         except Exception:
-            msg = data.LogLine.log(level=const.LogLevel.ERROR, msg="Unable to deserialize %(resource_id)s", resource_id=resource_id.resource_version_str(), timestamp=datetime.datetime.now().astimezone()),
+            msg = (
+                data.LogLine.log(
+                    level=const.LogLevel.ERROR,
+                    msg="Unable to deserialize %(resource_id)s",
+                    resource_id=resource_id.resource_version_str(),
+                    timestamp=datetime.datetime.now().astimezone(),
+                ),
+            )
 
             await self.client.resource_action_update(
                 tid=env_id,
@@ -334,7 +347,7 @@ class InProcessExecutor(Executor):
                 started=started,
                 finished=datetime.datetime.now().astimezone(),
                 status=const.ResourceState.unavailable,
-                messages=[msg]
+                messages=[msg],
             )
 
         ctx = handler.HandlerContext(resource)
@@ -368,7 +381,6 @@ class InProcessExecutor(Executor):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_id.resource_version_str(): ctx.changes}
         response = await self.client.resource_deploy_done(
             tid=env_id,
@@ -383,6 +395,10 @@ class InProcessExecutor(Executor):
             LOGGER.error("Resource status update failed %s", response.result)
 
         return None
+
+    @abc.abstractmethod
+    async def cache(self, model_version: int) -> contextlib.AbstractContextManager:
+        return self.agent._cache.manager(model_version)
 
 
 class ExternalExecutor(Executor):
@@ -399,13 +415,17 @@ class ExternalExecutor(Executor):
         resource: dict[str, object],
         env_id: uuid.UUID,
         reason: str,
-        ) -> None:
+    ) -> None:
         raise NotImplementedError
 
     @classmethod
     async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client):
         # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
+
+    async def cache(self, model_version: int) -> contextlib.AbstractContextManager:
+        raise NotImplementedError
+
 
 class ResourceAction(ResourceActionBase):
     def __init__(
@@ -425,11 +445,9 @@ class ResourceAction(ResourceActionBase):
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
 
-    async def execute(
-        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
-    ) -> None:
+    async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        with cache.manager(self.resource_id.get_version()):
+        with self.executor.cache(self.resource_id.get_version()):
             self.dependencies = [generation[Id.parse_id(x).resource_str()] for x in self.resource["requires"]]
             waiters = [x.future for x in self.dependencies]
             waiters.append(dummy.future)
@@ -473,14 +491,14 @@ class ResourceAction(ResourceActionBase):
                         # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                         return
 
-                    status, change, changes = await self.executor.execute(
+                    await self.executor.execute(
                         gid=self.gid,
                         resource_id=self.resource_id,
                         resource=self.resource,
                         env_id=self.env_id,
                         reason=self.reason,
                     )
-                    self.status = status
+                    # self.status = status
                     # self.change = change
                     # self.changes = changes
 
@@ -767,7 +785,7 @@ class ResourceScheduler:
         # Dispatch all actions
         # Will block on dependencies and dummy
         for resource_action in self.generation.values():
-            add_future(resource_action.execute(dummy, self.generation, self.cache))
+            add_future(resource_action.execute(dummy, self.generation))
 
         # Listen for completion
         self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values()))
@@ -1072,6 +1090,8 @@ class AgentInstance:
                     self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
+                # this only works with InProcessExecutor
+                # TODO: adapt for ExternalExecutor
                 undeployable, resources, _ = await self.setup_executor(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
@@ -1164,6 +1184,8 @@ class AgentInstance:
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
         async with self.ratelimiter:
+            # this only works with InProcessExecutor
+            # TODO: adapt for ExternalExecutor
             undeployable, resources, _ = await self.setup_executor(resource["model"], const.ResourceAction.getfact, [resource])
 
             if undeployable or not resources:
@@ -1584,7 +1606,8 @@ class Agent(SessionEndpoint):
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
-
+                if self._last_loaded[resource_install_spec.resource_type] == resource_install_spec.model_version:
+                    continue
                 # clear cache, for retry on failure
                 self._last_loaded[resource_install_spec.resource_type] = -1
             try:
