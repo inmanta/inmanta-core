@@ -225,7 +225,6 @@ class ResourceService(protocol.ServerSlice):
         log_limit: int,
         connection: Optional[Connection] = None,
     ) -> Apireturn:
-        # TODO: this output will slightly change
         # Validate resource version id
         try:
             Id.parse_resource_version_id(resource_id)
@@ -414,11 +413,6 @@ class ResourceService(protocol.ServerSlice):
         :param version: Version of the resources to consider.
         :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
         """
-        # TODO: can we get rid of mark deployed now????
-        # Looks feasible on the path for local dependencies, with start deploy
-        # what about CAD's?
-        # what about the dashboard?
-
         resources_version_ids: list[ResourceVersionIdStr] = [
             ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
         ]
@@ -926,7 +920,8 @@ class ResourceService(protocol.ServerSlice):
                                 status=status,
                                 connection=connection,
                             )
-                            extra_fields = {}
+                            # Not very typeable
+                            extra_fields: dict[str, Any] = {}
 
                             if change is not None and change != Change.nochange:
                                 extra_fields["last_produced_events"] = finished

@@ -35,11 +35,18 @@ from inmanta.util import parse_timestamp
 
 
 class ResourceFactory:
+    """Helper to construct resources and keep track of them"""
 
     def __init__(self, environment: UUID) -> None:
+        # Resources, as rid -> version -> resource
+        # Only tracks the default environment
         self.resources: dict[str, dict[int, data.Resource]] = defaultdict(dict)
+        # Deploy times, as rid -> version -> datetime
+        # Only tracks the default environment
         self.deploy_times: dict[str, dict[int, datetime.datetime]] = defaultdict(dict)
+        # Counter to make all data unique
         self.resource_counter = itertools.count()
+        # Default environment
         self.env = environment
 
     async def create_resource(

@@ -456,7 +456,6 @@ class OrchestrationService(protocol.ServerSlice):
         log_filter: Optional[str] = None,
         limit: Optional[int] = 0,
     ) -> Apireturn:
-        # TODO: output changes slightly
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
@@ -1105,7 +1104,6 @@ class OrchestrationService(protocol.ServerSlice):
                 now = datetime.datetime.now().astimezone()
 
                 if undep:
-                    # TODO: get rid of r_a_u ?
                     undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
                     # not checking error conditions
                     await self.resource_service.resource_action_update(
@@ -1125,7 +1123,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                     skippable = model.get_skipped_for_undeployable()
                     if skippable:
-                        # TODO: get rid of r_a_u ?
                         skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
                         # not checking error conditions
                         await self.resource_service.resource_action_update(
