@@ -45,6 +45,7 @@ from inmanta.export import cfg_env
 from inmanta.protocol import Result
 from inmanta.server import SLICE_COMPILER, SLICE_SERVER
 from inmanta.server import config as server_config
+from inmanta import config as inmanta_config
 from inmanta.server import protocol
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server.protocol import Server
@@ -791,7 +792,7 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert result.result["count"] == 5
 
     # clear the environment
-    state_dir = server_config.state_dir.get()
+    state_dir = inmanta_config.state_dir.get()
     project_dir = os.path.join(state_dir, "server", "environments", environment)
     assert os.path.exists(project_dir)
 
