@@ -364,8 +364,9 @@ class InProcessExecutor(Executor):
         except Exception:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("Failed to report the start of the deployment to the server")
-        else:
-            await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
+            return
+
+        await self._execute(resource, gid=gid, ctx=ctx, requires=requires)
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
