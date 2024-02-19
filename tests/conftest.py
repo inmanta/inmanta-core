@@ -541,7 +541,7 @@ def reset_metrics():
     pyformance.set_global_registry(MetricsRegistry())
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 async def clean_reset(create_db, clean_db, deactive_venv):
     reset_all_objects()
     config.Config._reset()
@@ -620,7 +620,7 @@ def free_socket():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def inmanta_config() -> Iterator[ConfigParser]:
+def inmanta_config(clean_reset) -> Iterator[ConfigParser]:
     config.Config.load_config()
     config.Config.set("auth_jwt_default", "algorithm", "HS256")
     config.Config.set("auth_jwt_default", "sign", "true")
@@ -766,11 +766,14 @@ async def server_config(event_loop, inmanta_config, postgres_db, database_name, 
     with tempfile.TemporaryDirectory() as state_dir:
         port = str(unused_tcp_port_factory())
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -861,12 +864,15 @@ async def server_multi(
                 token = protocol.encode_token(ct)
                 config.Config.set(x, "token", token)
 
+        # Config.set() always expects a string value
+        pg_password = "" if postgres_db.password is None else postgres_db.password
+
         port = str(unused_tcp_port_factory())
         config.Config.set("database", "name", database_name)
         config.Config.set("database", "host", "localhost")
         config.Config.set("database", "port", str(postgres_db.port))
         config.Config.set("database", "username", postgres_db.user)
-        config.Config.set("database", "password", postgres_db.password)
+        config.Config.set("database", "password", pg_password)
         config.Config.set("database", "connection_timeout", str(3))
         config.Config.set("config", "state-dir", state_dir)
         config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -1428,7 +1434,7 @@ def snippetcompiler_global() -> Iterator[SnippetCompilationTest]:
 
 @pytest.fixture(scope="function")
 def snippetcompiler(
-    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str
+    inmanta_config: ConfigParser, snippetcompiler_global: SnippetCompilationTest, modules_dir: str, clean_reset
 ) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with shared libs directory and compiler venv.
@@ -1439,7 +1445,7 @@ def snippetcompiler(
 
 
 @pytest.fixture(scope="function")
-def snippetcompiler_clean(modules_dir: str) -> Iterator[SnippetCompilationTest]:
+def snippetcompiler_clean(modules_dir: str, clean_reset) -> Iterator[SnippetCompilationTest]:
     """
     Yields a SnippetCompilationTest instance with its own libs directory and compiler venv.
     """
