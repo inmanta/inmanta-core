@@ -49,6 +49,7 @@ from collections import abc
 from configparser import ConfigParser
 from typing import Optional
 
+import asyncpg
 import click
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
@@ -64,11 +65,44 @@ from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, LoggerMode, _is_on_tty
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server import config
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version
 from inmanta.warnings import WarningsManager
 
 LOGGER = logging.getLogger("inmanta")
+
+
+async def wait_for_db(timeout=300):
+    """Wait for the database to be up by attempting to connect at intervals.
+
+    :param timeout: Maximum time to wait for the database to be up, in seconds.
+    """
+    if not config.db_wait_up.get():
+        return True  # we don't need to wait
+
+    start_time = asyncio.get_event_loop().time()
+
+    # Retrieve database connection settings from the configuration
+    db_settings = {
+        'host': config.db_host.get(),
+        'port': config.db_port.get(),
+        'user': config.db_username.get(),
+        'password': config.db_password.get(),
+        'database': config.db_name.get(),
+    }
+    while True:
+        try:
+            # Attempt to create a database connection
+            await asyncpg.connect(**db_settings)
+            LOGGER.info("Successfully connected to the database.")
+            return True
+        except Exception as e:
+            LOGGER.info("Waiting for database to be up")
+            await asyncio.sleep(1)  # Sleep for a second before retrying
+            if asyncio.get_event_loop().time() - start_time > timeout:
+                LOGGER.error("Timed out waiting for the database to be up.")
+                raise e
 
 
 @command("server", help_msg="Start the inmanta server")
@@ -85,6 +119,9 @@ def start_server(options: argparse.Namespace) -> None:
     setup_signal_handlers(ibl.stop)
 
     ioloop = IOLoop.current()
+
+    # Run database wait in the event loop before starting the server
+    ioloop.run_sync(lambda: wait_for_db())
 
     # handle startup exceptions
     def _handle_startup_done(fut: asyncio.Future) -> None:
@@ -363,7 +400,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--full",
         dest="full_deploy",
         help="Make the agents execute a full deploy instead of an incremental deploy. "
-        "Should be used together with the -d option",
+             "Should be used together with the -d option",
         action="store_true",
         default=False,
     )
@@ -386,7 +423,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--metadata",
         dest="metadata",
         help="JSON metadata why this compile happened. If a non-json string is "
-        "passed it is used as the 'message' attribute in the metadata.",
+             "passed it is used as the 'message' attribute in the metadata.",
         default=None,
     )
     parser.add_argument(
@@ -400,7 +437,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--export-plugin",
         dest="export_plugin",
         help="Only use this export plugin. This option also disables the execution of the plugins listed in "
-        "the configuration file in the export setting.",
+             "the configuration file in the export setting.",
         default=None,
     )
 
@@ -439,7 +476,7 @@ def export_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Se
         "--delete-resource-set",
         dest="delete_resource_set",
         help="Remove a resource set as part of a partial compile. This option can be provided multiple times and should always "
-        "be used together with the --partial option.",
+             "be used together with the --partial option.",
         action="append",
     )
     moduletool.add_deps_check_arguments(parser)
@@ -710,7 +747,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         action="count",
         default=0,
         help="Log level for messages going to the console. Default is warnings,"
-        "-v warning, -vv info, -vvv debug and -vvvv trace",
+             "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
     parser.add_argument(
         "--warnings",
@@ -745,7 +782,7 @@ def cmd_parser() -> argparse.ArgumentParser:
         action="count",
         default=argparse.SUPPRESS,
         help="Log level for messages going to the console. Default is warnings,"
-        "-v warning, -vv info, -vvv debug and -vvvv trace",
+             "-v warning, -vv info, -vvv debug and -vvvv trace",
     )
 
     subparsers = parser.add_subparsers(title="commands")

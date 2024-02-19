@@ -30,6 +30,7 @@ LOGGER = logging.getLogger(__name__)
 # Database
 #############################
 
+db_wait_up = Option("database", "wait_up", False, "If the server should wait for the DB to be up before starting", is_bool)
 db_host = Option("database", "host", "localhost", "Hostname or IP of the postgresql server", is_str)
 db_port = Option("database", "port", 5432, "The port of the postgresql server", is_int)
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server", is_str)
