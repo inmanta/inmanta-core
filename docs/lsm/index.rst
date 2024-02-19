@@ -1,4 +1,4 @@
-.. only:: iso
+.. only:: oss
 
     Inmanta Lifecycle Service Manager
     *********************************
@@ -62,37 +62,18 @@
     If no modifier is defined for an attribute, it will be ``rw`` by default.
     Here is an example of an entity definition where the modifier of the ``address`` attribute is set to ``rw+``.
 
-    .. code-block:: inmanta
-
-        entity InterfaceIPAssignment extends lsm::ServiceEntity:
-            """
-                Interface details.
-
-                :attr router_ip: The IP address of the SR linux router that should be configured.
-                :attr router_name: The name of the SR linux router that should be configured.
-                :attr interface_name: The name of the interface of the router that should be configured.
-                :attr address: The IP-address to assign to the given interface.
-            """
-
-            std::ipv_any_address router_ip
-            string router_name
-            string interface_name
-
-            std::ipv_any_interface address
-            lsm::attribute_modifier address__modifier="rw+"
-        end
-
-        implement InterfaceIPAssignment using parents
+    .. literalinclude:: index_sources/service_creation.cf
+        :linenos:
+        :language: inmanta
+        :lines: 1-29
 
     We also need to add a lifecycle and a name to the service. This is done by creating an instance of the ``ServiceEntityBinding`` entity:
 
-    .. code-block:: inmanta
-
-        binding = lsm::ServiceEntityBinding(
-            service_entity="__config__::InterfaceIPAssignment",
-            lifecycle=lsm::fsm::simple,
-            service_entity_name="interface-ip-assignment",
-        )
+    .. literalinclude:: index_sources/service_creation.cf
+        :linenos:
+        :language: inmanta
+        :lines: 30-36
+        :lineno-start: 25
 
     It's also possible to define a service identity for a service. For more information, see :ref:`service_identity`.
 
