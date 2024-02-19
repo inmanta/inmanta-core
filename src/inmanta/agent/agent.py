@@ -18,7 +18,6 @@
 
 import abc
 import asyncio
-import contextlib
 import dataclasses
 import datetime
 import enum
@@ -41,7 +40,7 @@ import pkg_resources
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
-from inmanta.agent.cache import AgentCache
+from inmanta.agent.cache import AgentCache, CacheVersionContext
 from inmanta.agent.handler import HandlerAPI, SkipResource
 from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
@@ -108,7 +107,7 @@ class ResourceActionBase(abc.ABC):
         self.logger: Logger = self.scheduler.logger
 
     async def execute(
-        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
+        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]"
     ) -> None:
         return
 
@@ -189,7 +188,7 @@ class Executor(ABC):
         self,
         gid: uuid.UUID,
         resource_id: Id,
-        resource: ResourceReference,
+        resource_ref: ResourceReference,
         env_id: uuid.UUID,
         reason: str,
     ) -> None:
@@ -198,14 +197,14 @@ class Executor(ABC):
 
         :param gid: unique id for this deploy
         :param resource_id: the resource id
-        :param resource: desired state for this resource as a dictionary
+        :param resource_ref: desired state for this resource as a ResourceReference
         :param env_id: the environment
         :param reason: textual reason for this deploy
         """
         pass
 
     @abc.abstractmethod
-    async def cache(self, model_version: int) -> contextlib.AbstractContextManager:
+    async def cache(self, model_version: int) -> CacheVersionContext:
         # Todo: properly type return value -> create sibling class ExecutorCache from AgentCache?
         pass
 
@@ -320,7 +319,7 @@ class InProcessExecutor(Executor):
         self,
         gid: uuid.UUID,
         resource_id: Id,
-        resource: dict[str, object],
+        resource_ref: ResourceReference,
         env_id: uuid.UUID,
         reason: str,
     ) -> None:
@@ -328,7 +327,7 @@ class InProcessExecutor(Executor):
         # TODO: double check: is this required? Is failure handled properly?
 
         try:
-            resource: Resource = Resource.deserialize(resource)
+            resource: Resource = Resource.deserialize(resource_ref)
         except Exception:
             msg = (
                 data.LogLine.log(
@@ -397,7 +396,7 @@ class InProcessExecutor(Executor):
         return None
 
     @abc.abstractmethod
-    async def cache(self, model_version: int) -> contextlib.AbstractContextManager:
+    async def cache(self, model_version: int) -> CacheVersionContext:
         return self.agent._cache.manager(model_version)
 
 
@@ -412,18 +411,19 @@ class ExternalExecutor(Executor):
         self,
         gid: uuid.UUID,
         resource_id: Id,
-        resource: dict[str, object],
+        resource_ref: ResourceReference,
         env_id: uuid.UUID,
         reason: str,
     ) -> None:
         raise NotImplementedError
 
     @classmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client):
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client) -> tuple[Self, Set[str]]:
         # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
 
-    async def cache(self, model_version: int) -> contextlib.AbstractContextManager:
+    async def cache(self, model_version: int) -> CacheVersionContext:
+        # TODO this cache should not rely on AgentCache
         raise NotImplementedError
 
 
@@ -512,7 +512,7 @@ class RemoteResourceAction(ResourceActionBase):
         super().__init__(scheduler, resource_id, gid, reason)
 
     async def execute(
-        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]", cache: AgentCache
+        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]"
     ) -> None:
         await dummy.future
         async with self.scheduler.agent.process.cad_ratelimiter:
@@ -1265,7 +1265,7 @@ class AgentInstance:
         """
         started = datetime.datetime.now().astimezone()
         executor: Executor
-        failed_resource_types: set[str]
+        failed_resource_types: Set[str]
         code: Sequence[ResourceInstallSpec] = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
@@ -1552,9 +1552,8 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def get_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> list[ResourceInstallSpec]:
-        failed_to_load: set[str] = set()
         if self._loader is None:
-            return failed_to_load
+            return []
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
@@ -1600,7 +1599,7 @@ class Agent(SessionEndpoint):
 
     async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> Set[str]:
         """Ensure that the code for the given environment and version is loaded"""
-        failed_to_load: set[str] = []
+        failed_to_load: set[str] = set()
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
@@ -1617,20 +1616,20 @@ class Agent(SessionEndpoint):
                     pip_config=resource_install_spec.pip_config,
                 )
                 LOGGER.debug(
-                    "Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.version
+                    "Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version
                 )
-                self._last_loaded[resource_install_spec.resource_type] = resource_install_spec.version
+                self._last_loaded[resource_install_spec.resource_type] = resource_install_spec.model_version
             except Exception:
                 LOGGER.exception(
                     "Failed to install handler %s version=%d",
                     resource_install_spec.resource_type,
-                    resource_install_spec.version,
+                    resource_install_spec.model_version,
                 )
                 failed_to_load.add(resource_install_spec.resource_type)
 
         return failed_to_load
 
-    async def _install(self, sources: list[ModuleSource], requirements: Sequence[str], pip_config: PipConfig) -> None:
+    async def _install(self, sources: Sequence[ModuleSource], requirements: Sequence[str], pip_config: PipConfig) -> None:
         if self._env is None or self._loader is None:
             raise Exception("Unable to load code when agent is started with code loading disabled.")
 
