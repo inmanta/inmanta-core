@@ -204,7 +204,7 @@ class Executor(ABC):
         pass
 
     @abc.abstractmethod
-    async def cache(self, model_version: int) -> CacheVersionContext:
+    def cache(self, model_version: int) -> CacheVersionContext:
         # Todo: properly type return value -> create sibling class ExecutorCache from AgentCache?
         pass
 
@@ -395,8 +395,7 @@ class InProcessExecutor(Executor):
 
         return None
 
-    @abc.abstractmethod
-    async def cache(self, model_version: int) -> CacheVersionContext:
+    def cache(self, model_version: int) -> CacheVersionContext:
         return self.agent._cache.manager(model_version)
 
 
@@ -422,7 +421,7 @@ class ExternalExecutor(Executor):
         # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
 
-    async def cache(self, model_version: int) -> CacheVersionContext:
+    def cache(self, model_version: int) -> CacheVersionContext:
         # TODO this cache should not rely on AgentCache
         raise NotImplementedError
 
@@ -494,7 +493,7 @@ class ResourceAction(ResourceActionBase):
                     await self.executor.execute(
                         gid=self.gid,
                         resource_id=self.resource_id,
-                        resource=self.resource,
+                        resource_ref=self.resource,
                         env_id=self.env_id,
                         reason=self.reason,
                     )
