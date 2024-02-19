@@ -29,7 +29,7 @@ import uuid
 from abc import ABC
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Callable, Coroutine, Iterable, Sequence, Mapping, Set
+from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Set
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
@@ -106,9 +106,7 @@ class ResourceActionBase(abc.ABC):
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
 
-    async def execute(
-        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]"
-    ) -> None:
+    async def execute(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
         return
 
     def is_running(self) -> bool:
@@ -417,7 +415,9 @@ class ExternalExecutor(Executor):
         raise NotImplementedError
 
     @classmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client) -> tuple[Self, Set[str]]:
+    async def get_executor(
+        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client
+    ) -> tuple[Self, Set[str]]:
         # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
 
@@ -510,9 +510,7 @@ class RemoteResourceAction(ResourceActionBase):
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         super().__init__(scheduler, resource_id, gid, reason)
 
-    async def execute(
-        self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]"
-    ) -> None:
+    async def execute(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
         await dummy.future
         async with self.scheduler.agent.process.cad_ratelimiter:
             try:
