@@ -52,14 +52,6 @@ class ConnectionNotInTransaction(ConnectionMaybeInTransaction):
     def call_after_tx(self, finalizer: Callable[[], object]) -> None:
         finalizer()
 
-    def __exit__(
-        self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> None:
-        return None
-
 
 class ConnectionInTransaction(ConnectionMaybeInTransaction):
 

@@ -795,7 +795,7 @@ class ResourceService(protocol.ServerSlice):
         is_increment_notification: bool = False,
         only_update_from_states: Optional[set[const.ResourceState]] = None,
         *,
-        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(None),
+        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
     ) -> Apireturn:
         """
         :param is_increment_notification: is this the increment calucation setting the deployed status,
@@ -1013,7 +1013,8 @@ class ResourceService(protocol.ServerSlice):
 
             def post_deploy_update() -> None:
                 assert model_version is not None  # mypy can't figure this out
-                # Make sure tasks are scheduled AFTER the tx is done
+                # Make sure tasks are scheduled AFTER the tx is done.
+                # This method is only called if the transaction commits successfully.
                 self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
 
                 waiting_agents = {
