@@ -1497,6 +1497,9 @@ class Changelog:
                 )
 
 
+ModuleChangelog = Changelog  # For backwards compatibility after class rename
+
+
 class ModuleBuildFailedError(Exception):
     def __init__(self, msg: str, *args: Any) -> None:
         self.msg = msg
