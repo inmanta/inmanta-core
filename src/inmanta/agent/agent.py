@@ -88,7 +88,6 @@ class ResourceActionBase(abc.ABC):
     future: ResourceActionResultFuture
     dependencies: list["ResourceActionBase"]
     # resourceid -> attribute -> {current: , desired:}
-    # changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]
 
     def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str) -> None:
         """
@@ -101,8 +100,6 @@ class ResourceActionBase(abc.ABC):
         # operation. This variable makes sure that the result cannot be set twice when the ResourceAction is cancelled.
         self.running: bool = False
         self.gid: uuid.UUID = gid
-        # self.status: Optional[const.ResourceState] = None
-        # self.change: Optional[const.Change] = const.Change.nochange
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
@@ -164,14 +161,11 @@ class ResourceReference(BaseModel):
     """
     In memory representation of the desired state of a resource
     """
+
     id: ResourceIdStr
     attributes: dict[str, object] = {}
     requires: list[ResourceVersionIdStr] = []
 
-    # def __init__(self, dict_repr: Mapping[str, object]):
-    #     self.id = dict_repr["id"]
-    #     self.attributes = dict_repr["attributes"]
-    #     self.requires = dict_repr["requires"]
 
 class Executor(ABC):
     """
@@ -447,7 +441,7 @@ class ResourceAction(ResourceActionBase):
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
-        super().__init__(scheduler, Id.parse_id(resource.id), gid, reason)
+        super().__init__(scheduler, Id.parse_id(resource.attributes["id"]), gid, reason)
         self.resource: ResourceReference = resource
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
@@ -473,9 +467,6 @@ class ResourceAction(ResourceActionBase):
                         # self.running will be set to false when self.cancel is called
                         # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                         return
-                    # self.status = self.undeployable
-                    # self.change = const.Change.nochange
-                    # self.changes = {}
                     self.future.set_result(ResourceActionResult(cancel=False))
                     return
                 finally:
@@ -505,9 +496,6 @@ class ResourceAction(ResourceActionBase):
                         env_id=self.env_id,
                         reason=self.reason,
                     )
-                    # self.status = status
-                    # self.change = change
-                    # self.changes = changes
 
                     self.future.set_result(ResourceActionResult(cancel=False))
                 finally:
@@ -764,9 +752,7 @@ class ResourceScheduler:
 
         # re-generate generation
         self.generation: dict[ResourceIdStr, ResourceAction] = {
-            resource.id: ResourceAction(
-                self, executor, self._env_id, resource, gid, self.running.reason
-            )
+            resource.id: ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
             for resource in resources
         }
 
@@ -1311,7 +1297,13 @@ class AgentInstance:
         for res in resources:
             res["attributes"]["id"] = res["id"]
             if res["resource_type"] not in failed_resource_types:
-                loaded_resources.append(ResourceReference(id=Id.parse_id(res["id"]).resource_str(), attributes=res["attributes"], requires=res["attributes"]["requires"]))
+                loaded_resources.append(
+                    ResourceReference(
+                        id=Id.parse_id(res["id"]).resource_str(),
+                        attributes=res["attributes"],
+                        requires=res["attributes"]["requires"],
+                    )
+                )
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
@@ -1319,7 +1311,9 @@ class AgentInstance:
             else:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
-                loaded_resources.append(ResourceReference(id=res["id"], attributes=res["attributes"], requires=res["attributes"]["requires"]))
+                loaded_resources.append(
+                    ResourceReference(id=res["id"], attributes=res["attributes"], requires=res["attributes"]["requires"])
+                )
 
         if len(failed_resources) > 0:
             log = data.LogLine.log(
