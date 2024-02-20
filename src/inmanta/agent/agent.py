@@ -1330,7 +1330,10 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> set[str]:
-        """Ensure that the code for the given environment and version is loaded"""
+        """
+        Ensure that the code for the given environment and version is loaded.
+        Return a list of all the ``resource_types`` that it failed to load.
+        """
         failed_to_load: set[str] = set()
         if self._loader is None:
             return failed_to_load
@@ -1353,6 +1356,7 @@ class Agent(SessionEndpoint):
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
                         requirements = set()
                         sources = []
+                        # Encapsulate source code details in ``ModuleSource`` objects
                         for source in result.result["data"]:
                             sources.append(
                                 ModuleSource(
@@ -1366,6 +1370,8 @@ class Agent(SessionEndpoint):
 
                         await self._install(sources, list(requirements))
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
+                        # Update the ``_last_loaded`` cache to indicate that the given resource type's code
+                        # was loaded successfully at the specified version.
                         self._last_loaded[rt] = version
                     except Exception:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)
