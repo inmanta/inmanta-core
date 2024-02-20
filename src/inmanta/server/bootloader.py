@@ -25,6 +25,8 @@ from pkgutil import ModuleInfo
 from types import ModuleType
 from typing import Optional
 
+import asyncpg
+
 from inmanta.const import EXTENSION_MODULE, EXTENSION_NAMESPACE
 from inmanta.server import config
 from inmanta.server.extensions import ApplicationContext, FeatureManager, InvalidSliceNameException
@@ -81,6 +83,12 @@ class InmantaBootloader:
         self.feature_manager: Optional[FeatureManager] = None
 
     async def start(self) -> None:
+        # Wait for the database to be up before starting the server
+        db_ready = await self.wait_for_db()
+        if not db_ready:
+            LOGGER.error("Failed to connect to the database within the timeout period.")
+            return  # or handle the error as appropriate
+
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
         LOGGER.info("Starting inmanta-server version %s", version)
@@ -236,3 +244,34 @@ class InmantaBootloader:
         ctx: ApplicationContext = self._collect_slices(exts, only_register_environment_settings)
         self.feature_manager = ctx.get_feature_manager()
         return ctx
+
+    async def wait_for_db(self, timeout=300):
+        """Wait for the database to be up by attempting to connect at intervals.
+
+        :param timeout: Maximum time to wait for the database to be up, in seconds.
+        """
+        if not config.db_wait_up.get():
+            return True  # we don't need to wait
+
+        start_time = asyncio.get_event_loop().time()
+
+        # Retrieve database connection settings from the configuration
+        db_settings = {
+            "host": config.db_host.get(),
+            "port": config.db_port.get(),
+            "user": config.db_username.get(),
+            "password": config.db_password.get(),
+            "database": config.db_name.get(),
+        }
+        while True:
+            try:
+                # Attempt to create a database connection
+                await asyncpg.connect(**db_settings)
+                LOGGER.info("Successfully connected to the database.")
+                return True
+            except Exception as e:
+                LOGGER.info("Waiting for database to be up")
+                await asyncio.sleep(1)  # Sleep for a second before retrying
+                if asyncio.get_event_loop().time() - start_time > timeout:
+                    LOGGER.error("Timed out waiting for the database to be up.")
+                    raise e
