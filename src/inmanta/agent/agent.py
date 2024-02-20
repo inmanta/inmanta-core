@@ -333,7 +333,7 @@ class InProcessExecutor(Executor):
         # TODO: double check: is this required? Is failure handled properly?
 
         try:
-            resource: Resource = Resource.deserialize(resource_ref.model_dump())
+            resource: Resource = Resource.deserialize(resource_ref.model_dump()["attributes"])
         except Exception:
             msg = (
                 data.LogLine.log(
