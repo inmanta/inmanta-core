@@ -813,6 +813,93 @@ async def test_server_logs_address(server_config, caplog, async_finalizer):
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
 
 
+class MockConnection:
+    """
+    Mock connection class to simulate an asyncpg connection.
+    This class includes a close method to mimic closing a database connection.
+    """
+
+    async def close(self):
+        return
+
+
+@pytest.mark.parametrize("wait_up", ["True", "False"])
+async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, wait_up):
+    """
+    Tests the Inmanta server bootloader's behavior with respect to waiting for the database to be ready before proceeding
+    with the startup, based on the 'wait_up' configuration.
+    """
+    state_dir = tmpdir.mkdir("state_dir").strpath
+    config.Config.set("database", "wait_up", wait_up)
+    config.Config.set("config", "state-dir", state_dir)
+
+    db_connect_called = asyncio.Event()
+    db_connect_success = asyncio.Event()
+
+    async def mock_asyncpg_connect(*args, **kwargs):
+        """
+        Mock function to replace asyncpg.connect.
+        Initially, simulates a connection failure. Once db_connect_success is set, it simulates a successful connection.
+        """
+        if not db_connect_called.is_set():
+            db_connect_called.set()
+            raise Exception("Connection failure")
+        else:
+            await db_connect_success.wait()
+            return MockConnection()
+
+    async def mock_start(self):
+        """Mocks the call to self.restserver.start()."""
+        return
+
+    async def mock_close():
+        """Mocks the call to conn.close()"""
+        return
+
+    monkeypatch.setattr("inmanta.server.protocol.Server.start", mock_start)
+    monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
+
+    caplog.set_level(logging.INFO)
+    caplog.clear()
+    ibl = InmantaBootloader()
+    start_task = asyncio.create_task(ibl.start())
+
+    if wait_up == "True":
+        await db_connect_called.wait()
+        db_connect_success.set()
+
+    await start_task
+
+    if wait_up == "True":
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up.")
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+    else:
+        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+
+    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+    await ibl.stop(timeout=15)
+
+
+@pytest.mark.parametrize("wait_up", ["True", "False"])
+async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, wait_up):
+    """
+    Tests the bootloader can connect to an existing database and can start.
+    """
+    config.Config.set("database", "wait_up", wait_up)
+    caplog.set_level(logging.INFO)
+    caplog.clear()
+    ibl = InmantaBootloader()
+    await ibl.start()
+    await ibl.stop(timeout=15)
+
+    if wait_up == "True":
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+    else:
+        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
     """
     Test querying resource actions via the API

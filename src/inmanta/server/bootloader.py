@@ -265,11 +265,12 @@ class InmantaBootloader:
         while True:
             try:
                 # Attempt to create a database connection
-                await asyncpg.connect(**db_settings)
+                conn = await asyncpg.connect(**db_settings, timeout=60)  # raises TimeoutError after 60 seconds
                 LOGGER.info("Successfully connected to the database.")
+                await conn.close()  # close the connection
                 return True
             except Exception as e:
-                LOGGER.info("Waiting for database to be up")
+                LOGGER.info("Waiting for database to be up.")
                 await asyncio.sleep(1)  # Sleep for a second before retrying
                 if asyncio.get_event_loop().time() - start_time > timeout:
                     LOGGER.error("Timed out waiting for the database to be up.")
