@@ -36,6 +36,7 @@ from logging import Logger
 from typing import Any, Dict, Iterator, Optional, Self, Union, cast
 
 import pkg_resources
+from pydantic import BaseModel
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -159,11 +160,18 @@ class ResourceInstallSpec:
     sources: Sequence["ModuleSource"]
 
 
-class ResourceReference(dict[str, object]):
+class ResourceReference(BaseModel):
     """
-    In memory dict representation of the desired state of a resource
+    In memory representation of the desired state of a resource
     """
+    id: ResourceIdStr
+    attributes: dict[str, object] = {}
+    requires: list[ResourceVersionIdStr] = []
 
+    # def __init__(self, dict_repr: Mapping[str, object]):
+    #     self.id = dict_repr["id"]
+    #     self.attributes = dict_repr["attributes"]
+    #     self.requires = dict_repr["requires"]
 
 class Executor(ABC):
     """
@@ -325,7 +333,7 @@ class InProcessExecutor(Executor):
         # TODO: double check: is this required? Is failure handled properly?
 
         try:
-            resource: Resource = Resource.deserialize(resource_ref)
+            resource: Resource = Resource.deserialize(resource_ref.model_dump())
         except Exception:
             msg = (
                 data.LogLine.log(
@@ -439,7 +447,7 @@ class ResourceAction(ResourceActionBase):
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
-        super().__init__(scheduler, Id.parse_id(resource["id"]), gid, reason)
+        super().__init__(scheduler, Id.parse_id(resource.id), gid, reason)
         self.resource: ResourceReference = resource
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
@@ -447,7 +455,7 @@ class ResourceAction(ResourceActionBase):
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
         with self.executor.cache(self.resource_id.get_version()):
-            self.dependencies = [generation[Id.parse_id(x).resource_str()] for x in self.resource["requires"]]
+            self.dependencies = [generation[Id.parse_id(x).resource_str()] for x in self.resource.requires]
             waiters = [x.future for x in self.dependencies]
             waiters.append(dummy.future)
             # Explicit cast is required because mypy has issues with * and generics
@@ -750,13 +758,13 @@ class ResourceScheduler:
 
         # start new run
         self.running = new_request
-        self.version = Id.parse_id(resources[0]["id"]).get_version()
+        self.version = Id.parse_id(resources[0].id).get_version()
         gid = uuid.uuid4()
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
         self.generation: dict[ResourceIdStr, ResourceAction] = {
-            Id.parse_id(resource["id"]).resource_str(): ResourceAction(
+            resource.id: ResourceAction(
                 self, executor, self._env_id, resource, gid, self.running.reason
             )
             for resource in resources
@@ -769,7 +777,7 @@ class ResourceScheduler:
                 self.generation[key].undeployable = undeployable[vid]
 
         # hook up Cross Agent Dependencies
-        all_dependencies: Iterator[Id] = (Id.parse_id(raw) for r in resources for raw in r.get("requires", []))
+        all_dependencies: Iterator[Id] = (Id.parse_id(raw) for r in resources for raw in r.requires)
         cross_agent_dependencies: Sequence[Id] = [rid for rid in all_dependencies if rid.get_agent_name() != self.name]
 
         for cad in cross_agent_dependencies:
@@ -1303,7 +1311,7 @@ class AgentInstance:
         for res in resources:
             res["attributes"]["id"] = res["id"]
             if res["resource_type"] not in failed_resource_types:
-                loaded_resources.append(ResourceReference(res["attributes"]))
+                loaded_resources.append(ResourceReference(id=Id.parse_id(res["id"]).resource_str(), attributes=res["attributes"], requires=res["attributes"]["requires"]))
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
@@ -1311,7 +1319,7 @@ class AgentInstance:
             else:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
-                loaded_resources.append(ResourceReference(res["attributes"]))
+                loaded_resources.append(ResourceReference(id=res["id"], attributes=res["attributes"], requires=res["attributes"]["requires"]))
 
         if len(failed_resources) > 0:
             log = data.LogLine.log(
