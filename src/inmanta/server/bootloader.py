@@ -83,10 +83,11 @@ class InmantaBootloader:
         self.feature_manager: Optional[FeatureManager] = None
 
     async def start(self) -> None:
-        # Wait for the database to be up before starting the server
-        db_ready = await self.wait_for_db()
-        if not db_ready:
-            LOGGER.error("Failed to connect to the database within the timeout period.")
+        if config.db_wait_up.get():
+            # Wait for the database to be up before starting the server
+            db_ready = await self.wait_for_db()
+            if not db_ready:
+                LOGGER.error("Failed to connect to the database within the timeout period.")
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
@@ -249,8 +250,6 @@ class InmantaBootloader:
 
         :param timeout: Maximum time to wait for the database to be up, in seconds.
         """
-        if not config.db_wait_up.get():
-            return True  # we don't need to wait
 
         start_time = asyncio.get_event_loop().time()
 

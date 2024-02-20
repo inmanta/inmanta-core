@@ -852,10 +852,6 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, wait_up):
         """Mocks the call to self.restserver.start()."""
         return
 
-    async def mock_close():
-        """Mocks the call to conn.close()"""
-        return
-
     monkeypatch.setattr("inmanta.server.protocol.Server.start", mock_start)
     monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
 
