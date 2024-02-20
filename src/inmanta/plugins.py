@@ -21,40 +21,35 @@ import collections.abc
 import inspect
 import os
 import subprocess
+import typing
 import warnings
-from collections import abc
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Type, TypeVar
 
+import inmanta.ast
 import inmanta.ast.type as inmanta_type
-from inmanta import const, protocol, util
-from inmanta.ast import LocatableString, Location, Namespace, Range, RuntimeException, TypeNotFoundException, WithComment
-from inmanta.ast.type import NamedType
-from inmanta.config import Config
-from inmanta.execute.proxy import DynamicProxy
-from inmanta.execute.runtime import QueueScheduler, Resolver, ResultVariable
-from inmanta.execute.util import NoneValue, Unknown
-from inmanta.stable_api import stable_api
-from inmanta.warnings import InmantaWarning
+import inmanta.warnings
+from inmanta import config, const, protocol, stable_api, util
+from inmanta.execute import proxy, runtime
+from inmanta.execute import util as execute_util
 
-T = TypeVar("T")
+T = typing.TypeVar("T")
 
-if TYPE_CHECKING:
-    from inmanta.ast.statements import DynamicStatement
-    from inmanta.ast.statements.call import FunctionCall
-    from inmanta.compiler import Compiler
+if typing.TYPE_CHECKING:
+    from inmanta import compiler
+    from inmanta.ast import statements
+    from inmanta.ast.statements import call
 
 
-class PluginDeprecationWarning(InmantaWarning):
+class PluginDeprecationWarning(inmanta.warnings.InmantaWarning):
     pass
 
 
-@stable_api
+@stable_api.stable_api
 class Context:
     """
     An instance of this class is used to pass context to the plugin
     """
 
-    __client: Optional["protocol.Client"] = None
+    __client: typing.Optional["protocol.Client"] = None
     __sync_client = None
 
     @classmethod
@@ -64,7 +59,12 @@ class Context:
         return cls.__client
 
     def __init__(
-        self, resolver: Resolver, queue: QueueScheduler, owner: "FunctionCall", plugin: "Plugin", result: ResultVariable
+        self,
+        resolver: runtime.Resolver,
+        queue: runtime.QueueScheduler,
+        owner: "call.FunctionCall",
+        plugin: "Plugin",
+        result: runtime.ResultVariable,
     ) -> None:
         self.resolver = resolver
         self.queue = queue
@@ -73,30 +73,30 @@ class Context:
         self.result = result
         self.compiler = queue.get_compiler()
 
-    def get_resolver(self) -> Resolver:
+    def get_resolver(self) -> runtime.Resolver:
         return self.resolver
 
-    def get_type(self, name: LocatableString) -> inmanta_type.Type:
+    def get_type(self, name: inmanta.ast.LocatableString) -> inmanta_type.Type:
         """
         Get a type from the configuration model.
         """
         try:
             return self.queue.get_types()[str(name)]
         except KeyError:
-            raise TypeNotFoundException(name, self.owner.namespace)
+            raise inmanta.ast.TypeNotFoundException(name, self.owner.namespace)
 
-    def get_queue_scheduler(self) -> QueueScheduler:
+    def get_queue_scheduler(self) -> runtime.QueueScheduler:
         return self.queue
 
     def get_environment_id(self) -> str:
-        env = str(Config.get("config", "environment", None))
+        env = str(config.Config.get("config", "environment", None))
 
         if env is None:
             raise Exception("The environment of the model should be configured in config>environment")
 
         return env
 
-    def get_compiler(self) -> "Compiler":
+    def get_compiler(self) -> "compiler.Compiler":
         return self.queue.get_compiler()
 
     def get_data_dir(self) -> str:
@@ -118,7 +118,7 @@ class Context:
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
 
-    def run_sync(self, function: Callable[[], abc.Awaitable[T]], timeout: int = 5) -> T:
+    def run_sync(self, function: typing.Callable[[], collections.abc.Awaitable[T]], timeout: int = 5) -> T:
         """
         Execute the async function and return its result. This method uses this thread's current (not running) event loop if
         there is one, otherwise it creates a new one. The main use for this function is to use the inmanta internal rpc to
@@ -129,14 +129,14 @@ class Context:
         :return: The result of the async call.
         :raises ConnectionRefusedError: When the function timeouts this exception is raised.
         """
-        with_timeout: abc.Awaitable[T] = asyncio.wait_for(function(), timeout)
+        with_timeout: collections.abc.Awaitable[T] = asyncio.wait_for(function(), timeout)
         try:
             return util.ensure_event_loop().run_until_complete(with_timeout)
         except TimeoutError:
             raise ConnectionRefusedError()
 
 
-@stable_api
+@stable_api.stable_api
 class PluginMeta(type):
     """
     A metaclass that keeps track of concrete plugin subclasses. This class is responsible for all plugin registration.
@@ -158,14 +158,14 @@ class PluginMeta(type):
         cls.__functions[plugin_class.__fq_plugin_name__] = plugin_class
 
     @classmethod
-    def get_functions(cls) -> dict[str, "Type[Plugin]"]:
+    def get_functions(cls) -> dict[str, "typing.Type[Plugin]"]:
         """
         Get all functions that are registered
         """
         return dict(cls.__functions)
 
     @classmethod
-    def clear(cls, inmanta_module: Optional[str] = None) -> None:
+    def clear(cls, inmanta_module: typing.Optional[str] = None) -> None:
         """
         Clears registered plugin functions.
 
@@ -189,11 +189,11 @@ class Null(inmanta_type.Type):
     accept null as an argument or return value.
     """
 
-    def validate(self, value: Optional[object]) -> bool:
-        if isinstance(value, NoneValue):
+    def validate(self, value: typing.Optional[object]) -> bool:
+        if isinstance(value, execute_util.NoneValue):
             return True
 
-        raise RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise inmanta.ast.RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def type_string(self) -> str:
         return "null"
@@ -227,7 +227,7 @@ class PluginValue:
 
     def __init__(self, type_expression: object) -> None:
         self.type_expression = type_expression
-        self._resolved_type: Optional[inmanta_type.Type] = None
+        self._resolved_type: typing.Optional[inmanta_type.Type] = None
 
     @property
     def resolved_type(self) -> inmanta_type.Type:
@@ -236,14 +236,14 @@ class PluginValue:
         once this object has been normalized (which happens during the plugin normalization).
         """
         if self._resolved_type is None:
-            raise RuntimeException(
+            raise inmanta.ast.RuntimeException(
                 stmt=None,
                 msg=f"{type(self).__name__} {self.VALUE_NAME} ({repr(self.type_expression)}) has not been normalized, "
                 "its resolved type can't be accessed.",
             )
         return self._resolved_type
 
-    def resolve_type(self, plugin: "Plugin", resolver: Namespace) -> inmanta_type.Type:
+    def resolve_type(self, plugin: "Plugin", resolver: inmanta.ast.Namespace) -> inmanta_type.Type:
         """
         Convert the string representation of this argument's type to a type.
         If no type annotation is present or if the type annotation allows any type to be passed
@@ -258,14 +258,18 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
-            raise RuntimeException(
+            raise inmanta.ast.RuntimeException(
                 stmt=None,
                 msg="Bad annotation in plugin %s for %s, expected str but got %s (%s)"
                 % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
             )
 
-        plugin_line: Range = Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
-        locatable_type: LocatableString = LocatableString(self.type_expression, plugin_line, 0, resolver)
+        plugin_line: inmanta.ast.Range = inmanta.ast.Range(
+            plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1
+        )
+        locatable_type: inmanta.ast.LocatableString = inmanta.ast.LocatableString(
+            self.type_expression, plugin_line, 0, resolver
+        )
         self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
         return self._resolved_type
 
@@ -277,7 +281,7 @@ class PluginValue:
 
         :param value: The value to validate
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, execute_util.Unknown):
             # Value is not known, it can not be validated
             return False
 
@@ -299,7 +303,7 @@ class PluginArgument(PluginValue):
         self,
         arg_name: str,
         arg_type: object,
-        arg_position: Optional[int] = None,
+        arg_position: typing.Optional[int] = None,
         default_value: object = NO_DEFAULT_VALUE_SET,
     ) -> None:
         super().__init__(arg_type)
@@ -311,7 +315,7 @@ class PluginArgument(PluginValue):
         self.VALUE_NAME = self.arg_name
 
     @property
-    def default_value(self) -> Optional[object]:
+    def default_value(self) -> typing.Optional[object]:
         if not self.has_default_value():
             raise Exception("PluginArgument doesn't have a default value")
         return self._default_value
@@ -338,15 +342,15 @@ class PluginReturn(PluginValue):
     VALUE_NAME = "return value"
 
 
-class Plugin(NamedType, WithComment, metaclass=PluginMeta):
+class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMeta):
     """
     This class models a plugin that can be called from the language.
     """
 
     deprecated: bool = False
-    replaced_by: Optional[str] = None
+    replaced_by: typing.Optional[str] = None
 
-    def __init__(self, namespace: Namespace) -> None:
+    def __init__(self, namespace: inmanta.ast.Namespace) -> None:
         self.ns = namespace
         self.namespace = namespace
 
@@ -355,9 +359,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         # Load the signature and build all the PluginArgument objects corresponding to it
         self.args: list[PluginArgument] = list()
-        self.var_args: Optional[PluginArgument] = None
+        self.var_args: typing.Optional[PluginArgument] = None
         self.kwargs: dict[str, PluginArgument] = dict()
-        self.var_kwargs: Optional[PluginArgument] = None
+        self.var_kwargs: typing.Optional[PluginArgument] = None
         self.all_args: dict[str, PluginArgument] = dict()
         self.return_type: PluginReturn = PluginReturn("null")
         if hasattr(self.__class__, "__function__"):
@@ -365,7 +369,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         self.new_statement = None
 
-        filename: Optional[str] = inspect.getsourcefile(self.__class__.__function__)
+        filename: typing.Optional[str] = inspect.getsourcefile(self.__class__.__function__)
         assert filename is not None
         try:
             line: int = inspect.getsourcelines(self.__class__.__function__)[1] + 1
@@ -376,7 +380,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         if self.__class__.__function__.__doc__:
             self.comment = self.__class__.__function__.__doc__
 
-        self.location = Location(filename, line)
+        self.location = inmanta.ast.Location(filename, line)
 
     def normalize(self) -> None:
         self.resolver = self.namespace
@@ -391,7 +395,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
 
         self.return_type.resolve_type(self, self.resolver)
 
-    def _load_signature(self, function: Callable[..., object]) -> None:
+    def _load_signature(self, function: typing.Callable[..., object]) -> None:
         """
         Load the signature from the given python function, and update the relevant attributes
         of this object.
@@ -418,7 +422,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             Get the annotation for a specific argument, and if none exists, raise an exception
             """
             if arg not in arg_spec.annotations:
-                raise RuntimeException(
+                raise inmanta.ast.RuntimeException(
                     stmt=None,
                     msg=f"All arguments of plugin {repr(self.get_full_name())} should be annotated: "
                     f"{repr(arg)} has no annotation",
@@ -531,7 +535,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         elif self.var_args is not None:
             return self.var_args
         else:
-            raise RuntimeException(None, f"{self.get_full_name()}() got an unexpected positional argument: {position}")
+            raise inmanta.ast.RuntimeException(
+                None, f"{self.get_full_name()}() got an unexpected positional argument: {position}"
+            )
 
     def get_kwarg(self, name: str) -> PluginArgument:
         """
@@ -551,10 +557,10 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # Trying to provide a keyword argument which doesn't exist
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise RuntimeException(None, f"{self.get_full_name()}() got an unexpected keyword argument: '{name}'")
+            raise inmanta.ast.RuntimeException(None, f"{self.get_full_name()}() got an unexpected keyword argument: '{name}'")
 
     def report_missing_arguments(
-        self, missing_args: collections.abc.Sequence[str], args_sort: Literal["positional", "keyword-only"]
+        self, missing_args: collections.abc.Sequence[str], args_sort: typing.Literal["positional", "keyword-only"]
     ) -> None:
         """
         Helper method to raise an exception specifying that the given arguments are missing.  We try here
@@ -571,7 +577,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         if len(missing_args) == 1:
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
+            raise inmanta.ast.RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
         if len(missing_args) > 1:
             arg_names = " and ".join(
                 (
@@ -581,7 +587,9 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             )
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise RuntimeException(None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}")
+            raise inmanta.ast.RuntimeException(
+                None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}"
+            )
 
     def check_args(self, args: list[object], kwargs: dict[str, object]) -> bool:
         """
@@ -599,7 +607,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             # (1) We got too many positional arguments
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise RuntimeException(
+            raise inmanta.ast.RuntimeException(
                 None, f"{self.get_full_name()}() takes {len(self.args)} positional arguments but {len(args)} were given"
             )
 
@@ -645,14 +653,14 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
             if kwarg.arg_position is not None and kwarg.arg_position < len(args):
                 # The exception raised here tries to match as closely as possible what python
                 # would have raised as exception
-                raise RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
+                raise inmanta.ast.RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
             if not kwarg.validate(value):
                 return False
         return True
 
-    def emit_statement(self) -> "DynamicStatement":
+    def emit_statement(self) -> "statements.DynamicStatement":
         """
         This method is called to determine if the plugin call pushes a new
         statement
@@ -675,7 +683,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
                     raise Exception(f"{self.__function_name__} requires {_bin} to be available in $PATH")
 
     @classmethod
-    def deprecate_function(cls, replaced_by: Optional[str] = None) -> None:
+    def deprecate_function(cls, replaced_by: typing.Optional[str] = None) -> None:
         cls.deprecated = True
         cls.replaced_by = replaced_by
 
@@ -693,17 +701,17 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         def new_arg(arg: object) -> object:
             if isinstance(arg, Context):
                 return arg
-            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
+            elif isinstance(arg, execute_util.Unknown) and self.is_accept_unknowns():
                 return arg
             else:
-                return DynamicProxy.return_value(arg)
+                return proxy.DynamicProxy.return_value(arg)
 
         new_args = [new_arg(arg) for arg in args]
         new_kwargs = {k: new_arg(v) for k, v in kwargs.items()}
 
         value = self.call(*new_args, **new_kwargs)
 
-        value = DynamicProxy.unwrap(value)
+        value = proxy.DynamicProxy.unwrap(value)
 
         # Validate the returned value
         self.return_type.validate(value)
@@ -717,7 +725,7 @@ class Plugin(NamedType, WithComment, metaclass=PluginMeta):
         return self.get_full_name()
 
 
-@stable_api
+@stable_api.stable_api
 class PluginException(Exception):
     """
     Base class for custom exceptions raised from a plugin.
@@ -727,13 +735,13 @@ class PluginException(Exception):
         self.message = message
 
 
-@stable_api
+@stable_api.stable_api
 def plugin(
-    function: Optional[Callable] = None,
-    commands: Optional[list[str]] = None,
+    function: typing.Optional[typing.Callable] = None,
+    commands: typing.Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> Callable:
+) -> typing.Callable:
     """
     Python decorator to register functions with inmanta as plugin
 
@@ -746,11 +754,11 @@ def plugin(
     """
 
     def curry_name(
-        name: Optional[str] = None,
-        commands: Optional[list[str]] = None,
+        name: typing.Optional[str] = None,
+        commands: typing.Optional[list[str]] = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
-    ) -> Callable:
+    ) -> typing.Callable:
         """
         Function to curry the name of the function
         """
@@ -760,7 +768,7 @@ def plugin(
             Create class to register the function and return the function itself
             """
 
-            def wrapper(self, *args: object, **kwargs: object) -> Any:
+            def wrapper(self, *args: object, **kwargs: object) -> typing.Any:
                 """
                 Python will bind the function as method into the class
                 """
@@ -805,15 +813,18 @@ def plugin(
         return fnc(function)
 
 
-@stable_api
+@stable_api.stable_api
 def deprecated(
-    function: Optional[Callable] = None, *, replaced_by: Optional[str] = None, **kwargs: abc.Mapping[str, object]
-) -> Callable:
+    function: typing.Optional[typing.Callable] = None,
+    *,
+    replaced_by: typing.Optional[str] = None,
+    **kwargs: collections.abc.Mapping[str, object],
+) -> typing.Callable:
     """
     the kwargs are currently ignored but where added in case we want to add something later on.
     """
 
-    def inner(fnc: Callable):
+    def inner(fnc: typing.Callable):
         if hasattr(fnc, "__plugin__"):
             fnc.__plugin__.deprecate_function(replaced_by)
         else:
