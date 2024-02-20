@@ -24,7 +24,7 @@ import subprocess
 import typing
 import warnings
 
-import inmanta.ast
+import inmanta.ast as ast
 import inmanta.ast.type as inmanta_type
 import inmanta.warnings
 from inmanta import config, const, protocol, stable_api, util
@@ -76,14 +76,14 @@ class Context:
     def get_resolver(self) -> runtime.Resolver:
         return self.resolver
 
-    def get_type(self, name: inmanta.ast.LocatableString) -> inmanta_type.Type:
+    def get_type(self, name: ast.LocatableString) -> inmanta_type.Type:
         """
         Get a type from the configuration model.
         """
         try:
             return self.queue.get_types()[str(name)]
         except KeyError:
-            raise inmanta.ast.TypeNotFoundException(name, self.owner.namespace)
+            raise ast.TypeNotFoundException(name, self.owner.namespace)
 
     def get_queue_scheduler(self) -> runtime.QueueScheduler:
         return self.queue
@@ -193,7 +193,7 @@ class Null(inmanta_type.Type):
         if isinstance(value, execute_util.NoneValue):
             return True
 
-        raise inmanta.ast.RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
+        raise ast.RuntimeException(None, f"Invalid value '{value}', expected {self.type_string()}")
 
     def type_string(self) -> str:
         return "null"
@@ -236,14 +236,14 @@ class PluginValue:
         once this object has been normalized (which happens during the plugin normalization).
         """
         if self._resolved_type is None:
-            raise inmanta.ast.RuntimeException(
+            raise ast.RuntimeException(
                 stmt=None,
                 msg=f"{type(self).__name__} {self.VALUE_NAME} ({repr(self.type_expression)}) has not been normalized, "
                 "its resolved type can't be accessed.",
             )
         return self._resolved_type
 
-    def resolve_type(self, plugin: "Plugin", resolver: inmanta.ast.Namespace) -> inmanta_type.Type:
+    def resolve_type(self, plugin: "Plugin", resolver: ast.Namespace) -> inmanta_type.Type:
         """
         Convert the string representation of this argument's type to a type.
         If no type annotation is present or if the type annotation allows any type to be passed
@@ -258,18 +258,14 @@ class PluginValue:
             return self._resolved_type
 
         if not isinstance(self.type_expression, str):
-            raise inmanta.ast.RuntimeException(
+            raise ast.RuntimeException(
                 stmt=None,
                 msg="Bad annotation in plugin %s for %s, expected str but got %s (%s)"
                 % (plugin.get_full_name(), self.VALUE_NAME, type(self.type_expression).__name__, self.type_expression),
             )
 
-        plugin_line: inmanta.ast.Range = inmanta.ast.Range(
-            plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1
-        )
-        locatable_type: inmanta.ast.LocatableString = inmanta.ast.LocatableString(
-            self.type_expression, plugin_line, 0, resolver
-        )
+        plugin_line: ast.Range = ast.Range(plugin.location.file, plugin.location.lnr, 1, plugin.location.lnr + 1, 1)
+        locatable_type: ast.LocatableString = ast.LocatableString(self.type_expression, plugin_line, 0, resolver)
         self._resolved_type = inmanta_type.resolve_type(locatable_type, resolver)
         return self._resolved_type
 
@@ -342,7 +338,7 @@ class PluginReturn(PluginValue):
     VALUE_NAME = "return value"
 
 
-class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMeta):
+class Plugin(inmanta_type.NamedType, ast.WithComment, metaclass=PluginMeta):
     """
     This class models a plugin that can be called from the language.
     """
@@ -350,7 +346,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
     deprecated: bool = False
     replaced_by: typing.Optional[str] = None
 
-    def __init__(self, namespace: inmanta.ast.Namespace) -> None:
+    def __init__(self, namespace: ast.Namespace) -> None:
         self.ns = namespace
         self.namespace = namespace
 
@@ -380,7 +376,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
         if self.__class__.__function__.__doc__:
             self.comment = self.__class__.__function__.__doc__
 
-        self.location = inmanta.ast.Location(filename, line)
+        self.location = ast.Location(filename, line)
 
     def normalize(self) -> None:
         self.resolver = self.namespace
@@ -422,7 +418,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
             Get the annotation for a specific argument, and if none exists, raise an exception
             """
             if arg not in arg_spec.annotations:
-                raise inmanta.ast.RuntimeException(
+                raise ast.RuntimeException(
                     stmt=None,
                     msg=f"All arguments of plugin {repr(self.get_full_name())} should be annotated: "
                     f"{repr(arg)} has no annotation",
@@ -535,9 +531,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
         elif self.var_args is not None:
             return self.var_args
         else:
-            raise inmanta.ast.RuntimeException(
-                None, f"{self.get_full_name()}() got an unexpected positional argument: {position}"
-            )
+            raise ast.RuntimeException(None, f"{self.get_full_name()}() got an unexpected positional argument: {position}")
 
     def get_kwarg(self, name: str) -> PluginArgument:
         """
@@ -557,7 +551,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
             # Trying to provide a keyword argument which doesn't exist
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise inmanta.ast.RuntimeException(None, f"{self.get_full_name()}() got an unexpected keyword argument: '{name}'")
+            raise ast.RuntimeException(None, f"{self.get_full_name()}() got an unexpected keyword argument: '{name}'")
 
     def report_missing_arguments(
         self, missing_args: collections.abc.Sequence[str], args_sort: typing.Literal["positional", "keyword-only"]
@@ -577,7 +571,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
         if len(missing_args) == 1:
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise inmanta.ast.RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
+            raise ast.RuntimeException(None, f"{func}() missing 1 required {args_sort} argument: '{missing_args[0]}'")
         if len(missing_args) > 1:
             arg_names = " and ".join(
                 (
@@ -587,7 +581,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
             )
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise inmanta.ast.RuntimeException(
+            raise ast.RuntimeException(
                 None, f"{func}() missing {len(missing_args)} required {args_sort} arguments: {arg_names}"
             )
 
@@ -607,7 +601,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
             # (1) We got too many positional arguments
             # The exception raised here tries to match as closely as possible what python
             # would have raised as exception
-            raise inmanta.ast.RuntimeException(
+            raise ast.RuntimeException(
                 None, f"{self.get_full_name()}() takes {len(self.args)} positional arguments but {len(args)} were given"
             )
 
@@ -653,7 +647,7 @@ class Plugin(inmanta_type.NamedType, inmanta.ast.WithComment, metaclass=PluginMe
             if kwarg.arg_position is not None and kwarg.arg_position < len(args):
                 # The exception raised here tries to match as closely as possible what python
                 # would have raised as exception
-                raise inmanta.ast.RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
+                raise ast.RuntimeException(None, f"{self.get_full_name()}() got multiple values for argument '{name}'")
 
             # (4) Validate the input value
             if not kwarg.validate(value):
