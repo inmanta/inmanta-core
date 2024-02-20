@@ -40,7 +40,6 @@ from inmanta.data import (
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
-    PipConfig,
     PromoteTriggerMethod,
     ResourceDiff,
     ResourceIdStr,
