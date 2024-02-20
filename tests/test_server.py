@@ -880,7 +880,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, wait_up):
 @pytest.mark.parametrize("wait_up", ["True", "False"])
 async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, wait_up):
     """
-    Tests the bootloader can connect to an existing database and can start.
+    Tests that the bootloader can connect to an existing database and can start.
     """
     config.Config.set("database", "wait_up", wait_up)
     caplog.set_level(logging.INFO)
