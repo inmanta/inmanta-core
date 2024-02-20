@@ -49,7 +49,6 @@ from collections import abc
 from configparser import ConfigParser
 from typing import Optional
 
-import asyncpg
 import click
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
@@ -64,7 +63,6 @@ from inmanta.config import Config, Option
 from inmanta.const import EXIT_START_FAILED
 from inmanta.export import cfg_env
 from inmanta.logging import InmantaLoggerConfig, LoggerMode, _is_on_tty
-from inmanta.server import config
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.signals import safe_shutdown, setup_signal_handlers
 from inmanta.util import get_compiler_version

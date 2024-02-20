@@ -87,7 +87,6 @@ class InmantaBootloader:
         db_ready = await self.wait_for_db()
         if not db_ready:
             LOGGER.error("Failed to connect to the database within the timeout period.")
-            return  # or handle the error as appropriate
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
