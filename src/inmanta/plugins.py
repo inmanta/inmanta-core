@@ -118,7 +118,7 @@ class Context:
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
 
-    def run_sync(self, function: typing.Callable[[], collections.abc.Awaitable[T]], timeout: int = 5) -> T:
+    def run_sync(self, function: collections.abc.Callable[[], collections.abc.Awaitable[T]], timeout: int = 5) -> T:
         """
         Execute the async function and return its result. This method uses this thread's current (not running) event loop if
         there is one, otherwise it creates a new one. The main use for this function is to use the inmanta internal rpc to
@@ -391,7 +391,7 @@ class Plugin(inmanta_type.NamedType, ast.WithComment, metaclass=PluginMeta):
 
         self.return_type.resolve_type(self, self.resolver)
 
-    def _load_signature(self, function: typing.Callable[..., object]) -> None:
+    def _load_signature(self, function: collections.abc.Callable[..., object]) -> None:
         """
         Load the signature from the given python function, and update the relevant attributes
         of this object.
@@ -731,11 +731,11 @@ class PluginException(Exception):
 
 @stable_api.stable_api
 def plugin(
-    function: typing.Optional[typing.Callable] = None,
+    function: typing.Optional[collections.abc.Callable] = None,
     commands: typing.Optional[list[str]] = None,
     emits_statements: bool = False,
     allow_unknown: bool = False,
-) -> typing.Callable:
+) -> collections.abc.Callable:
     """
     Python decorator to register functions with inmanta as plugin
 
@@ -752,7 +752,7 @@ def plugin(
         commands: typing.Optional[list[str]] = None,
         emits_statements: bool = False,
         allow_unknown: bool = False,
-    ) -> typing.Callable:
+    ) -> collections.abc.Callable:
         """
         Function to curry the name of the function
         """
@@ -809,16 +809,16 @@ def plugin(
 
 @stable_api.stable_api
 def deprecated(
-    function: typing.Optional[typing.Callable] = None,
+    function: typing.Optional[collections.abc.Callable] = None,
     *,
     replaced_by: typing.Optional[str] = None,
     **kwargs: collections.abc.Mapping[str, object],
-) -> typing.Callable:
+) -> collections.abc.Callable:
     """
     the kwargs are currently ignored but where added in case we want to add something later on.
     """
 
-    def inner(fnc: typing.Callable):
+    def inner(fnc: collections.abc.Callable):
         if hasattr(fnc, "__plugin__"):
             fnc.__plugin__.deprecate_function(replaced_by)
         else:
