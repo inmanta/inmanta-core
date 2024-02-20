@@ -1,0 +1,7 @@
+description: Resolve race condition on release version
+issue-nr: 6955
+change-type: patch
+destination-branches: [master, iso6, iso7]
+sections:
+  bugfix: "{{description}}"
+
