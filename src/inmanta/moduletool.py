@@ -1267,9 +1267,7 @@ version: 0.0.1dev0"""
         stable_releases: list[Version] = gitprovider.get_version_tags(module_dir, only_return_stable_versions=True)
 
         path_changelog_file = os.path.join(module_dir, const.MODULE_CHANGELOG_FILE)
-        changelog: Optional[Changelog] = (
-            Changelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
-        )
+        changelog: Optional[Changelog] = Changelog(path_changelog_file) if os.path.exists(path_changelog_file) else None
 
         requested_version_bump: Optional[ChangeType] = ChangeType.parse_from_bools(revision, patch, minor, major)
         if not requested_version_bump and dev:
