@@ -819,7 +819,7 @@ class MockConnection:
     This class includes a close method to mimic closing a database connection.
     """
 
-    async def close(self) -> None:
+    async def close(self, timeout: int) -> None:
         return
 
 
@@ -833,19 +833,17 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
     config.Config.set("database", "wait_time", db_wait_time)
     config.Config.set("config", "state-dir", state_dir)
 
-    db_connect_called: asyncio.Event = asyncio.Event()
-    db_connect_success: asyncio.Event = asyncio.Event()
+    state = {"first_connect": True}
 
     async def mock_asyncpg_connect(*args, **kwargs) -> MockConnection:
         """
         Mock function to replace asyncpg.connect.
-        Initially, simulates a connection failure. Once db_connect_success is set, it simulates a successful connection.
+        Will raise an Exception on the first invocation.
         """
-        if not db_connect_called.is_set():
-            db_connect_called.set()
+        if state["first_connect"]:
+            state["first_connect"] = False
             raise Exception("Connection failure")
         else:
-            await db_connect_success.wait()
             return MockConnection()
 
     async def mock_start(self) -> None:
@@ -854,16 +852,10 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
     monkeypatch.setattr("inmanta.server.protocol.Server.start", mock_start)
     monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
-
     caplog.set_level(logging.INFO)
     caplog.clear()
     ibl: InmantaBootloader = InmantaBootloader()
     start_task: asyncio.Task = asyncio.create_task(ibl.start())
-
-    if db_wait_time != "0":
-        await db_connect_called.wait()
-        db_connect_success.set()
-
     await start_task
 
     if db_wait_time != "0":
