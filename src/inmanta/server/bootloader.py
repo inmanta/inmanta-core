@@ -264,7 +264,7 @@ class InmantaBootloader:
             try:
                 # Attempt to create a database connection
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
-                LOGGER.info("Successfully connected to the database")
+                LOGGER.info("Successfully connected to the database.")
                 await conn.close()  # close the connection
                 return
             except Exception as e:
