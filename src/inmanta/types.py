@@ -22,7 +22,8 @@ import builtins
 import uuid
 from collections.abc import Coroutine, Mapping, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Type, Union
+from uuid import UUID
 
 import pydantic
 import typing_inspect
