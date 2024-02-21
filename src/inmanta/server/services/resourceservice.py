@@ -68,6 +68,7 @@ from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
+from inmanta.util.db import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 
 LOGGER = logging.getLogger(__name__)
 
@@ -402,7 +403,7 @@ class ResourceService(protocol.ServerSlice):
         timestamp: datetime.datetime,
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
-        connection: Optional[Connection] = None,
+        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
         only_update_from_states: Optional[set[const.ResourceState]] = None,
     ) -> None:
         """
@@ -744,7 +745,7 @@ class ResourceService(protocol.ServerSlice):
         is_increment_notification: bool = False,
         only_update_from_states: Optional[set[const.ResourceState]] = None,
         *,
-        connection: Optional[Connection] = None,
+        connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
     ) -> Apireturn:
         """
         :param is_increment_notification: is this the increment calucation setting the deployed status,
@@ -813,8 +814,8 @@ class ResourceService(protocol.ServerSlice):
         assert all(Id.is_resource_version_id(rvid) for rvid in resource_ids)
 
         resources: list[data.Resource]
-        async with data.Resource.get_connection(connection) as connection:
-            async with connection.transaction():
+        async with data.Resource.get_connection(connection.connection) as inner_connection:
+            async with inner_connection.transaction():
                 # validate resources
                 resources = await data.Resource.get_resources(
                     env.id,
@@ -822,7 +823,7 @@ class ResourceService(protocol.ServerSlice):
                     # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
                     # cascading deletes
                     lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
-                    connection=connection,
+                    connection=inner_connection,
                 )
                 if len(resources) == 0 or (len(resources) != len(resource_ids)):
                     return (
@@ -847,7 +848,7 @@ class ResourceService(protocol.ServerSlice):
                         raise AssertionError("Attempting to set undeployable resource to deployable state")
 
                 # get instance
-                resource_action = await data.ResourceAction.get(action_id=action_id, connection=connection)
+                resource_action = await data.ResourceAction.get(action_id=action_id, connection=inner_connection)
                 if resource_action is None:
                     # new
                     if started is None:
@@ -862,7 +863,7 @@ class ResourceService(protocol.ServerSlice):
                         action=action,
                         started=started,
                     )
-                    await resource_action.insert(connection=connection)
+                    await resource_action.insert(connection=inner_connection)
                 else:
                     # existing
                     if resource_action.finished is not None:
@@ -897,14 +898,14 @@ class ResourceService(protocol.ServerSlice):
                     status=status,
                     change=change,
                     finished=finished,
-                    connection=connection,
+                    connection=inner_connection,
                 )
 
                 if is_resource_state_update:
                     # transient resource update
                     if not is_resource_action_finished:
                         for res in resources:
-                            await res.update_fields(status=status, connection=connection)
+                            await res.update_fields(status=status, connection=inner_connection)
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
                         return 200
@@ -918,7 +919,7 @@ class ResourceService(protocol.ServerSlice):
                         for res in resources:
                             await res.update_fields(
                                 status=status,
-                                connection=connection,
+                                connection=inner_connection,
                             )
                             # Not very typeable
                             extra_fields: dict[str, Any] = {}
@@ -936,7 +937,7 @@ class ResourceService(protocol.ServerSlice):
                                 **extra_fields,
                                 last_deploy=finished,
                                 last_deployed_attribute_hash=res.attribute_hash,
-                                connection=connection,
+                                connection=inner_connection,
                             )
 
                             model_version = res.model
@@ -947,23 +948,34 @@ class ResourceService(protocol.ServerSlice):
                                 and status == const.ResourceState.deployed
                             ):
                                 await data.Parameter.delete_all(
-                                    environment=env.id, resource_id=res.resource_id, connection=connection
+                                    environment=env.id, resource_id=res.resource_id, connection=inner_connection
                                 )
 
         if is_resource_state_update and is_resource_action_finished:
-            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
-            waiting_agents = {
-                (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
-            }
 
-            for agent, resource_id in waiting_agents:
-                aclient = self.agentmanager_service.get_agent_client(env.id, agent)
-                if aclient is not None:
-                    if change is None:
-                        change = const.Change.nochange
-                    self.add_background_task(
-                        aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
-                    )
+            def post_deploy_update() -> None:
+                assert model_version is not None  # mypy can't figure this out
+                # Make sure tasks are scheduled AFTER the tx is done.
+                # This method is only called if the transaction commits successfully.
+                self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, model_version))
+
+                waiting_agents = {
+                    (Id.parse_id(prov).get_agent_name(), res.resource_version_id) for res in resources for prov in res.provides
+                }
+
+                for agent, resource_id in waiting_agents:
+                    aclient = self.agentmanager_service.get_agent_client(env.id, agent)
+                    if aclient is not None:
+                        if change is None:
+                            my_change = const.Change.nochange
+                        else:
+                            my_change = change
+
+                        self.add_background_task(
+                            aclient.resource_event(env.id, agent, resource_id, send_events, status, my_change, changes)
+                        )
+
+            connection.call_after_tx(post_deploy_update)
 
         return 200
 
