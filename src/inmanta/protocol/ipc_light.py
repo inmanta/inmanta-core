@@ -21,6 +21,7 @@ import asyncio
 import logging
 import pickle
 import struct
+import typing
 import uuid
 from asyncio import Future, Protocol, transports
 from dataclasses import dataclass
@@ -35,11 +36,22 @@ class ConnectionLost(IPCException):
     pass
 
 
+ServerContext = typing.TypeVar("ServerContext")
+R = typing.TypeVar("R")
+
+
+class IPCMethod(abc.ABC, typing.Generic[R, ServerContext]):
+    """Base class for methods intended for IPC"""
+
+    @abc.abstractmethod
+    async def call(self, context: ServerContext) -> R:
+        pass
+
+
 @dataclass
-class IPCRequestFrame:
-    id: uuid.UUID
-    method: str
-    arguments: list[object]
+class IPCRequestFrame(typing.Generic[R, ServerContext]):
+    id: Optional[uuid.UUID]
+    method: IPCMethod[R, ServerContext]
 
 
 @dataclass
@@ -49,7 +61,7 @@ class IPCReplyFrame:
     is_exception: bool
 
 
-class IPCFrameProtocol(Protocol):
+class IPCFrameProtocol(Protocol, typing.Generic[ServerContext]):
     """
     Simple protocol which sends
 
@@ -119,7 +131,7 @@ class IPCFrameProtocol(Protocol):
             # Failed to unpickle, drop connection
             self.logger.exception("Unexpected exception while handling frame", self.name)
 
-    def send_frame(self, frame: IPCRequestFrame | IPCReplyFrame) -> None:
+    def send_frame(self, frame: IPCRequestFrame[R, ServerContext] | IPCReplyFrame) -> None:
         """
         Helper method to construct and send frames
         """
@@ -129,7 +141,7 @@ class IPCFrameProtocol(Protocol):
         size = struct.pack("!L", len(buffer))
         self.transport.write(size + buffer)
 
-    def frame_received(self, frame: IPCRequestFrame | IPCReplyFrame) -> None:
+    def frame_received(self, frame: IPCRequestFrame[R, ServerContext] | IPCReplyFrame) -> None:
         """
         Method for frame handling subclasses
 
@@ -138,30 +150,26 @@ class IPCFrameProtocol(Protocol):
         raise Exception(f"Frame not handled {frame}")
 
 
-class IPCServer(IPCFrameProtocol, abc.ABC):
+class IPCServer(IPCFrameProtocol[ServerContext], abc.ABC, typing.Generic[ServerContext]):
     """Base server that dispatched methods"""
 
+    @abc.abstractmethod
+    def get_context(self) -> ServerContext:
+        pass
+
     # TODO: timeouts?
-    def frame_received(self, frame: IPCRequestFrame | IPCReplyFrame):
+    def frame_received(self, frame: IPCRequestFrame[R, ServerContext] | IPCReplyFrame) -> None:
         if isinstance(frame, IPCRequestFrame):
             asyncio.get_running_loop().create_task(self.dispatch(frame))
         else:
             super().frame_received(frame)
 
-    @abc.abstractmethod
-    def get_method(self, name: str) -> Callable[[...], Coroutine[Any, Any, object]]:
-        """
-        Main dispatch method, that returns the methods to dispatch to
-        """
-        pass
-
-    async def dispatch(self, frame: IPCRequestFrame) -> None:
+    async def dispatch(self, frame: IPCRequestFrame[R, ServerContext]) -> None:
         """
         Dispatch handler that sends back return values
         """
         try:
-            method = self.get_method(frame.method)
-            return_value = await method(*frame.arguments)
+            return_value = await frame.method.call(self.get_context())
             if frame.id is not None:
                 self.send_frame(IPCReplyFrame(frame.id, return_value, is_exception=False))
         except Exception as e:
@@ -170,7 +178,7 @@ class IPCServer(IPCFrameProtocol, abc.ABC):
                 self.send_frame(IPCReplyFrame(frame.id, e, is_exception=True))
 
 
-class IPCClient(IPCFrameProtocol):
+class IPCClient(IPCFrameProtocol[ServerContext]):
     """Base client that dispatched method calls"""
 
     def __init__(self, name: str):
@@ -179,12 +187,11 @@ class IPCClient(IPCFrameProtocol):
         self.requests: dict[uuid.UUID, Future[object]] = {}
         # All outstanding calls
 
-    def call(self, method: str, arguments: list[object], has_reply: bool = True) -> Future[object]:
+    def call(self, method: IPCMethod[R, ServerContext], has_reply: bool = True) -> Future[R] | None:
         """Call a method with given arguments"""
         request = IPCRequestFrame(
             id=uuid.uuid4() if has_reply else None,
             method=method,
-            arguments=arguments,
         )
         self.send_frame(request)
 
@@ -192,17 +199,17 @@ class IPCClient(IPCFrameProtocol):
             return None
 
         done = asyncio.get_event_loop().create_future()
-        self.requests[request.id] = done
+        self.requests[request.id] = done  # Mypy can't do it
         return done
 
-    def frame_received(self, frame: IPCRequestFrame | IPCReplyFrame):
+    def frame_received(self, frame: IPCRequestFrame[R, ServerContext] | IPCReplyFrame) -> None:
         """Handle replies"""
         if isinstance(frame, IPCReplyFrame):
             self.process_reply(frame)
         else:
             super().frame_received(frame)
 
-    def process_reply(self, frame: IPCReplyFrame):
+    def process_reply(self, frame: IPCReplyFrame) -> None:
         if frame.is_exception:
             self.requests[frame.id].set_exception(frame.returnvalue)
         else:

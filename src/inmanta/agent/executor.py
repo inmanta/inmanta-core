@@ -25,7 +25,9 @@ import socket
 import typing
 from typing import Awaitable
 
+import inmanta.config
 import inmanta.const
+import inmanta.protocol.ipc_light
 import inmanta.signals
 from inmanta.logging import InmantaLoggerConfig
 from inmanta.protocol.ipc_light import IPCClient, IPCServer
@@ -48,7 +50,16 @@ Pipe break: go to 3a and 3b
 """
 
 
-class ExecutorServer(IPCServer):
+class ExecutorContext:
+
+    def __init__(self, server: "ExecutorServer") -> None:
+        self.server = server
+
+    async def stop(self) -> None:
+        await self.server.stop()
+
+
+class ExecutorServer(IPCServer[ExecutorContext]):
     """The IPC server running on the executor"""
 
     def __init__(self, name: str) -> None:
@@ -56,14 +67,18 @@ class ExecutorServer(IPCServer):
         self.stopping = False
         self.stopped = asyncio.Event()
 
-    async def stop(self):
+    def get_context(self) -> ExecutorContext:
+        return ExecutorContext(self)
+
+    async def stop(self) -> None:
         """Perform shutdown"""
         self._sync_stop()
 
-    def _sync_stop(self):
+    def _sync_stop(self) -> None:
         """Actual shutdown, not async"""
         if not self.stopping:
             self.logger.info("Stopping")
+            assert self.transport is not None  # Mypy
             self.transport.close()
             self.stopping = True
 
@@ -73,24 +88,30 @@ class ExecutorServer(IPCServer):
         self._sync_stop()
         self.stopped.set()
 
-    def get_method(self, name: str) -> typing.Callable[[...], typing.Coroutine[typing.Any, typing.Any, object]]:
-        if name == "stop":
-            return self.stop
 
-        async def echo(*args):
-            return list(args)
+class StopCommand(inmanta.protocol.ipc_light.IPCMethod[None, ExecutorContext]):
 
-        return echo
+    async def call(self, context: ExecutorContext) -> None:
+        await context.stop()
 
 
-def mp_worker_entrypoint(socket, name):
+def mp_worker_entrypoint(
+    socket: socket.socket,
+    name: str,
+    logfile: str,
+    inmanta_log_level: str,
+    config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
+) -> None:
     """Entry point for child processes"""
-    # TODO: set up logging
-    InmantaLoggerConfig.get_instance()
+    log_config = InmantaLoggerConfig.get_instance()
+    log_config.configure_file_logger(logfile, inmanta_log_level)
+    logging.captureWarnings(True)
     logger = logging.getLogger(f"agent.executor.{name}")
     logger.info(f"Started with PID: {os.getpid()}")
 
-    async def serve():
+    inmanta.config.Config.load_config_from_dict(config)
+
+    async def serve() -> None:
         loop = asyncio.get_running_loop()
         # Start serving
         transport, protocol = await loop.connect_accepted_socket(functools.partial(ExecutorServer, name), socket)
@@ -102,12 +123,12 @@ def mp_worker_entrypoint(socket, name):
     exit(0)
 
 
-class FinalizingIPCClient(IPCClient):
+class FinalizingIPCClient(IPCClient[ExecutorContext]):
     """IPC client that can signal shutdown"""
 
     def __init__(self, name: str):
         super().__init__(name)
-        self.finalizers: list[typing.Callable[[], Awaitable[None]]] = []
+        self.finalizers: list[typing.Callable[[], typing.Coroutine[typing.Any, typing.Any, None]]] = []
 
     def connection_lost(self, exc: Exception | None) -> None:
         print("Client lost connection")
@@ -126,11 +147,11 @@ class MPExecutor:
 
     async def stop(self) -> None:
         """Stop by shutdown"""
-        self.connection.call("stop", [], False)
+        self.connection.call(StopCommand(), False)
 
     async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
         """Stop by process close"""
-        await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.force_stop, grace_time))
+        await asyncio.get_running_loop().run_in_executor(None, functools.partial(self._force_stop, grace_time))
 
     def _force_stop(self, grace_time: float) -> None:
         try:
@@ -149,8 +170,11 @@ class MPExecutor:
 
 
 class MPManager:
-    def __init__(self):
+    def __init__(self, log_folder: str, inmanta_log_level: str = "DEBUG") -> None:
         self.children: list[MPExecutor] = []
+        self.log_folder = log_folder
+        os.makedirs(self.log_folder, exist_ok=True)
+        self.inmanta_log_level = inmanta_log_level
 
     def _init_once(self) -> None:
         try:
@@ -163,9 +187,13 @@ class MPManager:
     async def make_child_and_connect(self, name: str) -> MPExecutor:
         """Async code to make a child process as share a socker with it"""
         loop = asyncio.get_running_loop()
+
         # Start child
         # TODO: do we need a specific thread pool?
-        process, parent_conn = await loop.run_in_executor(None, functools.partial(self._make_child, name))
+        logfile = os.path.join(self.log_folder, f"{name}.log")
+        process, parent_conn = await loop.run_in_executor(
+            None, functools.partial(self._make_child, name, logfile, self.inmanta_log_level)
+        )
         # Hook up the connection
         transport, protocol = await loop.connect_accepted_socket(
             functools.partial(FinalizingIPCClient, f"executor.{name}"), parent_conn
@@ -175,10 +203,14 @@ class MPManager:
         self.children.append(child_handle)
         return child_handle
 
-    def _make_child(self, name: str) -> tuple[multiprocessing.Process, socket.socket]:
+    def _make_child(self, name: str, log_file: str, log_level: int) -> tuple[multiprocessing.Process, socket.socket]:
         """Sync code to make a child process and share a socket with it"""
         parent_conn, child_conn = socket.socketpair()
-        p = multiprocessing.Process(target=mp_worker_entrypoint, args=(child_conn, name), name=f"agent.executor.{name}")
+        p = multiprocessing.Process(
+            target=mp_worker_entrypoint,
+            args=(child_conn, name, log_file, log_level, inmanta.config.Config.config_as_dict()),
+            name=f"agent.executor.{name}",
+        )
         p.start()
         child_conn.close()
         return p, parent_conn

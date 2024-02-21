@@ -236,11 +236,10 @@ class InmantaLoggerConfig:
             raise Exception("Options can only be applied once to a handler.")
         self._options_applied = True
         self._keep_logger_names = options.keep_logger_names
-        if options.log_file:
-            self.set_logfile_location(options.log_file)
-            formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-            self.set_log_formatter(formatter)
-            self.set_log_level(options.log_file_level, cli=False)
+        log_file = options.log_file
+        log_file_level = options.log_file_level
+        if log_file:
+            self.configure_file_logger(log_file, log_file_level)
         else:
             # Use a shorter space padding if we know that we will use short names as the logger name.
             # Otherwise the log records contains too much white spaces.
@@ -258,6 +257,12 @@ class InmantaLoggerConfig:
             )
             self.set_log_formatter(formatter)
             self.set_log_level(str(options.verbose))
+
+    def configure_file_logger(self, log_file: str, inmanta_log_level: str) -> None:
+        self.set_logfile_location(log_file)
+        formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
+        self.set_log_formatter(formatter)
+        self.set_log_level(inmanta_log_level, cli=False)
 
     @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
