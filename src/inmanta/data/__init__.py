@@ -4456,17 +4456,19 @@ class ResourcePersistentState(BaseDocument):
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
 
     @classmethod
-    async def trim(cls) -> None:
+    async def trim(cls, environment: UUID, connection: Optional[Connection] = None) -> None:
         """Remove all records that have no corresponding resource anymore"""
         await cls._execute_query(
-            """
+            f"""
             DELETE FROM {cls.table_name()} rps
             WHERE NOT EXISTS(
                 SELECT r.resource_id
                 FROM {Resource.table_name()} r
-                WHERE r.resource_id = rps.resource_id and r.environment=rps.environment
+                WHERE r.resource_id = rps.resource_id and r.environment=$1 and rps.environment=$1
             )
-            """
+            """,
+            environment,
+            connection=connection,
         )
 
 

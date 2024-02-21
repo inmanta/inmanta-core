@@ -255,7 +255,7 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     assert len(prvs) == n_versions_to_create + 1
 
     # Ensure we don't clean too much
-    await ResourcePersistentState.trim()
+    await ResourcePersistentState.trim(env_1_id)
 
     prvs = await ResourcePersistentState.get_list()
     assert len(prvs) == n_versions_to_create + 1
