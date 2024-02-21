@@ -56,6 +56,7 @@ from inmanta.data.model import (
     VersionedResource,
     VersionedResourceDetails,
 )
+from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
@@ -68,7 +69,6 @@ from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
-from inmanta.util.db import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 
 LOGGER = logging.getLogger(__name__)
 
