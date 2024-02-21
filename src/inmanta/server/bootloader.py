@@ -86,9 +86,7 @@ class InmantaBootloader:
         db_wait_time: int = config.db_wait_time.get()
         if db_wait_time:
             # Wait for the database to be up before starting the server
-            db_ready: bool = await self.wait_for_db(db_wait_time)
-            if not db_ready:
-                LOGGER.error("Failed to connect to the database within the database wait time period.")
+            await self.wait_for_db(db_wait_time)
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
@@ -246,7 +244,7 @@ class InmantaBootloader:
         self.feature_manager = ctx.get_feature_manager()
         return ctx
 
-    async def wait_for_db(self, db_wait_time: int) -> bool:
+    async def wait_for_db(self, db_wait_time: int):
         """Wait for the database to be up by attempting to connect at intervals.
 
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
@@ -268,7 +266,7 @@ class InmantaBootloader:
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
                 LOGGER.info("Successfully connected to the database.")
                 await conn.close()  # close the connection
-                return True
+                return
             except Exception as e:
                 LOGGER.info("Waiting for database to be up.")
                 await asyncio.sleep(1)  # Sleep for a second before retrying
