@@ -4443,14 +4443,14 @@ class ResourcePersistentState(BaseDocument):
     # Last deployment completed of any kind, including marking-deployed-for-know-good-state for increments
     # i.e. the end time of the last deploy
     last_deployed_attribute_hash: Optional[str] = None
-    # Hash used in for last_deploy
+    # Hash used in last_deploy
     last_deployed_version: Optional[int] = None
-    # Model version of  last_deploy
+    # Model version of last_deploy
     last_success: Optional[datetime.datetime] = None
     # last actual deployment completed without failure. i.e start time of the last deploy where status == ResourceState.deployed
     last_produced_events: Optional[datetime.datetime] = None
-    # Last produced an event. i.e. the end time of the last deploy where we hand an effective change
-    # (change is not None and change != Change.nochange:)
+    # Last produced an event. i.e. the end time of the last deploy where we had an effective change
+    # (change is not None and change != Change.nochange)
 
     # status
     last_non_deploying_status: const.NonDeployingResourceState = const.NonDeployingResourceState.available
@@ -4458,11 +4458,16 @@ class ResourcePersistentState(BaseDocument):
     @classmethod
     async def trim(cls) -> None:
         """Remove all records that have no corresponding resource anymore"""
-        selector_query = f"""FROM {cls.table_name()} rps WHERE NOT EXISTS
-            (SELECT r.resource_id FROM {Resource.table_name()} r
+        await cls._execute_query(
+            """
+            DELETE FROM {cls.table_name()} rps
+            WHERE NOT EXISTS(
+                SELECT r.resource_id
+                FROM {Resource.table_name()} r
                 WHERE r.resource_id = rps.resource_id and r.environment=rps.environment
-            )"""
-        await cls._execute_query("DELETE " + selector_query)
+            )
+            """
+        )
 
 
 @stable_api

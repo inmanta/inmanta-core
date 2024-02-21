@@ -265,7 +265,7 @@ def postgres_db(request: pytest.FixtureRequest):
             sublogger = logging.getLogger("pytest.postgresql.deadlock")
             for line in fh:
                 sublogger.warning("%s", line)
-        # os.remove(pg_logfile)
+        os.remove(pg_logfile)
         assert not has_deadlock
 
 
