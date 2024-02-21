@@ -823,14 +823,14 @@ class MockConnection:
         return
 
 
-@pytest.mark.parametrize("wait_up", ["True", "False"])
-async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, wait_up):
+@pytest.mark.parametrize("db_wait_time", ["20", "0"])
+async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time):
     """
     Tests the Inmanta server bootloader's behavior with respect to waiting for the database to be ready before proceeding
-    with the startup, based on the 'wait_up' configuration.
+    with the startup, based on the 'db_wait_time' configuration.
     """
     state_dir = tmpdir.mkdir("state_dir").strpath
-    config.Config.set("database", "wait_up", wait_up)
+    config.Config.set("database", "wait_time", db_wait_time)
     config.Config.set("config", "state-dir", state_dir)
 
     db_connect_called = asyncio.Event()
@@ -860,13 +860,13 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, wait_up):
     ibl = InmantaBootloader()
     start_task = asyncio.create_task(ibl.start())
 
-    if wait_up == "True":
+    if db_wait_time != "0":
         await db_connect_called.wait()
         db_connect_success.set()
 
     await start_task
 
-    if wait_up == "True":
+    if db_wait_time != "0":
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up.")
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
     else:
@@ -877,19 +877,19 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, wait_up):
     await ibl.stop(timeout=15)
 
 
-@pytest.mark.parametrize("wait_up", ["True", "False"])
-async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, wait_up):
+@pytest.mark.parametrize("db_wait_time", ["20", "0"])
+async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, db_wait_time):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
     """
-    config.Config.set("database", "wait_up", wait_up)
+    config.Config.set("database", "wait_time", db_wait_time)
     caplog.set_level(logging.INFO)
     caplog.clear()
     ibl = InmantaBootloader()
     await ibl.start()
     await ibl.stop(timeout=15)
 
-    if wait_up == "True":
+    if db_wait_time != "0":
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
     else:
         log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")

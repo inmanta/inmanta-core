@@ -83,9 +83,10 @@ class InmantaBootloader:
         self.feature_manager: Optional[FeatureManager] = None
 
     async def start(self) -> None:
-        if config.db_wait_up.get():
+        db_wait_time = config.db_wait_time.get()
+        if db_wait_time:
             # Wait for the database to be up before starting the server
-            db_ready = await self.wait_for_db()
+            db_ready = await self.wait_for_db(db_wait_time)
             if not db_ready:
                 LOGGER.error("Failed to connect to the database within the timeout period.")
 
@@ -245,10 +246,10 @@ class InmantaBootloader:
         self.feature_manager = ctx.get_feature_manager()
         return ctx
 
-    async def wait_for_db(self, timeout=300):
+    async def wait_for_db(self, db_wait_time=300):
         """Wait for the database to be up by attempting to connect at intervals.
 
-        :param timeout: Maximum time to wait for the database to be up, in seconds.
+        :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
         """
 
         start_time = asyncio.get_event_loop().time()
@@ -264,13 +265,13 @@ class InmantaBootloader:
         while True:
             try:
                 # Attempt to create a database connection
-                conn = await asyncpg.connect(**db_settings, timeout=60)  # raises TimeoutError after 60 seconds
+                conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
                 LOGGER.info("Successfully connected to the database.")
                 await conn.close()  # close the connection
                 return True
             except Exception as e:
                 LOGGER.info("Waiting for database to be up.")
                 await asyncio.sleep(1)  # Sleep for a second before retrying
-                if asyncio.get_event_loop().time() - start_time > timeout:
+                if asyncio.get_event_loop().time() - start_time > db_wait_time:
                     LOGGER.error("Timed out waiting for the database to be up.")
                     raise e
