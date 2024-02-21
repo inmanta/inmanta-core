@@ -859,7 +859,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
     await start_task
 
     if db_wait_time != "0":
-        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up: Connection failure")
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up.")
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
     else:
         # If db_wait_time is "0", the wait_for_db method is not called,
