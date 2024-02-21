@@ -84,7 +84,7 @@ class InmantaBootloader:
 
     async def start(self) -> None:
         db_wait_time: int = config.db_wait_time.get()
-        if db_wait_time:
+        if db_wait_time != 0:
             # Wait for the database to be up before starting the server
             await self.wait_for_db(db_wait_time)
 
@@ -264,12 +264,12 @@ class InmantaBootloader:
             try:
                 # Attempt to create a database connection
                 conn = await asyncpg.connect(**db_settings, timeout=5)  # raises TimeoutError after 5 seconds
-                LOGGER.info("Successfully connected to the database.")
+                LOGGER.info("Successfully connected to the database")
                 await conn.close()  # close the connection
                 return
             except Exception as e:
-                LOGGER.info("Waiting for database to be up.")
+                LOGGER.info("Waiting for database to be up: %s" % str(e))
                 await asyncio.sleep(1)  # Sleep for a second before retrying
-                if asyncio.get_event_loop().time() - start_time > db_wait_time:
+                if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
                     LOGGER.error("Timed out waiting for the database to be up.")
                     raise e
