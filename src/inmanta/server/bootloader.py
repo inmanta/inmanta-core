@@ -244,7 +244,7 @@ class InmantaBootloader:
         self.feature_manager = ctx.get_feature_manager()
         return ctx
 
-    async def wait_for_db(self, db_wait_time: int):
+    async def wait_for_db(self, db_wait_time: int) -> None:
         """Wait for the database to be up by attempting to connect at intervals.
 
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
@@ -270,7 +270,7 @@ class InmantaBootloader:
             except asyncio.TimeoutError:
                 LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception as e:
-                LOGGER.info("Waiting for database to be up: %s" % str(e))
+                LOGGER.info("Waiting for database to be up: %s", str(e))
             # Check if the maximum wait time has been exceeded
             if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
                 LOGGER.error("Timed out waiting for the database to be up.")
