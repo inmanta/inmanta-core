@@ -267,9 +267,13 @@ class InmantaBootloader:
                 LOGGER.info("Successfully connected to the database.")
                 await conn.close()  # close the connection
                 return
+            except asyncio.TimeoutError:
+                LOGGER.info("Waiting for database to be up: Connection attempt timed out.")
             except Exception as e:
                 LOGGER.info("Waiting for database to be up: %s" % str(e))
-                await asyncio.sleep(1)  # Sleep for a second before retrying
-                if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
-                    LOGGER.error("Timed out waiting for the database to be up.")
-                    raise e
+            # Check if the maximum wait time has been exceeded
+            if 0 < db_wait_time < asyncio.get_event_loop().time() - start_time:
+                LOGGER.error("Timed out waiting for the database to be up.")
+                raise Exception("Database connection timeout after %d seconds." % db_wait_time)
+            # Sleep for a second before retrying
+            await asyncio.sleep(1)
