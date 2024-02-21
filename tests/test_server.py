@@ -880,7 +880,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
 
 
 @pytest.mark.parametrize("db_wait_time", ["20", "0"])
-async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, db_wait_time):
+async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, db_wait_time: str):
     """
     Tests that the bootloader can connect to a database and can start for both wait_up values
     """
