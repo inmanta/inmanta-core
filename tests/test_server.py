@@ -870,6 +870,8 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up: Connection failure")
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
     else:
+        # If db_wait_time is "0", the wait_for_db method is not called,
+        # hence "Successfully connected to the database." log message will not appear.
         log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
 
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
@@ -892,6 +894,8 @@ async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, 
     if db_wait_time != "0":
         log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
     else:
+        # If db_wait_time is "0", the wait_for_db method is not called,
+        # hence "Successfully connected to the database." log message will not appear.
         log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
     log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
 
