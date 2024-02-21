@@ -819,24 +819,24 @@ class MockConnection:
     This class includes a close method to mimic closing a database connection.
     """
 
-    async def close(self):
+    async def close(self) -> None:
         return
 
 
 @pytest.mark.parametrize("db_wait_time", ["20", "0"])
-async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time):
+async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str) -> None:
     """
     Tests the Inmanta server bootloader's behavior with respect to waiting for the database to be ready before proceeding
     with the startup, based on the 'db_wait_time' configuration.
     """
-    state_dir = tmpdir.mkdir("state_dir").strpath
+    state_dir: str = tmpdir.mkdir("state_dir").strpath
     config.Config.set("database", "wait_time", db_wait_time)
     config.Config.set("config", "state-dir", state_dir)
 
-    db_connect_called = asyncio.Event()
-    db_connect_success = asyncio.Event()
+    db_connect_called: asyncio.Event = asyncio.Event()
+    db_connect_success: asyncio.Event = asyncio.Event()
 
-    async def mock_asyncpg_connect(*args, **kwargs):
+    async def mock_asyncpg_connect(*args, **kwargs) -> MockConnection:
         """
         Mock function to replace asyncpg.connect.
         Initially, simulates a connection failure. Once db_connect_success is set, it simulates a successful connection.
@@ -848,7 +848,7 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time):
             await db_connect_success.wait()
             return MockConnection()
 
-    async def mock_start(self):
+    async def mock_start(self) -> None:
         """Mocks the call to self.restserver.start()."""
         return
 
@@ -857,8 +857,8 @@ async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time):
 
     caplog.set_level(logging.INFO)
     caplog.clear()
-    ibl = InmantaBootloader()
-    start_task = asyncio.create_task(ibl.start())
+    ibl: InmantaBootloader = InmantaBootloader()
+    start_task: asyncio.Task = asyncio.create_task(ibl.start())
 
     if db_wait_time != "0":
         await db_connect_called.wait()
@@ -885,7 +885,7 @@ async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, 
     config.Config.set("database", "wait_time", db_wait_time)
     caplog.set_level(logging.INFO)
     caplog.clear()
-    ibl = InmantaBootloader()
+    ibl: InmantaBootloader = InmantaBootloader()
     await ibl.start()
     await ibl.stop(timeout=15)
 
