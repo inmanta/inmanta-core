@@ -86,9 +86,9 @@ class InmantaBootloader:
         db_wait_time: int = config.db_wait_time.get()
         if db_wait_time:
             # Wait for the database to be up before starting the server
-            db_ready = await self.wait_for_db(db_wait_time)
+            db_ready: bool = await self.wait_for_db(db_wait_time)
             if not db_ready:
-                LOGGER.error("Failed to connect to the database within the timeout period.")
+                LOGGER.error("Failed to connect to the database within the database wait time period.")
 
         ctx = self.load_slices()
         version = ctx.get_feature_manager().get_product_metadata().version
