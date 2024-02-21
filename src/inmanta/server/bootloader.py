@@ -83,7 +83,7 @@ class InmantaBootloader:
         self.feature_manager: Optional[FeatureManager] = None
 
     async def start(self) -> None:
-        db_wait_time = config.db_wait_time.get()
+        db_wait_time: int = config.db_wait_time.get()
         if db_wait_time:
             # Wait for the database to be up before starting the server
             db_ready = await self.wait_for_db(db_wait_time)
@@ -246,7 +246,7 @@ class InmantaBootloader:
         self.feature_manager = ctx.get_feature_manager()
         return ctx
 
-    async def wait_for_db(self, db_wait_time=300):
+    async def wait_for_db(self, db_wait_time: int) -> bool:
         """Wait for the database to be up by attempting to connect at intervals.
 
         :param db_wait_time: Maximum time to wait for the database to be up, in seconds.
