@@ -157,14 +157,27 @@ class ResourceInstallSpec:
     sources: Sequence["ModuleSource"]
 
 
-class ResourceReference(BaseModel):
+class ResourceReference:
     """
     In memory representation of the desired state of a resource
     """
+    id: Id
+    model_version: int
+    rvid: ResourceVersionIdStr
+    requires: list[ResourceVersionIdStr]
+    raw: JsonType
+    attributes: dict[str, Any]
 
-    id: ResourceIdStr
-    attributes: dict[str, object] = {}
-    requires: list[ResourceVersionIdStr] = []
+    def __init__(self, resource_dict: JsonType) -> None:
+        self.raw = resource_dict
+        self.attributes = resource_dict["attributes"]
+        self.attributes["id"] = resource_dict["id"]
+        self.id = Id.parse_id(resource_dict["id"])
+        self.rvid = self.id.resource_version_str()
+        self.requires = resource_dict["attributes"]["requires"]
+        self.model_version = resource_dict["model"]
+
+
 
 
 class Executor(ABC):
@@ -187,7 +200,6 @@ class Executor(ABC):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_id: Id,
         resource_ref: ResourceReference,
         env_id: uuid.UUID,
         reason: str,
@@ -318,7 +330,6 @@ class InProcessExecutor(Executor):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_id: Id,
         resource_ref: ResourceReference,
         env_id: uuid.UUID,
         reason: str,
@@ -327,20 +338,19 @@ class InProcessExecutor(Executor):
         # TODO: double check: is this required? Is failure handled properly?
 
         try:
-            resource: Resource = Resource.deserialize(resource_ref.model_dump()["attributes"])
+            resource: Resource = Resource.deserialize(resource_ref.attributes)
         except Exception:
-            msg = (
-                data.LogLine.log(
-                    level=const.LogLevel.ERROR,
-                    msg="Unable to deserialize %(resource_id)s",
-                    resource_id=resource_id.resource_version_str(),
-                    timestamp=datetime.datetime.now().astimezone(),
-                ),
+            msg = data.LogLine.log(
+                level=const.LogLevel.ERROR,
+                msg="Unable to deserialize %(resource_id)s",
+                resource_id=resource_ref.rvid,
+                timestamp=datetime.datetime.now().astimezone(),
             )
+
 
             await self.client.resource_action_update(
                 tid=env_id,
-                resource_ids=[resource_id.resource_version_str()],
+                resource_ids=[resource_ref.rvid],
                 action_id=uuid.uuid4(),
                 action=const.ResourceAction.deploy,
                 started=started,
@@ -353,7 +363,7 @@ class InProcessExecutor(Executor):
         ctx = handler.HandlerContext(resource)
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
-            resource=str(resource_id),
+            resource=str(resource_ref.rvid),
             deploy_id=gid,
             agent=self.agent.name,
             reason=reason,
@@ -361,9 +371,9 @@ class InProcessExecutor(Executor):
 
         try:
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
-                ctx.action_id, env_id, resource_id.resource_version_str()
+                ctx.action_id, env_id, resource_ref.rvid
             )
-        except Exception:
+        except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("Failed to report the start of the deployment to the server")
             return
@@ -372,7 +382,7 @@ class InProcessExecutor(Executor):
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
-            r_id=resource_id,
+            r_id=resource_ref.rvid,
             deploy_id=gid,
         )
 
@@ -382,10 +392,10 @@ class InProcessExecutor(Executor):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_id.resource_version_str(): ctx.changes}
+        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_ref.rvid: ctx.changes}
         response = await self.client.resource_deploy_done(
             tid=env_id,
-            rvid=resource_id.resource_version_str(),
+            rvid=resource_ref.rvid,
             action_id=ctx.action_id,
             status=ctx.status,
             messages=ctx.logs,
@@ -409,7 +419,6 @@ class ExternalExecutor(Executor):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_id: Id,
         resource_ref: ResourceReference,
         env_id: uuid.UUID,
         reason: str,
@@ -441,14 +450,14 @@ class ResourceAction(ResourceActionBase):
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
-        super().__init__(scheduler, Id.parse_id(ResourceVersionIdStr(str(resource.attributes["id"]))), gid, reason)
+        super().__init__(scheduler, resource.id, gid, reason)
         self.resource: ResourceReference = resource
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
 
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
-        with self.executor.cache(self.resource_id.get_version()):
+        with self.executor.cache(self.resource.model_version):
             self.dependencies = [generation[Id.parse_id(x).resource_str()] for x in self.resource.requires]
             waiters = [x.future for x in self.dependencies]
             waiters.append(dummy.future)
@@ -491,7 +500,6 @@ class ResourceAction(ResourceActionBase):
 
                     await self.executor.execute(
                         gid=self.gid,
-                        resource_id=self.resource_id,
                         resource_ref=self.resource,
                         env_id=self.env_id,
                         reason=self.reason,
@@ -746,21 +754,20 @@ class ResourceScheduler:
 
         # start new run
         self.running = new_request
-        self.version = Id.parse_id(resources[0].id).get_version()
+        self.version = resources[0].model_version
         gid = uuid.uuid4()
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
-        self.generation = {
-            resource.id: ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
-            for resource in resources
-        }
+        self.generation = {}
 
-        # mark undeployable
-        for key, res in self.generation.items():
-            vid = res.resource_id.resource_version_str()
-            if vid in undeployable:
-                self.generation[key].undeployable = undeployable[vid]
+        for resource in resources:
+            resource_action=ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
+            # mark undeployable
+            if resource.rvid in undeployable:
+                resource_action.undeployable = undeployable[resource.rvid]
+            self.generation[resource.id] = resource_action
+
 
         # hook up Cross Agent Dependencies
         all_dependencies: Iterator[Id] = (Id.parse_id(raw) for r in resources for raw in r.requires)
@@ -1091,23 +1098,19 @@ class AgentInstance:
                 self._cache.open_version(version)
                 for resource_ref in resource_refs:
                     started = datetime.datetime.now().astimezone()
-                    id = str(resource_refs[0].attributes["id"])
-
-                    resource_id = Id.parse_id(ResourceVersionIdStr(id)).resource_version_str()
-
                     try:
-                        resource: Resource = Resource.deserialize(resource_ref.model_dump()["attributes"])
+                        resource: Resource = Resource.deserialize(resource_ref.attributes)
                     except Exception:
                         msg = data.LogLine.log(
                             level=const.LogLevel.ERROR,
                             msg="Unable to deserialize %(resource_id)s",
-                            resource_id=resource_id,
+                            resource_id=resource_ref.rvid,
                             timestamp=datetime.datetime.now().astimezone(),
                         )
 
                         await self.get_client().resource_action_update(
                             tid=env_id,
-                            resource_ids=[resource_id],
+                            resource_ids=[resource_ref.rvid],
                             action_id=uuid.uuid4(),
                             action=const.ResourceAction.dryrun,
                             started=started,
@@ -1115,37 +1118,36 @@ class AgentInstance:
                             status=const.ResourceState.unavailable,
                             messages=[msg],
                         )
-                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
+                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={})
                         continue
                     ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now().astimezone()
                     provider = None
 
-                    resource_id = resource.id.resource_version_str()
-                    if resource_id in undeployable:
+                    if resource_ref.rvid in undeployable:
                         ctx.error(
                             "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
-                            resource_id=resource_id,
-                            status=undeployable[resource_id],
+                            resource_id=resource_ref.rvid,
+                            status=undeployable[resource_ref.rvid],
                         )
-                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
+                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={})
                         continue
 
                     try:
-                        self.logger.debug("Running dryrun for %s", resource_id)
+                        self.logger.debug("Running dryrun for %s", resource_ref.rvid)
 
                         try:
                             provider = await self.get_provider(resource)
                         except Exception as e:
                             ctx.exception(
                                 "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
-                                resource_id=resource_id,
+                                resource_id=resource_ref.rvid,
                                 exception=str(e),
                             )
                             await self.get_client().dryrun_update(
                                 tid=self._env_id,
                                 id=dry_run_id,
-                                resource=resource_id,
+                                resource=resource_ref.rvid,
                                 changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
                             )
                         else:
@@ -1160,12 +1162,12 @@ class AgentInstance:
                                 if ctx.status == const.ResourceState.failed:
                                     changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes
                                 )
                             except Exception as e:
                                 ctx.exception(
                                     "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
-                                    resource_id=str(resource.id),
+                                    resource_id=resource_ref.rvid,
                                     exception=str(e),
                                 )
                                 changes = ctx.changes
@@ -1173,7 +1175,7 @@ class AgentInstance:
                                     changes = {}
                                 changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
                                 await self.get_client().dryrun_update(
-                                    tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
+                                    tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes
                                 )
 
                     except Exception:
@@ -1181,7 +1183,7 @@ class AgentInstance:
                         changes = {}
                         changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
                         await self.get_client().dryrun_update(
-                            tid=self._env_id, id=dry_run_id, resource=resource_id, changes=changes
+                            tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes
                         )
                     finally:
                         if provider is not None:
@@ -1190,7 +1192,7 @@ class AgentInstance:
                         finished = datetime.datetime.now().astimezone()
                         await self.get_client().resource_action_update(
                             tid=self._env_id,
-                            resource_ids=[resource_id],
+                            resource_ids=[resource_ref.rvid],
                             action_id=ctx.action_id,
                             action=const.ResourceAction.dryrun,
                             started=started,
@@ -1319,14 +1321,9 @@ class AgentInstance:
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
         for res in resources:
-            res["attributes"]["id"] = res["id"]
             if res["resource_type"] not in failed_resource_types:
                 loaded_resources.append(
-                    ResourceReference(
-                        id=Id.parse_id(res["id"]).resource_str(),
-                        attributes=res["attributes"],
-                        requires=res["attributes"]["requires"],
-                    )
+                    ResourceReference(res)
                 )
 
                 state = const.ResourceState[res["status"]]
@@ -1336,7 +1333,7 @@ class AgentInstance:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
                 loaded_resources.append(
-                    ResourceReference(id=res["id"], attributes=res["attributes"], requires=res["attributes"]["requires"])
+                    ResourceReference(res)
                 )
 
         if len(failed_resources) > 0:

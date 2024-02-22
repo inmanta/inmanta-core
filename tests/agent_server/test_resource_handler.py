@@ -117,7 +117,12 @@ async def test_logging_error(resource_container, environment, client, agent, cli
 
 @pytest.mark.parametrize(
     "resource_type",
-    ["test::FailFast", "test::FailFastCRUD", "test::BadPost", "test::BadPostCRUD"],
+    [
+        "test::FailFast",
+        "test::FailFastCRUD",
+        "test::BadPost",
+        "test::BadPostCRUD"
+    ],
 )
 async def test_formatting_exception_messages(
     resource_container, environment: str, client, agent: Agent, clienthelper, resource_type: str
