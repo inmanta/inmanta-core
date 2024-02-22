@@ -23,7 +23,6 @@ import multiprocessing
 import os
 import socket
 import typing
-from typing import Awaitable
 
 import inmanta.config
 import inmanta.const

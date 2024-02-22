@@ -25,7 +25,7 @@ import typing
 import uuid
 from asyncio import Future, Protocol, transports
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Optional
+from typing import Optional
 
 
 class IPCException(Exception):
