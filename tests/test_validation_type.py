@@ -24,7 +24,7 @@ import pydantic
 import pytest
 
 from inmanta import compiler
-from inmanta.validation_type import _cachable_validate_type, regex_string, validate_type
+from inmanta.validation_type import HashKeyContainer, _cachable_validate_type, regex_string, validate_type
 
 
 @pytest.mark.parametrize(
@@ -99,3 +99,19 @@ def test_cache(snippetcompiler):
     # For each field: One miss, 19 hits
     assert _cachable_validate_type.cache_info().hits == 19 * 2
     assert _cachable_validate_type.cache_info().misses == 2
+
+
+@pytest.mark.parametrize(
+    "attr_type,validation_parameters,schema",
+    [
+        ("pydantic.constr", {"regex": "^test.*$"}, {"pattern": "^test.*$", "type": "string"}),
+        (
+            "pydantic.constr",
+            {"regex": "^test.*$", "max_length": 10},
+            {"maxLength": 10, "pattern": "^test.*$", "type": "string"},
+        ),
+    ],
+)
+def test_schema(attr_type: str, validation_parameters: dict[str, object], schema: dict[str, str | int]) -> None:
+    type_validator = _cachable_validate_type(attr_type, HashKeyContainer(validation_parameters))
+    assert type_validator.json_schema() == schema

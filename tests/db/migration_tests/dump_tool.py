@@ -140,7 +140,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
 
     await _wait_until_deployment_finishes(client, env_id_1, v1, 20)
 
-    await client.notify_change(id=env_id_1)
+    await client.notify_change(id=env_id_1, update=False)
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
@@ -152,7 +152,7 @@ async def test_dump_db(server, client, postgres_db, database_name):
     await _wait_until_deployment_finishes(client, env_id_1, env_1_version, 20)
 
     # a version that is release, but not deployed
-    await client.notify_change(id=env_id_1)
+    await client.notify_change(id=env_id_1, update=False)
 
     env_1_version += 1
     await wait_for_version(client, env_id_1, env_1_version)
@@ -169,6 +169,8 @@ async def test_dump_db(server, client, postgres_db, database_name):
     )
 
     # a not released version
+    await client.notify_change(id=env_id_1, update=False)
+    versions = await wait_for_version(client, env_id_1, 4)
     await client.notify_change(id=env_id_1)
 
     env_1_version += 1

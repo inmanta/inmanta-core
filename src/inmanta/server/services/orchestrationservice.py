@@ -30,7 +30,14 @@ from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, InvalidSort, RowLockMode
+from inmanta.data import (
+    APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    InvalidSort,
+    ResourcePersistentState,
+    RowLockMode,
+)
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -41,6 +48,7 @@ from inmanta.data.model import (
     ResourceMinimal,
     ResourceVersionIdStr,
 )
+from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -397,23 +405,25 @@ class OrchestrationService(protocol.ServerSlice):
         Purge versions from the database
         """
         # TODO: move to data and use queries for delete
-        envs = await data.Environment.get_list(halted=False)
-        for env_item in envs:
-            # get available versions
-            n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
-            assert isinstance(n_versions, int)
-            versions = await data.ConfigurationModel.get_list(environment=env_item.id)
-            if len(versions) > n_versions:
-                LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
-                version_dict = {x.version: x for x in versions}
-                delete_list = sorted(version_dict.keys())
-                delete_list = delete_list[:-n_versions]
+        async with data.Environment.get_connection() as connection:
+            envs = await data.Environment.get_list(halted=False, connection=connection)
+            for env_item in envs:
+                # get available versions
+                n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
+                assert isinstance(n_versions, int)
+                versions = await data.ConfigurationModel.get_list(environment=env_item.id, connection=connection)
+                if len(versions) > n_versions:
+                    LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
+                    version_dict = {x.version: x for x in versions}
+                    delete_list = sorted(version_dict.keys())
+                    delete_list = delete_list[:-n_versions]
 
-                for v in delete_list:
-                    await version_dict[v].delete_cascade()
+                    for v in delete_list:
+                        await version_dict[v].delete_cascade(connection=connection)
 
-        # Cleanup old agents from agent table in db
-        await data.Agent.clean_up()
+                await ResourcePersistentState.trim(env_item.id, connection=connection)
+            # Cleanup old agents from agent table in db
+            await data.Agent.clean_up()
 
     @handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
@@ -1067,93 +1077,90 @@ class OrchestrationService(protocol.ServerSlice):
     ) -> ReturnTupple:
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
-                # explicit lock to allow patching of increments for stale failures
-                # (locks out patching stage of deploy_done to avoid races)
-                await env.acquire_release_version_lock(connection=connection)
-                model = await data.ConfigurationModel.get_version_internal(
-                    env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
-                )
-                if model is None:
-                    return 404, {"message": "The request version does not exist."}
-
-                if model.released:
-                    raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
-
-                latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
-
-                # ensure we are the latest version
-                # this is required for the subsequent increment calculation to make sense
-                # this does introduce a race condition, with any OTHER release running concurrently on this environment
-                # We could lock the get_version_nr_latest_version for update to prevent this
-                if model.version < (latest_version or -1):
-                    raise Conflict(
-                        f"The version {version_id} on environment {env.id} "
-                        f"is older then the latest released version {latest_version}."
+                with ConnectionInTransaction(connection) as connection_holder:
+                    # explicit lock to allow patching of increments for stale failures
+                    # (locks out patching stage of deploy_done to avoid races)
+                    await env.acquire_release_version_lock(connection=connection)
+                    model = await data.ConfigurationModel.get_version_internal(
+                        env.id, version_id, connection=connection, lock=RowLockMode.FOR_NO_KEY_UPDATE
                     )
+                    if model is None:
+                        return 404, {"message": "The request version does not exist."}
 
-                # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-                undep = model.get_undeployable()
-                now = datetime.datetime.now().astimezone()
+                    if model.released:
+                        raise Conflict(f"The version {version_id} on environment {env.id} is already released.")
 
-                if undep:
-                    undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
-                    # not checking error conditions
-                    await self.resource_service.resource_action_update(
-                        env,
-                        undep_ids,
-                        action_id=uuid.uuid4(),
-                        started=now,
-                        finished=now,
-                        status=const.ResourceState.undefined,
-                        action=const.ResourceAction.deploy,
-                        changes={},
-                        messages=[],
-                        change=const.Change.nochange,
-                        send_events=False,
-                        connection=connection,
-                    )
+                    latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
 
-                    skippable = model.get_skipped_for_undeployable()
-                    if skippable:
-                        skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
+                    # ensure we are the latest version
+                    # this is required for the subsequent increment calculation to make sense
+                    # this does introduce a race condition, with any OTHER release running concurrently on this environment
+                    # We could lock the get_version_nr_latest_version for update to prevent this
+                    if model.version < (latest_version or -1):
+                        raise Conflict(
+                            f"The version {version_id} on environment {env.id} "
+                            f"is older then the latest released version {latest_version}."
+                        )
+
+                    # Already mark undeployable resources as deployed to create a better UX (change the version counters)
+                    undep = model.get_undeployable()
+                    now = datetime.datetime.now().astimezone()
+
+                    if undep:
+                        undep_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in undep]
                         # not checking error conditions
                         await self.resource_service.resource_action_update(
                             env,
-                            skippable_ids,
+                            undep_ids,
                             action_id=uuid.uuid4(),
                             started=now,
                             finished=now,
-                            status=const.ResourceState.skipped_for_undefined,
+                            status=const.ResourceState.undefined,
                             action=const.ResourceAction.deploy,
                             changes={},
                             messages=[],
                             change=const.Change.nochange,
                             send_events=False,
-                            connection=connection,
+                            connection=connection_holder,
                         )
 
-                if latest_version:
-                    # Set the updated field:
-                    # BE VERY CAREFUL
-                    # All state copied here has a race with stale deploy
-                    # This is handled in propagate_resource_state_if_stale
-                    await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
-                    await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
+                        skippable = model.get_skipped_for_undeployable()
+                        if skippable:
+                            skippable_ids = [ResourceVersionIdStr(rid + ",v=%s" % version_id) for rid in skippable]
+                            # not checking error conditions
+                            await self.resource_service.resource_action_update(
+                                env,
+                                skippable_ids,
+                                action_id=uuid.uuid4(),
+                                started=now,
+                                finished=now,
+                                status=const.ResourceState.skipped_for_undefined,
+                                action=const.ResourceAction.deploy,
+                                changes={},
+                                messages=[],
+                                change=const.Change.nochange,
+                                send_events=False,
+                                connection=connection_holder,
+                            )
 
-                    increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = (
-                        await self.resource_service.get_increment(
-                            env,
-                            version_id,
-                            connection=connection,
+                    if latest_version:
+                        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = (
+                            await self.resource_service.get_increment(
+                                env,
+                                version_id,
+                                connection=connection,
+                            )
                         )
-                    )
 
-                    increment_ids, neg_increment = increments
-                    await self.resource_service.mark_deployed(env, neg_increment, now, version_id, connection=connection)
+                        increment_ids, neg_increment = increments
+                        await self.resource_service.mark_deployed(
+                            env, neg_increment, now, version_id, connection=connection_holder
+                        )
 
-                # Setting the model's released field to True is the trigger for the agents to start pulling in the resources.
-                # This has to be done after the resources outside of the increment have been marked as deployed.
-                await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
+                    # Setting the model's released field to True is the trigger for the agents
+                    # to start pulling in the resources.
+                    # This has to be done after the resources outside of the increment have been marked as deployed.
+                    await model.update_fields(released=True, result=const.VersionState.deploying, connection=connection)
 
             if model.total == 0:
                 await model.mark_done(connection=connection)

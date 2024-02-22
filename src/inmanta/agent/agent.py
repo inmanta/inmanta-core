@@ -1601,6 +1601,10 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def get_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> list[ResourceInstallSpec]:
+        """
+        Get the list of installation specifications (i.e. pip congif, python package dependencies, Inmanta modules sources)
+        required to deploy a given version for the provided resource types.
+        """
         if self._loader is None:
             return []
 
@@ -1622,6 +1626,7 @@ class Agent(SessionEndpoint):
                     LOGGER.debug("Installing handler %s version=%d", resource_type, version)
                     requirements: set[str] = set()
                     sources: list["ModuleSource"] = []
+                    # Encapsulate source code details in ``ModuleSource`` objects
                     for source in result.result["data"]:
                         sources.append(
                             ModuleSource(
@@ -1659,6 +1664,7 @@ class Agent(SessionEndpoint):
                 # clear cache, for retry on failure
                 self._last_loaded[resource_install_spec.resource_type] = -1
             try:
+                # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                 await self._install(
                     resource_install_spec.sources,
                     resource_install_spec.requirements,
@@ -1667,6 +1673,8 @@ class Agent(SessionEndpoint):
                 LOGGER.debug(
                     "Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version
                 )
+                # Update the ``_last_loaded`` cache to indicate that the given resource type's code
+                # was loaded successfully at the specified version.
                 self._last_loaded[resource_install_spec.resource_type] = resource_install_spec.model_version
             except Exception:
                 LOGGER.exception(
