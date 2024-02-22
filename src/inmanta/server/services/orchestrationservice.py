@@ -30,7 +30,14 @@ from asyncpg import Connection
 
 from inmanta import const, data
 from inmanta.const import ResourceState
-from inmanta.data import APILIMIT, AVAILABLE_VERSIONS_TO_KEEP, ENVIRONMENT_AGENT_TRIGGER_METHOD, InvalidSort, RowLockMode
+from inmanta.data import (
+    APILIMIT,
+    AVAILABLE_VERSIONS_TO_KEEP,
+    ENVIRONMENT_AGENT_TRIGGER_METHOD,
+    InvalidSort,
+    ResourcePersistentState,
+    RowLockMode,
+)
 from inmanta.data.dataview import DesiredStateVersionView
 from inmanta.data.model import (
     DesiredStateVersion,
@@ -41,6 +48,7 @@ from inmanta.data.model import (
     ResourceMinimal,
     ResourceVersionIdStr,
 )
+from inmanta.db.util import ConnectionInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue, attach_warnings
 from inmanta.protocol.exceptions import BadRequest, BaseHttpException, Conflict, NotFound, ServerError
@@ -59,7 +67,6 @@ from inmanta.server.agentmanager import AgentManager, AutostartedAgentManager
 from inmanta.server.services.resourceservice import ResourceService
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
-from inmanta.util.db import ConnectionInTransaction
 
 LOGGER = logging.getLogger(__name__)
 
@@ -398,23 +405,25 @@ class OrchestrationService(protocol.ServerSlice):
         Purge versions from the database
         """
         # TODO: move to data and use queries for delete
-        envs = await data.Environment.get_list(halted=False)
-        for env_item in envs:
-            # get available versions
-            n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP)
-            assert isinstance(n_versions, int)
-            versions = await data.ConfigurationModel.get_list(environment=env_item.id)
-            if len(versions) > n_versions:
-                LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
-                version_dict = {x.version: x for x in versions}
-                delete_list = sorted(version_dict.keys())
-                delete_list = delete_list[:-n_versions]
+        async with data.Environment.get_connection() as connection:
+            envs = await data.Environment.get_list(halted=False, connection=connection)
+            for env_item in envs:
+                # get available versions
+                n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
+                assert isinstance(n_versions, int)
+                versions = await data.ConfigurationModel.get_list(environment=env_item.id, connection=connection)
+                if len(versions) > n_versions:
+                    LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
+                    version_dict = {x.version: x for x in versions}
+                    delete_list = sorted(version_dict.keys())
+                    delete_list = delete_list[:-n_versions]
 
-                for v in delete_list:
-                    await version_dict[v].delete_cascade()
+                    for v in delete_list:
+                        await version_dict[v].delete_cascade(connection=connection)
 
-        # Cleanup old agents from agent table in db
-        await data.Agent.clean_up()
+                await ResourcePersistentState.trim(env_item.id, connection=connection)
+            # Cleanup old agents from agent table in db
+            await data.Agent.clean_up()
 
     @handle(methods.list_versions, env="tid")
     async def list_version(self, env: data.Environment, start: Optional[int] = None, limit: Optional[int] = None) -> Apireturn:
@@ -1135,13 +1144,6 @@ class OrchestrationService(protocol.ServerSlice):
                             )
 
                     if latest_version:
-                        # Set the updated field:
-                        # BE VERY CAREFUL
-                        # All state copied here has a race with stale deploy
-                        # This is handled in propagate_resource_state_if_stale
-                        await data.Resource.copy_last_success(env.id, latest_version, version_id, connection=connection)
-                        await data.Resource.copy_last_produced_events(env.id, latest_version, version_id, connection=connection)
-
                         increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = (
                             await self.resource_service.get_increment(
                                 env,
