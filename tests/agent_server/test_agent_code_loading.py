@@ -28,6 +28,7 @@ import pytest
 
 import inmanta
 from inmanta.agent import Agent
+from inmanta.agent.agent import ResourceInstallSpec
 from inmanta.data import PipConfig
 from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
@@ -170,15 +171,26 @@ inmanta.test_agent_code_loading = 15
 
     # Cache test
     # install sources for all three
-    await agent.ensure_code(
-        environment=environment,
-        version=version_1,
-        resource_types=["test::Test", "test::Test2", "test::Test3"],
+
+    resource_install_specs_1: list[ResourceInstallSpec] = await agent.get_code(
+        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
-    # install sources as well
-    await agent.ensure_code(environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"])
-    # install sources as well
-    await agent.ensure_code(environment=environment, version=version_2, resource_types=["test::Test2"])
+    await agent.ensure_code(
+        code=resource_install_specs_1,
+    )
+    resource_install_specs_2: list[ResourceInstallSpec] = await agent.get_code(
+        environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
+    )
+    await agent.ensure_code(
+        code=resource_install_specs_2,
+    )
+    resource_install_specs_3: list[ResourceInstallSpec] = await agent.get_code(
+        environment=environment, version=version_2, resource_types=["test::Test2"]
+    )
+    await agent.ensure_code(
+        code=resource_install_specs_3,
+    )
+
 
     # Test 1 is deployed once, as seen by the agent
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test version={version_1}").contains(
@@ -201,8 +213,11 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources1
     assert getattr(inmanta, "test_agent_code_loading") == 5
 
+    resource_install_specs_4: list[ResourceInstallSpec] = await agent.get_code(
+        environment=environment, version=version_2, resource_types=["test::Test3"]
+    )
     # Install sources2
-    await agent.ensure_code(environment=environment, version=version_2, resource_types=["test::Test3"])
+    await agent.ensure_code(code=resource_install_specs_4)
     # Test 3 is deployed twice, as seen by the agent and the loader
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_1}")
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test3 version={version_2}")
@@ -214,8 +229,11 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources2
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
+    resource_install_specs_5: list[ResourceInstallSpec] = await agent.get_code(
+        environment=environment, version=version_3, resource_types=["test::Test4"]
+    )
     # Loader loads byte code file
-    await agent.ensure_code(environment=environment, version=version_3, resource_types=["test::Test4"])
+    await agent.ensure_code(code=resource_install_specs_5)
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test4 version={version_3}")
     LogSequence(caplog).contains("inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)").assert_not(
         "inmanta.loader", INFO, f"Deploying code (hv={hv3}, module=inmanta_plugins.tests)"
@@ -223,8 +241,11 @@ inmanta.test_agent_code_loading = 15
 
     assert getattr(inmanta, "test_agent_code_loading") == 15
 
+    resource_install_specs_6: list[ResourceInstallSpec] = await agent.get_code(
+        environment=environment, version=version_4, resource_types=["test::Test4"]
+    )
     # Now load the python only version again
-    await agent.ensure_code(environment=environment, version=version_4, resource_types=["test::Test4"])
+    await agent.ensure_code(code=resource_install_specs_6)
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
 
