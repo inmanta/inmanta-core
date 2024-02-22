@@ -1070,7 +1070,6 @@ class AgentInstance:
         return 200
 
     async def do_run_dryrun(self, version: int, dry_run_id: uuid.UUID, env_id: uuid.UUID) -> None:
-        started = datetime.datetime.now().astimezone()
 
         async with self.dryrunlock:
             async with self.ratelimiter:
@@ -1091,15 +1090,10 @@ class AgentInstance:
 
                 self._cache.open_version(version)
                 for resource_ref in resource_refs:
+                    started = datetime.datetime.now().astimezone()
+
                     resource_id = Id.parse_id(resource_ref.attributes["id"]).resource_version_str()
-                    # if resource_id in undeployable:
-                    #     ctx.error(
-                    #         "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
-                    #         resource_id=resource_id,
-                    #         status=undeployable[resource_id],
-                    #     )
-                    #     await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
-                    #     continue
+
                     try:
                         resource: Resource = Resource.deserialize(resource_ref.model_dump()["attributes"])
                     except Exception:
@@ -1109,7 +1103,6 @@ class AgentInstance:
                             resource_id=resource_id,
                             timestamp=datetime.datetime.now().astimezone(),
                         )
-
 
                         await self.get_client().resource_action_update(
                             tid=env_id,
@@ -1207,7 +1200,7 @@ class AgentInstance:
 
                 self._cache.close_version(version)
 
-    async def get_facts(self, resource: JsonType) -> Apireturn:
+    async def get_facts(self, resource: JsonType, env_id: uuid.UUID) -> Apireturn:
         async with self.ratelimiter:
             # this only works with InProcessExecutor
             # TODO: adapt for ExternalExecutor
@@ -1224,8 +1217,28 @@ class AgentInstance:
             started = datetime.datetime.now().astimezone()
             provider = None
             try:
-                resource_obj: Resource = Resource.deserialize(resource_refs[0])
+                resource_id = Id.parse_id(resource_refs[0].attributes["id"]).resource_version_str()
+                try:
+                    resource_obj: Resource = Resource.deserialize(resource_refs[0].model_dump()["attributes"])
+                except Exception:
+                    msg = data.LogLine.log(
+                        level=const.LogLevel.ERROR,
+                        msg="Unable to deserialize %(resource_id)s",
+                        resource_id=resource_id,
+                        timestamp=datetime.datetime.now().astimezone(),
+                    )
 
+                    await self.get_client().resource_action_update(
+                        tid=env_id,
+                        resource_ids=[resource_id],
+                        action_id=uuid.uuid4(),
+                        action=const.ResourceAction.getfact,
+                        started=started,
+                        finished=datetime.datetime.now().astimezone(),
+                        status=const.ResourceState.unavailable,
+                        messages=[msg],
+                    )
+                    return
                 ctx = handler.HandlerContext(resource_obj)
 
                 version = resource_obj.id.get_version()
@@ -1805,7 +1818,7 @@ class Agent(SessionEndpoint):
         if not instance:
             return 200
 
-        return await instance.get_facts(resource)
+        return await instance.get_facts(resource, env)
 
     @protocol.handle(methods.get_status)
     async def get_status(self) -> Apireturn:

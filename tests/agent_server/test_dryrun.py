@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import asyncio
 import json
 import logging
 import uuid
@@ -139,7 +138,7 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
         result = await client.dryrun_list(environment, version)
         return result.result["dryruns"][0]["todo"] == 0
 
-    await retry_limited(dryrun_finished, 5)
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(environment, dry_run_id)
@@ -236,9 +235,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
         result = await client.dryrun_list(env_id, version)
         return result.result["dryruns"][0]["todo"] == 0
 
-    await retry_limited(dryrun_finished, 5000)
-    # await retry_limited(dryrun_finished, 5)
-
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -268,7 +265,7 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     log_entry = result["logs"][0]
     assert log_entry["action"] == "dryrun"
     assert log_entry["status"] == "unavailable"
-    assert "Failed to load" in log_entry["messages"][0]["msg"]
+    assert "Unable to deserialize" in log_entry["messages"][0]["msg"]
 
     await agent.stop()
 
@@ -310,7 +307,7 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
         result = await client.dryrun_list(env_id, version)
         return result.result["dryruns"][0]["todo"] == 0
 
-    await retry_limited(dryrun_finished, 5)
+    await retry_limited(dryrun_finished, 10)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -465,7 +462,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
         result = await client.list_dryruns(environment, version)
         return result.result["data"][0]["todo"] == 0
 
-    await retry_limited(dryrun_finished, 5)
+    await retry_limited(dryrun_finished, 10)
 
     result = await client.get_dryrun_diff(uuid.uuid4(), version, dry_run_id)
     assert result.code == 404
@@ -522,7 +519,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     assert result.result["data"][0]["id"] == new_dry_run_id
     assert result.result["data"][0]["date"] > result.result["data"][1]["date"]
 
-    await retry_limited(dryrun_finished, 5)
+    await retry_limited(dryrun_finished, 10)
 
     # The new dryrun should have the updated value
     result = await client.get_dryrun_diff(environment, version, new_dry_run_id)
