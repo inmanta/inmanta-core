@@ -1091,20 +1091,29 @@ class AgentInstance:
 
                 self._cache.open_version(version)
                 for resource_ref in resource_refs:
+                    resource_id = Id.parse_id(resource_ref.attributes["id"]).resource_version_str()
+                    # if resource_id in undeployable:
+                    #     ctx.error(
+                    #         "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
+                    #         resource_id=resource_id,
+                    #         status=undeployable[resource_id],
+                    #     )
+                    #     await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
+                    #     continue
                     try:
                         resource: Resource = Resource.deserialize(resource_ref.model_dump()["attributes"])
                     except Exception:
                         msg = data.LogLine.log(
                             level=const.LogLevel.ERROR,
                             msg="Unable to deserialize %(resource_id)s",
-                            resource_id=Id.parse_id(resource_ref.attributes["id"]).resource_version_str(),
+                            resource_id=resource_id,
                             timestamp=datetime.datetime.now().astimezone(),
                         )
 
 
                         await self.get_client().resource_action_update(
                             tid=env_id,
-                            resource_ids=[Id.parse_id(resource_ref.attributes["id"]).resource_version_str()],
+                            resource_ids=[resource_id],
                             action_id=uuid.uuid4(),
                             action=const.ResourceAction.dryrun,
                             started=started,
@@ -1112,7 +1121,7 @@ class AgentInstance:
                             status=const.ResourceState.unavailable,
                             messages=[msg],
                         )
-                        return
+                        continue
                     ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now().astimezone()
                     provider = None
