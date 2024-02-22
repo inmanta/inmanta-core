@@ -311,7 +311,6 @@ class Resource(BaseModel):
     resource_version_id: ResourceVersionIdStr
     resource_id_value: str
     agent: str
-    last_deploy: Optional[datetime.datetime] = None
     attributes: JsonType
     status: const.ResourceState
     resource_set: Optional[str] = None

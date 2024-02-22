@@ -20,20 +20,7 @@ import logging
 import warnings
 from typing import Optional
 
-from inmanta.config import (
-    Config,
-    Option,
-    is_bool,
-    is_float,
-    is_int,
-    is_list,
-    is_map,
-    is_str,
-    is_str_opt,
-    is_time,
-    log_dir,
-    state_dir,
-)
+from inmanta.config import Config, Option, is_bool, is_float, is_int, is_list, is_map, is_str, is_str_opt, is_time
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +30,15 @@ LOGGER = logging.getLogger(__name__)
 # Database
 #############################
 
+db_wait_time = Option(
+    "database",
+    "wait_time",
+    0,
+    "For how long the server should wait for the DB to be up before starting. "
+    "If set to 0, the server won't wait for the DB. "
+    "If set to a negative value, the server will wait forever.",
+    is_time,
+)
 db_host = Option("database", "host", "localhost", "Hostname or IP of the postgresql server", is_str)
 db_port = Option("database", "port", 5432, "The port of the postgresql server", is_int)
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server", is_str)

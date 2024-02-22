@@ -383,8 +383,10 @@ async def test_last_non_deploying_status_field_on_resource(
                             The old one (resource_action_update) or the new one (deployment_endpoint).
     """
     version = await clienthelper.get_version()
-    rvid_r1_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file1],v={version}")
-    rvid_r2_v1 = ResourceVersionIdStr(f"std::File[agent1,path=/etc/file2],v={version}")
+    rid_r1 = "std::File[agent1,path=/etc/file1]"
+    rvid_r1_v1 = ResourceVersionIdStr(f"{rid_r1},v={version}")
+    rid_r2 = "std::File[agent1,path=/etc/file2]"
+    rvid_r2_v1 = ResourceVersionIdStr(f"{rid_r2},v={version}")
     resources = [
         {"path": "/etc/file1", "id": rvid_r1_v1, "requires": [], "purged": False, "send_event": False},
         {"path": "/etc/file2", "id": rvid_r2_v1, "requires": [], "purged": False, "send_event": False},
@@ -399,10 +401,14 @@ async def test_last_non_deploying_status_field_on_resource(
     ) -> None:
         db_resources = await data.Resource.get_list(environment=environment)
         rvid_to_resources = {res.resource_version_id: res for res in db_resources}
+
+        db_resource_state = await data.ResourcePersistentState.get_list(environment=environment)
+        rid_to_resource_state = {res.resource_id: res for res in db_resource_state}
+
         assert rvid_to_resources[rvid_r1_v1].status is r1_status
-        assert rvid_to_resources[rvid_r1_v1].last_non_deploying_status is r1_last_non_deploying_status
+        assert rid_to_resource_state[rid_r1].last_non_deploying_status is r1_last_non_deploying_status
         assert rvid_to_resources[rvid_r2_v1].status is r2_status
-        assert rvid_to_resources[rvid_r2_v1].last_non_deploying_status is r2_last_non_deploying_status
+        assert rid_to_resource_state[rid_r2].last_non_deploying_status is r2_last_non_deploying_status
 
     async def start_deployment(rvid: ResourceVersionIdStr) -> uuid.UUID:
         if endpoint_to_use == "deployment_endpoint":

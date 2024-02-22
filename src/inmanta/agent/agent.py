@@ -29,7 +29,7 @@ import time
 import uuid
 from asyncio import Lock
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Callable, Coroutine, Iterable, Sequence
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Dict, Optional, Union, cast
@@ -757,7 +757,7 @@ class AgentInstance:
 
         def periodic_schedule(
             kind: str,
-            action: Callable[[], Awaitable[object]],
+            action: Callable[[], Coroutine[object, None, object]],
             interval: Union[int, str],
             splay_value: int,
             initial_time: datetime.datetime,
@@ -1335,7 +1335,10 @@ class Agent(SessionEndpoint):
             agent_instance.pause("Connection to server lost")
 
     async def ensure_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> set[str]:
-        """Ensure that the code for the given environment and version is loaded"""
+        """
+        Ensure that the code for the given environment and version is loaded.
+        Return a list of all the ``resource_types`` that it failed to load.
+        """
         failed_to_load: set[str] = set()
         if self._loader is None:
             return failed_to_load
@@ -1361,6 +1364,7 @@ class Agent(SessionEndpoint):
                         LOGGER.debug("Installing handler %s version=%d", rt, version)
                         requirements = set()
                         sources = []
+                        # Encapsulate source code details in ``ModuleSource`` objects
                         for source in result.result["data"]:
                             sources.append(
                                 ModuleSource(
@@ -1374,8 +1378,11 @@ class Agent(SessionEndpoint):
 
                         if pip_config is None:
                             pip_config = await self._get_pip_config(environment, version)
+                        # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                         await self._install(sources, list(requirements), pip_config=pip_config)
                         LOGGER.debug("Installed handler %s version=%d", rt, version)
+                        # Update the ``_last_loaded`` cache to indicate that the given resource type's code
+                        # was loaded successfully at the specified version.
                         self._last_loaded[rt] = version
                     except Exception:
                         LOGGER.exception("Failed to install handler %s version=%d", rt, version)

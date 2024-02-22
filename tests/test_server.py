@@ -22,7 +22,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
 import pytest
@@ -33,7 +33,7 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
-from inmanta.data import AUTO_DEPLOY
+from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
@@ -217,18 +217,56 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     for _ in range(n_versions_to_create):
         version = (await client.reserve_version(env_1_id)).result["data"]
 
+        resources = [
+            # First one is fixed
+            {
+                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v={version}",
+                "owner": "root",
+                "path": "/etc/sysconfig/network",
+                "permissions": 644,
+                "purged": False,
+                "requires": [],
+            },
+            # This one changes ID every version
+            {
+                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network{version}],v={version}",
+                "owner": "root",
+                "path": "/etc/sysconfig/network",
+                "permissions": 644,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
         res = await client.put_version(
-            tid=env_1_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+            tid=env_1_id,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
         )
         assert res.code == 200
 
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == n_versions_to_create
 
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == n_versions_to_create + 1
+
+    # Ensure we don't clean too much
+    await ResourcePersistentState.trim(env_1_id)
+
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == n_versions_to_create + 1
+
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
+
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == min(n_versions_to_keep, n_versions_to_create) + 1
 
 
 async def test_n_versions_env_setting_scope(client, server):
@@ -813,6 +851,85 @@ async def test_server_logs_address(server_config, caplog, async_finalizer):
         log_contains(caplog, "protocol.rest", logging.INFO, f"Server listening on {address}:")
 
 
+class MockConnection:
+    """
+    Mock connection class to simulate an asyncpg connection.
+    This class includes a close method to mimic closing a database connection.
+    """
+
+    async def close(self, timeout: int) -> None:
+        return
+
+
+@pytest.mark.parametrize("db_wait_time", ["20", "0"])
+async def test_bootloader_db_wait(monkeypatch, tmpdir, caplog, db_wait_time: str) -> None:
+    """
+    Tests the Inmanta server bootloader's behavior with respect to waiting for the database to be ready before proceeding
+    with the startup, based on the 'db_wait_time' configuration.
+    """
+    state_dir: str = tmpdir.mkdir("state_dir").strpath
+    config.Config.set("database", "wait_time", db_wait_time)
+    config.Config.set("config", "state-dir", state_dir)
+
+    state = {"first_connect": True}
+
+    async def mock_asyncpg_connect(*args, **kwargs) -> MockConnection:
+        """
+        Mock function to replace asyncpg.connect.
+        Will raise an Exception on the first invocation.
+        """
+        if state["first_connect"]:
+            state["first_connect"] = False
+            raise Exception("Connection failure")
+        else:
+            return MockConnection()
+
+    async def mock_start(self) -> None:
+        """Mocks the call to self.restserver.start()."""
+        return
+
+    monkeypatch.setattr("inmanta.server.protocol.Server.start", mock_start)
+    monkeypatch.setattr("asyncpg.connect", mock_asyncpg_connect)
+    caplog.set_level(logging.INFO)
+    caplog.clear()
+    ibl: InmantaBootloader = InmantaBootloader()
+    start_task: asyncio.Task = asyncio.create_task(ibl.start())
+    await start_task
+
+    if db_wait_time != "0":
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Waiting for database to be up.")
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+    else:
+        # If db_wait_time is "0", the wait_for_db method is not called,
+        # hence "Successfully connected to the database." log message will not appear.
+        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+
+    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+    await ibl.stop(timeout=15)
+
+
+@pytest.mark.parametrize("db_wait_time", ["2", "0"])
+async def test_bootlader_connect_running_db(server_config, postgres_db, caplog, db_wait_time: str):
+    """
+    Tests that the bootloader can connect to a database and can start for both wait_up values
+    """
+    config.Config.set("database", "wait_time", db_wait_time)
+    caplog.set_level(logging.INFO)
+    caplog.clear()
+    ibl: InmantaBootloader = InmantaBootloader()
+    await ibl.start()
+    await ibl.stop(timeout=15)
+
+    if db_wait_time != "0":
+        log_contains(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+    else:
+        # If db_wait_time is "0", the wait_for_db method is not called,
+        # hence "Successfully connected to the database." log message will not appear.
+        log_doesnt_contain(caplog, "inmanta.server.bootloader", logging.INFO, "Successfully connected to the database.")
+    log_contains(caplog, "inmanta.server.server", logging.INFO, "Starting server endpoint")
+
+
 async def test_get_resource_actions(postgresql_client, client, clienthelper, server, environment, agent):
     """
     Test querying resource actions via the API
@@ -969,7 +1086,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             environment=env.id,
             resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
             status=const.ResourceState.deployed,
-            last_deploy=datetime.now() + timedelta(minutes=i),
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -1101,27 +1217,39 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     rvid_r2_v1 = f"{rvid_r2},v={model_version}"
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
-    await data.Resource.new(
-        environment=env_id,
+    async def make_resource_with_last_non_deploying_status(
+        status: const.ResourceState,
+        last_non_deploying_status: const.NonDeployingResourceState,
+        resource_version_id: str,
+        attributes: dict[str, object],
+    ) -> data.Resource:
+        r1 = data.Resource.new(
+            environment=env_id,
+            status=status,
+            resource_version_id=resource_version_id,
+            attributes=attributes,
+        )
+        await r1.insert()
+        await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
+
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
-    ).insert()
-    await data.Resource.new(
-        environment=env_id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env_id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
+    )
 
     action_id = uuid.uuid4()
 
@@ -1283,7 +1411,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["last_deploy"] is None
     assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)
@@ -1372,7 +1499,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["last_deploy"] is not None
     assert result.result["resource"]["status"] == const.ResourceState.deployed
 
     result = await client.get_version(tid=env_id, id=1)

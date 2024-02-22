@@ -22,6 +22,7 @@ from operator import itemgetter
 from uuid import UUID
 
 import pytest
+from dateutil.tz import UTC
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 from inmanta import data
@@ -171,6 +172,7 @@ async def env_with_resources(server, client):
                 status=status,
             )
             await res.insert()
+            await res.update_persistent_state(last_deploy=datetime.now(tz=UTC))
 
     await create_resource("agent1", "/etc/file1", "std::File", ResourceState.available, [1, 2, 3])
     await create_resource("agent1", "/etc/file2", "std::File", ResourceState.deploying, [1, 2])  # Orphaned

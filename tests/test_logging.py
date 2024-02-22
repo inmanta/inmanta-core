@@ -25,6 +25,11 @@ import pytest
 from inmanta.logging import InmantaLoggerConfig, MultiLineFormatter, Options
 
 
+@pytest.fixture(autouse=True)
+def cleanup_logger():
+    InmantaLoggerConfig.clean_instance()
+
+
 def test_setup_instance():
     inmanta_logger = InmantaLoggerConfig.get_instance()
     handler = inmanta_logger.get_handler()
