@@ -293,8 +293,8 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     assert env_blueprint1 in venv_manager._environment_map
     assert venv_manager._environment_map[env_blueprint1] == executor_1.executor_virtual_env
 
-    assert executor_1.executor_virtual_env.env.are_installed(list(requirements1))
-
+    installed = executor_1.executor_virtual_env.get_installed_packages()
+    assert all(element in installed for element in requirements1)
     # Getting it again will reuse the same one
     executor_1_reuse = await executor_manager.get_executor("agent1", blueprint1)
 
@@ -334,7 +334,8 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     assert env_blueprint2 in venv_manager._environment_map
     assert venv_manager._environment_map[env_blueprint2] == executor_3.executor_virtual_env
 
-    assert executor_3.executor_virtual_env.env.are_installed(list(requirements2))
+    installed = executor_3.executor_virtual_env.get_installed_packages()
+    assert all(element in installed for element in requirements2)
 
 
 async def test_process_manager_restart(environment, agent_factory, tmpdir, caplog) -> None:
@@ -357,7 +358,7 @@ async def test_process_manager_restart(environment, agent_factory, tmpdir, caplo
     with caplog.at_level(logging.INFO):
         # Getting a first executor will create it
         venv_manager = VirtualEnvironmentManager()
-        executor_manager = ExecutorManager(agent, venv_manager)
+        executor_manager = ExecutorManager(agent=agent, environment_manager=venv_manager)
         await executor_manager.get_executor("agent1", blueprint1)
         assert len(executor_manager.executor_map) == 1
         assert len(venv_manager._environment_map) == 1

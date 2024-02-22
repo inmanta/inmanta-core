@@ -45,6 +45,7 @@ from inmanta.agent.io.remote import ChannelClosedException
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ParameterSource, ResourceState
 from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConfig, ResourceIdStr, ResourceVersionIdStr
+from inmanta.env import PythonEnvironment
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
@@ -1546,35 +1547,33 @@ class ExecutorId:
     blueprint: ExecutorBlueprint
 
 
-class ExecutorVirtualEnvironment:
+class ExecutorVirtualEnvironment(PythonEnvironment):
     def __init__(self, storage: str, threadpool: ThreadPoolExecutor):
-        self.env = env.VirtualEnv(storage)
-        self.path = storage
+        super().__init__(env_path=storage)
         self.thread_pool = threadpool
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         loop = asyncio.get_running_loop()
         req = list(blueprint.requirements)
-        self.env.init_env()
-        install_for_config = functools.partial(
-            self.env.install_for_config,
-            requirements=list(pkg_resources.parse_requirements(req)),
-            config=blueprint.pip_config,
-            should_be_active=False,
-        )
-        await loop.run_in_executor(self.thread_pool, install_for_config)
+        self.init_env()
+        if len(req):  # install_for_config expects at least 1 requirement or a pah to install
+            install_for_config = functools.partial(
+                self.install_for_config,
+                requirements=list(pkg_resources.parse_requirements(req)),
+                config=blueprint.pip_config,
+            )
+            await loop.run_in_executor(self.thread_pool, install_for_config)
 
 
 class VirtualEnvironmentManager:
     def __init__(self):
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
+        self.envs_dir = self.create_storage()
 
-    def create_env_storage(self, storage: str, blueprint: EnvBlueprint) -> (str, bool):
-        envs_dir = storage
-        namespace_uuid = uuid.NAMESPACE_OID
+    def create_env_storage(self, blueprint: EnvBlueprint) -> (str, bool):
         hashed_blueprint_name = hash(blueprint)
         new_env_dir_name = hex(hashed_blueprint_name)[2:]
-        new_env_dir = os.path.join(envs_dir, new_env_dir_name)
+        new_env_dir = os.path.join(self.envs_dir, new_env_dir_name)
 
         # Check if the directory already exists and create it if not
         if not os.path.exists(new_env_dir):
@@ -1584,11 +1583,10 @@ class VirtualEnvironmentManager:
             LOGGER.info("Found existing venv for blueprint")
             return new_env_dir, False  # Returning the path and False for existing directory
 
-    async def create_environment(
-        self, blueprint: EnvBlueprint, storage: str, threadpool: ThreadPoolExecutor
-    ) -> ExecutorVirtualEnvironment:
-        # create a new storage location for the new environment or reuse an existing one
-        env_storage, is_new = self.create_env_storage(storage, blueprint)
+    async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
+        # Create a new storage location for the new environment or reuse an existing one
+        # TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
+        env_storage, is_new = self.create_env_storage(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         if is_new:
             await process_environment.create_and_install_environment(blueprint)
@@ -1596,12 +1594,23 @@ class VirtualEnvironmentManager:
 
         return process_environment
 
-    async def get_environment(
-        self, blueprint: EnvBlueprint, storage: str, threadpool: ThreadPoolExecutor
-    ) -> ExecutorVirtualEnvironment:
+    async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
+        assert type(blueprint) is EnvBlueprint, "Only EnvBlueprint instances are accepted, subclasses are not allowed."
         if blueprint in self._environment_map:
             return self._environment_map[blueprint]
-        return await self.create_environment(blueprint, storage, threadpool)
+        return await self.create_environment(blueprint, threadpool)
+
+    def create_storage(self) -> str:
+        state_dir = cfg.state_dir.get()
+
+        if not os.path.exists(state_dir):
+            os.mkdir(state_dir)
+
+        env_dir = os.path.join(state_dir, "envs")
+        if not os.path.exists(env_dir):
+            os.mkdir(env_dir)
+
+        return env_dir
 
 
 class Executor:
@@ -1610,7 +1619,7 @@ class Executor:
         self.executor_virtual_env: ExecutorVirtualEnvironment = executor_virtual_env
         self.storage = storage
 
-    def load_code(self, sources: Sequence["ModuleSource"], threadpool: ThreadPoolExecutor):
+    def load_code(self, sources: Sequence["ModuleSource"]):
         print("Load the code of sources for executor")
 
     def execute(self, resources: list[Resource]):
@@ -1627,9 +1636,9 @@ class ExecutorManager:
     async def create_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> Executor:
         executor_id = ExecutorId(agent_name, blueprint)
         env_blueprint = EnvBlueprint(pip_config=blueprint.pip_config, requirements=blueprint.requirements)
-        venv = await self.environment_manager.get_environment(env_blueprint, self.storage["envs"], self.agent.thread_pool)
-        executor = Executor(executor_id, venv, self.storage["codes"])
-        executor.load_code(blueprint.sources, self.agent.thread_pool)
+        venv = await self.environment_manager.get_environment(env_blueprint, self.agent.thread_pool)
+        executor = Executor(executor_id, venv, self.storage)
+        executor.load_code(blueprint.sources)
         self.executor_map[executor_id] = executor
         return executor
 
@@ -1649,27 +1658,13 @@ class ExecutorManager:
         executor = await self.get_executor(agent_name, blueprint)
         executor.execute(resources)
 
-    def create_storage(self) -> dict[str, str]:
+    def create_storage(self) -> str:
         state_dir = cfg.state_dir.get()
 
         if not os.path.exists(state_dir):
             os.mkdir(state_dir)
 
-        agent_state_dir = os.path.join(state_dir, "agent")
-
-        if not os.path.exists(agent_state_dir):
-            os.mkdir(agent_state_dir)
-
-        dir_map = {"agent": agent_state_dir}
-
         code_dir = os.path.join(state_dir, "codes")
-        dir_map["codes"] = code_dir
         if not os.path.exists(code_dir):
             os.mkdir(code_dir)
-
-        env_dir = os.path.join(state_dir, "envs")
-        dir_map["envs"] = env_dir
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
-        return dir_map
+        return code_dir
