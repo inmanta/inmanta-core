@@ -32,7 +32,15 @@ LOGGER = logging.getLogger("test")
 @pytest.mark.slowtest
 @pytest.mark.parametrize("change_state", [False, True])
 async def test_6475_deploy_with_failure_masking(
-    server, agent: Agent, environment, resource_container, clienthelper, client, monkeypatch, change_state: bool
+    server,
+    agent: Agent,
+    environment,
+    resource_container,
+    clienthelper,
+    client,
+    monkeypatch,
+    change_state: bool,
+    no_agent_backoff,
 ):
     """
     Consider:
