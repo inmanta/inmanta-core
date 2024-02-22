@@ -441,7 +441,7 @@ class ResourceAction(ResourceActionBase):
         """
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
-        super().__init__(scheduler, Id.parse_id(resource.attributes["id"]), gid, reason)
+        super().__init__(scheduler, Id.parse_id(ResourceVersionIdStr(str(resource.attributes["id"]))), gid, reason)
         self.resource: ResourceReference = resource
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
@@ -751,7 +751,7 @@ class ResourceScheduler:
         self.logger.info("Running %s for reason: %s", gid, self.running.reason)
 
         # re-generate generation
-        self.generation: dict[ResourceIdStr, ResourceAction] = {
+        self.generation = {
             resource.id: ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
             for resource in resources
         }
@@ -1091,8 +1091,9 @@ class AgentInstance:
                 self._cache.open_version(version)
                 for resource_ref in resource_refs:
                     started = datetime.datetime.now().astimezone()
+                    id = str(resource_refs[0].attributes["id"])
 
-                    resource_id = Id.parse_id(resource_ref.attributes["id"]).resource_version_str()
+                    resource_id = Id.parse_id(ResourceVersionIdStr(id)).resource_version_str()
 
                     try:
                         resource: Resource = Resource.deserialize(resource_ref.model_dump()["attributes"])
@@ -1217,7 +1218,8 @@ class AgentInstance:
             started = datetime.datetime.now().astimezone()
             provider = None
             try:
-                resource_id = Id.parse_id(resource_refs[0].attributes["id"]).resource_version_str()
+                id = str(resource_refs[0].attributes["id"])
+                resource_id = Id.parse_id(ResourceVersionIdStr(id)).resource_version_str()
                 try:
                     resource_obj: Resource = Resource.deserialize(resource_refs[0].model_dump()["attributes"])
                 except Exception:
@@ -1238,7 +1240,7 @@ class AgentInstance:
                         status=const.ResourceState.unavailable,
                         messages=[msg],
                     )
-                    return
+                    return 500
                 ctx = handler.HandlerContext(resource_obj)
 
                 version = resource_obj.id.get_version()
