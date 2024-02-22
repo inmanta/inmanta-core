@@ -1532,31 +1532,48 @@ class Agent(SessionEndpoint):
 
 @dataclasses.dataclass(frozen=True)
 class EnvBlueprint:
+    """Represents a blueprint for creating virtual environments with specific pip configurations and requirements."""
+
     pip_config: PipConfig
     requirements: Sequence[str]
 
 
 @dataclasses.dataclass(frozen=True)
 class ExecutorBlueprint(EnvBlueprint):
+    """Extends EnvBlueprint to include sources for the executor environment."""
+
     sources: Sequence[ModuleSource]
 
 
 @dataclasses.dataclass(frozen=True)
 class ExecutorId:
+    """Identifies an executor with a unique agent name and its blueprint configuration."""
+
     agent_name: str
     blueprint: ExecutorBlueprint
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment):
+    """
+    Manages a single virtual environment for an executor,
+    including the creation and installation of packages based on a blueprint.
+
+    :param storage: The file system path where the virtual environment should be created or exists.
+    :param threadpool: A ThreadPoolExecutor instance
+    """
+
     def __init__(self, storage: str, threadpool: ThreadPoolExecutor):
         super().__init__(env_path=storage)
         self.thread_pool = threadpool
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
+        """
+        Creates and installs the environment based on the provided blueprint.
+        """
         loop = asyncio.get_running_loop()
-        req = list(blueprint.requirements)
+        req: list[str] = list(blueprint.requirements)
         self.init_env()
-        if len(req):  # install_for_config expects at least 1 requirement or a pah to install
+        if len(req):  # install_for_config expects at least 1 requirement or a path to install
             install_for_config = functools.partial(
                 self.install_for_config,
                 requirements=list(pkg_resources.parse_requirements(req)),
@@ -1566,26 +1583,35 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
 
 
 class VirtualEnvironmentManager:
+    """
+    Manages all the virtual environments to avoid recreation by only creating new ones if needed
+    """
+
     def __init__(self):
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
-        self.envs_dir = self.create_storage()
+        self.envs_dir: str = self.create_envs_dir()
 
-    def create_env_storage(self, blueprint: EnvBlueprint) -> (str, bool):
-        hashed_blueprint_name = hash(blueprint)
-        new_env_dir_name = hex(hashed_blueprint_name)[2:]
-        new_env_dir = os.path.join(self.envs_dir, new_env_dir_name)
+    def create_env_storage(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
+        """
+        Creates a storage for a new environment based on its blueprint, or identifies an existing storage.
+        """
+        hashed_blueprint_name: int = hash(blueprint)
+        env_dir_name: str = hex(hashed_blueprint_name)[2:]
+        env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
-        if not os.path.exists(new_env_dir):
-            os.makedirs(new_env_dir)
-            return new_env_dir, True  # Returning the path and True for newly created directory
+        if not os.path.exists(env_dir):
+            os.makedirs(env_dir)
+            return env_dir, True  # Returning the path and True for newly created directory
         else:
             LOGGER.info("Found existing venv for blueprint")
-            return new_env_dir, False  # Returning the path and False for existing directory
+            return env_dir, False  # Returning the path and False for existing directory
 
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
-        # Create a new storage location for the new environment or reuse an existing one
-        # TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
+        """
+        Creates a new environment based on the blueprint, or reuses an existing one.
+        TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
+        """
         env_storage, is_new = self.create_env_storage(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         if is_new:
@@ -1595,12 +1621,18 @@ class VirtualEnvironmentManager:
         return process_environment
 
     async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
+        """
+        Retrieves an existing environment for the given blueprint or creates a new one if it doesn't exist.
+        """
         assert type(blueprint) is EnvBlueprint, "Only EnvBlueprint instances are accepted, subclasses are not allowed."
         if blueprint in self._environment_map:
             return self._environment_map[blueprint]
         return await self.create_environment(blueprint, threadpool)
 
-    def create_storage(self) -> str:
+    def create_envs_dir(self) -> str:
+        """
+        Creates a storage directory for new environments.
+        """
         state_dir = cfg.state_dir.get()
 
         if not os.path.exists(state_dir):
