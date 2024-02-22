@@ -74,7 +74,6 @@ LOGGER = logging.getLogger("inmanta")
 def server_parser_config(parser: argparse.ArgumentParser, parent_parsers: abc.Sequence[argparse.ArgumentParser]) -> None:
     parser.add_argument(
         "--db-wait-time",
-        default=0,
         type=int,
         dest="db_wait_time",
         help="Maximum time in seconds the server will wait for the database to be up before starting. "
@@ -90,7 +89,8 @@ def start_server(options: argparse.Namespace) -> None:
     if options.config_dir and not os.path.isdir(options.config_dir):
         LOGGER.warning("Config directory %s doesn't exist", options.config_dir)
 
-    Config.set("database", "wait_time", str(options.db_wait_time))
+    if options.db_wait_time is not None:
+        Config.set("database", "wait_time", str(options.db_wait_time))
 
     util.ensure_event_loop()
 
