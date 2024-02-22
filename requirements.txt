@@ -2,7 +2,7 @@ asyncpg==0.29.0
 click-plugins==1.1.1
 click==8.1.7
 colorlog==6.8.2
-cookiecutter==2.5.0
+cookiecutter==2.6.0
 crontab==1.0.1
 cryptography==42.0.4
 docstring-parser==0.15
