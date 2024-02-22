@@ -1121,6 +1121,7 @@ class AgentInstance:
                             status=const.ResourceState.unavailable,
                             messages=[msg],
                         )
+                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_id, changes={})
                         continue
                     ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now().astimezone()
