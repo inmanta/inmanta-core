@@ -162,11 +162,12 @@ class ResourceReference:
     """
 
     id: Id
-    model_version: int
+    rid: ResourceIdStr
     rvid: ResourceVersionIdStr
+    model_version: int
     requires: list[ResourceVersionIdStr]
-    raw: JsonType
     attributes: dict[str, Any]
+    raw: JsonType
 
     def __init__(self, resource_dict: JsonType) -> None:
         self.raw = resource_dict
