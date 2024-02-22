@@ -1572,8 +1572,8 @@ class VirtualEnvironmentManager:
     def create_env_storage(self, storage: str, blueprint: EnvBlueprint) -> (str, bool):
         envs_dir = storage
         namespace_uuid = uuid.NAMESPACE_OID
-        hashed_blueprint_name = str(blueprint.__hash__())
-        new_env_dir_name = str(uuid.uuid5(namespace_uuid, hashed_blueprint_name))
+        hashed_blueprint_name = hash(blueprint)
+        new_env_dir_name = hex(hashed_blueprint_name)[2:]
         new_env_dir = os.path.join(envs_dir, new_env_dir_name)
 
         # Check if the directory already exists and create it if not
