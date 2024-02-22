@@ -1568,7 +1568,10 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
         """
-        Creates and installs the environment based on the provided blueprint.
+        Creates and configures the virtual environment according to the provided blueprint.
+
+        :param blueprint: An instance of EnvBlueprint containing the configuration for
+            the pip installation and the requirements to install.
         """
         loop = asyncio.get_running_loop()
         req: list[str] = list(blueprint.requirements)
@@ -1584,7 +1587,9 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
 
 class VirtualEnvironmentManager:
     """
-    Manages all the virtual environments to avoid recreation by only creating new ones if needed
+    Manages virtual environments to ensure efficient reuse.
+    This manager handles the creation of new environments based on specific blueprints and maintains a directory
+    for storing these environments.
     """
 
     def __init__(self):
@@ -1593,7 +1598,11 @@ class VirtualEnvironmentManager:
 
     def create_env_storage(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
-        Creates a storage for a new environment based on its blueprint, or identifies an existing storage.
+        Determines the storage path for a virtual environment based on its blueprint.
+        It either identifies an existing directory for the environment or creates a new one.
+
+        :param blueprint: The blueprint of the environment for which the storage is being determined.
+        :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
         hashed_blueprint_name: int = hash(blueprint)
         env_dir_name: str = hex(hashed_blueprint_name)[2:]
@@ -1609,7 +1618,13 @@ class VirtualEnvironmentManager:
 
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
         """
-        Creates a new environment based on the blueprint, or reuses an existing one.
+        Creates a new virtual environment based on the provided blueprint or reuses an existing one if suitable.
+        This involves setting up the virtual environment and installing any required packages as specified in the blueprint.
+
+        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
+        :param threadpool: A ThreadPoolExecutor
+        :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
+
         TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
         """
         env_storage, is_new = self.create_env_storage(blueprint)
@@ -1622,7 +1637,11 @@ class VirtualEnvironmentManager:
 
     async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
         """
-        Retrieves an existing environment for the given blueprint or creates a new one if it doesn't exist.
+        Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
+
+        :param blueprint: The blueprint for which a matching environment is sought.
+        :param threadpool: A ThreadPoolExecutor
+        :return: An ExecutorVirtualEnvironment instance matching the blueprint.
         """
         assert type(blueprint) is EnvBlueprint, "Only EnvBlueprint instances are accepted, subclasses are not allowed."
         if blueprint in self._environment_map:
@@ -1631,7 +1650,10 @@ class VirtualEnvironmentManager:
 
     def create_envs_dir(self) -> str:
         """
-        Creates a storage directory for new environments.
+        Creates and returns the path to the directory used for storing virtual environments.
+        If the directory does not exist, it is created.
+
+        :return: The path
         """
         state_dir = cfg.state_dir.get()
 
@@ -1646,19 +1668,35 @@ class VirtualEnvironmentManager:
 
 
 class Executor:
+    """
+    Represents an executor responsible for deploying resources within a specified virtual environment.
+    It is identified by an ExecutorId and operates within the context of a given ExecutorVirtualEnvironment.
+
+    :param executor_id: Unique identifier for the executor, encapsulating the agent name and its configuration blueprint.
+    :param executor_virtual_env: The virtual environment in which this executor operates
+    :param storage: File system path to where the executor's resources are stored.
+    """
+
     def __init__(self, executor_id: ExecutorId, executor_virtual_env: ExecutorVirtualEnvironment, storage: str):
         self.executor_id = executor_id
         self.executor_virtual_env: ExecutorVirtualEnvironment = executor_virtual_env
         self.storage = storage
 
-    def load_code(self, sources: Sequence["ModuleSource"]):
+    def load_code(self, sources: Sequence["ModuleSource"]) -> None:
         print("Load the code of sources for executor")
 
-    def execute(self, resources: list[Resource]):
+    def execute(self, resources: list[Resource]) -> None:
         print("Start deploy of resources")
 
 
 class ExecutorManager:
+    """
+    Manages Executors by ensuring that Executors are created and reused efficiently based on their configurations.
+
+    :param agent: The Agent instance that this ExecutorManager is part of.
+    :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
+    """
+
     def __init__(self, agent: Agent, environment_manager: VirtualEnvironmentManager):
         self.executor_map: dict[ExecutorId, Executor] = {}
         self.environment_manager = environment_manager
@@ -1666,6 +1704,14 @@ class ExecutorManager:
         self.storage = self.create_storage()
 
     async def create_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> Executor:
+        """
+        Creates an Executor based with the specified agent name and blueprint.
+        It ensures the required virtual environment is prepared and source code is loaded.
+
+        :param agent_name: The name of the agent for which the Executor is being created.
+        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :return: An Executor instance
+        """
         executor_id = ExecutorId(agent_name, blueprint)
         env_blueprint = EnvBlueprint(pip_config=blueprint.pip_config, requirements=blueprint.requirements)
         venv = await self.environment_manager.get_environment(env_blueprint, self.agent.thread_pool)
@@ -1675,6 +1721,14 @@ class ExecutorManager:
         return executor
 
     async def get_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> Executor:
+        """
+        Retrieves an Executor based on the agent name and blueprint.
+        If an Executor does not exist for the given configuration, a new one is created.
+
+        :param agent_name: The name of the agent for which an Executor is being retrieved or created.
+        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :return: An Executor instance
+        """
         executor_id = ExecutorId(agent_name, blueprint)
         if executor_id in self.executor_map:
             return self.executor_map[executor_id]
@@ -1683,14 +1737,25 @@ class ExecutorManager:
     async def execute(
         self,
         agent_name: str,
-        config_model_version: int,
         blueprint: ExecutorBlueprint,
         resources: list[Resource],
-    ):
+    ) -> None:
+        """
+        Execute the given resources with the appropriate Executor.
+
+        :param agent_name: The name of the agent under which the execution is performed.
+        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :param resources: A list of Resource instances to be deployed.
+        """
         executor = await self.get_executor(agent_name, blueprint)
         executor.execute(resources)
 
     def create_storage(self) -> str:
+        """
+        Prepares and returns the path to the storage directory used by Executors for their source code.
+
+        :return: The path to the storage directory.
+        """
         state_dir = cfg.state_dir.get()
 
         if not os.path.exists(state_dir):

@@ -226,12 +226,16 @@ async def test_update_agent_map(server, environment, agent_factory):
 
 async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     """
-    verify the creation of executors and environments and if they can be reused
+    This test verifies the creation and reuse of executors and their underlying environments. It checks whether
+    new executors and environments are created as necessary and reused when the conditions are the same.
     """
+
+    # Setup the agent
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
     )
 
+    # Setup a local pip index and create two packages, pkg1 and pkg2
     pip_index = PipIndex(artifact_dir=str(tmpdir))
     create_python_package(
         name="pkg1",
@@ -246,10 +250,12 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
         publish_index=pip_index,
     )
 
+    # Define requirements and pip configuration
     requirements1 = ("pkg1",)
     requirements2 = ("pkg1", "pkg2")
     pip_config = PipConfig(index_url=pip_index.url)
 
+    # Prepare a source module and its hash
     code = """
     def test():
         return 10
@@ -270,18 +276,19 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     sources1 = ()
     sources2 = (module_source1,)
 
+    # Define blueprints for executors and environments
     blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
     env_blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
     blueprint2 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
     blueprint3 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
     env_blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
 
+    # Initialize the virtual environment and executor managers
     venv_manager = VirtualEnvironmentManager()
     executor_manager = ExecutorManager(agent, venv_manager)
 
-    # Getting a first executor will create it
+    # Getting a first executor should successfully create and map it
     executor_1 = await executor_manager.get_executor("agent1", blueprint1)
-
     assert executor_1
 
     assert len(executor_manager.executor_map) == 1
@@ -293,11 +300,12 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     assert env_blueprint1 in venv_manager._environment_map
     assert venv_manager._environment_map[env_blueprint1] == executor_1.executor_virtual_env
 
+    # Verify that required packages are installed in the environment
     installed = executor_1.executor_virtual_env.get_installed_packages()
     assert all(element in installed for element in requirements1)
-    # Getting it again will reuse the same one
-    executor_1_reuse = await executor_manager.get_executor("agent1", blueprint1)
 
+    # Reusing the same blueprint should reuse the executor without creating a new one
+    executor_1_reuse = await executor_manager.get_executor("agent1", blueprint1)
     assert executor_1_reuse == executor_1
 
     assert len(executor_manager.executor_map) == 1
@@ -309,8 +317,7 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     assert env_blueprint1 in venv_manager._environment_map
     assert venv_manager._environment_map[env_blueprint1] == executor_1_reuse.executor_virtual_env
 
-    # Changing the source will create a new executor
-    # Keeping the same blueprint will not create a new venv: same venv is used.
+    # Changing the source without changing the requirements should create a new executor but reuse the environment
     executor_2 = await executor_manager.get_executor("agent1", blueprint2)
 
     assert len(executor_manager.executor_map) == 2
@@ -318,11 +325,11 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     assert executor_2.executor_id in executor_manager.executor_map
     assert executor_manager.executor_map[executor_2.executor_id] == executor_2
 
-    assert len(venv_manager._environment_map) == 1
+    assert len(venv_manager._environment_map) == 1  # Environment is reused
     assert env_blueprint1 in venv_manager._environment_map
     assert venv_manager._environment_map[env_blueprint1] == executor_2.executor_virtual_env
 
-    # The requirements change: a new venv is needed
+    # Changing the requirements should necessitate a new environment
     executor_3 = await executor_manager.get_executor("agent1", blueprint3)
 
     assert len(executor_manager.executor_map) == 3
@@ -330,7 +337,7 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
     assert executor_3.executor_id in executor_manager.executor_map
     assert executor_manager.executor_map[executor_3.executor_id] == executor_3
 
-    assert len(venv_manager._environment_map) == 2
+    assert len(venv_manager._environment_map) == 2  # A new environment is created
     assert env_blueprint2 in venv_manager._environment_map
     assert venv_manager._environment_map[env_blueprint2] == executor_3.executor_virtual_env
 
@@ -340,23 +347,26 @@ async def test_process_manager(environment, agent_factory, tmpdir) -> None:
 
 async def test_process_manager_restart(environment, agent_factory, tmpdir, caplog) -> None:
     """
-    verify old venvs can be find back on restart
+    Verifies that virtual environments can be rediscovered upon the restart of an ExecutorManager. This test
+    simulates a restart scenario to ensure that previously created environments are reused instead of being recreated.
     """
     caplog.clear()
-
+    # Setup an agent
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
     )
 
+    # Setup a local pip, a pip config, requirements and sources
     pip_index = PipIndex(artifact_dir=str(tmpdir))
-    requirements1 = ()
     pip_config = PipConfig(index_url=pip_index.url)
-    sources1 = ()
+    requirements = ()
+    sources = ()
 
-    blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
+    # Create a blueprint with no requirements and no sources
+    blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
 
     with caplog.at_level(logging.INFO):
-        # Getting a first executor will create it
+        # First execution: create an executor and verify its creation
         venv_manager = VirtualEnvironmentManager()
         executor_manager = ExecutorManager(agent=agent, environment_manager=venv_manager)
         await executor_manager.get_executor("agent1", blueprint1)
@@ -365,11 +375,13 @@ async def test_process_manager_restart(environment, agent_factory, tmpdir, caplo
 
         log_doesnt_contain(caplog, "inmanta.agent.agent", logging.INFO, "Found existing venv for blueprint")
 
-        # restarting the ExecutorManager (creating a new one) will find back the old venv
+        # Simulate ExecutorManager restart by creating new instances of ExecutorManager and VirtualEnvironmentManager
         venv_manager2 = VirtualEnvironmentManager()
         executor_manager2 = ExecutorManager(agent, venv_manager2)
+        # Assertions before retrieving the executor to verify a fresh start
         assert len(executor_manager2.executor_map) == 0
         assert len(venv_manager2._environment_map) == 0
+        # Assertions after retrieval to verify the reuse of virtual environments
         await executor_manager2.get_executor("agent1", blueprint1)
         assert len(executor_manager2.executor_map) == 1
         assert len(venv_manager2._environment_map) == 1
