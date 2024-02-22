@@ -1599,7 +1599,7 @@ class VirtualEnvironmentManager:
     for storing these environments.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = self.create_envs_dir()
 
