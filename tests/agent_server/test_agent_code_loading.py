@@ -191,7 +191,6 @@ inmanta.test_agent_code_loading = 15
         code=resource_install_specs_3,
     )
 
-
     # Test 1 is deployed once, as seen by the agent
     LogSequence(caplog).contains("inmanta.agent.agent", DEBUG, f"Installing handler test::Test version={version_1}").contains(
         "inmanta.agent.agent", DEBUG, f"Installed handler test::Test version={version_1}"
