@@ -51,11 +51,13 @@ Pipe break: go to 3a and 3b
 
 
 class ExecutorContext:
+    """The context object used by the executor to expose state to the incoming calls"""
 
     def __init__(self, server: "ExecutorServer") -> None:
         self.server = server
 
     async def stop(self) -> None:
+        """Request the executor to stop"""
         await self.server.stop()
 
 
@@ -89,7 +91,7 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         self.stopped.set()
 
 
-class StopCommand(inmanta.protocol.ipc_light.IPCMethod[None, ExecutorContext]):
+class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
     async def call(self, context: ExecutorContext) -> None:
         await context.stop()
@@ -100,11 +102,14 @@ def mp_worker_entrypoint(
     name: str,
     logfile: str,
     inmanta_log_level: str,
+    cli_log: bool,
     config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
 ) -> None:
     """Entry point for child processes"""
     log_config = InmantaLoggerConfig.get_instance()
     log_config.configure_file_logger(logfile, inmanta_log_level)
+    if cli_log:
+        log_config.add_cli_logger(inmanta_log_level)
     logging.captureWarnings(True)
     logger = logging.getLogger(f"agent.executor.{name}")
     logger.info(f"Started with PID: {os.getpid()}")
@@ -170,11 +175,18 @@ class MPExecutor:
 
 
 class MPManager:
-    def __init__(self, log_folder: str, inmanta_log_level: str = "DEBUG") -> None:
+    def __init__(self, log_folder: str, inmanta_log_level: str = "DEBUG", cli_log: bool = False) -> None:
+        """
+
+        :param log_folder: folder to place log files for the executors
+        :param inmanta_log_level: log level for the executors
+        :param cli_log: do we also want to echo the log to std_err
+        """
         self.children: list[MPExecutor] = []
         self.log_folder = log_folder
         os.makedirs(self.log_folder, exist_ok=True)
         self.inmanta_log_level = inmanta_log_level
+        self.cli_log = cli_log
 
     def _init_once(self) -> None:
         try:
@@ -192,7 +204,7 @@ class MPManager:
         # TODO: do we need a specific thread pool?
         logfile = os.path.join(self.log_folder, f"{name}.log")
         process, parent_conn = await loop.run_in_executor(
-            None, functools.partial(self._make_child, name, logfile, self.inmanta_log_level)
+            None, functools.partial(self._make_child, name, logfile, self.inmanta_log_level, self.cli_log)
         )
         # Hook up the connection
         transport, protocol = await loop.connect_accepted_socket(
@@ -203,12 +215,14 @@ class MPManager:
         self.children.append(child_handle)
         return child_handle
 
-    def _make_child(self, name: str, log_file: str, log_level: int) -> tuple[multiprocessing.Process, socket.socket]:
+    def _make_child(
+        self, name: str, log_file: str, log_level: int, cli_log: bool
+    ) -> tuple[multiprocessing.Process, socket.socket]:
         """Sync code to make a child process and share a socket with it"""
         parent_conn, child_conn = socket.socketpair()
         p = multiprocessing.Process(
             target=mp_worker_entrypoint,
-            args=(child_conn, name, log_file, log_level, inmanta.config.Config.config_as_dict()),
+            args=(child_conn, name, log_file, log_level, cli_log, inmanta.config.Config.config_as_dict()),
             name=f"agent.executor.{name}",
         )
         p.start()

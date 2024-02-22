@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import logging
 
 import pytest
 
@@ -32,6 +33,7 @@ class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
         self.args = args
 
     async def call(self, ctx) -> list[str]:
+        logging.getLogger(__name__).info("Echo ")
         return self.args
 
 
@@ -46,7 +48,7 @@ class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
 
 
 async def test_executor_server(tmp_path):
-    manager = MPManager(log_folder=str(tmp_path))
+    manager = MPManager(log_folder=str(tmp_path), cli_log=True)
     manager._init_once()
 
     inmanta.config.Config.set("test", "aaa", "bbbb")

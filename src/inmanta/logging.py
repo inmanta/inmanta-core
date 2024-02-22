@@ -264,6 +264,14 @@ class InmantaLoggerConfig:
         self.set_log_formatter(formatter)
         self.set_log_level(inmanta_log_level, cli=False)
 
+    def add_cli_logger(self, inmanta_log_level: str) -> logging.Handler:
+        """Add a simple cli logger, used for debugging subprocesses"""
+        handler = logging.StreamHandler()
+        handler.setLevel(self.convert_inmanta_log_level(inmanta_log_level))
+        handler.setFormatter(self._get_log_formatter_for_stream_handler(False))
+        logging.root.addHandler(handler)
+        return handler
+
     @stable_api
     def set_log_level(self, inmanta_log_level: str, cli: bool = True) -> None:
         """
@@ -274,18 +282,26 @@ class InmantaLoggerConfig:
         :param inmanta_log_level: The inmanta logging level
         :param cli: True if the logs will be outputted to the CLI.
         """
+        python_log_level = self.convert_inmanta_log_level(inmanta_log_level, cli)
+        self._handler.setLevel(python_log_level)
+        logging.root.setLevel(python_log_level)
+
+    def convert_inmanta_log_level(self, inmanta_log_level: str, cli: bool = False) -> int:
+        """
+        :param inmanta_log_level: The inmanta logging level
+        :param cli: True if the logs will be outputted to the CLI.
+
+        :return: python log level
+        """
         # maximum of 4 v's
         if inmanta_log_level.isdigit() and int(inmanta_log_level) > 4:
             inmanta_log_level = "4"
-
         # The minimal log level on the CLI is always WARNING
         if cli and (inmanta_log_level == "ERROR" or (inmanta_log_level.isdigit() and int(inmanta_log_level) < 1)):
             inmanta_log_level = "WARNING"
-
         # Converts the Inmanta log level to the Python log level
         python_log_level = log_levels[inmanta_log_level]
-        self._handler.setLevel(python_log_level)
-        logging.root.setLevel(python_log_level)
+        return python_log_level
 
     @stable_api
     def set_log_formatter(self, formatter: logging.Formatter) -> None:
