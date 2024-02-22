@@ -22,7 +22,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from functools import partial
 
 import pytest
@@ -33,7 +33,7 @@ from inmanta import config, const, data, loader, resources
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
-from inmanta.data import AUTO_DEPLOY
+from inmanta.data import AUTO_DEPLOY, ResourcePersistentState
 from inmanta.data.model import AttributeStateChange, LogLine, ResourceVersionIdStr
 from inmanta.export import upload_code
 from inmanta.protocol import Client
@@ -217,18 +217,56 @@ async def test_create_too_many_versions(client, server, n_versions_to_keep, n_ve
     for _ in range(n_versions_to_create):
         version = (await client.reserve_version(env_1_id)).result["data"]
 
+        resources = [
+            # First one is fixed
+            {
+                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v={version}",
+                "owner": "root",
+                "path": "/etc/sysconfig/network",
+                "permissions": 644,
+                "purged": False,
+                "requires": [],
+            },
+            # This one changes ID every version
+            {
+                "id": f"std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network{version}],v={version}",
+                "owner": "root",
+                "path": "/etc/sysconfig/network",
+                "permissions": 644,
+                "purged": False,
+                "requires": [],
+            },
+        ]
+
         res = await client.put_version(
-            tid=env_1_id, version=version, resources=[], unknowns=[], version_info={}, compiler_version=get_compiler_version()
+            tid=env_1_id,
+            version=version,
+            resources=resources,
+            unknowns=[],
+            version_info={},
+            compiler_version=get_compiler_version(),
         )
         assert res.code == 200
 
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == n_versions_to_create
 
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == n_versions_to_create + 1
+
+    # Ensure we don't clean too much
+    await ResourcePersistentState.trim(env_1_id)
+
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == n_versions_to_create + 1
+
     await server.get_slice(SLICE_ORCHESTRATION)._purge_versions()
 
     versions = await client.list_versions(tid=env_1_id)
     assert versions.result["count"] == min(n_versions_to_keep, n_versions_to_create)
+
+    prvs = await ResourcePersistentState.get_list()
+    assert len(prvs) == min(n_versions_to_keep, n_versions_to_create) + 1
 
 
 async def test_n_versions_env_setting_scope(client, server):
@@ -969,7 +1007,6 @@ async def test_resource_action_pagination(postgresql_client, client, clienthelpe
             environment=env.id,
             resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % str(i),
             status=const.ResourceState.deployed,
-            last_deploy=datetime.now() + timedelta(minutes=i),
             attributes={"attr": [{"a": 1, "b": "c"}], "path": "/etc/motd"},
         )
         await res1.insert()
@@ -1101,27 +1138,39 @@ async def test_resource_deploy_start(server, client, environment, agent, endpoin
     rvid_r2_v1 = f"{rvid_r2},v={model_version}"
     rvid_r3_v1 = f"{rvid_r3},v={model_version}"
 
-    await data.Resource.new(
-        environment=env_id,
+    async def make_resource_with_last_non_deploying_status(
+        status: const.ResourceState,
+        last_non_deploying_status: const.NonDeployingResourceState,
+        resource_version_id: str,
+        attributes: dict[str, object],
+    ) -> data.Resource:
+        r1 = data.Resource.new(
+            environment=env_id,
+            status=status,
+            resource_version_id=resource_version_id,
+            attributes=attributes,
+        )
+        await r1.insert()
+        await r1.update_persistent_state(last_deploy=datetime.now(tz=UTC), last_non_deploying_status=last_non_deploying_status)
+
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.skipped,
         last_non_deploying_status=const.NonDeployingResourceState.skipped,
         resource_version_id=rvid_r1_v1,
         attributes={"purge_on_delete": False, "requires": [rvid_r2, rvid_r3]},
-    ).insert()
-    await data.Resource.new(
-        environment=env_id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.deployed,
         last_non_deploying_status=const.NonDeployingResourceState.deployed,
         resource_version_id=rvid_r2_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
-    await data.Resource.new(
-        environment=env_id,
+    )
+    await make_resource_with_last_non_deploying_status(
         status=const.ResourceState.failed,
         last_non_deploying_status=const.NonDeployingResourceState.failed,
         resource_version_id=rvid_r3_v1,
         attributes={"purge_on_delete": False, "requires": []},
-    ).insert()
+    )
 
     action_id = uuid.uuid4()
 
@@ -1283,7 +1332,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["last_deploy"] is None
     assert result.result["resource"]["status"] == const.ResourceState.deploying
 
     result = await client.get_version(tid=env_id, id=1)
@@ -1372,7 +1420,6 @@ async def test_resource_deploy_done(server, client, environment, agent, caplog, 
 
     result = await client.get_resource(tid=env_id, id=rvid_r1_v1)
     assert result.code == 200, result.result
-    assert result.result["resource"]["last_deploy"] is not None
     assert result.result["resource"]["status"] == const.ResourceState.deployed
 
     result = await client.get_version(tid=env_id, id=1)

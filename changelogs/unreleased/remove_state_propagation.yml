@@ -1,0 +1,6 @@
+description: Remove state back propagation from the database
+change-type: minor
+destination-branches: [master, iso7]
+sections:
+  feature: "{{description}}"
+  upgrade-note: "{{description}}"

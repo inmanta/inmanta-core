@@ -56,6 +56,7 @@ from inmanta.data.model import (
     VersionedResource,
     VersionedResourceDetails,
 )
+from inmanta.db.util import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 from inmanta.protocol import handle, methods, methods_v2
 from inmanta.protocol.common import ReturnValue
 from inmanta.protocol.exceptions import BadRequest, Conflict, NotFound
@@ -68,7 +69,6 @@ from inmanta.server.agentmanager import AgentManager
 from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes
 from inmanta.util import parse_timestamp
-from inmanta.util.db import ConnectionMaybeInTransaction, ConnectionNotInTransaction
 
 LOGGER = logging.getLogger(__name__)
 
@@ -540,8 +540,13 @@ class ResourceService(protocol.ServerSlice):
                 self.clear_env_cache(env)
 
                 await resource.update_fields(
-                    last_deploy=timestamp,
                     status=status,
+                    connection=connection,
+                )
+                await resource.update_persistent_state(
+                    last_deploy=timestamp,
+                    last_deployed_version=version,
+                    last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
                     connection=connection,
                 )
@@ -678,17 +683,20 @@ class ResourceService(protocol.ServerSlice):
                 if status == ResourceState.deployed:
                     extra_fields["last_success"] = resource_action.started
 
-                propagate_event_timers = False
                 # keep track IF we need to propagate if we are stale
                 # but only do it at the end of the transaction
                 if change != Change.nochange:
                     # We are producing an event
                     extra_fields["last_produced_events"] = finished
-                    propagate_event_timers = True
 
                 await resource.update_fields(
-                    last_deploy=finished,
                     status=status,
+                    connection=connection,
+                )
+                await resource.update_persistent_state(
+                    last_deploy=finished,
+                    last_deployed_version=resource_id.version,
+                    last_deployed_attribute_hash=resource.attribute_hash,
                     last_non_deploying_status=const.NonDeployingResourceState(status),
                     **extra_fields,
                     connection=connection,
@@ -700,18 +708,6 @@ class ResourceService(protocol.ServerSlice):
 
                 if "purged" in resource.attributes and resource.attributes["purged"] and status == const.ResourceState.deployed:
                     await data.Parameter.delete_all(environment=env.id, resource_id=resource.resource_id, connection=connection)
-
-                propagate_deploy_state = status == ResourceState.failed or status == ResourceState.skipped
-                await self.propagate_resource_state_if_stale(
-                    connection,
-                    env,
-                    [resource_id],
-                    resource_action.started,
-                    finished,
-                    status,
-                    propagate_event_timers,
-                    propagate_deploy_state,
-                )
 
         self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, resource.model))
 
@@ -730,52 +726,6 @@ class ResourceService(protocol.ServerSlice):
                     change=change,
                     changes=changes_with_rvid,
                 )
-
-    async def propagate_resource_state_if_stale(
-        self,
-        connection: Connection,
-        env: data.Environment,
-        resource_ids: list[Id],
-        started: datetime.datetime,
-        finished: datetime.datetime,
-        deploy_state: ResourceState,
-        propagate_event_timers: bool,
-        propagate_deploy_state: bool,
-    ) -> None:
-        if propagate_deploy_state or propagate_event_timers:
-            # lock out release version
-            await env.acquire_release_version_lock(connection=connection)
-            latest_version = await data.ConfigurationModel.get_version_nr_latest_version(env.id, connection=connection)
-
-            for resource_id in resource_ids:
-                if latest_version is not None and latest_version > resource_id.version:
-                    # we are stale, forward propagate our status
-                    # this is required because:
-                    # upon release of the newer version our old status may have been copied over into the new version
-                    # (by the increment calculation)
-                    # the new version may thus hide this failure
-                    # issue #6475
-                    # the release_version_lock above ensure we can not race with release itself
-                    # this is at the end of the transaction to not block release too long
-                    # and vice versa
-                    if propagate_deploy_state:
-                        await self._update_deploy_state(
-                            env,
-                            resource_id.resource_str(),
-                            finished,
-                            latest_version,
-                            deploy_state,
-                            f"update on stale version {resource_id.version}",
-                            fail_on_error=False,
-                            connection=connection,
-                            can_overwrite_available=False,
-                        )
-                    if propagate_event_timers:
-                        # We only update last_succes IF we are a success
-                        last_success = started if deploy_state == const.ResourceState.deployed else None
-                        await data.Resource.update_event_timers_if_newer(
-                            env.id, resource_id.resource_str(), latest_version, last_success, finished, connection=connection
-                        )
 
     @handle(methods.resource_action_update, env="tid")
     async def resource_action_update(
@@ -813,6 +763,7 @@ class ResourceService(protocol.ServerSlice):
             else:
                 raise BadRequest(f"Unsupported deprecated resources state {status.value}")
 
+        # TODO: get rid of this?
         status = convert_legacy_state(status)
 
         # can update resource state
@@ -950,22 +901,11 @@ class ResourceService(protocol.ServerSlice):
                     connection=inner_connection,
                 )
 
-                async def update_fields_resource(
-                    resource: data.Resource, connection: Optional[Connection] = None, **kwargs: object
-                ) -> None:
-                    """
-                    This method ensures that the `last_non_deploying_status` field in the database
-                    is updated correctly when the `status` field of a resource is updated.
-                    """
-                    if "status" in kwargs and kwargs["status"] is not ResourceState.deploying:
-                        kwargs["last_non_deploying_status"] = const.NonDeployingResourceState(kwargs["status"])
-                    await resource.update_fields(**kwargs, connection=connection)
-
                 if is_resource_state_update:
                     # transient resource update
                     if not is_resource_action_finished:
                         for res in resources:
-                            await update_fields_resource(res, status=status, connection=inner_connection)
+                            await res.update_fields(status=status, connection=inner_connection)
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
                         return 200
@@ -975,29 +915,31 @@ class ResourceService(protocol.ServerSlice):
                         if not keep_increment_cache:
                             self.clear_env_cache(env)
 
-                        propagate_event_timers = change != Change.nochange
-
-                        await self.propagate_resource_state_if_stale(
-                            inner_connection,
-                            env,
-                            [Id.parse_id(res) for res in resource_ids],
-                            started,
-                            finished,
-                            status,  # mypy can't figure out this is never None here
-                            propagate_event_timers,
-                            status == ResourceState.failed or status == ResourceState.skipped,
-                        )
-
-                        model_version: Optional[int] = None
+                        model_version = None
                         for res in resources:
-                            extra_fields = {}
-                            if status == ResourceState.deployed and not is_increment_notification:
-                                extra_fields["last_success"] = resource_action.started
-                            if propagate_event_timers:
-                                extra_fields["last_produced_events"] = finished
-                            await update_fields_resource(
-                                res, last_deploy=finished, status=status, **extra_fields, connection=inner_connection
+                            await res.update_fields(
+                                status=status,
+                                connection=inner_connection,
                             )
+                            # Not very typeable
+                            extra_fields: dict[str, Any] = {}
+
+                            if change is not None and change != Change.nochange:
+                                extra_fields["last_produced_events"] = finished
+
+                            if not is_increment_notification:
+                                if status == ResourceState.deployed:
+                                    extra_fields["last_success"] = resource_action.started
+                                if status != ResourceState.deploying:
+                                    extra_fields["last_non_deploying_status"] = const.NonDeployingResourceState(status)
+
+                            await res.update_persistent_state(
+                                **extra_fields,
+                                last_deploy=finished,
+                                last_deployed_attribute_hash=res.attribute_hash,
+                                connection=inner_connection,
+                            )
+
                             model_version = res.model
 
                             if (
