@@ -135,9 +135,11 @@ async def test_dryrun_and_deploy(server, client, resource_container, environment
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(environment, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 5)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(environment, dry_run_id)
@@ -230,9 +232,12 @@ async def test_dryrun_failures(resource_container, server, agent, client, enviro
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 5000)
+
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -300,9 +305,11 @@ async def test_dryrun_scale(resource_container, server, client, environment, age
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
-    while result.result["dryruns"][0]["todo"] > 0:
+    async def dryrun_finished():
         result = await client.dryrun_list(env_id, version)
-        await asyncio.sleep(0.1)
+        return result.result["dryruns"][0]["todo"] == 0
+
+    await retry_limited(dryrun_finished, 5)
 
     dry_run_id = result.result["dryruns"][0]["id"]
     result = await client.dryrun_report(env_id, dry_run_id)
@@ -457,7 +464,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
         result = await client.list_dryruns(environment, version)
         return result.result["data"][0]["todo"] == 0
 
-    await retry_limited(dryrun_finished, 10)
+    await retry_limited(dryrun_finished, 5)
 
     result = await client.get_dryrun_diff(uuid.uuid4(), version, dry_run_id)
     assert result.code == 404
@@ -514,7 +521,7 @@ async def test_dryrun_v2(server, client, resource_container, environment, agent_
     assert result.result["data"][0]["id"] == new_dry_run_id
     assert result.result["data"][0]["date"] > result.result["data"][1]["date"]
 
-    await retry_limited(dryrun_finished, 10)
+    await retry_limited(dryrun_finished, 5)
 
     # The new dryrun should have the updated value
     result = await client.get_dryrun_diff(environment, version, new_dry_run_id)

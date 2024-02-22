@@ -1092,20 +1092,19 @@ class AgentInstance:
                 self._cache.open_version(version)
                 for resource_ref in resource_refs:
                     try:
-                        resource: Resource = Resource.deserialize(resource_ref)
+                        resource: Resource = Resource.deserialize(resource_ref.model_dump()["attributes"])
                     except Exception:
-                        msg = (
-                            data.LogLine.log(
-                                level=const.LogLevel.ERROR,
-                                msg="Unable to deserialize %(resource_id)s",
-                                resource_id=resource_ref["id"].resource_version_str(),
-                                timestamp=datetime.datetime.now().astimezone(),
-                            ),
+                        msg = data.LogLine.log(
+                            level=const.LogLevel.ERROR,
+                            msg="Unable to deserialize %(resource_id)s",
+                            resource_id=Id.parse_id(resource_ref.attributes["id"]).resource_version_str(),
+                            timestamp=datetime.datetime.now().astimezone(),
                         )
+
 
                         await self.get_client().resource_action_update(
                             tid=env_id,
-                            resource_ids=[resource_ref["id"].resource_version_str()],
+                            resource_ids=[Id.parse_id(resource_ref.attributes["id"]).resource_version_str()],
                             action_id=uuid.uuid4(),
                             action=const.ResourceAction.dryrun,
                             started=started,
