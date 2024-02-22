@@ -308,7 +308,7 @@ async def wait_for_version(client, environment, cnt, compile_timeout: int = 30):
 async def _wait_until_deployment_finishes(client: Client, environment: str, version: int, timeout: int = 10) -> None:
     async def is_deployment_finished() -> bool:
         result = await client.get_version(environment, version)
-        # print(version, result.result)
+        print(version, result.result)
         return result.result["model"]["deployed"]
 
     await retry_limited(is_deployment_finished, timeout)
