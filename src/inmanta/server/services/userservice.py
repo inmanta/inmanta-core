@@ -117,7 +117,7 @@ class UserService(server_protocol.ServerSlice):
         except nacl.exceptions.InvalidkeyError:
             raise exceptions.UnauthorizedException()
 
-        token = auth.encode_token([str(const.ClientType.api.value)], expire=None, custom_claims={"sub": username})
+        token = auth.encode_token([str(const.ClientType.api.value)], expire=None)
         return common.ReturnValue(
             status_code=200,
             headers={"Authentication": f"Bearer {token}"},

@@ -1,5 +1,0 @@
-description: Add sub claim to jwt token on login
-change-type: patch
-destination-branches:
-  - master
-  - iso7

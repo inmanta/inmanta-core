@@ -111,10 +111,6 @@ async def test_login(server: protocol.Server, client: endpoints.Client, auth_cli
     assert "user" in response.result["data"]
     assert response.result["data"]["user"]["username"] == "admin"
 
-    data = auth.decode_token(response.result["data"]["token"])
-    assert "sub" in data
-    assert data["sub"] == "admin"
-
     token = response.result["data"]["token"]
     config.Config.set("client_rest_transport", "token", token)
 
