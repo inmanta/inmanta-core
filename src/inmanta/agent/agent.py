@@ -36,7 +36,6 @@ from logging import Logger
 from typing import Any, Dict, Iterator, Optional, Self, Union, cast
 
 import pkg_resources
-from pydantic import BaseModel
 
 from inmanta import const, data, env, protocol
 from inmanta.agent import config as cfg
@@ -161,6 +160,7 @@ class ResourceReference:
     """
     In memory representation of the desired state of a resource
     """
+
     id: Id
     model_version: int
     rvid: ResourceVersionIdStr
@@ -173,11 +173,10 @@ class ResourceReference:
         self.attributes = resource_dict["attributes"]
         self.attributes["id"] = resource_dict["id"]
         self.id = Id.parse_id(resource_dict["id"])
+        self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
         self.requires = resource_dict["attributes"]["requires"]
         self.model_version = resource_dict["model"]
-
-
 
 
 class Executor(ABC):
@@ -347,7 +346,6 @@ class InProcessExecutor(Executor):
                 timestamp=datetime.datetime.now().astimezone(),
             )
 
-
             await self.client.resource_action_update(
                 tid=env_id,
                 resource_ids=[resource_ref.rvid],
@@ -373,7 +371,7 @@ class InProcessExecutor(Executor):
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
                 ctx.action_id, env_id, resource_ref.rvid
             )
-        except Exception as e:
+        except Exception:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("Failed to report the start of the deployment to the server")
             return
@@ -762,12 +760,11 @@ class ResourceScheduler:
         self.generation = {}
 
         for resource in resources:
-            resource_action=ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
+            resource_action = ResourceAction(self, executor, self._env_id, resource, gid, self.running.reason)
             # mark undeployable
             if resource.rvid in undeployable:
                 resource_action.undeployable = undeployable[resource.rvid]
-            self.generation[resource.id] = resource_action
-
+            self.generation[resource.rid] = resource_action
 
         # hook up Cross Agent Dependencies
         all_dependencies: Iterator[Id] = (Id.parse_id(raw) for r in resources for raw in r.requires)
@@ -1118,7 +1115,9 @@ class AgentInstance:
                             status=const.ResourceState.unavailable,
                             messages=[msg],
                         )
-                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={})
+                        await self.get_client().dryrun_update(
+                            tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={}
+                        )
                         continue
                     ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now().astimezone()
@@ -1130,7 +1129,9 @@ class AgentInstance:
                             resource_id=resource_ref.rvid,
                             status=undeployable[resource_ref.rvid],
                         )
-                        await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={})
+                        await self.get_client().dryrun_update(
+                            tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={}
+                        )
                         continue
 
                     try:
@@ -1220,21 +1221,22 @@ class AgentInstance:
             started = datetime.datetime.now().astimezone()
             provider = None
             try:
-                id = str(resource_refs[0].attributes["id"])
-                resource_id = Id.parse_id(ResourceVersionIdStr(id)).resource_version_str()
+                # id = str(resource_refs[0].attributes["id"])
+                # resource_id = Id.parse_id(ResourceVersionIdStr(id)).resource_version_str()
+                resource_ref: ResourceReference = resource_refs[0]
                 try:
-                    resource_obj: Resource = Resource.deserialize(resource_refs[0].model_dump()["attributes"])
+                    resource_obj: Resource = Resource.deserialize(resource_ref.attributes)
                 except Exception:
                     msg = data.LogLine.log(
                         level=const.LogLevel.ERROR,
                         msg="Unable to deserialize %(resource_id)s",
-                        resource_id=resource_id,
+                        resource_id=resource_ref.rvid,
                         timestamp=datetime.datetime.now().astimezone(),
                     )
 
                     await self.get_client().resource_action_update(
                         tid=env_id,
-                        resource_ids=[resource_id],
+                        resource_ids=[resource_ref.rvid],
                         action_id=uuid.uuid4(),
                         action=const.ResourceAction.getfact,
                         started=started,
@@ -1245,9 +1247,8 @@ class AgentInstance:
                     return 500
                 ctx = handler.HandlerContext(resource_obj)
 
-                version = resource_obj.id.get_version()
                 try:
-                    self._cache.open_version(version)
+                    self._cache.open_version(resource_ref.model_version)
                     provider = await self.get_provider(resource_obj)
                     result = await asyncio.get_running_loop().run_in_executor(
                         self.thread_pool, provider.check_facts, ctx, resource_obj
@@ -1269,7 +1270,7 @@ class AgentInstance:
                     finished = datetime.datetime.now().astimezone()
                     await self.get_client().resource_action_update(
                         tid=self._env_id,
-                        resource_ids=[resource_obj.id.resource_version_str()],
+                        resource_ids=[resource_ref.rvid],
                         action_id=ctx.action_id,
                         action=const.ResourceAction.getfact,
                         started=started,
@@ -1280,7 +1281,7 @@ class AgentInstance:
                 except Exception:
                     self.logger.exception("Unable to retrieve fact")
                 finally:
-                    self._cache.close_version(version)
+                    self._cache.close_version(resource_ref.model_version)
 
             except Exception:
                 self.logger.exception("Unable to find a handler for %s", resource["id"])
@@ -1322,9 +1323,7 @@ class AgentInstance:
 
         for res in resources:
             if res["resource_type"] not in failed_resource_types:
-                loaded_resources.append(
-                    ResourceReference(res)
-                )
+                loaded_resources.append(ResourceReference(res))
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
@@ -1332,9 +1331,7 @@ class AgentInstance:
             else:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
-                loaded_resources.append(
-                    ResourceReference(res)
-                )
+                loaded_resources.append(ResourceReference(res))
 
         if len(failed_resources) > 0:
             log = data.LogLine.log(
