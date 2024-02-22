@@ -97,7 +97,8 @@ class Config:
         input_config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
     ) -> None:
         """
-        Load the configuration from a dict, used to copy config
+        Load the configuration from a dict, used to copy config.
+        Replaces all existing config.
         """
         config = LenientConfigParser(interpolation=Interpolation())
         config.read_dict(input_config)
