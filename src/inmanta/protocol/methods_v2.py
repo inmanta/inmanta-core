@@ -22,7 +22,7 @@ import datetime
 import uuid
 from typing import Literal, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState
+from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ParameterSource, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
@@ -1123,6 +1123,34 @@ def get_parameters(
 
 
 @typedmethod(
+    path="/parameters/<id>",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.compiler, ClientType.agent],
+    api_version=2,
+)
+def set_parameter(
+    tid: uuid.UUID,
+    id: str,
+    source: ParameterSource,
+    value: str,
+    metadata: dict[str, str] = {},
+    recompile: bool = False,
+) -> model.Parameter:
+    """
+    Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+    Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
+
+    :param tid: The id of the environment
+    :param id: The name of the parameter
+    :param source: The source of the parameter.
+    :param value: The value of the parameter
+    :param metadata: Optional. Metadata about the parameter
+    :param recompile: Optional. Whether to trigger a recompile
+    """
+
+
+@typedmethod(
     path="/facts",
     operation="GET",
     arg_options=methods.ENV_OPTS,
@@ -1163,6 +1191,37 @@ def get_all_facts(
     :return: A list of all matching facts
     :raise NotFound: This exception is raised when the referenced environment is not found
     :raise BadRequest: When the parameters used for filtering, sorting or paging are not valid
+    """
+
+
+@typedmethod(
+    path="/facts/<name>",
+    operation="PUT",
+    arg_options=methods.ENV_OPTS,
+    client_types=[ClientType.api, ClientType.compiler, ClientType.agent],
+    api_version=2,
+)
+def set_fact(
+    tid: uuid.UUID,
+    name: str,
+    source: ParameterSource,
+    value: str,
+    resource_id: str,
+    metadata: dict[str, str] = {},
+    recompile: bool = False,
+    expires: Optional[bool] = True,
+) -> ReturnValue[model.Fact]:
+    """
+    Set a fact on the server
+
+    :param tid: The id of the environment
+    :param name: The name of the parameter
+    :param source: The source of the parameter.
+    :param value: The value of the parameter
+    :param resource_id: Optional. Scope the parameter to resource (fact)
+    :param metadata: Optional. Metadata about the parameter
+    :param recompile: Optional. Whether to trigger a recompile
+    :param expires: Optional. If the fact should expire or not. By default, facts expire.
     """
 
 

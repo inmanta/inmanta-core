@@ -364,6 +364,38 @@ class ParameterService(protocol.ServerSlice):
             raise NotFound(f"Fact with id {id} does not exist")
         return param.as_fact()
 
+    @handle(methods_v2.set_fact, env="tid")
+    async def set_fact(
+        self,
+        env: data.Environment,
+        name: str,
+        source: ParameterSource,
+        value: str,
+        resource_id: str,
+        metadata: dict = {},
+        recompile: bool = False,
+        expires: Optional[bool] = True,
+    ) -> ReturnValue[Fact]:
+        self._validate_parameter(name, resource_id, expires)
+        result = await self._update_param(env, name, value, source, resource_id, metadata, recompile, expires)
+        warnings = None
+        if result:
+            compile_metadata = {
+                "message": "Recompile model because one or more parameters were updated",
+                "type": "param",
+                "params": [(name, resource_id)],
+            }
+            warnings = await self.server_slice._async_recompile(env, False, metadata=compile_metadata)
+
+        param = await data.Parameter.get_one(environment=env.id, resource_id=resource_id, name=name)
+        if not param:
+            raise NotFound(f"Fact with id {name} does not exist")
+
+        return_value = ReturnValue(response=param.as_fact())
+        if warnings:
+            return_value.add_warnings(warnings)
+        return return_value
+
     @handle(methods_v2.get_parameters, env="tid")
     async def get_parameters(
         self,

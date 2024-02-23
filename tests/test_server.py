@@ -29,7 +29,7 @@ import pytest
 from dateutil import parser
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
-from inmanta import config, const, data, loader, resources
+from inmanta import config, const, data, loader, resources, util
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
 from inmanta.const import ParameterSource
@@ -1896,3 +1896,87 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
         f"because Request conflicts with the current state of the resource: "
         f"The version 2 on environment {environment} is older then the latest released version",
     )
+
+
+async def test_set_fact(
+    server,
+    client,
+    clienthelper,
+    environment,
+    no_agent_backoff,
+    agent_factory,
+):
+    """
+    Test the set_fact endpoint. First create a fact with expires set to true.
+    Then set expires to false for the same fact.
+    """
+
+    await agent_factory(
+        environment=environment,
+        agent_map={"discovery_agent": "localhost"},
+        hostname="discovery_agent",
+    )
+
+    version = await clienthelper.get_version()
+    resource_id = "test::MyDiscoveryResource[discovery_agent,key=key1]"
+    resource_version_id = f"{resource_id},v={version}"
+
+    resources = [
+        {
+            "key": "key1",
+            "id": resource_version_id,
+            "send_event": True,
+            "purged": False,
+            "requires": [],
+        }
+    ]
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+        compiler_version=util.get_compiler_version(),
+    )
+    assert result.code == 200
+
+    result = await client.set_fact(
+        tid=environment,
+        name="test",
+        source=ParameterSource.fact.value,
+        value="value1",
+        resource_id="test::MyDiscoveryResource[discovery_agent,key=key1]",
+    )
+
+    assert result.code == 200
+    fact = result.result["data"]
+    assert fact["expires"] is True
+
+    result = await client.get_facts(
+        tid=environment,
+        rid="test::MyDiscoveryResource[discovery_agent,key=key1]",
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0] == fact
+
+    result = await client.set_fact(
+        tid=environment,
+        name="test",
+        source=ParameterSource.fact.value,
+        value="value1",
+        resource_id="test::MyDiscoveryResource[discovery_agent,key=key1]",
+        expires=False,
+    )
+    assert result.code == 200
+    fact = result.result["data"]
+    assert fact["expires"] is False
+
+    result = await client.get_facts(
+        tid=environment,
+        rid="test::MyDiscoveryResource[discovery_agent,key=key1]",
+    )
+    assert result.code == 200
+    assert len(result.result["data"]) == 1
+    assert result.result["data"][0] == fact
