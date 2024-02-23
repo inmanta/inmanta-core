@@ -3052,6 +3052,17 @@ class Parameter(BaseDocument):
             expires=self.expires,
         )
 
+    def as_param(self) -> m.Parameter:
+        return m.Parameter(
+            id=self.id,
+            name=self.name,
+            value=self.value,
+            environment=self.environment,
+            source=self.source,
+            updated=self.updated,
+            metadata=self.metadata,
+        )
+
 
 class UnknownParameter(BaseDocument):
     """
