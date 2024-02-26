@@ -32,7 +32,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Se
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from typing import Any, Dict, Iterator, Optional, Self, Union, cast
+from typing import Any, Dict, Optional, Self, Union, cast
 
 import pkg_resources
 
@@ -164,7 +164,7 @@ class ResourceReference:
     rid: ResourceIdStr
     rvid: ResourceVersionIdStr
     model_version: int
-    requires: list[ResourceVersionIdStr]
+    requires: Sequence[Id]
     attributes: dict[str, Any]
     raw: JsonType
 
@@ -175,7 +175,7 @@ class ResourceReference:
         self.id = Id.parse_id(resource_dict["id"])
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
-        self.requires = resource_dict["attributes"]["requires"]
+        self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
         self.model_version = resource_dict["model"]
 
 
@@ -456,7 +456,7 @@ class ResourceAction(ResourceActionBase):
     async def execute(self, dummy: "ResourceActionBase", generation: Mapping[ResourceIdStr, ResourceActionBase]) -> None:
         self.logger.log(const.LogLevel.TRACE.to_int, "Entering %s %s", self.gid, self.resource)
         with self.executor.cache(self.resource.model_version):
-            self.dependencies = [generation[Id.parse_id(x).resource_str()] for x in self.resource.requires]
+            self.dependencies = [generation[resource_id.resource_str()] for resource_id in self.resource.requires]
             waiters = [x.future for x in self.dependencies]
             waiters.append(dummy.future)
             # Explicit cast is required because mypy has issues with * and generics
@@ -767,8 +767,9 @@ class ResourceScheduler:
             self.generation[resource.rid] = resource_action
 
         # hook up Cross Agent Dependencies
-        all_dependencies: Iterator[Id] = (Id.parse_id(raw) for r in resources for raw in r.requires)
-        cross_agent_dependencies: Sequence[Id] = [rid for rid in all_dependencies if rid.get_agent_name() != self.name]
+        cross_agent_dependencies: Sequence[Id] = [
+            rid for resource in resources for rid in resource.requires if rid.get_agent_name() != self.name
+        ]
 
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, self.running.reason)
