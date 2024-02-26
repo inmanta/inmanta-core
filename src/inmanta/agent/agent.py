@@ -28,7 +28,6 @@ import time
 import uuid
 from abc import ABC
 from asyncio import Lock
-from collections import defaultdict
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Set
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -1412,7 +1411,7 @@ class Agent(SessionEndpoint):
             # Lock to ensure only one actual install runs at a time
             self._loader_lock = Lock()
             # Cache to prevent re-loading the same resource-version
-            self._last_loaded: dict[str, int] = defaultdict(lambda: -1)
+            self._last_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock = NamedLock()
 
@@ -1599,7 +1598,7 @@ class Agent(SessionEndpoint):
 
     async def get_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> list[ResourceInstallSpec]:
         """
-        Get the list of installation specifications (i.e. pip congif, python package dependencies, Inmanta modules sources)
+        Get the list of installation specifications (i.e. pip config, python package dependencies, Inmanta modules sources)
         required to deploy a given version for the provided resource types.
         """
         if self._loader is None:
@@ -1611,40 +1610,39 @@ class Agent(SessionEndpoint):
         resource_install_specs: list[ResourceInstallSpec] = []
         for resource_type in set(resource_types):
 
-            if self._last_loaded[resource_type] == version:
+            cached_spec: Optional[ResourceInstallSpec] = self._last_loaded.get((resource_type, version))
+            if cached_spec:
                 LOGGER.debug("Code already present for %s version=%d", resource_type, version)
+                resource_install_specs.append(cached_spec)
                 continue
-            # only one logical thread can load a particular resource type at any time
-            # TODO deal with this lock  -> not sure how
-            async with self._resource_loader_lock.get(resource_type):
-                result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
-                if result.code == 200 and result.result is not None:
-                    sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
-                    LOGGER.debug("Installing handler %s version=%d", resource_type, version)
-                    requirements: set[str] = set()
-                    sources: list["ModuleSource"] = []
-                    # Encapsulate source code details in ``ModuleSource`` objects
-                    for source in result.result["data"]:
-                        sources.append(
-                            ModuleSource(
-                                name=source["module_name"],
-                                is_byte_code=source["is_byte_code"],
-                                hash_value=source["hash"],
-                                _client=sync_client,
-                            )
+            result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
+            if result.code == 200 and result.result is not None:
+                sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
+                LOGGER.debug("Installing handler %s version=%d", resource_type, version)
+                requirements: set[str] = set()
+                sources: list["ModuleSource"] = []
+                # Encapsulate source code details in ``ModuleSource`` objects
+                for source in result.result["data"]:
+                    sources.append(
+                        ModuleSource(
+                            name=source["module_name"],
+                            is_byte_code=source["is_byte_code"],
+                            hash_value=source["hash"],
+                            _client=sync_client,
                         )
-                        requirements.update(source["requirements"])
-
-                    if pip_config is None:
-                        # TODO: what if this fails?
-                        pip_config = await self._get_pip_config(environment, version)
-
-                    resource_install_specs.append(
-                        ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
                     )
-                else:
-                    # TODO what if server call fails ?
-                    pass
+                    requirements.update(source["requirements"])
+
+                if pip_config is None:
+                    # TODO: what if this fails?
+                    pip_config = await self._get_pip_config(environment, version)
+
+                resource_install_specs.append(
+                    ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
+                )
+            else:
+                # TODO what if server call fails ?
+                pass
 
         return resource_install_specs
 
@@ -1656,10 +1654,8 @@ class Agent(SessionEndpoint):
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded[resource_install_spec.resource_type] == resource_install_spec.model_version:
+                if self._last_loaded.get((resource_install_spec.resource_type, resource_install_spec.model_version)):
                     continue
-                # clear cache, for retry on failure
-                self._last_loaded[resource_install_spec.resource_type] = -1
             try:
                 # Install required python packages and the list of ``ModuleSource`` with the provided pip config
                 await self._install(
@@ -1672,7 +1668,9 @@ class Agent(SessionEndpoint):
                 )
                 # Update the ``_last_loaded`` cache to indicate that the given resource type's code
                 # was loaded successfully at the specified version.
-                self._last_loaded[resource_install_spec.resource_type] = resource_install_spec.model_version
+                self._last_loaded[(resource_install_spec.resource_type, resource_install_spec.model_version)] = (
+                    resource_install_spec
+                )
             except Exception:
                 LOGGER.exception(
                     "Failed to install handler %s version=%d",
