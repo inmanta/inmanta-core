@@ -41,13 +41,8 @@ def test_deploy(snippetcompiler, tmpdir, postgres_db, default_main_file):
         file = std::Symlink(host=host, source="/dev/null", target="{file_name}")
     """
 
-    main_file = "main.cf"
-
-    if default_main_file:
-        project = snippetcompiler.setup_for_snippet(code)
-    else:
-        main_file = "other.cf"
-        project = snippetcompiler.setup_for_snippet(code, main_file=main_file)
+    main_file = "main.cf" if default_main_file else "other.cf"
+    project = snippetcompiler.setup_for_snippet(code, main_file=main_file)
 
     os.chdir(snippetcompiler.project_dir)
     Options = collections.namedtuple("Options", ["dryrun", "dashboard", "main_file"])
