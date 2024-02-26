@@ -1154,6 +1154,7 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> Project:
         """
         Sets up the project to compile a snippet of inmanta DSL. Activates the compiler environment (and patches
@@ -1186,8 +1187,11 @@ class SnippetCompilationTest(KeepOnFail):
             use_pip_config_file,
             index_url,
             extra_index_url,
+            main_file,
         )
-        return self._load_project(autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check)
+        return self._load_project(
+            autostd, install_project, install_v2_modules, strict_deps_check=strict_deps_check, main_file=main_file
+        )
 
     def _load_project(
         self,
@@ -1249,6 +1253,7 @@ class SnippetCompilationTest(KeepOnFail):
         use_pip_config_file: bool = False,
         index_url: Optional[str] = None,
         extra_index_url: list[str] = [],
+        main_file: str = "main.cf",
     ) -> None:
         add_to_module_path = add_to_module_path if add_to_module_path is not None else []
         python_package_sources = python_package_sources if python_package_sources is not None else []
@@ -1295,7 +1300,7 @@ class SnippetCompilationTest(KeepOnFail):
                 )
         with open(os.path.join(self.project_dir, "requirements.txt"), "w", encoding="utf-8") as fd:
             fd.write("\n".join(str(req) for req in python_requires))
-        self.main = os.path.join(self.project_dir, "main.cf")
+        self.main = os.path.join(self.project_dir, main_file)
         with open(self.main, "w", encoding="utf-8") as x:
             x.write(snippet)
 
