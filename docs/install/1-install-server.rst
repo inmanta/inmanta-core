@@ -4,7 +4,7 @@ Install Inmanta
 ***************
 
 This page explains how to install the Inmanta orchestrator software and setup an orchestration server. Regardless what platform
-you installed it on, Inmanta requires at least the latest Python 3.9 and git to be installed.
+you installed it on, Inmanta requires git to be installed.
 
 
 Install the software
@@ -189,8 +189,9 @@ Install the software
     Create a repositories file to point yum to the inmanta service orchestrator release repository. Create a file
     ``/etc/yum.repos.d/inmanta.repo`` with the following content:
 
+
     .. code-block:: sh
-       :substitutions:
+        :substitutions:
 
         [inmanta-service-orchestrator-|version_major|-stable]
         name=inmanta-service-orchestrator-|version_major|-stable
@@ -228,8 +229,8 @@ Install the software
     - The file with the .license extension is the license file
     - The file with the .jwe extension is the entitlement file
 
-    Copy the license file to the server and store them for example in ``/etc/inmanta/license``. If this directory does not exist, create it. Then create a
-    configuration file to point the orchestrator to the license file. Create a file ``/etc/inmanta/inmanta.d/license.cfg`` with the following content:
+    Copy both files to the server and store them for example in ``/etc/inmanta/license``. If this directory does not exist, create it. Then create a
+    configuration file to point the orchestrator to the license files. Create a file ``/etc/inmanta/inmanta.d/license.cfg`` with the following content:
 
     .. code-block::
 
@@ -265,7 +266,7 @@ Step 3: Install PostgreSQL 13
 
 .. only:: iso
 
-    Install the PostgreSQL 13 package included in RHEL.
+    Install the PostgreSQL 13 package included in RHEL. More info in the `postgresql documentation <https://www.postgresql.org/download/linux/redhat/>`_
 
     .. tab-set::
 
@@ -280,7 +281,7 @@ Step 3: Install PostgreSQL 13
 
             .. code-block:: sh
 
-                sudo dnf module install postgresql-server
+                sudo dnf install postgresql-server
                 sudo systemctl enable postgresql
 
 
@@ -300,6 +301,10 @@ Initialize the PostgreSQL server:
 .. only:: iso
 
     .. code-block:: sh
+
+        # TODO: the following step was failing because of missing langpacks, I had to install them with
+        # `sudo dnf install langpacks-en glibc-all-langpacks -y`
+        # I'm not sure whether this is specific to my setup of more general
 
         sudo su - postgres -c "postgresql-setup --initdb"
 
@@ -437,7 +442,7 @@ ssh and if the remote agent is used.
 
     sudo chown inmanta:inmanta /var/lib/inmanta/.ssh/config
 
-3. Add the public key to any git repositories and save if to include in configuration models that require remote agents.
+3. Add the public key to any git repositories and save it to include in configuration models that require remote agents.
 4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
    the host key.
 
@@ -487,7 +492,7 @@ Start the Inmanta server and make sure it is started at boot.
   sudo systemctl enable --now inmanta-server
 
 
-The web-console is now available on the port and host configured in step 7.
+The web-console is now available on the port and host configured in step 8.
 
 Optional Step 11: Setup influxdb for collection of performance metrics
 ----------------------------------------------------------------------
