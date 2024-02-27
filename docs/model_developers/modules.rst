@@ -354,4 +354,3 @@ You will also need to specify the url of the repository in the ``project.yml`` f
 By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
 
 
-
