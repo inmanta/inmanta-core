@@ -319,7 +319,7 @@ host=localhost
 
         return True
 
-    def export(self) -> bool:
+    def export(self, main_file: str) -> bool:
         """
         Export a version to the embedded server
         """
@@ -336,6 +336,8 @@ host=localhost
             "localhost",
             "--server_port",
             str(self._server_port),
+            "-f",
+            main_file,
         ]
 
         sub_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -485,7 +487,7 @@ host=localhost
         raise FinishedException()
 
     def run(self) -> None:
-        self.export()
+        self.export(main_file=self._options.main_file)
         self.deploy(dry_run=self._options.dryrun)
 
     def stop(self) -> None:
