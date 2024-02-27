@@ -302,10 +302,6 @@ Initialize the PostgreSQL server:
 
     .. code-block:: sh
 
-        # TODO: the following step was failing because of missing langpacks, I had to install them with
-        # `sudo dnf install langpacks-en glibc-all-langpacks -y`
-        # I'm not sure whether this is specific to my setup of more general
-
         sudo su - postgres -c "postgresql-setup --initdb"
 
 
