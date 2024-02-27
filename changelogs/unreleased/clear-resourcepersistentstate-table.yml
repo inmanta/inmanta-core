@@ -1,0 +1,4 @@
+---
+description: Fix bug where the ResourcePersistentState table is not clear when an environment is cleared or deleted.
+change-type: patch
+destination-branches: [master, iso7]
