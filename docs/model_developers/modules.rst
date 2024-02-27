@@ -31,15 +31,15 @@ A complete V2 module might contain the following files:
     |__ pyproject.toml
     |
     |__ model
-    |    |__ _init.cf
-    |    |__ services.cf
+    |    |__ _init.cf
+    |    |__ services.cf
     |
     |__ inmanta_plugins/<module-name>/
-    |    |__ __init__.py
-    |    |__ functions.py
+    |    |__ __init__.py
+    |    |__ functions.py
     |
     |__ files
-    |    |__ file1.txt
+    |    |__ file1.txt
     |
     |__ templates
          |__ conf_file.conf.tmpl
@@ -155,17 +155,17 @@ A complete module might contain the following files:
     |__ module.yml
     |
     |__ model
-    |    |__ _init.cf
-    |    |__ services.cf
+    |    |__ _init.cf
+    |    |__ services.cf
     |
     |__ plugins
-    |    |__ functions.py
+    |    |__ functions.py
     |
     |__ files
-    |    |__ file1.txt
+    |    |__ file1.txt
     |
     |__ templates
-    |    |__ conf_file.conf.tmpl
+    |    |__ conf_file.conf.tmpl
     |
     |__ requirements.txt
 
