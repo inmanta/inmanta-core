@@ -2832,6 +2832,7 @@ class Environment(BaseDocument):
             await ResourceAction.delete_all(environment=self.id, connection=con)
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
+            await ResourcePersistentState.delete_all(environment=self.id, connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
