@@ -266,7 +266,8 @@ Step 3: Install PostgreSQL 13
 
 .. only:: iso
 
-    Install the PostgreSQL 13 package included in RHEL. More info in the `postgresql documentation <https://www.postgresql.org/download/linux/redhat/>`_
+    Install the PostgreSQL 13 package included in RHEL. More info in the 'Included in Distribution' section
+    of the `postgresql documentation <https://www.postgresql.org/download/linux/redhat/>`_.
 
     .. tab-set::
 
@@ -284,6 +285,16 @@ Step 3: Install PostgreSQL 13
                 sudo dnf install postgresql-server
                 sudo systemctl enable postgresql
 
+            .. warning::
+                Before moving on to the next step, make sure that the locale used by the system is actually installed.
+                By default, RHEL9 uses the ``en_US.UTF-8`` locale which can be installed via:
+
+                .. code-block:: sh
+
+                    sudo dnf install langpacks-en -y
+
+                .. note::
+                    If your system uses a different locale, please install the corresponding langpack.
 
 .. _install-step-3:
 
