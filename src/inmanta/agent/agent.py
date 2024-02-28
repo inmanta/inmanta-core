@@ -1222,8 +1222,6 @@ class AgentInstance:
             started = datetime.datetime.now().astimezone()
             provider = None
             try:
-                # id = str(resource_refs[0].attributes["id"])
-                # resource_id = Id.parse_id(ResourceVersionIdStr(id)).resource_version_str()
                 resource_ref: ResourceReference = resource_refs[0]
                 try:
                     resource_obj: Resource = Resource.deserialize(resource_ref.attributes)
