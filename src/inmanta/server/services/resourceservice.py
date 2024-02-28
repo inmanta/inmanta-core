@@ -20,6 +20,8 @@ import asyncio
 import datetime
 import logging
 import os
+import re
+import timeit
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
@@ -335,9 +337,9 @@ class ResourceService(protocol.ServerSlice):
 
         now = datetime.datetime.now().astimezone()
 
+        ON_AGENT_REGEX = re.compile(fr"^[a-zA-Z0-9_:]+\[{re.escape(agent)},")
         def on_agent(res: ResourceIdStr) -> bool:
-            idr = Id.parse_id(res)
-            return idr.get_agent_name() == agent
+            return ON_AGENT_REGEX.match(res) is not None
 
         # This is a bit subtle.
         # Any resource we consider deployed has to be marked as such.
@@ -414,34 +416,79 @@ class ResourceService(protocol.ServerSlice):
         :param version: Version of the resources to consider.
         :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
         """
-        resources_version_ids: list[ResourceVersionIdStr] = [
-            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
-        ]
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_iso_format(timestamp),
-            "args": [],
-        }
+        if not resources_id:
+            return
 
-        await self.resource_action_update(
-            env,
-            resources_version_ids,
-            action_id=uuid.uuid4(),
-            started=timestamp,
-            finished=timestamp,
-            status=const.ResourceState.deployed,
-            # does this require a different ResourceAction?
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[logline],
-            change=const.Change.nochange,
-            send_events=False,
-            keep_increment_cache=True,
-            is_increment_notification=True,
-            only_update_from_states=only_update_from_states,
-            connection=connection,
-        )
+        resources_id = [res_id for res_id in resources_id if filter(res_id)]
+        if not resources_id:
+            return
+
+        action_id=uuid.uuid4()
+
+        async with data.Resource.get_connection(connection.connection) as inner_connection:
+            async with inner_connection.transaction():
+                # validate resources
+                if only_update_from_states is not None:
+                    resources = await data.Resource.get_resource_ids_with_status(
+                        env.id,
+                        resources_id,
+                        version,
+                        only_update_from_states,
+                        # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                        # cascading deletes
+                        lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
+                        connection=inner_connection,
+                    )
+                    if not resources:
+                        return None
+
+                resources_version_ids: list[ResourceVersionIdStr] = [
+                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id
+                ]
+
+                resource_action = data.ResourceAction(
+                    environment=env.id,
+                    version=version,
+                    resource_version_ids=resources_version_ids,
+                    action_id=action_id,
+                    action=const.ResourceAction.deploy,
+                    started=timestamp,
+                    messages=[
+                        {
+                            "level": "INFO",
+                            "msg": "Setting deployed due to known good status",
+                            "args": [],
+                            "timestamp": timestamp.isoformat(timespec="microseconds"),
+                        }
+                    ],
+                    changes={},
+                    status=const.ResourceState.deployed,
+                    change=const.Change.nochange,
+                    finished=timestamp,
+                )
+                await resource_action.insert(connection=inner_connection)
+                self.log_resource_action(
+                    env.id,
+                    resources_version_ids,
+                    const.LogLevel.INFO.to_int,
+                    timestamp,
+                    "Setting deployed due to known good status",
+                )
+
+                await data.Resource.set_deployed_multi(
+                    env.id,
+                    resources_id,
+                    version,
+                    connection=inner_connection
+                )
+                # Resource persistent state should not be affected
+
+        def post_deploy_update() -> None:
+            # Make sure tasks are scheduled AFTER the tx is done.
+            # This method is only called if the transaction commits successfully.
+            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, version))
+
+        connection.call_after_tx(post_deploy_update)
 
     async def _update_deploy_state(
         self,
