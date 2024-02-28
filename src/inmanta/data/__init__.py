@@ -4626,12 +4626,10 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         resource_ids: list[m.ResourceIdStr],
-        version:int,
+        version: int,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[m.ResourceIdStr]:
-        query = (
-            "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
-        )
+        query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
         async with cls.get_connection(connection) as connection:
             await connection.execute(query, environment, version, resource_ids)
 
@@ -4645,14 +4643,13 @@ class Resource(BaseDocument):
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[m.ResourceIdStr]:
-        query = (
-            "SELECT resource_id as resource_id FROM resource WHERE environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
-        )
+        query = "SELECT resource_id as resource_id FROM resource WHERE environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
         if lock:
             query += lock.value
         async with cls.get_connection(connection) as connection:
-            return [r["resource_id"] for r in
-                    await connection.fetch(query, environment, version, statuses, resource_version_ids)]
+            return [
+                r["resource_id"] for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
+            ]
 
     @classmethod
     async def get_undeployable(cls, environment: uuid.UUID, version: int) -> list["Resource"]:
@@ -4845,7 +4842,7 @@ class Resource(BaseDocument):
                 return ",".join(f"{prefix}.{field}" for field in projection)
 
         if project_attributes:
-            json_projection = ',' + ",".join(f"r.attributes->'{v}' as {v}" for v in project_attributes)
+            json_projection = "," + ",".join(f"r.attributes->'{v}' as {v}" for v in project_attributes)
         else:
             json_projection = ""
 
@@ -4859,7 +4856,8 @@ class Resource(BaseDocument):
         for res in resources:
             if project_attributes:
                 for k in project_attributes:
-                    res[k] = json.loads(res[k])
+                    if res[k]:
+                        res[k] = json.loads(res[k])
         return resources
 
     @classmethod
@@ -5765,10 +5763,7 @@ class ConfigurationModel(BaseDocument):
             "last_deployed_attribute_hash",
             "last_non_deploying_status",
         ]
-        projection_a_attributes = [
-            "requires",
-            "send_event"
-        ]
+        projection_a_attributes = ["requires", "send_event"]
         projection = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
@@ -5798,11 +5793,7 @@ class ConfigurationModel(BaseDocument):
                 req_res = id_to_resource[req]
                 assert req_res is not None  # todo
                 last_produced_events = req_res["last_produced_events"]
-                if (
-                    last_produced_events is not None
-                    and last_produced_events > last_success
-                    and req_res["send_event"]
-                ):
+                if last_produced_events is not None and last_produced_events > last_success and req_res["send_event"]:
                     in_increment = True
                     break
 

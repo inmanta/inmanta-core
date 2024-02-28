@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import logging
 import uuid
@@ -69,6 +70,8 @@ from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
+PLOGGER = logging.getLogger("performance")
+
 
 PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
@@ -411,7 +414,9 @@ class OrchestrationService(protocol.ServerSlice):
                 # get available versions
                 n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
                 assert isinstance(n_versions, int)
-                versions = await data.ConfigurationModel.get_list(environment=env_item.id, connection=connection)
+                versions = await data.ConfigurationModel.get_list(
+                    environment=env_item.id, connection=connection, no_status=True
+                )
                 if len(versions) > n_versions:
                     LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
                     version_dict = {x.version: x for x in versions}
@@ -652,7 +657,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-    ) -> None:
+    ) -> abc.Sequence[str]:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
                                 When a partial compile is done, it should contain all the resources that belong to the
@@ -665,6 +670,8 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
+
+        :return: all agents affected
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -818,6 +825,7 @@ class OrchestrationService(protocol.ServerSlice):
                 await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
+        return list(all_agents)
 
     async def _trigger_auto_deploy(
         self,
@@ -825,6 +833,7 @@ class OrchestrationService(protocol.ServerSlice):
         version: int,
         *,
         connection: Optional[Connection],
+        agents: Optional[abc.Sequence[str]] = None,
     ) -> None:
         """
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
@@ -838,7 +847,7 @@ class OrchestrationService(protocol.ServerSlice):
             agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
             await self.release_version(
-                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection
+                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection, agents=agents
             )
 
     def _create_unknown_parameter_daos_from_api_unknowns(
@@ -946,6 +955,8 @@ class OrchestrationService(protocol.ServerSlice):
                      "source": str
                     }
         """
+        PLOGGER.warning("STARTING PUT PARTIAL")
+        previous = asyncio.get_running_loop().time()
         if resource_state is None:
             resource_state = {}
         if unknowns is None:
@@ -978,6 +989,9 @@ class OrchestrationService(protocol.ServerSlice):
                 "Following resource sets are present in the removed resource sets and in the resources that are exported: "
                 f"{intersection}"
             )
+        t_now = asyncio.get_running_loop().time()
+        PLOGGER.warning("INPUT VALIDATION: %s", t_now - previous)
+        previous = t_now
 
         async with data.Resource.get_connection() as con:
             async with con.transaction():
@@ -1020,6 +1034,10 @@ class OrchestrationService(protocol.ServerSlice):
                     set_version=version,
                 )
 
+                t_now = asyncio.get_running_loop().time()
+                PLOGGER.warning("LOAD STAGE: %s", t_now - previous)
+                previous = t_now
+
                 updated_resource_sets: abc.Set[str] = {sr_name for sr_name in resource_sets.values() if sr_name is not None}
                 partial_update_merger = await PartialUpdateMerger.create(
                     env_id=env.id,
@@ -1033,6 +1051,9 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # add shared resources
                 merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
+                t_now = asyncio.get_running_loop().time()
+                PLOGGER.warning("MERGE STAGE: %s", t_now - previous)
+                previous = t_now
 
                 await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
@@ -1040,7 +1061,7 @@ class OrchestrationService(protocol.ServerSlice):
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
                 )
 
-                await self._put_version(
+                all_agents = await self._put_version(
                     env,
                     version,
                     merged_resources,
@@ -1052,16 +1073,23 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                 )
+                t_now = asyncio.get_running_loop().time()
+                PLOGGER.warning("PUT STAGE: %s", t_now - previous)
+                previous = t_now
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
             try:
-                await self._trigger_auto_deploy(env, version, connection=con)
+                await self._trigger_auto_deploy(env, version, agents=all_agents, connection=con)
             except Conflict as e:
                 # It is unclear if this condition can ever happen
                 LOGGER.warning(
                     "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
                 )
                 returnvalue.add_warnings([f"Could not perform auto deploy: {e.log_message} {e.details}"])
+
+            t_now = asyncio.get_running_loop().time()
+            PLOGGER.warning("AUTO DEPLOY STAGE: %s", t_now - previous)
+            previous = t_now
 
         return returnvalue
 
@@ -1074,7 +1102,11 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
+        agents: Optional[abc.Sequence[str]] = None,
     ) -> ReturnTupple:
+        """
+        :param agents: agents that have to be notified by the push
+        """
         async with data.ConfigurationModel.get_connection(connection) as connection:
             async with connection.transaction():
                 with ConnectionInTransaction(connection) as connection_holder:
@@ -1170,8 +1202,10 @@ class OrchestrationService(protocol.ServerSlice):
                 # We can't be in a transaction here, or the agent will not see the data that as committed
                 # This assert prevents anyone from wrapping this method in a transaction by accident
                 assert not connection.is_in_transaction()
-                # fetch all resource in this cm and create a list of distinct agents
-                agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
+
+                if agents is None:
+                    # fetch all resource in this cm and create a list of distinct agents
+                    agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
                 await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
                 for agent in agents:

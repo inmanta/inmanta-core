@@ -337,7 +337,8 @@ class ResourceService(protocol.ServerSlice):
 
         now = datetime.datetime.now().astimezone()
 
-        ON_AGENT_REGEX = re.compile(fr"^[a-zA-Z0-9_:]+\[{re.escape(agent)},")
+        ON_AGENT_REGEX = re.compile(rf"^[a-zA-Z0-9_:]+\[{re.escape(agent)},")
+
         def on_agent(res: ResourceIdStr) -> bool:
             return ON_AGENT_REGEX.match(res) is not None
 
@@ -423,7 +424,7 @@ class ResourceService(protocol.ServerSlice):
         if not resources_id:
             return
 
-        action_id=uuid.uuid4()
+        action_id = uuid.uuid4()
 
         async with data.Resource.get_connection(connection.connection) as inner_connection:
             async with inner_connection.transaction():
@@ -475,12 +476,7 @@ class ResourceService(protocol.ServerSlice):
                     "Setting deployed due to known good status",
                 )
 
-                await data.Resource.set_deployed_multi(
-                    env.id,
-                    resources_id,
-                    version,
-                    connection=inner_connection
-                )
+                await data.Resource.set_deployed_multi(env.id, resources_id, version, connection=inner_connection)
                 # Resource persistent state should not be affected
 
         def post_deploy_update() -> None:
