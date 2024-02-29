@@ -1565,12 +1565,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
     Manages a single virtual environment for an executor,
     including the creation and installation of packages based on a blueprint.
 
-    :param storage: The file system path where the virtual environment should be created or exists.
+    :param env_path: The file system path where the virtual environment should be created or exists.
     :param threadpool: A ThreadPoolExecutor instance
     """
 
-    def __init__(self, storage: str, threadpool: ThreadPoolExecutor):
-        super().__init__(env_path=storage)
+    def __init__(self, env_path: str, threadpool: ThreadPoolExecutor):
+        super().__init__(env_path=env_path)
         self.thread_pool = threadpool
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
