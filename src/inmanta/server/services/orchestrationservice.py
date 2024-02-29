@@ -834,7 +834,6 @@ class OrchestrationService(protocol.ServerSlice):
         env: data.Environment,
         version: int,
         *,
-        connection: Optional[Connection],
         agents: Optional[abc.Sequence[str]] = None,
     ) -> None:
         """
@@ -848,8 +847,8 @@ class OrchestrationService(protocol.ServerSlice):
             push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            await self.release_version(
-                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection, agents=agents
+            self.add_background_task(
+                self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, agents=agents)
             )
 
     def _create_unknown_parameter_daos_from_api_unknowns(
@@ -927,13 +926,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                 )
-            try:
-                await self._trigger_auto_deploy(env, version, connection=con)
-            except Conflict as e:
-                # this should be an api warning, but this is not supported here
-                LOGGER.warning(
-                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
-                )
+            await self._trigger_auto_deploy(env, version, connection=con)
 
         return 200
 
@@ -1080,18 +1073,10 @@ class OrchestrationService(protocol.ServerSlice):
                 previous = t_now
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
-            try:
-                await self._trigger_auto_deploy(env, version, agents=all_agents, connection=con)
-            except Conflict as e:
-                # It is unclear if this condition can ever happen
-                LOGGER.warning(
-                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
-                )
-                returnvalue.add_warnings([f"Could not perform auto deploy: {e.log_message} {e.details}"])
+            await self._trigger_auto_deploy(env, version, agents=all_agents)
 
             t_now = asyncio.get_running_loop().time()
             PLOGGER.warning("AUTO DEPLOY STAGE: %s", t_now - previous)
-            previous = t_now
 
         return returnvalue
 
