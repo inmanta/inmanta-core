@@ -18,6 +18,7 @@
 
 import asyncio
 import base64
+import functools
 import json
 import logging
 import os
@@ -1845,7 +1846,7 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
     v1 = await clienthelper.get_version()
     v2 = await clienthelper.get_version()
 
-    async def put_version(version):
+    async def put_version(version: int) -> int:
         partial = (version == v1 and v1_partial) or (version == v2 and v2_partial)
 
         if partial:
@@ -1871,7 +1872,7 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 version_info={},
             )
             assert result.code == 200
-
+            return result.result["data"]
         else:
             result = await client.put_version(
                 tid=environment,
@@ -1882,17 +1883,13 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
                 compiler_version=get_compiler_version(),
             )
             assert result.code == 200
+            return version
 
-    await put_version(v0)
-
-    with caplog.at_level(logging.WARNING):
-        await put_version(v2)
-        await put_version(v1)
-    log_contains(
-        caplog,
-        "inmanta",
-        logging.WARNING,
-        f"Could not perform auto deploy on version 2 in environment {environment}, "
-        f"because Request conflicts with the current state of the resource: "
-        f"The version 2 on environment {environment} is older then the latest released version",
-    )
+    v0 = await put_version(v0)
+    await retry_limited(functools.partial(clienthelper.is_released, v0), 1, 0.05)
+    v2 = await put_version(v2)
+    await retry_limited(functools.partial(clienthelper.is_released, v2), 1, 0.05)
+    v1 = await put_version(v1)
+    # give it time to attempt to be release
+    await asyncio.sleep(0.1)
+    assert not await clienthelper.is_released(v1)

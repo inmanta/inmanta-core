@@ -337,7 +337,7 @@ class ClientHelper:
         assert res.code == 200
         return res.result["data"]
 
-    async def put_version_simple(self, resources: dict[str, Any], version: int) -> None:
+    async def put_version_simple(self, resources: dict[str, Any], version: int, wait_for_released: bool = False) -> None:
         res = await self.client.put_version(
             tid=self.environment,
             version=version,
@@ -347,6 +347,14 @@ class ClientHelper:
             compiler_version=get_compiler_version(),
         )
         assert res.code == 200, res.result
+        if wait_for_released:
+            await retry_limited(functools.partial(self.is_released, version), 0.2, interval=0.05)
+
+    async def is_released(self, version: int) -> bool:
+        versions = await self.client.list_versions(tid=self.environment)
+        assert versions.code == 200
+        lookup = {v["version"]: v["released"] for v in versions.result["versions"]}
+        return lookup[version]
 
 
 def get_resource(version: int, key: str = "key1", agent: str = "agent1", value: str = "value1") -> dict[str, Any]:

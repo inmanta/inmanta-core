@@ -18,6 +18,7 @@
 
 import asyncio
 import dataclasses
+import functools
 import logging
 import time
 import uuid
@@ -1403,14 +1404,14 @@ async def test_auto_deploy(
         result = await client.set_setting(environment, data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, agent_trigger_method)
         assert result.code == 200
 
-        await clienthelper.put_version_simple(resources, version)
+        await clienthelper.put_version_simple(resources, version, wait_for_released=True)
 
         # check deploy
         result = await client.get_version(environment, version)
         assert result.code == 200
         assert result.result["model"]["released"]
         assert result.result["model"]["total"] == 3
-        assert result.result["model"]["result"] == "deploying"
+        assert result.result["model"]["result"] in ["deploying", "success"]
 
         await _wait_until_deployment_finishes(client, environment, version)
 
@@ -1556,8 +1557,7 @@ async def test_autostart_mapping(server, client, clienthelper, resource_containe
         },
     ]
 
-    await clienthelper.put_version_simple(resources, version)
-
+    await clienthelper.put_version_simple(resources, version, wait_for_released=True)
     # check deploy
     result = await client.get_version(environment, version)
     assert result.code == 200
