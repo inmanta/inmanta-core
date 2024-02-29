@@ -22,6 +22,8 @@ import dataclasses
 import datetime
 import enum
 import functools
+import hashlib
+import json
 import logging
 import os
 import random
@@ -1544,6 +1546,24 @@ class EnvBlueprint:
     pip_config: PipConfig
     requirements: Sequence[str]
 
+    def generate_env_blueprint_hash(self) -> str:
+        """
+        Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
+        and requirements in a sorted, consistent manner. This ensures that the hash value is
+        independent of the order of requirements and consistent across interpreter sessions.
+        """
+        # Convert the blueprint to a dictionary, ensuring a consistent ordering of keys
+        blueprint_dict = dataclasses.asdict(self)
+        # Sort the requirements to ensure the hash is order-independent
+        blueprint_dict["requirements"] = sorted(blueprint_dict["requirements"])
+
+        # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
+        serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
+
+        # Use md5 to generate a hash of the serialized blueprint
+        hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
+        return hash_obj.hexdigest()
+
 
 @dataclasses.dataclass(frozen=True)
 class ExecutorBlueprint(EnvBlueprint):
@@ -1551,10 +1571,16 @@ class ExecutorBlueprint(EnvBlueprint):
 
     sources: Sequence[ModuleSource]
 
+    def to_env_blueprint(self) -> EnvBlueprint:
+        """
+        Converts this ExecutorBlueprint instance into an EnvBlueprint instance.
+        """
+        return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements)
+
 
 @dataclasses.dataclass(frozen=True)
 class ExecutorId:
-    """Identifies an executor with a unique agent name and its blueprint configuration."""
+    """Identifies an executor with an agent name and its blueprint configuration."""
 
     agent_name: str
     blueprint: ExecutorBlueprint
@@ -1611,7 +1637,7 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
-        hashed_blueprint_name: int = hash(blueprint)
+        hashed_blueprint_name: str = blueprint.generate_env_blueprint_hash()
         env_dir_name: str = hex(hashed_blueprint_name)[2:]
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
@@ -1620,7 +1646,7 @@ class VirtualEnvironmentManager:
             os.makedirs(env_dir)
             return env_dir, True  # Returning the path and True for newly created directory
         else:
-            LOGGER.info("Found existing venv for blueprint")
+            LOGGER.info(f"Found existing virtual environment at {env_dir}")
             return env_dir, False  # Returning the path and False for existing directory
 
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
@@ -1710,17 +1736,16 @@ class ExecutorManager:
         self.agent = agent  # for now the executorManager lives in an agent
         self.storage = self.create_storage()
 
-    async def create_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> Executor:
+    async def create_executor(self, executor_id: ExecutorId) -> Executor:
         """
         Creates an Executor based with the specified agent name and blueprint.
         It ensures the required virtual environment is prepared and source code is loaded.
 
-        :param agent_name: The name of the agent for which the Executor is being created.
-        :param blueprint: The ExecutorBlueprint defining the configuration for the Executor.
+        :param executor_id: executor identifier containing an agent name and a blueprint configuration.
         :return: An Executor instance
         """
-        executor_id = ExecutorId(agent_name, blueprint)
-        env_blueprint = EnvBlueprint(pip_config=blueprint.pip_config, requirements=blueprint.requirements)
+        blueprint = executor_id.blueprint
+        env_blueprint = blueprint.to_env_blueprint()
         venv = await self.environment_manager.get_environment(env_blueprint, self.agent.thread_pool)
         executor = Executor(executor_id, venv, self.storage)
         executor.load_code(blueprint.sources)
@@ -1739,7 +1764,7 @@ class ExecutorManager:
         executor_id = ExecutorId(agent_name, blueprint)
         if executor_id in self.executor_map:
             return self.executor_map[executor_id]
-        return await self.create_executor(agent_name, blueprint)
+        return await self.create_executor(executor_id)
 
     async def execute(
         self,
