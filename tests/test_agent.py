@@ -364,6 +364,7 @@ async def test_process_manager_restart(environment, agent_factory, tmpdir, caplo
 
     # Create a blueprint with no requirements and no sources
     blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
+    env_bp_hash1 = blueprint1.to_env_blueprint().generate_env_blueprint_hash()
 
     with caplog.at_level(logging.INFO):
         # First execution: create an executor and verify its creation
@@ -373,7 +374,9 @@ async def test_process_manager_restart(environment, agent_factory, tmpdir, caplo
         assert len(executor_manager.executor_map) == 1
         assert len(venv_manager._environment_map) == 1
 
-        log_doesnt_contain(caplog, "inmanta.agent.agent", logging.INFO, "Found existing venv for blueprint")
+        env_dir = os.path.join(venv_manager.envs_dir, env_bp_hash1)
+
+        log_doesnt_contain(caplog, "inmanta.agent.agent", logging.INFO, f"Found existing virtual environment at {env_dir}")
 
         # Simulate ExecutorManager restart by creating new instances of ExecutorManager and VirtualEnvironmentManager
         venv_manager2 = VirtualEnvironmentManager()
@@ -386,4 +389,26 @@ async def test_process_manager_restart(environment, agent_factory, tmpdir, caplo
         assert len(executor_manager2.executor_map) == 1
         assert len(venv_manager2._environment_map) == 1
 
-        log_contains(caplog, "inmanta.agent.agent", logging.INFO, "Found existing venv for blueprint")
+        log_contains(caplog, "inmanta.agent.agent", logging.INFO, f"Found existing virtual environment at {env_dir}")
+
+
+async def test_blueprint_hash_consistency(tmpdir):
+    """
+    Test to verify that the hashing mechanism for EnvBlueprints is consistent across
+    different orders of requirements
+    """
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    # Define two sets of requirements, identical but in different orders
+    requirements1 = ("pkg1", "pkg2")
+    requirements2 = ("pkg2", "pkg1")
+
+    blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
+    blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
+
+    hash1 = blueprint1.generate_env_blueprint_hash()
+    hash2 = blueprint2.generate_env_blueprint_hash()
+    print(hash1)
+
+    assert hash1 == hash2, "Blueprint hashes should be identical regardless of the order of requirements"

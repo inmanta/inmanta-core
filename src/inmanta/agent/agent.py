@@ -1554,11 +1554,17 @@ class EnvBlueprint:
         """
         # Convert the blueprint to a dictionary, ensuring a consistent ordering of keys
         blueprint_dict = dataclasses.asdict(self)
+
+        # Serialize PipConfig
+        blueprint_dict["pip_config"] = self.pip_config.dict()
+
         # Sort the requirements to ensure the hash is order-independent
         blueprint_dict["requirements"] = sorted(blueprint_dict["requirements"])
 
         # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
         serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
+
+        print("Serialized Blueprint for Hashing:", serialized_blueprint)
 
         # Use md5 to generate a hash of the serialized blueprint
         hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
@@ -1627,12 +1633,13 @@ class VirtualEnvironmentManager:
 
     def __init__(self) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
-        self.envs_dir: str = self.create_envs_dir()
+        self.envs_dir: str = self.initialize_envs_directory()
 
-    def create_env_storage(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
+    def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
-        Determines the storage path for a virtual environment based on its blueprint.
-        It either identifies an existing directory for the environment or creates a new one.
+        Retrieves the directory path for a virtual environment based on the given blueprint.
+        If the directory does not exist, it creates a new one. This method ensures that each
+        virtual environment has a unique storage location.
 
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
@@ -1645,7 +1652,7 @@ class VirtualEnvironmentManager:
             os.makedirs(env_dir)
             return env_dir, True  # Returning the path and True for newly created directory
         else:
-            LOGGER.info(f"Found existing virtual environment at {env_dir}")
+            LOGGER.info("Found existing virtual environment at %s", env_dir)
             return env_dir, False  # Returning the path and False for existing directory
 
     async def create_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
@@ -1659,7 +1666,7 @@ class VirtualEnvironmentManager:
 
         TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
         """
-        env_storage, is_new = self.create_env_storage(blueprint)
+        env_storage, is_new = self.get_or_create_env_directory(blueprint)
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         if is_new:
             await process_environment.create_and_install_environment(blueprint)
@@ -1681,12 +1688,12 @@ class VirtualEnvironmentManager:
             return self._environment_map[blueprint]
         return await self.create_environment(blueprint, threadpool)
 
-    def create_envs_dir(self) -> str:
+    def initialize_envs_directory(self) -> str:
         """
-        Creates and returns the path to the directory used for storing virtual environments.
-        If the directory does not exist, it is created.
+        Initializes the base directory for storing virtual environments. If the directory
+        does not exist, it is created.
 
-        :return: The path
+        :return: The path to the environments directory.
         """
         state_dir = cfg.state_dir.get()
         env_dir = os.path.join(state_dir, "envs")
