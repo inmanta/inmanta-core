@@ -182,19 +182,16 @@ class ResourceDetails:
 class Executor(ABC):
     """
     An executor for resources. Delegates to the appropriate handlers.
-    This requires the following behaviours:
-
-    - Ability to set up prior to deploy: install and load specific version of handler code (+ requirements) for this resource
-    - Ability to perform the deployment itself: execute the loaded handler code to push desired state
     """
 
     @classmethod
     @abc.abstractmethod
-    async def get_executor(
-        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]
-    ) -> tuple[Self, Set[str]]:
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, Set[str]]:
         """
-        # TODO docstring
+        Get an executor for the requested resources.
+        The return value is a tuple of
+            - the executor
+            - the set of resources for which no handler code is available
         """
         pass
 
@@ -216,22 +213,20 @@ class Executor(ABC):
 
     @abc.abstractmethod
     def cache(self, model_version: int) -> CacheVersionContext:
-        # Todo: properly type return value -> create sibling class ExecutorCache from AgentCache?
         pass
 
 
 class InProcessExecutor(Executor):
     """
-    This executor is running in the same process as the agent. `get_executor` loads resource and handler code within this process, reloading when required.
+    This executor is running in the same process as the agent. `get_executor` loads resource and handler
+    code within this process, reloading when required.
     """
 
     def __init__(self, agent: "AgentInstance"):
         self.agent: AgentInstance = agent
 
     @classmethod
-    async def get_executor(
-        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]
-    ) -> tuple[Self, Set[str]]:
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, Set[str]]:
         failed_resource_types: Set[str] = await agent.process.ensure_code(code)
         return cls(agent), failed_resource_types
 
@@ -423,9 +418,7 @@ class ExternalExecutor(Executor):
         raise NotImplementedError
 
     @classmethod
-    async def get_executor(
-        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]
-    ) -> tuple[Self, Set[str]]:
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, Set[str]]:
         # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
 
@@ -1085,8 +1078,6 @@ class AgentInstance:
                     self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
-                # this only works with InProcessExecutor
-                # TODO: adapt for ExternalExecutor
                 undeployable, resource_refs, _ = await self.setup_executor(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
