@@ -1886,9 +1886,9 @@ async def test_put_stale_version(client, server, environment, clienthelper, capl
             return version
 
     v0 = await put_version(v0)
-    await retry_limited(functools.partial(clienthelper.is_released, v0), 1, 0.05)
+    await retry_limited(functools.partial(clienthelper.is_released, v0), timeout=1, interval=0.05)
     v2 = await put_version(v2)
-    await retry_limited(functools.partial(clienthelper.is_released, v2), 1, 0.05)
+    await retry_limited(functools.partial(clienthelper.is_released, v2), timeout=1, interval=0.05)
     v1 = await put_version(v1)
     # give it time to attempt to be release
     await asyncio.sleep(0.1)
