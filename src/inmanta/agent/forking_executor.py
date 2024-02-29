@@ -29,7 +29,7 @@ import inmanta.const
 import inmanta.protocol.ipc_light
 import inmanta.signals
 from inmanta.logging import InmantaLoggerConfig
-from inmanta.protocol.ipc_light import IPCClient, IPCServer
+from inmanta.protocol.ipc_light import FinalizingIPCClient, IPCServer
 
 LOGGER = logging.getLogger(__name__)
 """
@@ -127,24 +127,10 @@ def mp_worker_entrypoint(
     exit(0)
 
 
-class FinalizingIPCClient(IPCClient[ExecutorContext]):
-    """IPC client that can signal shutdown"""
-
-    def __init__(self, name: str):
-        super().__init__(name)
-        self.finalizers: list[typing.Callable[[], typing.Coroutine[typing.Any, typing.Any, None]]] = []
-
-    def connection_lost(self, exc: Exception | None) -> None:
-        print("Client lost connection")
-        super().connection_lost(exc)
-        for fin in self.finalizers:
-            asyncio.get_running_loop().create_task(fin())
-
-
 class MPExecutor:
     """A Single Child Executor"""
 
-    def __init__(self, process: multiprocessing.Process, connection: FinalizingIPCClient):
+    def __init__(self, process: multiprocessing.Process, connection: FinalizingIPCClient[ExecutorContext]):
         self.process = process
         self.connection = connection
         self.connection.finalizers.append(self.force_stop)

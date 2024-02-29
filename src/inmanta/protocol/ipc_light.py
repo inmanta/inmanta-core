@@ -233,3 +233,16 @@ class IPCClient(IPCFrameProtocol[ServerContext]):
             outstanding_request.set_exception(excn)
         self.requests.clear()
         super().connection_lost(exc)
+
+
+class FinalizingIPCClient(IPCClient[ServerContext]):
+    """IPC client that can signal shutdown"""
+
+    def __init__(self, name: str):
+        super().__init__(name)
+        self.finalizers: list[typing.Callable[[], typing.Coroutine[typing.Any, typing.Any, None]]] = []
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        super().connection_lost(exc)
+        for fin in self.finalizers:
+            asyncio.get_running_loop().create_task(fin())

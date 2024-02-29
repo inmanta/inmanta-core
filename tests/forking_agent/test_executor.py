@@ -23,7 +23,7 @@ import pytest
 
 import inmanta.config
 import inmanta.protocol.ipc_light
-from inmanta.agent.executor import MPManager
+from inmanta.agent.forking_executor import MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
 
 
