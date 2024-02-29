@@ -17,7 +17,6 @@
 """
 
 import asyncio
-import contextlib
 import datetime
 import logging
 import uuid
@@ -28,7 +27,6 @@ import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
-from asyncpg import Connection
 
 import inmanta.util
 from inmanta import const, data

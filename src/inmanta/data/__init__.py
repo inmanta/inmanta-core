@@ -4643,7 +4643,10 @@ class Resource(BaseDocument):
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[m.ResourceIdStr]:
-        query = "SELECT resource_id as resource_id FROM resource WHERE environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
+        query = (
+            "SELECT resource_id as resource_id FROM resource WHERE "
+            "environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
+        )
         if lock:
             query += lock.value
         async with cls.get_connection(connection) as connection:
