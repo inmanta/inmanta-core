@@ -102,7 +102,7 @@ class ResourceActionBase(abc.ABC):
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
 
-    async def execute(self, dummy: "ResourceActionBase", generation: "Dict[ResourceIdStr, ResourceActionBase]") -> None:
+    async def execute(self, dummy: "ResourceActionBase", generation: "dict[ResourceIdStr, ResourceActionBase]") -> None:
         return
 
     def is_running(self) -> bool:
@@ -165,7 +165,7 @@ class ResourceReference:
     rvid: ResourceVersionIdStr
     model_version: int
     requires: Sequence[Id]
-    attributes: dict[str, Any]
+    attributes: dict[str, object]
     raw: JsonType
 
     def __init__(self, resource_dict: JsonType) -> None:
@@ -181,7 +181,7 @@ class ResourceReference:
 
 class Executor(ABC):
     """
-    This class represents a process able to deploy a resource.
+    An executor for resources. Delegates to the appropriate handlers.
     This requires the following behaviours:
 
     - Ability to set up prior to deploy: install and load specific version of handler code (+ requirements) for this resource
@@ -222,7 +222,7 @@ class Executor(ABC):
 
 class InProcessExecutor(Executor):
     """
-    This executor is running in the same process as the agent
+    This executor is running in the same process as the agent. `get_executor` loads resource and handler code within this process, reloading when required.
     """
 
     def __init__(self, client: protocol.Client, agent: "AgentInstance"):
