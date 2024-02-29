@@ -452,7 +452,7 @@ print(blueprint.generate_env_blueprint_hash())
 """
 
     # Generate hash in the current session for comparison
-    pip_config = PipConfig(**pip_config_dict)  # Reconstruct PipConfig from dict
+    pip_config = PipConfig(**pip_config_dict)
     current_session_blueprint = EnvBlueprint(pip_config=pip_config, requirements=requirements)
     current_hash = current_session_blueprint.generate_env_blueprint_hash()
 
