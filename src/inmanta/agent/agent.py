@@ -1552,14 +1552,10 @@ class EnvBlueprint:
         and requirements in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
         """
-        # Convert the blueprint to a dictionary, ensuring a consistent ordering of keys
-        blueprint_dict = dataclasses.asdict(self)
-
-        # Serialize PipConfig
-        blueprint_dict["pip_config"] = self.pip_config.dict()
-
-        # Sort the requirements to ensure the hash is order-independent
-        blueprint_dict["requirements"] = sorted(blueprint_dict["requirements"])
+        blueprint_dict: Dict[str, Any] = {
+            "pip_config": self.pip_config.dict(),
+            "requirements": sorted(self.requirements),
+        }
 
         # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
         serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
