@@ -1758,11 +1758,6 @@ class ExecutorManager:
         :return: The path to the storage directory.
         """
         state_dir = cfg.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
         code_dir = os.path.join(state_dir, "codes")
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
+        os.makedirs(code_dir, exist_ok=True)
         return code_dir
