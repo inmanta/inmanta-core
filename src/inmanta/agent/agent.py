@@ -195,6 +195,16 @@ class Executor(ABC):
         """
         pass
 
+
+    @abc.abstractmethod
+    async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
+        """
+        Deserialize a resource from an in memory representation to an actual Resource
+
+        :param resource_details: in memory representation of the resource
+        :param action: the current action being performed that required this resource deserialization
+        """
+
     @abc.abstractmethod
     async def execute(
         self,
@@ -208,6 +218,18 @@ class Executor(ABC):
         :param gid: unique id for this deploy
         :param resource_ref: desired state for this resource as a ResourceDetails
         :param reason: textual reason for this deploy
+        """
+        pass
+
+    @abc.abstractmethod
+    async def dry_run(
+        self,
+        resource_ref: ResourceDetails,
+    ) -> None:
+        """
+        Perform a dryrun on the resource
+
+        :param resource_ref: desired state for this resource as a ResourceDetails
         """
         pass
 
@@ -324,36 +346,42 @@ class InProcessExecutor(Executor):
 
         return resource_status, resource_change, changes
 
+    async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
+        started: datetime.datetime = datetime.datetime.now().astimezone()
+        try:
+            return Resource.deserialize(resource_details.attributes)
+        except Exception:
+            msg = data.LogLine.log(
+                level=const.LogLevel.ERROR,
+                msg="Unable to deserialize %(resource_id)s",
+                resource_id=resource_details.rvid,
+                timestamp=datetime.datetime.now().astimezone(),
+            )
+
+            await self.agent.get_client().resource_action_update(
+                tid=resource_details.env_id,
+                resource_ids=[resource_details.rvid],
+                action_id=uuid.uuid4(),
+                action=action,
+                started=started,
+                finished=datetime.datetime.now().astimezone(),
+                status=const.ResourceState.unavailable,
+                messages=[msg],
+            )
+            raise
+
     async def execute(
         self,
         gid: uuid.UUID,
         resource_ref: ResourceDetails,
         reason: str,
     ) -> None:
-        started: datetime.datetime = datetime.datetime.now().astimezone()
         try:
-            resource: Resource = Resource.deserialize(resource_ref.attributes)
+            resource: Resource = await self.deserialize(resource_ref, const.ResourceAction.deploy)
         except Exception:
-            msg = data.LogLine.log(
-                level=const.LogLevel.ERROR,
-                msg="Unable to deserialize %(resource_id)s",
-                resource_id=resource_ref.rvid,
-                timestamp=datetime.datetime.now().astimezone(),
-            )
-
-            await self.agent.get_client().resource_action_update(
-                tid=resource_ref.env_id,
-                resource_ids=[resource_ref.rvid],
-                action_id=uuid.uuid4(),
-                action=const.ResourceAction.deploy,
-                started=started,
-                finished=datetime.datetime.now().astimezone(),
-                status=const.ResourceState.unavailable,
-                messages=[msg],
-            )
             return
 
-        ctx = handler.HandlerContext(resource, self.agent.logger)
+        ctx = handler.HandlerContext(resource, logger=self.agent.logger)
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
             resource=str(resource_ref.rvid),
@@ -397,6 +425,98 @@ class InProcessExecutor(Executor):
         )
         if response.code != 200:
             LOGGER.error("Resource status update failed %s", response.result)
+
+    async def dry_run(
+        self,
+        resource_ref: Resource,
+    ) -> None:
+        """
+        Perform a dryrun on the resource
+
+        :param resource_ref: desired state for this resource as a ResourceDetails
+        """
+        ctx = handler.HandlerContext(resource, True)
+        started = datetime.datetime.now().astimezone()
+        provider = None
+
+        if resource_ref.rvid in undeployable:
+            ctx.error(
+                "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
+                resource_id=resource_ref.rvid,
+                status=undeployable[resource_ref.rvid],
+            )
+            await self.get_client().dryrun_update(
+                tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={}
+            )
+            continue
+
+        try:
+            self.logger.debug("Running dryrun for %s", resource_ref.rvid)
+
+            try:
+                provider = await self.get_provider(resource)
+            except Exception as e:
+                ctx.exception(
+                    "Unable to find a handler for %(resource_id)s (exception: %(exception)s",
+                    resource_id=resource_ref.rvid,
+                    exception=str(e),
+                )
+                await self.get_client().dryrun_update(
+                    tid=self._env_id,
+                    id=dry_run_id,
+                    resource=resource_ref.rvid,
+                    changes={"handler": {"current": "FAILED", "desired": "Unable to find a handler"}},
+                )
+            else:
+                try:
+                    await asyncio.get_running_loop().run_in_executor(
+                        self.thread_pool, provider.execute, ctx, resource, True
+                    )
+
+                    changes = ctx.changes
+                    if changes is None:
+                        changes = {}
+                    if ctx.status == const.ResourceState.failed:
+                        changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
+                    await self.get_client().dryrun_update(
+                        tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes
+                    )
+                except Exception as e:
+                    ctx.exception(
+                        "Exception during dryrun for %(resource_id)s (exception: %(exception)s",
+                        resource_id=resource_ref.rvid,
+                        exception=str(e),
+                    )
+                    changes = ctx.changes
+                    if changes is None:
+                        changes = {}
+                    changes["handler"] = AttributeStateChange(current="FAILED", desired="Handler failed")
+                    await self.get_client().dryrun_update(
+                        tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes
+                    )
+
+        except Exception:
+            ctx.exception("Unable to process resource for dryrun.")
+            changes = {}
+            changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
+            await self.get_client().dryrun_update(
+                tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes
+            )
+        finally:
+            if provider is not None:
+                provider.close()
+
+            finished = datetime.datetime.now().astimezone()
+            await self.get_client().resource_action_update(
+                tid=self._env_id,
+                resource_ids=[resource_ref.rvid],
+                action_id=ctx.action_id,
+                action=const.ResourceAction.dryrun,
+                started=started,
+                finished=finished,
+                messages=ctx.logs,
+                status=const.ResourceState.dry,
+            )
 
     def cache(self, model_version: int) -> CacheVersionContext:
         return self.agent._cache.manager(model_version)
@@ -1078,37 +1198,22 @@ class AgentInstance:
                     self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
-                undeployable, resource_refs, _ = await self.setup_executor(
+                undeployable, resource_refs, executor = await self.setup_executor(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
 
+                await executor.dry_run(resource_refs)
                 self._cache.open_version(version)
                 for resource_ref in resource_refs:
-                    started = datetime.datetime.now().astimezone()
                     try:
-                        resource: Resource = Resource.deserialize(resource_ref.attributes)
+                        resource: Resource = await executor.deserialize(resource_ref, const.ResourceAction.dryrun)
                     except Exception:
-                        msg = data.LogLine.log(
-                            level=const.LogLevel.ERROR,
-                            msg="Unable to deserialize %(resource_id)s",
-                            resource_id=resource_ref.rvid,
-                            timestamp=datetime.datetime.now().astimezone(),
-                        )
-
-                        await self.get_client().resource_action_update(
-                            tid=env_id,
-                            resource_ids=[resource_ref.rvid],
-                            action_id=uuid.uuid4(),
-                            action=const.ResourceAction.dryrun,
-                            started=started,
-                            finished=datetime.datetime.now().astimezone(),
-                            status=const.ResourceState.unavailable,
-                            messages=[msg],
-                        )
                         await self.get_client().dryrun_update(
                             tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={}
                         )
                         continue
+
+                    await executor.dry_run(resource)
                     ctx = handler.HandlerContext(resource, True)
                     started = datetime.datetime.now().astimezone()
                     provider = None
