@@ -195,7 +195,6 @@ class Executor(ABC):
         """
         pass
 
-
     @abc.abstractmethod
     async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
         """
@@ -445,9 +444,7 @@ class InProcessExecutor(Executor):
                 resource_id=resource_ref.rvid,
                 status=undeployable[resource_ref.rvid],
             )
-            await self.get_client().dryrun_update(
-                tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={}
-            )
+            await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes={})
             continue
 
         try:
@@ -469,9 +466,7 @@ class InProcessExecutor(Executor):
                 )
             else:
                 try:
-                    await asyncio.get_running_loop().run_in_executor(
-                        self.thread_pool, provider.execute, ctx, resource, True
-                    )
+                    await asyncio.get_running_loop().run_in_executor(self.thread_pool, provider.execute, ctx, resource, True)
 
                     changes = ctx.changes
                     if changes is None:
@@ -499,9 +494,7 @@ class InProcessExecutor(Executor):
             ctx.exception("Unable to process resource for dryrun.")
             changes = {}
             changes["handler"] = AttributeStateChange(current="FAILED", desired="Resource Deserialization Failed")
-            await self.get_client().dryrun_update(
-                tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes
-            )
+            await self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=resource_ref.rvid, changes=changes)
         finally:
             if provider is not None:
                 provider.close()
