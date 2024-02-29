@@ -494,7 +494,7 @@ class InProcessExecutor(Executor):
                     else:
                         try:
                             await asyncio.get_running_loop().run_in_executor(
-                                self.agent.thread_pool, provider.execute, ctx, resource, True
+                                self.agent.thread_pool, provider.execute, ctx, resource_obj, True
                             )
 
                             changes = ctx.changes
