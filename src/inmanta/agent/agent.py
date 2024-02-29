@@ -1632,6 +1632,7 @@ class VirtualEnvironmentManager:
     def __init__(self) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
         self.envs_dir: str = self.initialize_envs_directory()
+        self._locks: NamedLock = NamedLock()
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
         """
@@ -1675,16 +1676,15 @@ class VirtualEnvironmentManager:
     async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
         """
         Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
-
-        :param blueprint: The blueprint for which a matching environment is sought.
-        :param threadpool: A ThreadPoolExecutor
-        :return: An ExecutorVirtualEnvironment instance matching the blueprint.
-        TODO: Handle race condition here when two executors request a Python Environment for the same blueprint.
+        Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
         """
-        assert type(blueprint) is EnvBlueprint, "Only EnvBlueprint instances are accepted, subclasses are not allowed."
-        if blueprint in self._environment_map:
-            return self._environment_map[blueprint]
-        return await self.create_environment(blueprint, threadpool)
+        assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
+
+        # Acquire a lock based on the blueprint's hash
+        async with self._locks.get(blueprint.generate_env_blueprint_hash()):
+            if blueprint in self._environment_map:
+                return self._environment_map[blueprint]
+            return await self.create_environment(blueprint, threadpool)
 
     def initialize_envs_directory(self) -> str:
         """
