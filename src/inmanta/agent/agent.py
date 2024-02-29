@@ -1637,8 +1637,7 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
-        hashed_blueprint: str = blueprint.generate_env_blueprint_hash()
-        env_dir_name: str = hashed_blueprint[2:]
+        env_dir_name: str = blueprint.generate_env_blueprint_hash()
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -1675,6 +1674,7 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint for which a matching environment is sought.
         :param threadpool: A ThreadPoolExecutor
         :return: An ExecutorVirtualEnvironment instance matching the blueprint.
+        TODO: Handle race condition here when two executors request a Python Environment for the same blueprint.
         """
         assert type(blueprint) is EnvBlueprint, "Only EnvBlueprint instances are accepted, subclasses are not allowed."
         if blueprint in self._environment_map:
