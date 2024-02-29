@@ -1591,12 +1591,12 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
     Manages a single virtual environment for an executor,
     including the creation and installation of packages based on a blueprint.
 
-    :param storage: The file system path where the virtual environment should be created or exists.
+    :param env_path: The file system path where the virtual environment should be created or exists.
     :param threadpool: A ThreadPoolExecutor instance
     """
 
-    def __init__(self, storage: str, threadpool: ThreadPoolExecutor):
-        super().__init__(env_path=storage)
+    def __init__(self, env_path: str, threadpool: ThreadPoolExecutor):
+        super().__init__(env_path=env_path)
         self.thread_pool = threadpool
 
     async def create_and_install_environment(self, blueprint: EnvBlueprint) -> None:
@@ -1637,8 +1637,8 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
-        hashed_blueprint_name: str = blueprint.generate_env_blueprint_hash()
-        env_dir_name: str = hex(hashed_blueprint_name)[2:]
+        hashed_blueprint: str = blueprint.generate_env_blueprint_hash()
+        env_dir_name: str = hashed_blueprint[2:]
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -1689,14 +1689,8 @@ class VirtualEnvironmentManager:
         :return: The path
         """
         state_dir = cfg.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
         env_dir = os.path.join(state_dir, "envs")
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
+        os.makedirs(env_dir, exist_ok=True)
         return env_dir
 
 
@@ -1789,11 +1783,6 @@ class ExecutorManager:
         :return: The path to the storage directory.
         """
         state_dir = cfg.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
         code_dir = os.path.join(state_dir, "codes")
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
+        os.makedirs(code_dir, exist_ok=True)
         return code_dir
