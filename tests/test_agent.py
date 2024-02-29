@@ -418,8 +418,8 @@ async def test_blueprint_hash_consistency(tmpdir):
 
 def test_hash_consistency_across_sessions():
     """
-    This test ensures that the custom hash function used within EnvBlueprint objects produces consistent hash values,
-    even when the Python interpreter session is restarted.
+    Ensures that the hash function used within EnvBlueprint objects produces consistent hash values,
+    even when the interpreter session is restarted.
 
     The test achieves this by:
     1. Creating an EnvBlueprint object in the current session and generating a hash value for it.
