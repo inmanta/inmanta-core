@@ -117,8 +117,15 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: dict[uuid.UUID, logging.Handler] = {}
 
-        # Dict: environment_id: (model_version, increment, negative_increment)
-        self._increment_cache: dict[uuid.UUID, Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]] = {}
+        # Dict: environment_id: (model_version, increment, negative_increment, negative_increment_per_agent, run_ahead_lock)
+        self._increment_cache: dict[
+            uuid.UUID,
+            Optional[
+                tuple[
+                    int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]], asyncio.Event
+                ]
+            ],
+        ] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -332,15 +339,10 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.get_increment(env, version)
-        increment_ids, neg_increment = increments
+        version, increment_ids, neg_increment, neg_increment_per_agent = await self.get_increment(env, version)
 
         now = datetime.datetime.now().astimezone()
-
         ON_AGENT_REGEX = re.compile(rf"^[a-zA-Z0-9_:]+\[{re.escape(agent)},")
-
-        def on_agent(res: ResourceIdStr) -> bool:
-            return ON_AGENT_REGEX.match(res) is not None
 
         # This is a bit subtle.
         # Any resource we consider deployed has to be marked as such.
@@ -353,10 +355,9 @@ class ResourceService(protocol.ServerSlice):
         # As such, it should not race with backpropagation on failure.
         await self.mark_deployed(
             env,
-            neg_increment,
+            neg_increment_per_agent[agent],
             now,
             version,
-            filter=on_agent,
             only_update_from_states={const.ResourceState.available, const.ResourceState.deploying},
         )
 
@@ -369,12 +370,10 @@ class ResourceService(protocol.ServerSlice):
             if rv.resource_id not in increment_ids:
                 continue
 
-            # TODO double parsing of ID
             def in_requires(req: ResourceIdStr) -> bool:
                 if req in increment_ids:
                     return True
-                idr = Id.parse_id(req)
-                return idr.get_agent_name() != agent
+                return ON_AGENT_REGEX.match(req) is None
 
             rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
             deploy_model.append(rv.to_dict())
@@ -595,8 +594,12 @@ class ResourceService(protocol.ServerSlice):
                 )
 
     async def get_increment(
-        self, env: data.Environment, version: int, connection: Optional[Connection] = None
-    ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+        self,
+        env: data.Environment,
+        version: int,
+        connection: Optional[Connection] = None,
+        run_ahead_lock: Optional[asyncio.Event] = None,
+    ) -> tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
         In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
@@ -606,31 +609,46 @@ class ResourceService(protocol.ServerSlice):
         :param version: The version of the model to consider.
         :param connection: connection to use towards the DB.
             When the connection is in a transaction, we will always invalidate the cache
+        :param run_ahead_lock: lock used to keep agents hanging while building up the latest version
         """
 
-        def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
+        async def _get_cache_entry() -> (
+            Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]]
+        ):
             """
-            Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
+            Returns a tuple (increment, negative_increment, negative_increment_per_agent)
+            if a cache entry exists for the given environment and version
             or None if no such cache entry exists.
             """
             cache_entry = self._increment_cache.get(env.id, None)
             if cache_entry is None:
                 # No cache entry found
                 return None
-            (version_cache_entry, incr, neg_incr) = cache_entry
-            if version_cache_entry != version:
+            (version_cache_entry, incr, neg_incr, neg_incr_per_agent, run_ahead_lock) = cache_entry
+            if version_cache_entry > version:
+                # Cache is ahead,
+                if run_ahead_lock is not None:
+                    await run_ahead_lock.wait()
+            elif version_cache_entry != version:
                 # Cache entry exists for another version
+                # Expire
                 return None
-            return incr, neg_incr
+            return version_cache_entry, incr, neg_incr, neg_incr_per_agent
 
-        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
+        increment: Optional[
+            tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]
+        ] = await _get_cache_entry()
         if increment is None or (connection is not None and connection.is_in_transaction()):
             lock = self._increment_cache_locks[env.id]
             async with lock:
-                increment = _get_cache_entry()
+                increment = await _get_cache_entry()
                 if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
-                    self._increment_cache[env.id] = (version, *increment)
+                    positive, negative = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
+                    negative_per_agent: dict[str, set[ResourceIdStr]] = defaultdict(set)
+                    for rid in negative:
+                        negative_per_agent[Id.parse_id(rid).agent_name].add(rid)
+                    increment = (version, positive, negative, negative_per_agent)
+                    self._increment_cache[env.id] = (version, positive, negative, negative_per_agent, run_ahead_lock)
         return increment
 
     @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")

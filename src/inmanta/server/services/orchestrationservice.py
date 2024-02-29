@@ -17,6 +17,7 @@
 """
 
 import asyncio
+import contextlib
 import datetime
 import logging
 import uuid
@@ -29,6 +30,7 @@ import asyncpg.exceptions
 import pydantic
 from asyncpg import Connection
 
+import inmanta.util
 from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import (
@@ -1108,7 +1110,8 @@ class OrchestrationService(protocol.ServerSlice):
         :param agents: agents that have to be notified by the push
         """
         async with data.ConfigurationModel.get_connection(connection) as connection:
-            async with connection.transaction():
+            version_run_ahead_lock = asyncio.Event()
+            async with connection.transaction(), inmanta.util.FinallySet(version_run_ahead_lock):
                 with ConnectionInTransaction(connection) as connection_holder:
                     # explicit lock to allow patching of increments for stale failures
                     # (locks out patching stage of deploy_done to avoid races)
@@ -1176,15 +1179,15 @@ class OrchestrationService(protocol.ServerSlice):
                             )
 
                     if latest_version:
-                        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = (
+                        version, increment_ids, neg_increment, neg_increment_per_agent = (
                             await self.resource_service.get_increment(
                                 env,
                                 version_id,
                                 connection=connection,
+                                run_ahead_lock=version_run_ahead_lock,
                             )
                         )
 
-                        increment_ids, neg_increment = increments
                         await self.resource_service.mark_deployed(
                             env, neg_increment, now, version_id, connection=connection_holder
                         )
