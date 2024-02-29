@@ -1321,10 +1321,15 @@ class AgentInstance:
         """
         started = datetime.datetime.now().astimezone()
         executor: Executor
-        failed_resource_types: Set[str]
-        code: Sequence[ResourceInstallSpec] = await self.process.get_code(
+        code: Sequence[ResourceInstallSpec]
+        # Resource types for which no handler code exist for the given version
+        # or for which the pip config couldn't be retrieved
+        invalid_resource_types: set[str]
+        code, invalid_resource_types = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
+        # Resource types for which an error occurred during handler code installation
+        failed_resource_types: set[str]
         executor, failed_resource_types = await self.get_executor(code)
 
         loaded_resources: list[ResourceDetails] = []
@@ -1332,7 +1337,7 @@ class AgentInstance:
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
         for res in resources:
-            if res["resource_type"] not in failed_resource_types:
+            if res["resource_type"] not in (invalid_resource_types | failed_resource_types):
                 loaded_resources.append(ResourceDetails(res))
 
                 state = const.ResourceState[res["status"]]
@@ -1606,18 +1611,21 @@ class Agent(SessionEndpoint):
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
 
-    async def get_code(self, environment: uuid.UUID, version: int, resource_types: Sequence[str]) -> list[ResourceInstallSpec]:
+    async def get_code(
+        self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
+    ) -> tuple[list[ResourceInstallSpec], set[str]]:
         """
         Get the list of installation specifications (i.e. pip config, python package dependencies, Inmanta modules sources)
         required to deploy a given version for the provided resource types.
         """
         if self._loader is None:
-            return []
+            return [], set()
 
         # store it outside the loop, but only load when required
         pip_config: Optional[PipConfig] = None
 
         resource_install_specs: list[ResourceInstallSpec] = []
+        invalid_resource_types: set[str] = set()
         for resource_type in set(resource_types):
 
             cached_spec: Optional[ResourceInstallSpec] = self._last_loaded.get((resource_type, version))
@@ -1644,17 +1652,18 @@ class Agent(SessionEndpoint):
                     requirements.update(source["requirements"])
 
                 if pip_config is None:
-                    # TODO: what if this fails?
-                    pip_config = await self._get_pip_config(environment, version)
+                    try:
+                        pip_config = await self._get_pip_config(environment, version)
+                    except Exception:
+                        invalid_resource_types.add(resource_type)
 
                 resource_install_specs.append(
                     ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
                 )
             else:
-                # TODO what if server call fails ?
-                pass
+                invalid_resource_types.add(resource_type)
 
-        return resource_install_specs
+        return resource_install_specs, invalid_resource_types
 
     async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> Set[str]:
         """Ensure that the code for the given environment and version is loaded"""
