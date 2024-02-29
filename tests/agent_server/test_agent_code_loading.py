@@ -171,20 +171,27 @@ inmanta.test_agent_code_loading = 15
 
     # Cache test
     # install sources for all three
+    resource_install_specs_1: list[ResourceInstallSpec]
+    resource_install_specs_2: list[ResourceInstallSpec]
+    resource_install_specs_3: list[ResourceInstallSpec]
+    resource_install_specs_4: list[ResourceInstallSpec]
+    resource_install_specs_5: list[ResourceInstallSpec]
+    resource_install_specs_6: list[ResourceInstallSpec]
 
-    resource_install_specs_1: list[ResourceInstallSpec] = await agent.get_code(
+
+    resource_install_specs_1, _ = await agent.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
     await agent.ensure_code(
         code=resource_install_specs_1,
     )
-    resource_install_specs_2: list[ResourceInstallSpec] = await agent.get_code(
+    resource_install_specs_2, _ = await agent.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
     )
     await agent.ensure_code(
         code=resource_install_specs_2,
     )
-    resource_install_specs_3: list[ResourceInstallSpec] = await agent.get_code(
+    resource_install_specs_3, _ = await agent.get_code(
         environment=environment, version=version_2, resource_types=["test::Test2"]
     )
     await agent.ensure_code(
@@ -212,7 +219,7 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources1
     assert getattr(inmanta, "test_agent_code_loading") == 5
 
-    resource_install_specs_4: list[ResourceInstallSpec] = await agent.get_code(
+    resource_install_specs_4, _ = await agent.get_code(
         environment=environment, version=version_2, resource_types=["test::Test3"]
     )
     # Install sources2
@@ -228,7 +235,7 @@ inmanta.test_agent_code_loading = 15
     # we are now at sources2
     assert getattr(inmanta, "test_agent_code_loading") == 10
 
-    resource_install_specs_5: list[ResourceInstallSpec] = await agent.get_code(
+    resource_install_specs_5, _ = await agent.get_code(
         environment=environment, version=version_3, resource_types=["test::Test4"]
     )
     # Loader loads byte code file
@@ -240,7 +247,7 @@ inmanta.test_agent_code_loading = 15
 
     assert getattr(inmanta, "test_agent_code_loading") == 15
 
-    resource_install_specs_6: list[ResourceInstallSpec] = await agent.get_code(
+    resource_install_specs_6, _ = await agent.get_code(
         environment=environment, version=version_4, resource_types=["test::Test4"]
     )
     # Now load the python only version again
