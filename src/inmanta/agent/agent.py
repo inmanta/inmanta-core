@@ -155,7 +155,7 @@ class ResourceInstallSpec:
     sources: Sequence["ModuleSource"]
 
 
-class ResourceReference:
+class ResourceDetails:
     """
     In memory representation of the desired state of a resource
     """
@@ -163,18 +163,18 @@ class ResourceReference:
     id: Id
     rid: ResourceIdStr
     rvid: ResourceVersionIdStr
+    env_id: uuid.UUID
     model_version: int
     requires: Sequence[Id]
     attributes: dict[str, object]
-    raw: JsonType
 
     def __init__(self, resource_dict: JsonType) -> None:
-        self.raw = resource_dict
         self.attributes = resource_dict["attributes"]
         self.attributes["id"] = resource_dict["id"]
         self.id = Id.parse_id(resource_dict["id"])
         self.rid = self.id.resource_str()
         self.rvid = self.id.resource_version_str()
+        self.env_id = resource_dict["environment"]
         self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
         self.model_version = resource_dict["model"]
 
@@ -191,25 +191,25 @@ class Executor(ABC):
     @classmethod
     @abc.abstractmethod
     async def get_executor(
-        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client
+        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]
     ) -> tuple[Self, Set[str]]:
+        """
+        # TODO docstring
+        """
         pass
 
     @abc.abstractmethod
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_ref: ResourceReference,
-        env_id: uuid.UUID,
+        resource_ref: ResourceDetails,
         reason: str,
     ) -> None:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
         :param gid: unique id for this deploy
-        :param resource_id: the resource id
-        :param resource_ref: desired state for this resource as a ResourceReference
-        :param env_id: the environment
+        :param resource_ref: desired state for this resource as a ResourceDetails
         :param reason: textual reason for this deploy
         """
         pass
@@ -225,21 +225,20 @@ class InProcessExecutor(Executor):
     This executor is running in the same process as the agent. `get_executor` loads resource and handler code within this process, reloading when required.
     """
 
-    def __init__(self, client: protocol.Client, agent: "AgentInstance"):
-        self.client: protocol.Client = client
+    def __init__(self, agent: "AgentInstance"):
         self.agent: AgentInstance = agent
 
     @classmethod
     async def get_executor(
-        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client
+        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]
     ) -> tuple[Self, Set[str]]:
         failed_resource_types: Set[str] = await agent.process.ensure_code(code)
-        return cls(client, agent), failed_resource_types
+        return cls(agent), failed_resource_types
 
     async def send_in_progress(
         self, action_id: uuid.UUID, env_id: uuid.UUID, resource_id: ResourceVersionIdStr
     ) -> dict[ResourceIdStr, const.ResourceState]:
-        result = await self.client.resource_deploy_start(
+        result = await self.agent.get_client().resource_deploy_start(
             tid=env_id,
             rvid=resource_id,
             action_id=action_id,
@@ -256,7 +255,11 @@ class InProcessExecutor(Executor):
         requires: dict[ResourceIdStr, const.ResourceState],
     ) -> None:
         """
-        :param ctx: The context to use during execution of this deploy
+        Get the handler for a given resource and run its ``deploy`` method.
+
+        :param resource: The resource to deploy.
+        :param gid: Id of this deploy.
+        :param ctx: The context to use during execution of this deploy.
         :param requires: A dictionary that maps each dependency of the resource to be deployed, to its latest resource
                          state that was not `deploying'.
         """
@@ -312,7 +315,7 @@ class InProcessExecutor(Executor):
         ctx: handler.HandlerContext,
     ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_id.resource_version_str(): ctx.changes}
-        response = await self.client.resource_deploy_done(
+        response = await self.agent.get_client().resource_deploy_done(
             tid=env_id,
             rvid=resource_id.resource_version_str(),
             action_id=ctx.action_id,
@@ -329,13 +332,10 @@ class InProcessExecutor(Executor):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_ref: ResourceReference,
-        env_id: uuid.UUID,
+        resource_ref: ResourceDetails,
         reason: str,
     ) -> None:
         started: datetime.datetime = datetime.datetime.now().astimezone()
-        # TODO: double check: is this required? Is failure handled properly?
-
         try:
             resource: Resource = Resource.deserialize(resource_ref.attributes)
         except Exception:
@@ -346,8 +346,8 @@ class InProcessExecutor(Executor):
                 timestamp=datetime.datetime.now().astimezone(),
             )
 
-            await self.client.resource_action_update(
-                tid=env_id,
+            await self.agent.get_client().resource_action_update(
+                tid=resource_ref.env_id,
                 resource_ids=[resource_ref.rvid],
                 action_id=uuid.uuid4(),
                 action=const.ResourceAction.deploy,
@@ -358,7 +358,7 @@ class InProcessExecutor(Executor):
             )
             return
 
-        ctx = handler.HandlerContext(resource)
+        ctx = handler.HandlerContext(resource, self.agent.logger)
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
             resource=str(resource_ref.rvid),
@@ -369,7 +369,7 @@ class InProcessExecutor(Executor):
 
         try:
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
-                ctx.action_id, env_id, resource_ref.rvid
+                ctx.action_id, resource_ref.env_id, resource_ref.rvid
             )
         except Exception:
             ctx.set_status(const.ResourceState.failed)
@@ -386,13 +386,13 @@ class InProcessExecutor(Executor):
 
         if ctx.facts:
             ctx.debug("Sending facts to the server")
-            set_fact_response = await self.client.set_parameters(tid=env_id, parameters=ctx.facts)
+            set_fact_response = await self.agent.get_client().set_parameters(tid=resource_ref.env_id, parameters=ctx.facts)
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_ref.rvid: ctx.changes}
-        response = await self.client.resource_deploy_done(
-            tid=env_id,
+        response = await self.agent.get_client().resource_deploy_done(
+            tid=resource_ref.env_id,
             rvid=resource_ref.rvid,
             action_id=ctx.action_id,
             status=ctx.status,
@@ -417,15 +417,14 @@ class ExternalExecutor(Executor):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_ref: ResourceReference,
-        env_id: uuid.UUID,
+        resource_ref: ResourceDetails,
         reason: str,
     ) -> None:
         raise NotImplementedError
 
     @classmethod
     async def get_executor(
-        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec], client: protocol.Client
+        cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]
     ) -> tuple[Self, Set[str]]:
         # TODO extract the relevant identifying info and stabilize it (i.e. sort and deduplicate specs).
         raise NotImplementedError
@@ -441,7 +440,7 @@ class ResourceAction(ResourceActionBase):
         scheduler: "ResourceScheduler",
         executor: Executor,
         env_id: uuid.UUID,
-        resource: ResourceReference,
+        resource: ResourceDetails,
         gid: uuid.UUID,
         reason: str,
     ) -> None:
@@ -449,7 +448,7 @@ class ResourceAction(ResourceActionBase):
         :param gid: A unique identifier to identify a deploy. This is local to this agent.
         """
         super().__init__(scheduler, resource.id, gid, reason)
-        self.resource: ResourceReference = resource
+        self.resource: ResourceDetails = resource
         self.executor: Executor = executor
         self.env_id: uuid.UUID = env_id
 
@@ -499,7 +498,6 @@ class ResourceAction(ResourceActionBase):
                     await self.executor.execute(
                         gid=self.gid,
                         resource_ref=self.resource,
-                        env_id=self.env_id,
                         reason=self.reason,
                     )
 
@@ -709,7 +707,7 @@ class ResourceScheduler:
 
     def reload(
         self,
-        resources: Sequence[ResourceReference],
+        resources: Sequence[ResourceDetails],
         undeployable: dict[ResourceVersionIdStr, ResourceState],
         new_request: DeployRequest,
         executor: Executor,
@@ -1222,7 +1220,7 @@ class AgentInstance:
             started = datetime.datetime.now().astimezone()
             provider = None
             try:
-                resource_ref: ResourceReference = resource_refs[0]
+                resource_ref: ResourceDetails = resource_refs[0]
                 try:
                     resource_obj: Resource = Resource.deserialize(resource_ref.attributes)
                 except Exception:
@@ -1290,12 +1288,12 @@ class AgentInstance:
                     provider.close()
             return 200
 
-    async def get_executor(self, code: Sequence[ResourceInstallSpec], client: protocol.Client) -> tuple[Executor, Set[str]]:
-        return await InProcessExecutor.get_executor(self, code, client)
+    async def get_executor(self, code: Sequence[ResourceInstallSpec]) -> tuple[Executor, Set[str]]:
+        return await InProcessExecutor.get_executor(self, code)
 
     async def setup_executor(
         self, version: int, action: const.ResourceAction, resources: list[JsonType]
-    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceReference], Executor]:
+    ) -> tuple[dict[ResourceVersionIdStr, const.ResourceState], list[ResourceDetails], Executor]:
         # TODO refactor wiring of tuples around -> not sure how
 
         """
@@ -1314,15 +1312,15 @@ class AgentInstance:
         code: Sequence[ResourceInstallSpec] = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
-        executor, failed_resource_types = await self.get_executor(code, self.get_client())
+        executor, failed_resource_types = await self.get_executor(code)
 
-        loaded_resources: list[ResourceReference] = []
+        loaded_resources: list[ResourceDetails] = []
         failed_resources: list[ResourceVersionIdStr] = []
         undeployable: dict[ResourceVersionIdStr, const.ResourceState] = {}
 
         for res in resources:
             if res["resource_type"] not in failed_resource_types:
-                loaded_resources.append(ResourceReference(res))
+                loaded_resources.append(ResourceDetails(res))
 
                 state = const.ResourceState[res["status"]]
                 if state in const.UNDEPLOYABLE_STATES:
@@ -1330,7 +1328,7 @@ class AgentInstance:
             else:
                 failed_resources.append(res["id"])
                 undeployable[res["id"]] = const.ResourceState.unavailable
-                loaded_resources.append(ResourceReference(res))
+                loaded_resources.append(ResourceDetails(res))
 
         if len(failed_resources) > 0:
             log = data.LogLine.log(
