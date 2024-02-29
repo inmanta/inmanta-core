@@ -121,7 +121,7 @@ class ResourceService(protocol.ServerSlice):
             uuid.UUID,
             Optional[
                 tuple[
-                    int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]], asyncio.Event
+                    int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]], Optional[asyncio.Event]
                 ]
             ],
         ] = {}
@@ -357,7 +357,7 @@ class ResourceService(protocol.ServerSlice):
             neg_increment_per_agent[agent],
             now,
             version,
-            only_update_from_states={const.ResourceState.available, const.ResourceState.deploying},
+            only_update_from_states=[const.ResourceState.available, const.ResourceState.deploying],
         )
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
@@ -405,7 +405,7 @@ class ResourceService(protocol.ServerSlice):
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
         connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
-        only_update_from_states: Optional[set[const.ResourceState]] = None,
+        only_update_from_states: Optional[Sequence[const.ResourceState]] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -418,8 +418,8 @@ class ResourceService(protocol.ServerSlice):
         if not resources_id:
             return
 
-        resources_id = [res_id for res_id in resources_id if filter(res_id)]
-        if not resources_id:
+        resources_id_int = [res_id for res_id in resources_id if filter(res_id)]
+        if not resources_id_int:
             return
 
         action_id = uuid.uuid4()
@@ -430,7 +430,7 @@ class ResourceService(protocol.ServerSlice):
                 if only_update_from_states is not None:
                     resources = await data.Resource.get_resource_ids_with_status(
                         env.id,
-                        resources_id,
+                        resources_id_int,
                         version,
                         only_update_from_states,
                         # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
@@ -442,7 +442,7 @@ class ResourceService(protocol.ServerSlice):
                         return None
 
                 resources_version_ids: list[ResourceVersionIdStr] = [
-                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id
+                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id_int
                 ]
 
                 resource_action = data.ResourceAction(
@@ -474,7 +474,7 @@ class ResourceService(protocol.ServerSlice):
                     "Setting deployed due to known good status",
                 )
 
-                await data.Resource.set_deployed_multi(env.id, resources_id, version, connection=inner_connection)
+                await data.Resource.set_deployed_multi(env.id, resources_id_int, version, connection=inner_connection)
                 # Resource persistent state should not be affected
 
         def post_deploy_update() -> None:

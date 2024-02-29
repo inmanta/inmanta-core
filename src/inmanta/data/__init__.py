@@ -4625,10 +4625,10 @@ class Resource(BaseDocument):
     async def set_deployed_multi(
         cls,
         environment: uuid.UUID,
-        resource_ids: list[m.ResourceIdStr],
+        resource_ids: Sequence[m.ResourceIdStr],
         version: int,
         connection: Optional[asyncpg.connection.Connection] = None,
-    ) -> list[m.ResourceIdStr]:
+    ) -> None:
         query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
         async with cls.get_connection(connection) as connection:
             await connection.execute(query, environment, version, resource_ids)
@@ -4639,7 +4639,7 @@ class Resource(BaseDocument):
         environment: uuid.UUID,
         resource_version_ids: list[m.ResourceIdStr],
         version: int,
-        statuses: list[const.ResourceState],
+        statuses: Sequence[const.ResourceState],
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
     ) -> list[m.ResourceIdStr]:
@@ -4651,7 +4651,7 @@ class Resource(BaseDocument):
             query += lock.value
         async with cls.get_connection(connection) as connection:
             return [
-                r["resource_id"] for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
+                m.ResourceIdStr(cast(str, r["resource_id"])) for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
             ]
 
     @classmethod
@@ -5491,8 +5491,8 @@ class ConfigurationModel(BaseDocument):
                     {lock_statement}"""
         query_result = await cls._fetch_query(query_string, *values, connection=connection)
         result = []
-        for record in query_result:
-            record = dict(record)
+        for in_record in query_result:
+            record = dict(in_record)
             if no_obj:
                 if no_status:
                     record["status"] = {}

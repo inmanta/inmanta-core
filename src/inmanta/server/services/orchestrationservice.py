@@ -924,7 +924,7 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                 )
-            await self._trigger_auto_deploy(env, version, connection=con)
+            await self._trigger_auto_deploy(env, version)
 
         return 200
 
