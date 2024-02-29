@@ -18,7 +18,6 @@
 
 import asyncio
 import dataclasses
-import functools
 import logging
 import time
 import uuid
