@@ -1663,14 +1663,8 @@ class VirtualEnvironmentManager:
         :return: The path
         """
         state_dir = cfg.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
         env_dir = os.path.join(state_dir, "envs")
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
-
+        os.makedirs(env_dir, exist_ok=True)
         return env_dir
 
 
