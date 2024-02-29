@@ -19,8 +19,10 @@
 import asyncio
 import concurrent
 import hashlib
+import json
 import logging
 import os
+import subprocess
 import uuid
 
 import pytest
@@ -412,3 +414,50 @@ async def test_blueprint_hash_consistency(tmpdir):
     print(hash1)
 
     assert hash1 == hash2, "Blueprint hashes should be identical regardless of the order of requirements"
+
+
+def test_hash_consistency_across_sessions():
+    """
+    This test ensures that the custom hash function used within EnvBlueprint objects produces consistent hash values,
+    even when the Python interpreter session is restarted.
+
+    The test achieves this by:
+    1. Creating an EnvBlueprint object in the current session and generating a hash value for it.
+    2. Serializing the configuration of the EnvBlueprint object and embedding it into a dynamically constructed Python
+       code string.
+    3. Executing the constructed Python code in a new Python interpreter session using the subprocess module. This simulates
+       generating the hash in a fresh interpreter session.
+    4. Comparing the hash value generated in the current session with the one generated in the new interpreter session
+       to ensure they are identical.
+    """
+    pip_config_dict = {"index_url": "http://example.com", "extra_index_url": [], "pre": None, "use_system_config": False}
+    requirements = ["pkg1", "pkg2"]
+
+    # Serialize the configuration for passing to the subprocess
+    config_str = json.dumps({"pip_config": pip_config_dict, "requirements": requirements})
+
+    # Python code to execute in subprocess
+    python_code = f"""
+import json
+from inmanta.agent.agent import EnvBlueprint, PipConfig
+
+config_str = '''{config_str}'''
+config = json.loads(config_str)
+
+pip_config = PipConfig(**config["pip_config"])
+blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"])
+
+# Generate and print the hash
+print(blueprint.generate_env_blueprint_hash())
+"""
+
+    # Generate hash in the current session for comparison
+    pip_config = PipConfig(**pip_config_dict)  # Reconstruct PipConfig from dict
+    current_session_blueprint = EnvBlueprint(pip_config=pip_config, requirements=requirements)
+    current_hash = current_session_blueprint.generate_env_blueprint_hash()
+
+    # Generate hash in a new interpreter session
+    result = subprocess.run(["python", "-c", python_code], capture_output=True, text=True)
+    new_session_hash = result.stdout.strip()
+
+    assert current_hash == new_session_hash, "Hash values should be consistent across interpreter sessions"
