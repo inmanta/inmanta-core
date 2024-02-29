@@ -49,7 +49,7 @@ class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
 
 async def test_executor_server(tmp_path):
     manager = MPManager(log_folder=str(tmp_path), cli_log=True)
-    manager._init_once()
+    manager.init_once()
 
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
@@ -73,7 +73,7 @@ async def test_executor_server(tmp_path):
 
 async def test_executor_server_dirty_shutdown(tmp_path):
     manager = MPManager(log_folder=str(tmp_path))
-    manager._init_once()
+    manager.init_once()
 
     child1 = await manager.make_child_and_connect("Testchild")
 

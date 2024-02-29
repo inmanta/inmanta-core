@@ -173,7 +173,8 @@ class MPManager:
         self.inmanta_log_level = inmanta_log_level
         self.cli_log = cli_log
 
-    def _init_once(self) -> None:
+    @classmethod
+    def init_once(cls) -> None:
         try:
             multiprocessing.set_start_method("forkserver")
             multiprocessing.set_forkserver_preload(["inmanta", "inmanta.config"])
