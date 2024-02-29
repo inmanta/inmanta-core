@@ -121,7 +121,11 @@ class ResourceService(protocol.ServerSlice):
             uuid.UUID,
             Optional[
                 tuple[
-                    int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]], Optional[asyncio.Event]
+                    int,
+                    abc.Set[ResourceIdStr],
+                    abc.Set[ResourceIdStr],
+                    abc.Mapping[str, abc.Set[ResourceIdStr]],
+                    Optional[asyncio.Event],
                 ]
             ],
         ] = {}

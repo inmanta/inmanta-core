@@ -4651,7 +4651,8 @@ class Resource(BaseDocument):
             query += lock.value
         async with cls.get_connection(connection) as connection:
             return [
-                m.ResourceIdStr(cast(str, r["resource_id"])) for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
+                m.ResourceIdStr(cast(str, r["resource_id"]))
+                for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
             ]
 
     @classmethod
