@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import subprocess
 import uuid
 
@@ -507,3 +508,43 @@ async def test_environment_creation_locking(environment, tmpdir) -> None:
 
     assert env_same_1 is env_same_2, "Expected the same instance for the same blueprint"
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
+
+
+async def test_venv_corruption_and_recreation(tmpdir, environment) -> None:
+    """
+    Tests that the VirtualEnvironmentManager can detect a corrupted virtual environment and recreate it.
+    """
+    manager = VirtualEnvironmentManager()
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+
+    # Create a package to be used in the environment
+    create_python_package(
+        name="testpackage",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "testpackage"),
+        publish_index=pip_index,
+    )
+
+    blueprint = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("testpackage",))
+
+    # Initially create the environment
+    initial_env = await manager.get_environment(blueprint, None)
+    initial_env_dir = initial_env.env_path  # Correctly access the environment path
+    assert os.path.exists(initial_env_dir), "The environment directory should exist after creation."
+
+    # Manually corrupt the environment by removing a critical directory to simulate corruption
+    shutil.rmtree(os.path.join(initial_env_dir, "lib"), ignore_errors=True)
+    assert not os.path.exists(os.path.join(initial_env_dir, "lib")), "Manual corruption: 'lib' directory removed."
+
+    # Attempt to reuse the environment, which should trigger validation and recreation due to detected corruption
+    recreated_env = await manager.get_environment(blueprint, None)
+    recreated_env_dir = recreated_env.env_path  # Correctly access the environment path after recreation
+
+    # Check that the environment directory is the same but has been recreated
+    assert os.path.exists(os.path.join(recreated_env_dir, "lib")), "The 'lib' directory should exist after recreation."
+    assert initial_env_dir == recreated_env_dir, "Environment directory should be reused for the same blueprint."
+
+    # Verify that the package is correctly installed in the recreated environment
+    # This assumes a method or logic to verify installed packages is available
+    installed_packages = recreated_env.get_installed_packages()
+    assert "testpackage" in installed_packages, "testpackage should be installed in the recreated environment."
