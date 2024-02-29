@@ -388,10 +388,10 @@ class InProcessExecutor(Executor):
         reason: str,
     ) -> None:
         try:
-            resource: Resource = await self.deserialize(resource_ref, const.ResourceAction.deploy)
+            resource: Resource | None = await self.deserialize(resource_ref, const.ResourceAction.deploy)
         except Exception:
             return
-
+        assert resource is not None
         ctx = handler.HandlerContext(resource, logger=self.agent.logger)
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
@@ -441,7 +441,7 @@ class InProcessExecutor(Executor):
         self,
         resources: Sequence[ResourceDetails],
         dry_run_id: uuid.UUID,
-        undeployable: dict[ResourceVersionIdStr, ResourceState],
+        undeployable: Mapping[ResourceVersionIdStr, ResourceState],
     ) -> None:
         """
         Perform a dryrun for the given resources
@@ -456,10 +456,11 @@ class InProcessExecutor(Executor):
         with self.cache(model_version):
             for resource in resources:
                 try:
-                    resource_obj: Resource = await self.deserialize(resource, const.ResourceAction.dryrun)
+                    resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.dryrun)
                 except Exception:
                     await self.agent.get_client().dryrun_update(tid=env_id, id=dry_run_id, resource=resource.rvid, changes={})
                     continue
+                assert resource_obj is not None
                 ctx = handler.HandlerContext(resource_obj, True)
                 started = datetime.datetime.now().astimezone()
                 provider = None
@@ -553,9 +554,10 @@ class InProcessExecutor(Executor):
         provider = None
         try:
             try:
-                resource_obj: Resource = await self.deserialize(resource, const.ResourceAction.getfact)
+                resource_obj: Resource | None = await self.deserialize(resource, const.ResourceAction.getfact)
             except Exception:
                 return 500
+            assert resource_obj is not None
             ctx = handler.HandlerContext(resource_obj)
 
             with self.cache(model_version):
@@ -1324,12 +1326,12 @@ class AgentInstance:
         code: Sequence[ResourceInstallSpec]
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
-        invalid_resource_types: set[str]
+        invalid_resource_types: Set[str]
         code, invalid_resource_types = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
         # Resource types for which an error occurred during handler code installation
-        failed_resource_types: set[str]
+        failed_resource_types: Set[str]
         executor, failed_resource_types = await self.get_executor(code)
 
         loaded_resources: list[ResourceDetails] = []
@@ -1656,10 +1658,10 @@ class Agent(SessionEndpoint):
                         pip_config = await self._get_pip_config(environment, version)
                     except Exception:
                         invalid_resource_types.add(resource_type)
-
-                resource_install_specs.append(
-                    ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
-                )
+                else:
+                    resource_install_specs.append(
+                        ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
+                    )
             else:
                 invalid_resource_types.add(resource_type)
 
