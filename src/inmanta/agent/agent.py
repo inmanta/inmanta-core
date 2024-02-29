@@ -1611,8 +1611,8 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
-        hashed_blueprint_name: int = hash(blueprint)
-        env_dir_name: str = hex(hashed_blueprint_name)[2:]
+        hashed_blueprint: int = hash(blueprint)
+        env_dir_name: str = hex(hashed_blueprint)[2:]
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
