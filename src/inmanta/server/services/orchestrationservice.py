@@ -657,7 +657,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-    ) -> abc.Sequence[str]:
+    ) -> abc.Collection[str]:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
                                 When a partial compile is done, it should contain all the resources that belong to the
@@ -838,6 +838,9 @@ class OrchestrationService(protocol.ServerSlice):
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
         to commit. If not respected, the auto deploy might work on stale data, likely resulting in resources hanging in the
         deploying state.
+
+        :argument agents: the list of agents we should restrict our notifications to. if it is None, we notify all agents if
+            PUSH_ON_AUTO_DEPLOY is set
         """
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
@@ -911,6 +914,8 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         async with data.Resource.get_connection() as con:
+            # We don't allow connection reuse here, because the last line in this block can't tolerate a transaction
+            # assert not con.is_in_transaction()
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
                 await env.put_version_lock(shared=True, connection=con)
@@ -924,6 +929,8 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                 )
+            # This must be outside all transactions, as it relies on the result of _put_version
+            # and it starts a background task, so it can't re-use this connection
             await self._trigger_auto_deploy(env, version)
 
         return 200
@@ -948,8 +955,6 @@ class OrchestrationService(protocol.ServerSlice):
                      "source": str
                     }
         """
-        PLOGGER.warning("STARTING PUT PARTIAL")
-        previous = asyncio.get_running_loop().time()
         if resource_state is None:
             resource_state = {}
         if unknowns is None:
@@ -982,9 +987,6 @@ class OrchestrationService(protocol.ServerSlice):
                 "Following resource sets are present in the removed resource sets and in the resources that are exported: "
                 f"{intersection}"
             )
-        t_now = asyncio.get_running_loop().time()
-        PLOGGER.warning("INPUT VALIDATION: %s", t_now - previous)
-        previous = t_now
 
         async with data.Resource.get_connection() as con:
             async with con.transaction():
@@ -1027,10 +1029,6 @@ class OrchestrationService(protocol.ServerSlice):
                     set_version=version,
                 )
 
-                t_now = asyncio.get_running_loop().time()
-                PLOGGER.warning("LOAD STAGE: %s", t_now - previous)
-                previous = t_now
-
                 updated_resource_sets: abc.Set[str] = {sr_name for sr_name in resource_sets.values() if sr_name is not None}
                 partial_update_merger = await PartialUpdateMerger.create(
                     env_id=env.id,
@@ -1044,10 +1042,6 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # add shared resources
                 merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
-                t_now = asyncio.get_running_loop().time()
-                PLOGGER.warning("MERGE STAGE: %s", t_now - previous)
-                previous = t_now
-
                 await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
@@ -1066,15 +1060,9 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                 )
-                t_now = asyncio.get_running_loop().time()
-                PLOGGER.warning("PUT STAGE: %s", t_now - previous)
-                previous = t_now
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
             await self._trigger_auto_deploy(env, version, agents=all_agents)
-
-            t_now = asyncio.get_running_loop().time()
-            PLOGGER.warning("AUTO DEPLOY STAGE: %s", t_now - previous)
 
         return returnvalue
 
@@ -1090,7 +1078,7 @@ class OrchestrationService(protocol.ServerSlice):
         agents: Optional[abc.Sequence[str]] = None,
     ) -> ReturnTupple:
         """
-        :param agents: agents that have to be notified by the push
+        :param agents: agents that have to be notified by the push, defaults to all
         """
         async with data.ConfigurationModel.get_connection(connection) as connection:
             version_run_ahead_lock = asyncio.Event()

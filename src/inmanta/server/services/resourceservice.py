@@ -422,8 +422,9 @@ class ResourceService(protocol.ServerSlice):
         if not resources_id:
             return
 
-        resources_id_int = [res_id for res_id in resources_id if filter(res_id)]
-        if not resources_id_int:
+        # performance-critical path: avoid parsing cost if we can
+        resources_id_filtered = [res_id for res_id in resources_id if filter(res_id)]
+        if not resources_id_filtered:
             return
 
         action_id = uuid.uuid4()
@@ -434,7 +435,7 @@ class ResourceService(protocol.ServerSlice):
                 if only_update_from_states is not None:
                     resources = await data.Resource.get_resource_ids_with_status(
                         env.id,
-                        resources_id_int,
+                        resources_id_filtered,
                         version,
                         only_update_from_states,
                         # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
@@ -446,7 +447,7 @@ class ResourceService(protocol.ServerSlice):
                         return None
 
                 resources_version_ids: list[ResourceVersionIdStr] = [
-                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id_int
+                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id_filtered
                 ]
 
                 resource_action = data.ResourceAction(
@@ -478,7 +479,7 @@ class ResourceService(protocol.ServerSlice):
                     "Setting deployed due to known good status",
                 )
 
-                await data.Resource.set_deployed_multi(env.id, resources_id_int, version, connection=inner_connection)
+                await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
                 # Resource persistent state should not be affected
 
         def post_deploy_update() -> None:
@@ -627,11 +628,12 @@ class ResourceService(protocol.ServerSlice):
             if cache_entry is None:
                 # No cache entry found
                 return None
-            (version_cache_entry, incr, neg_incr, neg_incr_per_agent, run_ahead_lock) = cache_entry
-            if version_cache_entry > version:
-                # Cache is ahead,
-                if run_ahead_lock is not None:
-                    await run_ahead_lock.wait()
+            (version_cache_entry, incr, neg_incr, neg_incr_per_agent, cached_run_ahead_lock) = cache_entry
+            if version_cache_entry >= version:
+                assert not run_ahead_lock  # We only expect a lock if WE are ahead
+                # Cache is ahead or equal
+                if cached_run_ahead_lock is not None:
+                    await cached_run_ahead_lock.wait()
             elif version_cache_entry != version:
                 # Cache entry exists for another version
                 # Expire

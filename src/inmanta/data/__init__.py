@@ -4828,9 +4828,9 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         version: int,
-        projection: Optional[list[str]],
-        projection_presistent: Optional[list[str]],
-        project_attributes: Optional[list[str]] = None,
+        projection: Optional[list[typing.LiteralString]],
+        projection_presistent: Optional[list[typing.LiteralString]],
+        project_attributes: Optional[list[typing.LiteralString]] = None,
         *,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
@@ -5756,19 +5756,19 @@ class ConfigurationModel(BaseDocument):
         deployed and different hash -> increment
         """
         # Depends on deploying
-        projection_a_resource = [
+        projection_a_resource: list[typing.LiteralString] = [
             "resource_id",
             "attribute_hash",
             "status",
         ]
-        projection_a_state = [
+        projection_a_state: list[typing.LiteralString] = [
             "last_success",
             "last_produced_events",
             "last_deployed_attribute_hash",
             "last_non_deploying_status",
         ]
-        projection_a_attributes = ["requires", "send_event"]
-        projection = ["resource_id", "status", "attribute_hash"]
+        projection_a_attributes: list[typing.LiteralString] = ["requires", "send_event"]
+        projection: list[typing.LiteralString] = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw_with_persistent_state(

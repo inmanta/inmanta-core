@@ -255,7 +255,7 @@ server_resource_action_log_prefix: Option[str] = Option(
 server_enabled_extensions: Option[list[str]] = Option(
     "server",
     "enabled_extensions",
-    [],
+    list,
     "A list of extensions the server must load. Core is always loaded."
     "If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
