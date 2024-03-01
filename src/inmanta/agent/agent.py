@@ -1658,10 +1658,10 @@ class Agent(SessionEndpoint):
                         pip_config = await self._get_pip_config(environment, version)
                     except Exception:
                         invalid_resource_types.add(resource_type)
-                else:
-                    resource_install_specs.append(
-                        ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
-                    )
+
+                resource_install_specs.append(
+                    ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
+                )
             else:
                 invalid_resource_types.add(resource_type)
 
@@ -1670,6 +1670,7 @@ class Agent(SessionEndpoint):
     async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> Set[str]:
         """Ensure that the code for the given environment and version is loaded"""
         failed_to_load: set[str] = set()
+        # breakpoint()
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
