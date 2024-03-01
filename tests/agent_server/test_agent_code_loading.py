@@ -178,19 +178,19 @@ inmanta.test_agent_code_loading = 15
     resource_install_specs_5: list[ResourceInstallSpec]
     resource_install_specs_6: list[ResourceInstallSpec]
 
-    resource_install_specs_1, undep = await agent.get_code(
+    resource_install_specs_1, _ = await agent.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2", "test::Test3"]
     )
     await agent.ensure_code(
         code=resource_install_specs_1,
     )
-    resource_install_specs_2, undep = await agent.get_code(
+    resource_install_specs_2, _ = await agent.get_code(
         environment=environment, version=version_1, resource_types=["test::Test", "test::Test2"]
     )
     await agent.ensure_code(
         code=resource_install_specs_2,
     )
-    resource_install_specs_3, undep = await agent.get_code(
+    resource_install_specs_3, _ = await agent.get_code(
         environment=environment, version=version_2, resource_types=["test::Test2"]
     )
     await agent.ensure_code(
