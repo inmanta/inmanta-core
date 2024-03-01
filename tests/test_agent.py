@@ -497,3 +497,63 @@ async def test_environment_creation_locking(environment, tmpdir) -> None:
 
     assert env_same_1 is env_same_2, "Expected the same instance for the same blueprint"
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
+
+
+async def test_executor_creation_and_reuse(environment, agent_factory, tmpdir) -> None:
+    """
+    This test verifies the creation and reuse of executors based on their blueprints. It checks whether
+    the concurrency aspects to ensure locking mechanisms work as intended.
+    """
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
+    )
+
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    create_python_package(
+        name="pkg1",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "pkg1"),
+        publish_index=pip_index,
+    )
+
+    requirements1 = ()
+    requirements2 = ("pkg1",)
+    pip_config = PipConfig(index_url=pip_index.url)
+
+    # Prepare a source module and its hash
+    code = """
+    def test():
+        return 10
+    """.encode()
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(code)
+    hv: str = sha1sum.hexdigest()
+    module_source1 = ModuleSource(
+        name="inmanta_plugins.test",
+        hash_value=hv,
+        is_byte_code=False,
+        source=code,
+    )
+    sources1 = ()
+    sources2 = (module_source1,)
+
+    blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
+    blueprint2 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
+    blueprint3 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
+
+    venv_manager = VirtualEnvironmentManager()
+    executor_manager = ExecutorManager(agent, venv_manager)
+
+    # Simulate concurrent executor creation requests
+    executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
+        executor_manager.get_executor("agent1", blueprint1),
+        executor_manager.get_executor("agent1", blueprint1),
+        executor_manager.get_executor("agent1", blueprint2),
+        executor_manager.get_executor("agent1", blueprint3),
+    )
+
+    # Assertions to verify correct executor handling
+    assert executor_1 is executor_1_reuse, "Expected the same executor instance for identical blueprint"
+    assert executor_1 is not executor_2, "Expected a different executor instance for different sources"
+    assert executor_1 is not executor_3, "Expected a different executor instance for different requirements and sources"
+    assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
