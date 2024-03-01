@@ -22,16 +22,18 @@ import struct
 
 import pytest
 
+import inmanta.config
+import inmanta.protocol.ipc_light
 from inmanta.protocol.ipc_light import IPCClient, IPCServer
 
 
 def test_package_reassembly():
-    class IPCSpy(IPCClient):
-        def __init__(self):
+    class IPCSpy(IPCClient[None]):
+        def __init__(self) -> None:
             self.blocks = []
             super().__init__("SPY")
 
-        def _block_received(self, block: bytes):
+        def _block_received(self, block: bytes) -> None:
             self.blocks.append(block)
 
     base_block = "aaa".encode()
@@ -65,29 +67,31 @@ def test_package_reassembly():
     assert ipc.blocks == [base_block, base_block]
 
 
+class Error(inmanta.protocol.ipc_light.IPCMethod[None, None]):
+
+    async def call(self, ctx: None) -> None:
+        raise Exception("raise")
+
+
+class Echo(inmanta.protocol.ipc_light.IPCMethod[list[int], None]):
+
+    def __init__(self, args: list[int]) -> None:
+        self.args = args
+
+    async def call(self, ctx) -> list[int]:
+        return self.args
+
+
 async def test_normal_flow(request):
     loop = asyncio.get_running_loop()
     parent_conn, child_conn = socket.socketpair()
 
-    class TestIPC(IPCServer):
+    class TestIPC(IPCServer[None]):
         def __init__(self):
             super().__init__("SERVER")
 
-        def get_method(self, name: str):
-            if name == "fastraise":
-                raise Exception("Fastraise")
-
-            if name == "raise":
-
-                async def func(*args):
-                    raise Exception("raise")
-
-                return func
-
-            async def echo(*args):
-                return list(args)
-
-            return echo
+        def get_context(self) -> None:
+            return None
 
     server_transport, server_protocol = await loop.connect_accepted_socket(TestIPC, parent_conn)
     request.addfinalizer(server_transport.close)
@@ -95,11 +99,8 @@ async def test_normal_flow(request):
     request.addfinalizer(client_transport.close)
 
     with pytest.raises(Exception, match="raise"):
-        await client_protocol.call("raise", [])
-
-    with pytest.raises(Exception, match="Fastraise"):
-        await client_protocol.call("fastraise", [])
+        await client_protocol.call(Error())
 
     args = [1, 2, 3, 4]
-    result = await client_protocol.call("echo", args)
+    result = await client_protocol.call(Echo(args))
     assert args == result

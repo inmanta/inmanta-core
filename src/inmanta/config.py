@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import sys
+import typing
 import uuid
 import warnings
 from collections import abc, defaultdict
@@ -89,6 +90,28 @@ class Config:
         config.read(files)
         cls.__instance = config
         cls._config_dir = config_dir
+
+    @classmethod
+    def load_config_from_dict(
+        cls,
+        input_config: typing.Mapping[str, typing.Mapping[str, typing.Any]],
+    ) -> None:
+        """
+        Load the configuration from a dict, used to copy config.
+        Replaces all existing config.
+        """
+        config = LenientConfigParser(interpolation=Interpolation())
+        config.read_dict(input_config)
+        cls.__instance = config
+        cls._config_dir = None
+
+    @classmethod
+    def config_as_dict(cls) -> typing.Mapping[str, typing.Mapping[str, typing.Any]]:
+        """
+        Return the config as a dict, to be used with load_config_from_dict
+        """
+        assert cls.__instance is not None
+        return dict(cls.__instance.items())
 
     @classmethod
     def _get_instance(cls) -> ConfigParser:
