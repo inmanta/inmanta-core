@@ -178,25 +178,7 @@ class ResourceDetails:
         self.requires = [Id.parse_id(resource_id) for resource_id in resource_dict["attributes"]["requires"]]
         self.model_version = resource_dict["model"]
 
-        '''
-        all attributes:
-        resource_dict = {
-            'attributes': {'key': 'key1', 'value': 'value1', 'purged': False, 'requires': [], 'send_event': False,
-                        'purge_on_delete': False, 'version': 1},
-            'status': 'available',
-            'resource_set': None,
-            'provides': [],
-            'environment': '03955b40-053f-4f59-9387-9ef68ab6b0cd',
-            'model': 1,
-            'resource_id': 'test::BadPostCRUD[agent1,key=key1]',
-            'resource_type': 'test::BadPostCRUD',
-            'resource_id_value': 'key1',
-            'agent': 'agent1',
-            'attribute_hash': '9873cfcdf68f88da03477217cf186c68',
-            'resource_version_id': 'test::BadPostCRUD[agent1,key=key1],v=1',
-            'id': 'test::BadPostCRUD[agent1,key=key1],v=1'
-        }
-        '''
+
 class Executor(ABC):
     """
     An executor for resources. Delegates to the appropriate handlers.
@@ -1676,6 +1658,7 @@ class Agent(SessionEndpoint):
                         pip_config = await self._get_pip_config(environment, version)
                     except Exception:
                         invalid_resource_types.add(resource_type)
+                        continue
 
                 resource_install_specs.append(
                     ResourceInstallSpec(resource_type, version, pip_config, list(requirements), sources)
