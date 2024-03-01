@@ -1693,16 +1693,64 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint specifying the configuration for the new virtual environment.
         :param threadpool: A ThreadPoolExecutor
         :return: An instance of ExecutorVirtualEnvironment representing the created or reused environment.
-
-        TODO: Improve handling of bad venv scenarios, such as when the folder exists but is empty or corrupted.
         """
         env_storage, is_new = self.get_or_create_env_directory(blueprint)
+
+        # Check for validity of the existing virtual environment
+        if not is_new and not self.is_environment_valid(env_storage, blueprint):
+            LOGGER.info("Existing virtual environment at %s is invalid or corrupted and will be recreated", env_storage)
+            self.recreate_environment_directory(env_storage)
+            is_new = True
+
         process_environment = ExecutorVirtualEnvironment(env_storage, threadpool)
         if is_new:
             await process_environment.create_and_install_environment(blueprint)
         self._environment_map[blueprint] = process_environment
 
         return process_environment
+
+    def is_environment_valid(self, env_storage: str, blueprint: EnvBlueprint) -> bool:
+        """
+        Checks if the given virtual environment directory is valid by looking for specific files and directories
+        that should exist in a properly configured virtual environment.
+        :param env_storage: The file system path to the virtual environment.
+        :param blueprint: The blueprint specifying the configuration for the new virtual environment.
+        :return: True if the environment is valid, False otherwise.
+        """
+        expected_elements = ["pyvenv.cfg", "lib", "bin"]
+        try:
+            if not all(os.path.exists(os.path.join(env_storage, element)) for element in expected_elements):
+                return False
+            installed_packages = self.get_installed_packages(env_storage)
+            required_packages = {pkg.split("==")[0] for pkg in blueprint.requirements}
+            missing_packages = required_packages - set(installed_packages.keys())
+        except Exception as e:
+            LOGGER.info(f"Error while validating environment: {e}")
+            return False
+        if missing_packages:
+            return False
+        return True
+
+    def get_installed_packages(self, env_storage: str) -> dict:
+        """
+        Gets a dictionary of installed packages and their versions
+        :param env_storage: The file system path to the virtual environment.
+        :return: A dictionary with package names as keys and their versions as values.
+        """
+        pip_path = os.path.join(env_storage, "bin", "pip")
+        result = subprocess.run([pip_path, "list", "--format=json"], capture_output=True, text=True, check=True, timeout=5)
+        packages = json.loads(result.stdout)
+        installed_packages = {package["name"]: package["version"] for package in packages}
+        return installed_packages
+
+    def recreate_environment_directory(self, env_storage: str) -> None:
+        """
+        Clears the contents of an existing virtual environment directory and recreates it,
+        ensuring that it is ready for a new environment setup.
+        :param env_storage: The file system path to the virtual environment to be cleared and recreated.
+        """
+        shutil.rmtree(env_storage)
+        os.makedirs(env_storage)
 
     async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
         """
@@ -1711,12 +1759,23 @@ class VirtualEnvironmentManager:
         """
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
-        if blueprint in self._environment_map:
-            return self._environment_map[blueprint]
-        # Acquire a lock based on the blueprint's hash
-        async with self._locks.get(blueprint.generate_blueprint_hash()):
+        # Helper function to check for and return a valid environment if it exists
+        def check_and_return_environment():
             if blueprint in self._environment_map:
-                return self._environment_map[blueprint]
+                storage = self._environment_map[blueprint].env_path
+                if self.is_environment_valid(storage, blueprint):
+                    return self._environment_map[blueprint]
+            return None
+
+        existing_env = check_and_return_environment()
+        if existing_env:
+            return existing_env
+
+        # Acquire a lock based on the blueprint's hash to ensure thread-safe creation of new environments
+        async with self._locks.get(blueprint.generate_blueprint_hash()):
+            existing_env = check_and_return_environment()
+            if existing_env:
+                return existing_env
             return await self.create_environment(blueprint, threadpool)
 
 

@@ -30,6 +30,7 @@ import pytest
 
 from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
+from inmanta.agent.agent import EnvBlueprint, ExecutorBlueprint, ExecutorId, ExecutorManager, VirtualEnvironmentManager
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.loader import ModuleSource
@@ -555,3 +556,82 @@ async def test_executor_creation_and_reuse(environment, agent_factory, tmpdir) -
     assert executor_1 is not executor_2, "Expected a different executor instance for different sources"
     assert executor_1 is not executor_3, "Expected a different executor instance for different requirements and sources"
     assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
+
+
+async def test_venv_corruption_and_recreation(tmpdir, environment) -> None:
+    """
+    Tests that the VirtualEnvironmentManager can detect a corrupted virtual environment and recreate it.
+    """
+    manager = VirtualEnvironmentManager()
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+
+    # Create a package to be used in the environment
+    create_python_package(
+        name="testpackage",
+        pkg_version=version.Version("1.0.0"),
+        path=os.path.join(tmpdir, "testpackage"),
+        publish_index=pip_index,
+    )
+
+    blueprint = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("testpackage",))
+
+    # Initially create the environment
+    initial_env = await manager.get_environment(blueprint, None)
+    initial_env_dir = initial_env.env_path  # Correctly access the environment path
+    assert os.path.exists(initial_env_dir), "The environment directory should exist after creation."
+
+    # Manually corrupt the environment by removing a critical directory to simulate corruption
+    shutil.rmtree(os.path.join(initial_env_dir, "lib"), ignore_errors=True)
+    assert not os.path.exists(os.path.join(initial_env_dir, "lib")), "Manual corruption: 'lib' directory removed."
+
+    # Attempt to reuse the environment, which should trigger validation and recreation due to detected corruption
+    recreated_env = await manager.get_environment(blueprint, None)
+    recreated_env_dir = recreated_env.env_path  # Correctly access the environment path after recreation
+
+    # Check that the environment directory is the same but has been recreated
+    assert os.path.exists(os.path.join(recreated_env_dir, "lib")), "The 'lib' directory should exist after recreation."
+    assert initial_env_dir == recreated_env_dir, "Environment directory should be reused for the same blueprint."
+
+    # Verify that the package is correctly installed in the recreated environment
+    # This assumes a method or logic to verify installed packages is available
+    installed_packages = recreated_env.get_installed_packages()
+    assert "testpackage" in installed_packages, "testpackage should be installed in the recreated environment."
+
+
+async def test_venv_corruption_and_manager_restart(environment, agent_factory, tmpdir) -> None:
+    """
+    Verifies that a corrupted virtual environment is handled correctly upon the restart of a VirtualEnvironmentManager.
+    This includes detecting the corrupted environment and recreating it if necessary.
+    """
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
+    )
+
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    pip_config = PipConfig(index_url=pip_index.url)
+    requirements = ()
+    sources = ()
+
+    blueprint = ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
+    env_bp_hash = blueprint.to_env_blueprint().generate_blueprint_hash()
+
+    # First execution: create an executor and verify its creation
+    venv_manager = VirtualEnvironmentManager()
+    executor_manager = ExecutorManager(agent=agent, environment_manager=venv_manager)
+    await executor_manager.get_executor("agent1", blueprint)
+    env_dir = os.path.join(venv_manager.envs_dir, env_bp_hash)
+
+    # Manually corrupt the environment by removing a critical directory
+    shutil.rmtree(os.path.join(env_dir, "lib"), ignore_errors=True)
+
+    # Simulate ExecutorManager restart by creating new instances
+    venv_manager2 = VirtualEnvironmentManager()
+    executor_manager2 = ExecutorManager(agent=agent, environment_manager=venv_manager2)
+
+    await executor_manager2.get_executor("agent1", blueprint)
+
+    # Depending on the implementation, verify the environment was detected as corrupted and recreated
+    # This could involve checking for specific log messages or verifying the existence and content of the environment directory
+    assert os.path.exists(
+        os.path.join(env_dir, "lib")
+    ), "The 'lib' directory should exist after recreation if the environment was recreated."
