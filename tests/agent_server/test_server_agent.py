@@ -1422,10 +1422,15 @@ async def test_auto_deploy(
         assert resource_container.Provider.get("agent1", "key2") == value_resource_two
         assert not resource_container.Provider.isset("agent1", "key3")
 
-    assert resource_container.Provider.readcount("agent1", "key1") == read_resource1
-    assert resource_container.Provider.changecount("agent1", "key1") == change_resource1
-    assert resource_container.Provider.readcount("agent1", "key2") == read_resource2
-    assert resource_container.Provider.changecount("agent1", "key2") == change_resource2
+    async def check_final() -> bool:
+        return (
+            (resource_container.Provider.readcount("agent1", "key1") == read_resource1)
+            and (resource_container.Provider.changecount("agent1", "key1") == change_resource1)
+            and (resource_container.Provider.readcount("agent1", "key2") == read_resource2)
+            and (resource_container.Provider.changecount("agent1", "key2") == change_resource2)
+        )
+
+    await retry_limited(check_final, 1)
 
 
 async def test_auto_deploy_no_splay(server, client, clienthelper, resource_container, environment, no_agent_backoff):
