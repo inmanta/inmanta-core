@@ -30,11 +30,11 @@ import pytest
 import inmanta
 from inmanta import const
 from inmanta.agent import Agent
-from inmanta.data.model import Notification
 from inmanta.data import PipConfig
+from inmanta.data.model import Notification
 from inmanta.protocol import Client
 from inmanta.util import get_compiler_version
-from utils import LogSequence, log_doesnt_contain, log_contains, PipIndex
+from utils import LogSequence, log_contains, log_doesnt_contain
 
 
 async def make_source_structure(

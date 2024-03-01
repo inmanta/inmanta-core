@@ -35,7 +35,7 @@ from typing import Any, Dict, Optional, Union, cast
 
 import pkg_resources
 
-from inmanta import const, data, env, protocol, loader, module
+from inmanta import const, data, env, loader, module, protocol
 from inmanta.agent import config as cfg
 from inmanta.agent import handler
 from inmanta.agent.cache import AgentCache
@@ -1385,7 +1385,8 @@ class Agent(SessionEndpoint):
                         all_required_module.update(
                             {
                                 module.ModuleV2Source.get_inmanta_module_name(r)
-                                for r in requirements if r.startswith("inmanta-module-")
+                                for r in requirements
+                                if r.startswith("inmanta-module-")
                             }
                         )
 

@@ -22,7 +22,7 @@ import datetime
 import uuid
 from typing import Literal, Optional, Union
 
-from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, ResourceState, NotificationSeverity
+from inmanta.const import AgentAction, ApiDocsFormat, Change, ClientType, NotificationSeverity, ResourceState
 from inmanta.data import model
 from inmanta.data.model import DiscoveredResource, PipConfig, ResourceIdStr
 from inmanta.protocol import methods
