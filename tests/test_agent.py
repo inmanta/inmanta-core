@@ -502,7 +502,7 @@ async def test_environment_creation_locking(environment, tmpdir) -> None:
 async def test_executor_creation_and_reuse(environment, agent_factory, tmpdir) -> None:
     """
     This test verifies the creation and reuse of executors based on their blueprints. It checks whether
-    the concurrency aspects to ensure locking mechanisms work as intended.
+    the concurrency aspects and the locking mechanisms work as intended.
     """
     agent: Agent = await agent_factory(
         environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
