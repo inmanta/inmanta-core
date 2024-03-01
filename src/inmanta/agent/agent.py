@@ -1676,11 +1676,14 @@ class VirtualEnvironmentManager:
         """
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
-        # Acquire a lock based on the blueprint's hash
-        async with self._locks.get(blueprint.generate_env_blueprint_hash()):
-            if blueprint in self._environment_map:
+        if blueprint in self._environment_map:
                 return self._environment_map[blueprint]
-            return await self.create_environment(blueprint, threadpool)
+        else:
+            # Acquire a lock based on the blueprint's hash
+            async with self._locks.get(blueprint.generate_env_blueprint_hash()):
+                if blueprint in self._environment_map:
+                    return self._environment_map[blueprint]
+                return await self.create_environment(blueprint, threadpool)
 
     def initialize_envs_directory(self) -> str:
         """
