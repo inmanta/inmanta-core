@@ -4837,6 +4837,8 @@ class Resource(BaseDocument):
         """This method performs none of the mangling required to produce valid resources!
 
         project_attributes performs a projection on the json attributes of the resources table
+
+        all projections must be disjoint, as they become named fields in the output record
         """
 
         def collect_projection(projection: Optional[list[str]], prefix: str) -> str:
