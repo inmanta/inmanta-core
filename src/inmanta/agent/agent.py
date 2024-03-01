@@ -1539,30 +1539,34 @@ class Agent(SessionEndpoint):
         return 200, collect_report(self)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class EnvBlueprint:
     """Represents a blueprint for creating virtual environments with specific pip configurations and requirements."""
 
     pip_config: PipConfig
     requirements: Sequence[str]
+    _hash_cache: str = dataclasses.field(default=None, init=False, repr=False)
 
     def generate_blueprint_hash(self) -> str:
         """
         Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
         and requirements in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
+        Also cache the hash to only compute it once.
         """
-        blueprint_dict: Dict[str, Any] = {
-            "pip_config": self.pip_config.dict(),
-            "requirements": sorted(self.requirements),
-        }
+        if self._hash_cache is None:
+            blueprint_dict: Dict[str, Any] = {
+                "pip_config": self.pip_config.dict(),
+                "requirements": sorted(self.requirements),
+            }
 
-        # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
-        serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
+            # Serialize the blueprint dictionary to a JSON string, ensuring consistent ordering
+            serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
 
-        # Use md5 to generate a hash of the serialized blueprint
-        hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
-        return hash_obj.hexdigest()
+            # Use md5 to generate a hash of the serialized blueprint
+            hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
+            self._hash_cache = hash_obj.hexdigest()
+        return self._hash_cache
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, EnvBlueprint):
@@ -1573,31 +1577,35 @@ class EnvBlueprint:
         return int(self.generate_blueprint_hash(), 16)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class ExecutorBlueprint(EnvBlueprint):
     """Extends EnvBlueprint to include sources for the executor environment."""
 
     sources: Sequence[ModuleSource]
+    _hash_cache: str = dataclasses.field(default=None, init=False, repr=False)
 
     def generate_blueprint_hash(self) -> str:
         """
         Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources
         and requirements in a sorted, consistent manner. This ensures that the hash value is
         independent of the order of requirements and consistent across interpreter sessions.
+        Also cache the hash to only compute it once.
         """
-        blueprint_dict = {
-            "pip_config": self.pip_config.dict(),
-            "requirements": sorted(self.requirements),
-            # Use the hash values of the sources, sorted to ensure consistent ordering
-            "sources": sorted(source.hash_value for source in self.sources),
-        }
+        if self._hash_cache is None:
+            blueprint_dict = {
+                "pip_config": self.pip_config.dict(),
+                "requirements": sorted(self.requirements),
+                # Use the hash values of the sources, sorted to ensure consistent ordering
+                "sources": sorted(source.hash_value for source in self.sources),
+            }
 
-        # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
-        serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
+            # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
+            serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
 
-        # Use md5 to generate a hash of the serialized blueprint
-        hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
-        return hash_obj.hexdigest()
+            # Use md5 to generate a hash of the serialized blueprint
+            hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
+            self._hash_cache = hash_obj.hexdigest()
+        return self._hash_cache
 
     def to_env_blueprint(self) -> EnvBlueprint:
         """
@@ -1614,7 +1622,7 @@ class ExecutorBlueprint(EnvBlueprint):
         return int(self.generate_blueprint_hash(), 16)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class ExecutorId:
     """Identifies an executor with an agent name and its blueprint configuration."""
 
