@@ -544,7 +544,6 @@ async def test_executor_creation_and_reuse(environment, agent_factory, tmpdir) -
     venv_manager = VirtualEnvironmentManager()
     executor_manager = ExecutorManager(agent, venv_manager)
 
-    # Simulate concurrent executor creation requests
     executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
         executor_manager.get_executor("agent1", blueprint1),
         executor_manager.get_executor("agent1", blueprint1),
@@ -552,7 +551,6 @@ async def test_executor_creation_and_reuse(environment, agent_factory, tmpdir) -
         executor_manager.get_executor("agent1", blueprint3),
     )
 
-    # Assertions to verify correct executor handling
     assert executor_1 is executor_1_reuse, "Expected the same executor instance for identical blueprint"
     assert executor_1 is not executor_2, "Expected a different executor instance for different sources"
     assert executor_1 is not executor_3, "Expected a different executor instance for different requirements and sources"
