@@ -1546,7 +1546,7 @@ class EnvBlueprint:
     pip_config: PipConfig
     requirements: Sequence[str]
 
-    def generate_env_blueprint_hash(self) -> str:
+    def generate_blueprint_hash(self) -> str:
         """
         Generate a stable hash for an EnvBlueprint instance by serializing its pip_config
         and requirements in a sorted, consistent manner. This ensures that the hash value is
@@ -1570,6 +1570,26 @@ class ExecutorBlueprint(EnvBlueprint):
     """Extends EnvBlueprint to include sources for the executor environment."""
 
     sources: Sequence[ModuleSource]
+
+    def generate_blueprint_hash(self) -> str:
+        """
+        Generate a stable hash for an ExecutorBlueprint instance by serializing its pip_config, sources
+        and requirements in a sorted, consistent manner. This ensures that the hash value is
+        independent of the order of requirements and consistent across interpreter sessions.
+        """
+        blueprint_dict = {
+            "pip_config": self.pip_config.dict(),
+            "requirements": sorted(self.requirements),
+            # Use the hash values of the sources, sorted to ensure consistent ordering
+            "sources": sorted(source.hash_value for source in self.sources),
+        }
+
+        # Serialize the extended blueprint dictionary to a JSON string, ensuring consistent ordering
+        serialized_blueprint = json.dumps(blueprint_dict, sort_keys=True)
+
+        # Use md5 to generate a hash of the serialized blueprint
+        hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
+        return hash_obj.hexdigest()
 
     def to_env_blueprint(self) -> EnvBlueprint:
         """
@@ -1618,6 +1638,19 @@ class ExecutorVirtualEnvironment(PythonEnvironment):
             await loop.run_in_executor(self.thread_pool, install_for_config)
 
 
+def initialize_envs_directory() -> str:
+    """
+    Initializes the base directory for storing virtual environments. If the directory
+    does not exist, it is created.
+
+    :return: The path to the environments directory.
+    """
+    state_dir = cfg.state_dir.get()
+    env_dir = os.path.join(state_dir, "envs")
+    os.makedirs(env_dir, exist_ok=True)
+    return env_dir
+
+
 class VirtualEnvironmentManager:
     """
     Manages virtual environments to ensure efficient reuse.
@@ -1627,7 +1660,7 @@ class VirtualEnvironmentManager:
 
     def __init__(self) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
-        self.envs_dir: str = self.initialize_envs_directory()
+        self.envs_dir: str = initialize_envs_directory()
         self._locks: NamedLock = NamedLock()
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
@@ -1639,7 +1672,7 @@ class VirtualEnvironmentManager:
         :param blueprint: The blueprint of the environment for which the storage is being determined.
         :return: A tuple containing the path to the directory and a boolean indicating whether the directory was newly created.
         """
-        env_dir_name: str = blueprint.generate_env_blueprint_hash()
+        env_dir_name: str = blueprint.generate_blueprint_hash()
         env_dir: str = os.path.join(self.envs_dir, env_dir_name)
 
         # Check if the directory already exists and create it if not
@@ -1677,25 +1710,12 @@ class VirtualEnvironmentManager:
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
         if blueprint in self._environment_map:
+            return self._environment_map[blueprint]
+        # Acquire a lock based on the blueprint's hash
+        async with self._locks.get(blueprint.generate_blueprint_hash()):
+            if blueprint in self._environment_map:
                 return self._environment_map[blueprint]
-        else:
-            # Acquire a lock based on the blueprint's hash
-            async with self._locks.get(blueprint.generate_env_blueprint_hash()):
-                if blueprint in self._environment_map:
-                    return self._environment_map[blueprint]
-                return await self.create_environment(blueprint, threadpool)
-
-    def initialize_envs_directory(self) -> str:
-        """
-        Initializes the base directory for storing virtual environments. If the directory
-        does not exist, it is created.
-
-        :return: The path to the environments directory.
-        """
-        state_dir = cfg.state_dir.get()
-        env_dir = os.path.join(state_dir, "envs")
-        os.makedirs(env_dir, exist_ok=True)
-        return env_dir
+            return await self.create_environment(blueprint, threadpool)
 
 
 class Executor:
@@ -1733,6 +1753,7 @@ class ExecutorManager:
         self.environment_manager = environment_manager
         self.agent = agent  # for now the executorManager lives in an agent
         self.storage = self.create_storage()
+        self._locks: NamedLock = NamedLock()
 
     async def create_executor(self, executor_id: ExecutorId) -> Executor:
         """
@@ -1762,7 +1783,11 @@ class ExecutorManager:
         executor_id = ExecutorId(agent_name, blueprint)
         if executor_id in self.executor_map:
             return self.executor_map[executor_id]
-        return await self.create_executor(executor_id)
+        # Acquire a lock based on the blueprint's hash
+        async with self._locks.get(blueprint.generate_blueprint_hash()):
+            if executor_id in self.executor_map:
+                return self.executor_map[executor_id]
+            return await self.create_executor(executor_id)
 
     async def execute(
         self,
