@@ -246,6 +246,10 @@ class Executor(ABC):
 
     @abc.abstractmethod
     def cache(self, model_version: int) -> CacheVersionContext:
+        """
+        Context manager responsible for opening and closing the handler cache
+        for the given model_version during deployment.
+        """
         pass
 
 
