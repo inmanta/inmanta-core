@@ -1545,7 +1545,7 @@ class EnvBlueprint:
 
     pip_config: PipConfig
     requirements: Sequence[str]
-    _hash_cache: str = dataclasses.field(default=None, init=False, repr=False)
+    _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
     def generate_blueprint_hash(self) -> str:
         """
@@ -1582,7 +1582,7 @@ class ExecutorBlueprint(EnvBlueprint):
     """Extends EnvBlueprint to include sources for the executor environment."""
 
     sources: Sequence[ModuleSource]
-    _hash_cache: str = dataclasses.field(default=None, init=False, repr=False)
+    _hash_cache: Optional[str] = dataclasses.field(default=None, init=False, repr=False)
 
     def generate_blueprint_hash(self) -> str:
         """
