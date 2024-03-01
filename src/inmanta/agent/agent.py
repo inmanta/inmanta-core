@@ -1759,7 +1759,6 @@ class VirtualEnvironmentManager:
         Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
         Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
         """
-
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
         # Define a helper function to return a valid environment if it exists
