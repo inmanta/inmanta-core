@@ -1757,16 +1757,29 @@ class VirtualEnvironmentManager:
     async def get_environment(self, blueprint: EnvBlueprint, threadpool: ThreadPoolExecutor) -> ExecutorVirtualEnvironment:
         """
         Retrieves an existing virtual environment that matches the given blueprint or creates a new one if no match is found.
-        Utilizes NamedLock to ensure thread-safe operations for each unique blueprint.
+        Utilizes NamedLock to ensure thread-safe operations for each unique blueprint. Checks if the blueprint exists in the
+        environment map before and after acquiring the lock to optimize for parallel execution without blocking.
         """
+
         assert isinstance(blueprint, EnvBlueprint), "Only EnvBlueprint instances are accepted, subclasses are not allowed."
 
-        if blueprint in self._environment_map:
-            return self._environment_map[blueprint]
-        # Acquire a lock based on the blueprint's hash
-        async with self._locks.get(blueprint.generate_blueprint_hash()):
+        # Define a helper function to return a valid environment if it exists
+        def check_and_return_environment():
             if blueprint in self._environment_map:
-                return self._environment_map[blueprint]
+                storage = self._environment_map[blueprint].env_path
+                if self.is_environment_valid(storage, blueprint):
+                    return self._environment_map[blueprint]
+            return None
+
+        existing_env = check_and_return_environment()
+        if existing_env:
+            return existing_env
+
+        # Acquire a lock based on the blueprint's hash to ensure thread-safe creation of new environments
+        async with self._locks.get(blueprint.generate_blueprint_hash()):
+            existing_env = check_and_return_environment()
+            if existing_env:
+                return existing_env
             return await self.create_environment(blueprint, threadpool)
 
 
