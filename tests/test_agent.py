@@ -488,7 +488,6 @@ async def test_environment_creation_locking(environment, tmpdir) -> None:
     blueprint1 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",))
     blueprint2 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=())
 
-
     # Wait for all tasks to complete
     env_same_1, env_same_2, env_diff_1 = await asyncio.gather(
         manager.get_environment(blueprint1, None),
