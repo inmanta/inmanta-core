@@ -1,0 +1,3 @@
+description: refactor executor manager
+change-type: minor
+destination-branches: [master]
