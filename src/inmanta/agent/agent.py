@@ -1564,6 +1564,14 @@ class EnvBlueprint:
         hash_obj = hashlib.md5(serialized_blueprint.encode("utf-8"))
         return hash_obj.hexdigest()
 
+    def __eq__(self, other):
+        if not isinstance(other, EnvBlueprint):
+            return False
+        return self.generate_blueprint_hash() == other.generate_blueprint_hash()
+
+    def __hash__(self):
+        return int(self.generate_blueprint_hash(), 16)
+
 
 @dataclasses.dataclass(frozen=True)
 class ExecutorBlueprint(EnvBlueprint):
@@ -1597,6 +1605,14 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements)
 
+    def __eq__(self, other):
+        if not isinstance(other, ExecutorBlueprint):
+            return False
+        return self.generate_blueprint_hash() == other.generate_blueprint_hash()
+
+    def __hash__(self):
+        return int(self.generate_blueprint_hash(), 16)
+
 
 @dataclasses.dataclass(frozen=True)
 class ExecutorId:
@@ -1604,6 +1620,17 @@ class ExecutorId:
 
     agent_name: str
     blueprint: ExecutorBlueprint
+
+    def __hash__(self):
+        return hash(self.agent_name + self.blueprint.generate_blueprint_hash())
+
+    def __eq__(self, other):
+        if not isinstance(other, ExecutorId):
+            return False
+        return (
+            self.agent_name == other.agent_name
+            and self.blueprint.generate_blueprint_hash() == other.blueprint.generate_blueprint_hash()
+        )
 
 
 class ExecutorVirtualEnvironment(PythonEnvironment):
