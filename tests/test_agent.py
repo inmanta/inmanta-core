@@ -593,7 +593,6 @@ async def test_venv_corruption_and_recreation(tmpdir, environment) -> None:
     assert initial_env_dir == recreated_env_dir, "Environment directory should be reused for the same blueprint."
 
     # Verify that the package is correctly installed in the recreated environment
-    # This assumes a method or logic to verify installed packages is available
     installed_packages = recreated_env.get_installed_packages()
     assert "testpackage" in installed_packages, "testpackage should be installed in the recreated environment."
 
@@ -630,8 +629,6 @@ async def test_venv_corruption_and_manager_restart(environment, agent_factory, t
 
     await executor_manager2.get_executor("agent1", blueprint)
 
-    # Depending on the implementation, verify the environment was detected as corrupted and recreated
-    # This could involve checking for specific log messages or verifying the existence and content of the environment directory
     assert os.path.exists(
         os.path.join(env_dir, "lib")
     ), "The 'lib' directory should exist after recreation if the environment was recreated."
