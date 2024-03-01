@@ -22,6 +22,8 @@ import hashlib
 import json
 import logging
 import os
+import subprocess
+import os
 import shutil
 import subprocess
 import uuid
@@ -30,7 +32,6 @@ import pytest
 
 from inmanta import config, data, protocol
 from inmanta.agent import Agent, reporting
-from inmanta.agent.agent import EnvBlueprint, ExecutorBlueprint, ExecutorId, ExecutorManager, VirtualEnvironmentManager
 from inmanta.agent.handler import HandlerContext, InvalidOperation
 from inmanta.data.model import AttributeStateChange, PipConfig
 from inmanta.loader import ModuleSource
@@ -367,7 +368,7 @@ async def test_process_manager_restart(environment, agent_factory, tmpdir, caplo
 
     # Create a blueprint with no requirements and no sources
     blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements, sources=sources)
-    env_bp_hash1 = blueprint1.to_env_blueprint().generate_env_blueprint_hash()
+    env_bp_hash1 = blueprint1.to_env_blueprint().generate_blueprint_hash()
 
     with caplog.at_level(logging.INFO):
         # First execution: create an executor and verify its creation
@@ -410,8 +411,8 @@ async def test_blueprint_hash_consistency(tmpdir):
     blueprint1 = EnvBlueprint(pip_config=pip_config, requirements=requirements1)
     blueprint2 = EnvBlueprint(pip_config=pip_config, requirements=requirements2)
 
-    hash1 = blueprint1.generate_env_blueprint_hash()
-    hash2 = blueprint2.generate_env_blueprint_hash()
+    hash1 = blueprint1.generate_blueprint_hash()
+    hash2 = blueprint2.generate_blueprint_hash()
     print(hash1)
 
     assert hash1 == hash2, "Blueprint hashes should be identical regardless of the order of requirements"
@@ -449,16 +450,22 @@ pip_config = PipConfig(**config["pip_config"])
 blueprint = EnvBlueprint(pip_config=pip_config, requirements=config["requirements"])
 
 # Generate and print the hash
-print(blueprint.generate_env_blueprint_hash())
+print(blueprint.generate_blueprint_hash())
 """
 
     # Generate hash in the current session for comparison
     pip_config = PipConfig(**pip_config_dict)
     current_session_blueprint = EnvBlueprint(pip_config=pip_config, requirements=requirements)
-    current_hash = current_session_blueprint.generate_env_blueprint_hash()
+    current_hash = current_session_blueprint.generate_blueprint_hash()
 
     # Generate hash in a new interpreter session
     result = subprocess.run(["python", "-c", python_code], capture_output=True, text=True)
+
+    # Check if the subprocess ended successfully
+    if result.returncode != 0:
+        print(f"Error executing subprocess: {result.stderr}")
+        raise RuntimeError("Subprocess execution failed")
+
     new_session_hash = result.stdout.strip()
 
     assert current_hash == new_session_hash, "Hash values should be consistent across interpreter sessions"
@@ -483,68 +490,70 @@ async def test_environment_creation_locking(environment, tmpdir) -> None:
     blueprint1 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",))
     blueprint2 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=())
 
-    # Event to control the execution of get environment
-    creation_event = asyncio.Event()
-
-    # adjust the environment creation method to await the event
-    original_get_environment = manager.get_environment
-
-    async def mock_get_environment(blueprint, threadpool):
-        await creation_event.wait()  # Wait for the event to be set
-        return await original_get_environment(blueprint, threadpool)
-
-    manager.get_environment = mock_get_environment
-
-    # Start all get_environment but wait before proceeding
-    task_same_1 = asyncio.create_task(manager.get_environment(blueprint1, None))
-    task_same_2 = asyncio.create_task(manager.get_environment(blueprint1, None))
-    task_diff_1 = asyncio.create_task(manager.get_environment(blueprint2, None))
-
-    # Allow all get_environment tasks to proceed
-    creation_event.set()
-
     # Wait for all tasks to complete
-    env_same_1, env_same_2, env_diff_1 = await asyncio.gather(task_same_1, task_same_2, task_diff_1)
+    env_same_1, env_same_2, env_diff_1 = await asyncio.gather(
+        manager.get_environment(blueprint1, None),
+        manager.get_environment(blueprint1, None),
+        manager.get_environment(blueprint2, None),
+    )
 
     assert env_same_1 is env_same_2, "Expected the same instance for the same blueprint"
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
 
 
-async def test_venv_corruption_and_recreation(tmpdir, environment) -> None:
+async def test_executor_creation_and_reuse(environment, agent_factory, tmpdir) -> None:
     """
-    Tests that the VirtualEnvironmentManager can detect a corrupted virtual environment and recreate it.
+    This test verifies the creation and reuse of executors based on their blueprints. It checks whether
+    the concurrency aspects and the locking mechanisms work as intended.
     """
-    manager = VirtualEnvironmentManager()
-    pip_index = PipIndex(artifact_dir=str(tmpdir))
+    agent: Agent = await agent_factory(
+        environment=environment, agent_map={"agent1": "localhost"}, hostname="host", agent_names=["agent1"]
+    )
 
-    # Create a package to be used in the environment
+    pip_index = PipIndex(artifact_dir=str(tmpdir))
     create_python_package(
-        name="testpackage",
+        name="pkg1",
         pkg_version=version.Version("1.0.0"),
-        path=os.path.join(tmpdir, "testpackage"),
+        path=os.path.join(tmpdir, "pkg1"),
         publish_index=pip_index,
     )
 
-    blueprint = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("testpackage",))
+    requirements1 = ()
+    requirements2 = ("pkg1",)
+    pip_config = PipConfig(index_url=pip_index.url)
 
-    # Initially create the environment
-    initial_env = await manager.get_environment(blueprint, None)
-    initial_env_dir = initial_env.env_path  # Correctly access the environment path
-    assert os.path.exists(initial_env_dir), "The environment directory should exist after creation."
+    # Prepare a source module and its hash
+    code = """
+    def test():
+        return 10
+    """.encode()
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(code)
+    hv: str = sha1sum.hexdigest()
+    module_source1 = ModuleSource(
+        name="inmanta_plugins.test",
+        hash_value=hv,
+        is_byte_code=False,
+        source=code,
+    )
+    sources1 = ()
+    sources2 = (module_source1,)
 
-    # Manually corrupt the environment by removing a critical directory to simulate corruption
-    shutil.rmtree(os.path.join(initial_env_dir, "lib"), ignore_errors=True)
-    assert not os.path.exists(os.path.join(initial_env_dir, "lib")), "Manual corruption: 'lib' directory removed."
+    blueprint1 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources1)
+    blueprint2 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements1, sources=sources2)
+    blueprint3 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
 
-    # Attempt to reuse the environment, which should trigger validation and recreation due to detected corruption
-    recreated_env = await manager.get_environment(blueprint, None)
-    recreated_env_dir = recreated_env.env_path  # Correctly access the environment path after recreation
+    venv_manager = VirtualEnvironmentManager()
+    executor_manager = ExecutorManager(agent, venv_manager)
 
-    # Check that the environment directory is the same but has been recreated
-    assert os.path.exists(os.path.join(recreated_env_dir, "lib")), "The 'lib' directory should exist after recreation."
-    assert initial_env_dir == recreated_env_dir, "Environment directory should be reused for the same blueprint."
+    executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
+        executor_manager.get_executor("agent1", blueprint1),
+        executor_manager.get_executor("agent1", blueprint1),
+        executor_manager.get_executor("agent1", blueprint2),
+        executor_manager.get_executor("agent1", blueprint3),
+    )
 
-    # Verify that the package is correctly installed in the recreated environment
-    # This assumes a method or logic to verify installed packages is available
-    installed_packages = recreated_env.get_installed_packages()
-    assert "testpackage" in installed_packages, "testpackage should be installed in the recreated environment."
+    assert executor_1 is executor_1_reuse, "Expected the same executor instance for identical blueprint"
+    assert executor_1 is not executor_2, "Expected a different executor instance for different sources"
+    assert executor_1 is not executor_3, "Expected a different executor instance for different requirements and sources"
+    assert executor_2 is not executor_3, "Expected different executor instances for different requirements"
