@@ -70,7 +70,7 @@ class EnvBlueprint:
             self._hash_cache = hash_obj.hexdigest()
         return self._hash_cache
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, EnvBlueprint):
             return False
         return self.generate_blueprint_hash() == other.generate_blueprint_hash()
@@ -115,7 +115,7 @@ class ExecutorBlueprint(EnvBlueprint):
         """
         return EnvBlueprint(pip_config=self.pip_config, requirements=self.requirements)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorBlueprint):
             return False
         return self.generate_blueprint_hash() == other.generate_blueprint_hash()
@@ -136,7 +136,7 @@ class ExecutorId:
         hash_obj = hashlib.md5(combined_str.encode("utf-8"))
         return int(hash_obj.hexdigest(), 16)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, ExecutorId):
             return False
         return (
@@ -287,6 +287,12 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
         self.environment_manager = environment_manager
         self.thread_pool = thread_pool
         self._locks: NamedLock = NamedLock()
+
+    @abc.abstractmethod
+    async def create_executor(
+        self, venv: ExecutorVirtualEnvironment, executor_id: ExecutorId
+    ) -> MyExecutor:
+        pass
 
     async def get_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> MyExecutor:
         """
