@@ -488,28 +488,13 @@ async def test_environment_creation_locking(environment, tmpdir) -> None:
     blueprint1 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=("pkg1",))
     blueprint2 = EnvBlueprint(pip_config=PipConfig(index_url=pip_index.url), requirements=())
 
-    # Event to control the execution of get environment
-    creation_event = asyncio.Event()
-
-    # adjust the environment creation method to await the event
-    original_get_environment = manager.get_environment
-
-    async def mock_get_environment(blueprint, threadpool):
-        await creation_event.wait()  # Wait for the event to be set
-        return await original_get_environment(blueprint, threadpool)
-
-    manager.get_environment = mock_get_environment
-
-    # Start all get_environment but wait before proceeding
-    task_same_1 = asyncio.create_task(manager.get_environment(blueprint1, None))
-    task_same_2 = asyncio.create_task(manager.get_environment(blueprint1, None))
-    task_diff_1 = asyncio.create_task(manager.get_environment(blueprint2, None))
-
-    # Allow all get_environment tasks to proceed
-    creation_event.set()
 
     # Wait for all tasks to complete
-    env_same_1, env_same_2, env_diff_1 = await asyncio.gather(task_same_1, task_same_2, task_diff_1)
+    env_same_1, env_same_2, env_diff_1 = await asyncio.gather(
+        manager.get_environment(blueprint1, None),
+        manager.get_environment(blueprint1, None),
+        manager.get_environment(blueprint2, None),
+    )
 
     assert env_same_1 is env_same_2, "Expected the same instance for the same blueprint"
     assert env_same_1 is not env_diff_1, "Expected different instances for different blueprints"
