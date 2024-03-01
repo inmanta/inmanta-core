@@ -1349,7 +1349,7 @@ class Agent(SessionEndpoint):
         pip_config: Optional[PipConfig] = None
 
         # The names of the modules that are included in the requirements list of a module source.
-        all_required_module: set[str] = set()
+        all_required_modules: set[str] = set()
         # The names of the modules for which the source code was installed.
         all_installed_modules: set[str] = set()
 
@@ -1386,7 +1386,7 @@ class Agent(SessionEndpoint):
                             module_name: str = loader.get_inmanta_module_name(source["module_name"])
                             all_installed_modules.add(module_name)
 
-                        all_required_module.update(
+                        all_required_modules.update(
                             {
                                 module.ModuleV2Source.get_inmanta_module_name(r)
                                 for r in requirements
@@ -1411,7 +1411,7 @@ class Agent(SessionEndpoint):
         #  * Or, not be exported and never been exported in any previous version.
         # Otherwise there is the possibility that stale code in the code directory of the agent gets picket up,
         # instead of the code from the Python package (V2 module) installed in the venv of the agent.
-        modules_not_expected_in_code_directory: set[str] = all_required_module - all_installed_modules
+        modules_not_expected_in_code_directory: set[str] = all_required_modules - all_installed_modules
         modules_present_in_code_dir: set[str] = {d for d in os.listdir(self._loader.mod_dir)}
         modules_with_stale_python_code: set[str] = modules_present_in_code_dir & modules_not_expected_in_code_directory
         if modules_with_stale_python_code:
