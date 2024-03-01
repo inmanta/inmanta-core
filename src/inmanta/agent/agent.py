@@ -1418,7 +1418,7 @@ class Agent(SessionEndpoint):
             warning_message = f"""
 The source code for the modules {', '.join(modules_with_stale_python_code)} is present in the modules directory of the agent \
 ({self._loader.mod_dir}), but these modules were not exported to the server in the latest version. This is likely \
-caused by by the fact that the above-mentioned modules contained resources or providers in a previous version, but not \
+caused by the fact that the above-mentioned modules contained resources or providers in a previous version, but not \
 anymore in the current version, while there exists an inter-module dependency from another module to the above-mentioned \
 modules. If this is the case, the agent might pick up stale Python code for any of the above-mentioned modules. If this \
 problem occurs, a manual cleanup of the agent's code directory is required to resolve this problem.
