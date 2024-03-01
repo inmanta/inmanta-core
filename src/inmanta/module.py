@@ -1618,7 +1618,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         result in an error.
         When a non-strict check is done, only version conflicts in a direct dependency will result in an error.
         All other violations will only result in a warning message.
-    :param agent_install_dependency_modules: [EXPERT FEATURE] If true, when a module declares Python dependencies on
+    :param agent_install_dependency_modules: If true, when a module declares Python dependencies on
         other (v2) modules, the agent will install these dependency modules with pip. This option should only be enabled
         if the agent is configured with the appropriate pip related environment variables. The option allows to an extent
         for inter-module dependencies within handler code, even if the dependency module doesn't have any handlers that
@@ -1657,7 +1657,7 @@ class ProjectMetadata(Metadata, MetadataFieldRequires):
         Annotated[str, StringConstraints(strip_whitespace=True, pattern=_re_relation_precedence_rule, min_length=1)]
     ] = []
     strict_deps_check: bool = True
-    agent_install_dependency_modules: bool = False
+    agent_install_dependency_modules: bool = True
     pip: ProjectPipConfig = ProjectPipConfig()
 
     @field_validator("modulepath", mode="before")

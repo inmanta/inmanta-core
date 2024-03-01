@@ -239,8 +239,8 @@ class CodeLoader:
 
         self.__check_dir()
 
-        mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-        PluginModuleFinder.configure_module_finder(modulepaths=[mod_dir], prefer=True)
+        self.mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
+        PluginModuleFinder.configure_module_finder(modulepaths=[self.mod_dir], prefer=True)
 
     def __check_dir(self) -> None:
         """

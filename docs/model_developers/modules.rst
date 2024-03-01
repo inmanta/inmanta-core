@@ -347,10 +347,26 @@ Add the following content to the file:
   login <username>
   password <password>
 
-For more information see the doc about`pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
+For more information see the doc about `pip authentication <https://pip.pypa.io/en/stable/topics/authentication/>`_.
 
 You will also need to specify the url of the repository in the ``project.yml`` file of your project (See: :ref:`specify_location_pip`).
 
 By following the previous steps, the Inmanta server will be able to install modules from a private Python package repository.
 
 
+Inter-module dependencies
+#########################
+
+The plugins code of a module A can have a dependency on the plugins code of another V2 module B. When doing this,
+care should be taken that the Python module(s) you depend on, do not define any resources or providers. Otherwise the
+python environment of the agent can get corrupt in the following way:
+
+1. Module A-1.0 depends on X.py of module B-1.0
+2. A-1.0 and B-1.0 are exported: The exporter exports the X.py file to the server and the agent puts the X.py file in
+   its code directory.
+3. In a later version of module B (B-2.0) the X.py file doesn't have any resources anymore.
+4. A-1.0 and B-2.0 are exported: The exporter doesn't export X.py anymore, because it doesn't have any resources. The
+   agent doesn't modify the X.py present in its code directory, but the old version of X.py is still present. The
+   results is that the stale version of X.py is loadedinstead of the version present in the agents python environment.
+
+This issue will persist after a restart of the agent process.
