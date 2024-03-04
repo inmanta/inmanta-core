@@ -244,7 +244,7 @@ server_purge_resource_action_logs_interval = Option(
     "server", "purge-resource-action-logs-interval", 3600, "The number of seconds between resource-action log purging", is_time
 )
 
-server_resource_action_log_prefix = Option(
+server_resource_action_log_prefix: Option[str] = Option(
     "server",
     "resource_action_log_prefix",
     "resource-actions-",
@@ -252,10 +252,10 @@ server_resource_action_log_prefix = Option(
     is_str,
 )
 
-server_enabled_extensions = Option(
+server_enabled_extensions: Option[list[str]] = Option(
     "server",
     "enabled_extensions",
-    "",
+    list,
     "A list of extensions the server must load. Core is always loaded."
     "If an extension listed in this list is not available, the server will refuse to start.",
     is_list,
@@ -271,9 +271,9 @@ server_access_control_allow_origin = Option(
 )
 
 
-def default_hangtime() -> str:
+def default_hangtime() -> int:
     """:inmanta.config:option:`server.agent-timeout` *3/4"""
-    return str(int(agent_timeout.get() * 3 / 4))
+    return int(agent_timeout.get() * 3 / 4)
 
 
 agent_hangtime = Option(
