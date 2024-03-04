@@ -106,13 +106,7 @@ def test_code_manager(tmpdir: py.path.local):
 
     # verify requirements behavior
     source_info: SourceInfo = single_type_list[0]
-    # by default only install all (module and non-module) dependencies
     assert source_info.requires == ["inmanta-module-std", "lorem"]
-    # reset cache
-    source_info._requires = None
-    # when disabled, only install non-module dependencies
-    project._metadata.agent_install_dependency_modules = False
-    assert source_info.requires == ["lorem"]
 
 
 def test_code_loader(tmp_path, caplog):

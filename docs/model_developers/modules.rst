@@ -357,16 +357,16 @@ By following the previous steps, the Inmanta server will be able to install modu
 Inter-module dependencies
 #########################
 
-The plugins code of a module A can have a dependency on the plugins code of another V2 module B. When doing this,
+The plugins code of a module mod-a can have a dependency on the plugins code of another V2 module mod-b. When doing this,
 care should be taken that the module(s) you depend on, do not define any resources or providers. Otherwise the
 python environment of the agent can get corrupt in the following way:
 
-1. Module A-1.0 depends on X.py of module B-1.0
-2. A-1.0 and B-1.0 are exported: The exporter exports the X.py file to the server and the agent puts the X.py file in
-   its code directory.
-3. In a later version of module B (B-2.0) the X.py file doesn't have any resources anymore.
-4. A-1.0 and B-2.0 are exported: The exporter doesn't export X.py anymore, because it doesn't have any resources. The
-   agent doesn't modify the X.py present in its code directory, but the old version of X.py is still present. The
-   result is that the stale version of X.py is loaded instead of the version present in the agent's python environment.
+1. Module mod-a-1.0 depends on x.py of module mod-b-1.0
+2. mod-a-1.0 and mod-b-1.0 are exported: The exporter exports the x.py file to the server and the agent puts
+   the x.py file in its code directory.
+3. In a later version of module mod-b (mod-b-2.0) the x.py file doesn't have any resources anymore.
+4. mod-a-1.0 is exported: The exporter doesn't export x.py of module mod-b anymore. The agent doesn't modify
+   the x.py present in its code directory, but the old version of x.py is still present. The result is that
+   the stale version of x.py is loaded instead of the version present in the agent's python environment.
 
 This issue will persist after a restart of the agent process.

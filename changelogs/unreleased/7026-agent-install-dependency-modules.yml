@@ -1,5 +1,5 @@
 ---
-description: The project configuration option `agent_install_dependency_modules` is now enabled by default.
+description: Dropped the project configuration option `agent_install_dependency_modules`. The installation of module dependencies is now always enabled.
 issue-nr: 7026
 issue-repo: inmanta-core
 change-type: patch
