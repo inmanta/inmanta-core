@@ -20,6 +20,7 @@ import asyncio
 import datetime
 import logging
 import os
+import re
 import uuid
 from collections import abc, defaultdict
 from collections.abc import Sequence
@@ -115,8 +116,19 @@ class ResourceService(protocol.ServerSlice):
         self._resource_action_loggers: dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: dict[uuid.UUID, logging.Handler] = {}
 
-        # Dict: environment_id: (model_version, increment, negative_increment)
-        self._increment_cache: dict[uuid.UUID, Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]] = {}
+        # Dict: environment_id: (model_version, increment, negative_increment, negative_increment_per_agent, run_ahead_lock)
+        self._increment_cache: dict[
+            uuid.UUID,
+            Optional[
+                tuple[
+                    int,
+                    abc.Set[ResourceIdStr],
+                    abc.Set[ResourceIdStr],
+                    abc.Mapping[str, abc.Set[ResourceIdStr]],
+                    Optional[asyncio.Event],
+                ]
+            ],
+        ] = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(lambda: asyncio.Lock())
 
@@ -330,14 +342,10 @@ class ResourceService(protocol.ServerSlice):
         if version is None:
             return 404, {"message": "No version available"}
 
-        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = await self.get_increment(env, version)
-        increment_ids, neg_increment = increments
+        version, increment_ids, neg_increment, neg_increment_per_agent = await self.get_increment(env, version)
 
         now = datetime.datetime.now().astimezone()
-
-        def on_agent(res: ResourceIdStr) -> bool:
-            idr = Id.parse_id(res)
-            return idr.get_agent_name() == agent
+        ON_AGENT_REGEX = re.compile(rf"^[a-zA-Z0-9_:]+\[{re.escape(agent)},")
 
         # This is a bit subtle.
         # Any resource we consider deployed has to be marked as such.
@@ -350,11 +358,10 @@ class ResourceService(protocol.ServerSlice):
         # As such, it should not race with backpropagation on failure.
         await self.mark_deployed(
             env,
-            neg_increment,
+            neg_increment_per_agent[agent],
             now,
             version,
-            filter=on_agent,
-            only_update_from_states={const.ResourceState.available, const.ResourceState.deploying},
+            only_update_from_states=[const.ResourceState.available, const.ResourceState.deploying],
         )
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
@@ -366,12 +373,10 @@ class ResourceService(protocol.ServerSlice):
             if rv.resource_id not in increment_ids:
                 continue
 
-            # TODO double parsing of ID
             def in_requires(req: ResourceIdStr) -> bool:
                 if req in increment_ids:
                     return True
-                idr = Id.parse_id(req)
-                return idr.get_agent_name() != agent
+                return ON_AGENT_REGEX.match(req) is None
 
             rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
             deploy_model.append(rv.to_dict())
@@ -404,7 +409,7 @@ class ResourceService(protocol.ServerSlice):
         version: int,
         filter: Callable[[ResourceIdStr], bool] = lambda x: True,
         connection: ConnectionMaybeInTransaction = ConnectionNotInTransaction(),
-        only_update_from_states: Optional[set[const.ResourceState]] = None,
+        only_update_from_states: Optional[Sequence[const.ResourceState]] = None,
     ) -> None:
         """
         Set the status of the provided resources as deployed
@@ -414,34 +419,75 @@ class ResourceService(protocol.ServerSlice):
         :param version: Version of the resources to consider.
         :param filter: Filter function that takes a resource id as an argument and returns True if it should be kept.
         """
-        resources_version_ids: list[ResourceVersionIdStr] = [
-            ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id if filter(res_id)
-        ]
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": util.datetime_iso_format(timestamp),
-            "args": [],
-        }
+        if not resources_id:
+            return
 
-        await self.resource_action_update(
-            env,
-            resources_version_ids,
-            action_id=uuid.uuid4(),
-            started=timestamp,
-            finished=timestamp,
-            status=const.ResourceState.deployed,
-            # does this require a different ResourceAction?
-            action=const.ResourceAction.deploy,
-            changes={},
-            messages=[logline],
-            change=const.Change.nochange,
-            send_events=False,
-            keep_increment_cache=True,
-            is_increment_notification=True,
-            only_update_from_states=only_update_from_states,
-            connection=connection,
-        )
+        # performance-critical path: avoid parsing cost if we can
+        resources_id_filtered = [res_id for res_id in resources_id if filter(res_id)]
+        if not resources_id_filtered:
+            return
+
+        action_id = uuid.uuid4()
+
+        async with data.Resource.get_connection(connection.connection) as inner_connection:
+            async with inner_connection.transaction():
+                # validate resources
+                if only_update_from_states is not None:
+                    resources = await data.Resource.get_resource_ids_with_status(
+                        env.id,
+                        resources_id_filtered,
+                        version,
+                        only_update_from_states,
+                        # acquire lock on Resource before read and before lock on ResourceAction to prevent conflicts with
+                        # cascading deletes
+                        lock=data.RowLockMode.FOR_NO_KEY_UPDATE,
+                        connection=inner_connection,
+                    )
+                    if not resources:
+                        return None
+
+                resources_version_ids: list[ResourceVersionIdStr] = [
+                    ResourceVersionIdStr(f"{res_id},v={version}") for res_id in resources_id_filtered
+                ]
+
+                resource_action = data.ResourceAction(
+                    environment=env.id,
+                    version=version,
+                    resource_version_ids=resources_version_ids,
+                    action_id=action_id,
+                    action=const.ResourceAction.deploy,
+                    started=timestamp,
+                    messages=[
+                        {
+                            "level": "INFO",
+                            "msg": "Setting deployed due to known good status",
+                            "args": [],
+                            "timestamp": timestamp.isoformat(timespec="microseconds"),
+                        }
+                    ],
+                    changes={},
+                    status=const.ResourceState.deployed,
+                    change=const.Change.nochange,
+                    finished=timestamp,
+                )
+                await resource_action.insert(connection=inner_connection)
+                self.log_resource_action(
+                    env.id,
+                    resources_version_ids,
+                    const.LogLevel.INFO.to_int,
+                    timestamp,
+                    "Setting deployed due to known good status",
+                )
+
+                await data.Resource.set_deployed_multi(env.id, resources_id_filtered, version, connection=inner_connection)
+                # Resource persistent state should not be affected
+
+        def post_deploy_update() -> None:
+            # Make sure tasks are scheduled AFTER the tx is done.
+            # This method is only called if the transaction commits successfully.
+            self.add_background_task(data.ConfigurationModel.mark_done_if_done(env.id, version))
+
+        connection.call_after_tx(post_deploy_update)
 
     async def _update_deploy_state(
         self,
@@ -552,8 +598,12 @@ class ResourceService(protocol.ServerSlice):
                 )
 
     async def get_increment(
-        self, env: data.Environment, version: int, connection: Optional[Connection] = None
-    ) -> tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]:
+        self,
+        env: data.Environment,
+        version: int,
+        connection: Optional[Connection] = None,
+        run_ahead_lock: Optional[asyncio.Event] = None,
+    ) -> tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]:
         """
         Get the increment for a given environment and a given version of the model from the _increment_cache if possible.
         In case of cache miss, the increment calculation is performed behind a lock to make sure it is only done once per
@@ -563,31 +613,47 @@ class ResourceService(protocol.ServerSlice):
         :param version: The version of the model to consider.
         :param connection: connection to use towards the DB.
             When the connection is in a transaction, we will always invalidate the cache
+        :param run_ahead_lock: lock used to keep agents hanging while building up the latest version
         """
 
-        def _get_cache_entry() -> Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]]:
+        async def _get_cache_entry() -> (
+            Optional[tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]]
+        ):
             """
-            Returns a tuple (increment, negative_increment) if a cache entry exists for the given environment and version
+            Returns a tuple (increment, negative_increment, negative_increment_per_agent)
+            if a cache entry exists for the given environment and version
             or None if no such cache entry exists.
             """
             cache_entry = self._increment_cache.get(env.id, None)
             if cache_entry is None:
                 # No cache entry found
                 return None
-            (version_cache_entry, incr, neg_incr) = cache_entry
-            if version_cache_entry != version:
+            (version_cache_entry, incr, neg_incr, neg_incr_per_agent, cached_run_ahead_lock) = cache_entry
+            if version_cache_entry >= version:
+                assert not run_ahead_lock  # We only expect a lock if WE are ahead
+                # Cache is ahead or equal
+                if cached_run_ahead_lock is not None:
+                    await cached_run_ahead_lock.wait()
+            elif version_cache_entry != version:
                 # Cache entry exists for another version
+                # Expire
                 return None
-            return incr, neg_incr
+            return version_cache_entry, incr, neg_incr, neg_incr_per_agent
 
-        increment: Optional[tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]]] = _get_cache_entry()
+        increment: Optional[
+            tuple[int, abc.Set[ResourceIdStr], abc.Set[ResourceIdStr], abc.Mapping[str, abc.Set[ResourceIdStr]]]
+        ] = await _get_cache_entry()
         if increment is None or (connection is not None and connection.is_in_transaction()):
             lock = self._increment_cache_locks[env.id]
             async with lock:
-                increment = _get_cache_entry()
+                increment = await _get_cache_entry()
                 if increment is None:
-                    increment = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
-                    self._increment_cache[env.id] = (version, *increment)
+                    positive, negative = await data.ConfigurationModel.get_increment(env.id, version, connection=connection)
+                    negative_per_agent: dict[str, set[ResourceIdStr]] = defaultdict(set)
+                    for rid in negative:
+                        negative_per_agent[Id.parse_id(rid).agent_name].add(rid)
+                    increment = (version, positive, negative, negative_per_agent)
+                    self._increment_cache[env.id] = (version, positive, negative, negative_per_agent, run_ahead_lock)
         return increment
 
     @handle(methods_v2.resource_deploy_done, env="tid", resource_id="rvid")

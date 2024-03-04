@@ -1006,7 +1006,7 @@ class AutostartedAgentManager(ServerSlice):
     async def _ensure_agents(
         self,
         env: data.Environment,
-        agents: list[str],
+        agents: Sequence[str],
         restart: bool = False,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,

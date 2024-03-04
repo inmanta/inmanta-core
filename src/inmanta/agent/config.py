@@ -91,7 +91,7 @@ server_timeout = Option(
     is_time,
 )
 
-agent_deploy_interval = Option(
+agent_deploy_interval: Option[int | str] = Option(
     "config",
     "agent-deploy-interval",
     0,
