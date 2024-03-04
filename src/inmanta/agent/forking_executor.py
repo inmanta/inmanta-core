@@ -110,6 +110,13 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
 
 
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
+    """
+    Initialize the executor:
+    1. setup the client, using the session id of the agent
+    2. activate the venv created for this executor
+    3. load additional source files
+    """
+
     def __init__(self, venv_path: str, storage_folder: str, session_gid: uuid.UUID, sources: list[inmanta.loader.ModuleSource]):
         self.venv_path = venv_path
         self.storage_folder = storage_folder
@@ -117,9 +124,14 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         self.sources = sources
 
     async def call(self, context: ExecutorContext) -> None:
+        # setup client
         context.client = inmanta.protocol.SessionClient("agent", self.gid)
+
+        # activate venv
         context.venv = inmanta.env.VirtualEnv(self.venv_path)
         context.venv.use_virtual_env()
+
+        # Download and load code
         loader = inmanta.loader.CodeLoader(self.storage_folder)
         loop = asyncio.get_running_loop()
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
@@ -227,10 +239,14 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         cli_log: bool = False,
     ) -> None:
         """
-
+        :param thread_pool:  threadpool to perform work on
+        :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
+        :param session_gid: agent session id, used to connect to the server, the agent should keep this alive
         :param log_folder: folder to place log files for the executors
+        :param storage_folder: folder to place code files
         :param inmanta_log_level: log level for the executors
         :param cli_log: do we also want to echo the log to std_err
+
         """
         super().__init__(thread_pool, environment_manager)
         self.children: list[MPExecutor] = []
@@ -246,12 +262,15 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
     def init_once(cls) -> None:
         try:
             multiprocessing.set_start_method("forkserver")
-            multiprocessing.set_forkserver_preload(["inmanta", "inmanta.config", __name__])
+            # Load common modules
+            # Including this one
+            multiprocessing.set_forkserver_preload(["inmanta.config", __name__])
         except RuntimeError:
             # already set
             pass
 
     async def create_executor(self, venv: executor.ExecutorVirtualEnvironment, executor_id: executor.ExecutorId) -> MPExecutor:
+        # entry point from parent class
         executor = await self.make_child_and_connect(executor_id.agent_name)
         storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.generate_blueprint_hash())
         os.makedirs(storage_for_blueprint)
@@ -285,6 +304,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         return child_handle
 
     def _child_closed(self, child_handle: MPExecutor) -> None:
+        """Internal, for child to remove itself once stopped"""
         try:
             self.children.remove(child_handle)
         except ValueError:

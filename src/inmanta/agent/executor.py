@@ -278,7 +278,7 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
     """
     Manages Executors by ensuring that Executors are created and reused efficiently based on their configurations.
 
-    :param agent: The Agent instance that this ExecutorManager is part of.
+    :param thread_pool:  threadpool to perform work on
     :param environment_manager: The VirtualEnvironmentManager responsible for managing the virtual environments
     """
 
