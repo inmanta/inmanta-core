@@ -565,6 +565,7 @@ class PythonEnvironment:
             if not self.python_path:
                 raise ValueError("The python_path cannot be an empty string.")
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
+        self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
     @classmethod
     def get_python_path_for_env_path(cls, env_path: str) -> str:
@@ -597,6 +598,100 @@ class PythonEnvironment:
         For a given path to a python binary, return the path to the venv directory.
         """
         return os.path.dirname(os.path.dirname(python_path))
+
+    def init_env(self) -> None:
+        """
+        Initialize the virtual environment.
+        """
+        LOGGER.info("Initializing virtual environment at %s", self.env_path)
+
+        # check if the virtual env exists
+        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
+            # Make sure the venv hosts the same python version as the running process
+            if sys.platform.startswith("linux"):
+                # Check if the python binary exists in the environment's bin directory
+                if not os.path.exists(self.python_path):
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} as no Python installation exists."
+                    )
+                # On linux based systems, the python version is in the path to the site packages dir:
+                if not os.path.exists(self.site_packages_dir):
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+            else:
+                # On other distributions a more costly check is required:
+                # Get version as a (major, minor) tuple for the venv and the running process
+                venv_python_version = (
+                    subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
+                )
+                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
+
+                running_process_python_version = sys.version_info[:2]
+
+                if venv_python_version != running_process_python_version:
+                    raise VenvActivationFailedError(
+                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
+                        "is different from the Python version of this process."
+                    )
+
+        else:
+            path = os.path.realpath(self.env_path)
+            try:
+                venv.create(path, clear=True, with_pip=False)
+                self._write_pip_binary()
+                self._write_pth_file()
+            except CalledProcessError as e:
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
+            except Exception:
+                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
+            LOGGER.debug("Created a new virtualenv at %s", self.env_path)
+
+        if not os.path.exists(self._path_pth_file):
+            # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
+            self._write_pip_binary()
+            self._write_pth_file()
+
+    def _write_pip_binary(self) -> None:
+        """
+        write out a "stub" pip binary so that pip list works in the virtual env.
+        """
+        pip_path = os.path.join(self.env_path, "bin", "pip")
+
+        with open(pip_path, "w", encoding="utf-8") as fd:
+            fd.write(
+                """#!/usr/bin/env bash
+source "$(dirname "$0")/activate"
+python -m pip $@
+                """.strip()
+            )
+        os.chmod(pip_path, 0o755)
+
+    def _write_pth_file(self) -> None:
+        """
+        Write an inmanta-inherit-from-parent-venv.pth file to the venv to ensure that an activation of this venv will also
+        activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
+        this venv.
+        """
+        site_dir_strings: list[str] = ['"' + p.replace('"', r"\"") + '"' for p in list(sys.path)]
+        add_site_dir_statements: str = "\n".join(
+            [f"site.addsitedir({p}) if {p} not in sys.path else None" for p in site_dir_strings]
+        )
+        script = f"""
+import os
+import site
+import sys
+
+
+# Ensure inheritance from all parent venvs + process their .pth files
+{add_site_dir_statements}
+        """
+        script_as_oneliner = "; ".join(
+            [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
+        )
+        with open(self._path_pth_file, "w", encoding="utf-8") as fd:
+            fd.write(script_as_oneliner)
 
     def get_installed_packages(self, only_editable: bool = False) -> dict[str, version.Version]:
         """
@@ -1085,7 +1180,6 @@ class VirtualEnv(ActiveEnv):
         self.virtual_python: Optional[str] = None
         self._using_venv: bool = False
         self._parent_python: Optional[str] = None
-        self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
     def validate_path(self, path: str) -> None:
         """
@@ -1114,64 +1208,6 @@ class VirtualEnv(ActiveEnv):
         """
         return os.path.exists(self.python_path) and os.path.exists(self._path_pth_file)
 
-    def init_env(self) -> None:
-        """
-        Initialize the virtual environment.
-        """
-        self._parent_python = sys.executable
-        LOGGER.info("Using virtual environment at %s", self.env_path)
-
-        # check if the virtual env exists
-        if os.path.isdir(self.env_path) and os.listdir(self.env_path):
-            # Make sure the venv hosts the same python version as the running process
-            if sys.platform.startswith("linux"):
-                # Check if the python binary exists in the environment's bin directory
-                if not os.path.exists(self.python_path):
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} as no Python installation exists."
-                    )
-                # On linux based systems, the python version is in the path to the site packages dir:
-                if not os.path.exists(self.site_packages_dir):
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
-            else:
-                # On other distributions a more costly check is required:
-                # Get version as a (major, minor) tuple for the venv and the running process
-                venv_python_version = (
-                    subprocess.check_output([self.python_path, "--version"]).decode("utf-8").strip().split()[1]
-                )
-                venv_python_version = tuple(map(int, venv_python_version.split(".")))[:2]
-
-                running_process_python_version = sys.version_info[:2]
-
-                if venv_python_version != running_process_python_version:
-                    raise VenvActivationFailedError(
-                        msg=f"Unable to use virtualenv at {self.env_path} because its Python version "
-                        "is different from the Python version of this process."
-                    )
-
-        else:
-            path = os.path.realpath(self.env_path)
-            try:
-                venv.create(path, clear=True, with_pip=False)
-                self._write_pip_binary()
-                self._write_pth_file()
-            except CalledProcessError as e:
-                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path} ({e.stdout.decode()})")
-            except Exception:
-                raise VenvCreationFailedError(msg=f"Unable to create new virtualenv at {self.env_path}")
-            LOGGER.debug("Created a new virtualenv at %s", self.env_path)
-
-        if not os.path.exists(self._path_pth_file):
-            # Venv was created using an older version of Inmanta -> Update pip binary and set sitecustomize.py file
-            self._write_pip_binary()
-            self._write_pth_file()
-
-        # set the path to the python and the pip executables
-        self.virtual_python = self.python_path
-
     def is_using_virtual_env(self) -> bool:
         return self._using_venv
 
@@ -1192,46 +1228,6 @@ class VirtualEnv(ActiveEnv):
         self.notify_change()
 
         self._using_venv = True
-
-    def _write_pip_binary(self) -> None:
-        """
-        write out a "stub" pip binary so that pip list works in the virtual env.
-        """
-        pip_path = os.path.join(self.env_path, "bin", "pip")
-
-        with open(pip_path, "w", encoding="utf-8") as fd:
-            fd.write(
-                """#!/usr/bin/env bash
-source "$(dirname "$0")/activate"
-python -m pip $@
-                """.strip()
-            )
-        os.chmod(pip_path, 0o755)
-
-    def _write_pth_file(self) -> None:
-        """
-        Write an inmanta-inherit-from-parent-venv.pth file to the venv to ensure that an activation of this venv will also
-        activate the parent venv. The site directories of the parent venv should appear later in sys.path than the ones of
-        this venv.
-        """
-        site_dir_strings: list[str] = ['"' + p.replace('"', r"\"") + '"' for p in list(sys.path)]
-        add_site_dir_statements: str = "\n".join(
-            [f"site.addsitedir({p}) if {p} not in sys.path else None" for p in site_dir_strings]
-        )
-        script = f"""
-import os
-import site
-import sys
-
-
-# Ensure inheritance from all parent venvs + process their .pth files
-{add_site_dir_statements}
-        """
-        script_as_oneliner = "; ".join(
-            [line for line in script.split("\n") if line.strip() and not line.strip().startswith("#")]
-        )
-        with open(self._path_pth_file, "w", encoding="utf-8") as fd:
-            fd.write(script_as_oneliner)
 
     def _update_sys_path(self) -> None:
         """

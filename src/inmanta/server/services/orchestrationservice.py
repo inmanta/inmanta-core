@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import asyncio
 import datetime
 import logging
 import uuid
@@ -26,8 +27,8 @@ import asyncpg
 import asyncpg.connection
 import asyncpg.exceptions
 import pydantic
-from asyncpg import Connection
 
+import inmanta.util
 from inmanta import const, data
 from inmanta.const import ResourceState
 from inmanta.data import (
@@ -69,6 +70,8 @@ from inmanta.server.validate_filter import InvalidFilter
 from inmanta.types import Apireturn, JsonType, PrimitiveTypes, ReturnTupple
 
 LOGGER = logging.getLogger(__name__)
+PLOGGER = logging.getLogger("performance")
+
 
 PERFORM_CLEANUP: bool = True
 # Kill switch for cleanup, for use when working with historical data
@@ -411,7 +414,9 @@ class OrchestrationService(protocol.ServerSlice):
                 # get available versions
                 n_versions = await env_item.get(AVAILABLE_VERSIONS_TO_KEEP, connection=connection)
                 assert isinstance(n_versions, int)
-                versions = await data.ConfigurationModel.get_list(environment=env_item.id, connection=connection)
+                versions = await data.ConfigurationModel.get_list(
+                    environment=env_item.id, connection=connection, no_status=True
+                )
                 if len(versions) > n_versions:
                     LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
                     version_dict = {x.version: x for x in versions}
@@ -652,7 +657,7 @@ class OrchestrationService(protocol.ServerSlice):
         pip_config: Optional[PipConfig] = None,
         *,
         connection: asyncpg.connection.Connection,
-    ) -> None:
+    ) -> abc.Collection[str]:
         """
         :param rid_to_resource: This parameter should contain all the resources when a full compile is done.
                                 When a partial compile is done, it should contain all the resources that belong to the
@@ -665,6 +670,8 @@ class OrchestrationService(protocol.ServerSlice):
         :param removed_resource_sets: When a partial compile is done, this parameter should indicate the names of the resource
                                       sets that are removed by the partial compile. When no resource sets are removed by
                                       a partial compile or when a full compile is done, this parameter can be set to None.
+
+        :return: all agents affected
 
         Pre-conditions:
             * The requires and provides relationships of the resources in rid_to_resource must be set correctly. For a
@@ -818,18 +825,22 @@ class OrchestrationService(protocol.ServerSlice):
                 await ra.insert(connection=connection)
 
         LOGGER.debug("Successfully stored version %d", version)
+        return list(all_agents)
 
     async def _trigger_auto_deploy(
         self,
         env: data.Environment,
         version: int,
         *,
-        connection: Optional[Connection],
+        agents: Optional[abc.Sequence[str]] = None,
     ) -> None:
         """
         Triggers auto-deploy for stored resources. Must be called only after transaction that stores resources has been allowed
         to commit. If not respected, the auto deploy might work on stale data, likely resulting in resources hanging in the
         deploying state.
+
+        :argument agents: the list of agents we should restrict our notifications to. if it is None, we notify all agents if
+            PUSH_ON_AUTO_DEPLOY is set
         """
         auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
@@ -837,8 +848,8 @@ class OrchestrationService(protocol.ServerSlice):
             push_on_auto_deploy = cast(bool, await env.get(data.PUSH_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = cast(str, await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            await self.release_version(
-                env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, connection=connection
+            self.add_background_task(
+                self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy, agents=agents)
             )
 
     def _create_unknown_parameter_daos_from_api_unknowns(
@@ -903,6 +914,8 @@ class OrchestrationService(protocol.ServerSlice):
         )
 
         async with data.Resource.get_connection() as con:
+            # We don't allow connection reuse here, because the last line in this block can't tolerate a transaction
+            # assert not con.is_in_transaction()
             async with con.transaction():
                 # Acquire a lock that conflicts with the lock acquired by put_partial but not with itself
                 await env.put_version_lock(shared=True, connection=con)
@@ -916,13 +929,9 @@ class OrchestrationService(protocol.ServerSlice):
                     pip_config=pip_config,
                     connection=con,
                 )
-            try:
-                await self._trigger_auto_deploy(env, version, connection=con)
-            except Conflict as e:
-                # this should be an api warning, but this is not supported here
-                LOGGER.warning(
-                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
-                )
+            # This must be outside all transactions, as it relies on the result of _put_version
+            # and it starts a background task, so it can't re-use this connection
+            await self._trigger_auto_deploy(env, version)
 
         return 200
 
@@ -1033,14 +1042,13 @@ class OrchestrationService(protocol.ServerSlice):
 
                 # add shared resources
                 merged_resources = partial_update_merger.merge_updated_and_shared_resources(list(rid_to_resource.values()))
-
                 await data.Code.copy_versions(env.id, base_version, version, connection=con)
 
                 merged_unknowns = await partial_update_merger.merge_unknowns(
                     unknowns_in_partial_compile=self._create_unknown_parameter_daos_from_api_unknowns(env.id, version, unknowns)
                 )
 
-                await self._put_version(
+                all_agents = await self._put_version(
                     env,
                     version,
                     merged_resources,
@@ -1054,14 +1062,7 @@ class OrchestrationService(protocol.ServerSlice):
                 )
 
             returnvalue: ReturnValue[int] = ReturnValue[int](200, response=version)
-            try:
-                await self._trigger_auto_deploy(env, version, connection=con)
-            except Conflict as e:
-                # It is unclear if this condition can ever happen
-                LOGGER.warning(
-                    "Could not perform auto deploy on version %d in environment %s, because %s", version, env.id, e.log_message
-                )
-                returnvalue.add_warnings([f"Could not perform auto deploy: {e.log_message} {e.details}"])
+            await self._trigger_auto_deploy(env, version, agents=all_agents)
 
         return returnvalue
 
@@ -1074,9 +1075,14 @@ class OrchestrationService(protocol.ServerSlice):
         agent_trigger_method: Optional[const.AgentTriggerMethod] = None,
         *,
         connection: Optional[asyncpg.connection.Connection] = None,
+        agents: Optional[abc.Sequence[str]] = None,
     ) -> ReturnTupple:
+        """
+        :param agents: agents that have to be notified by the push, defaults to all
+        """
         async with data.ConfigurationModel.get_connection(connection) as connection:
-            async with connection.transaction():
+            version_run_ahead_lock = asyncio.Event()
+            async with connection.transaction(), inmanta.util.FinallySet(version_run_ahead_lock):
                 with ConnectionInTransaction(connection) as connection_holder:
                     # explicit lock to allow patching of increments for stale failures
                     # (locks out patching stage of deploy_done to avoid races)
@@ -1144,15 +1150,15 @@ class OrchestrationService(protocol.ServerSlice):
                             )
 
                     if latest_version:
-                        increments: tuple[abc.Set[ResourceIdStr], abc.Set[ResourceIdStr]] = (
+                        version, increment_ids, neg_increment, neg_increment_per_agent = (
                             await self.resource_service.get_increment(
                                 env,
                                 version_id,
                                 connection=connection,
+                                run_ahead_lock=version_run_ahead_lock,
                             )
                         )
 
-                        increment_ids, neg_increment = increments
                         await self.resource_service.mark_deployed(
                             env, neg_increment, now, version_id, connection=connection_holder
                         )
@@ -1170,8 +1176,10 @@ class OrchestrationService(protocol.ServerSlice):
                 # We can't be in a transaction here, or the agent will not see the data that as committed
                 # This assert prevents anyone from wrapping this method in a transaction by accident
                 assert not connection.is_in_transaction()
-                # fetch all resource in this cm and create a list of distinct agents
-                agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
+
+                if agents is None:
+                    # fetch all resource in this cm and create a list of distinct agents
+                    agents = await data.ConfigurationModel.get_agents(env.id, version_id, connection=connection)
                 await self.autostarted_agent_manager._ensure_agents(env, agents, connection=connection)
 
                 for agent in agents:
