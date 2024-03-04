@@ -61,6 +61,11 @@ class GetName(inmanta.protocol.ipc_light.IPCMethod[str, None]):
 
 
 class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
+    """
+    Part of assertions for test_executor_server
+
+    Most be module level to be able to pickle it
+    """
 
     async def call(self, ctx) -> list[str]:
         import inmanta_plugins.test.testA
@@ -91,20 +96,33 @@ async def mpmanager(tmp_path, agent: inmanta.agent.Agent) -> typing.Iterator[MPM
 
 
 async def test_executor_server(mpmanager: MPManager, client):
+    """
+    Test the MPManager, this includes
+
+    1. copying of config
+    2. building up an empty venv
+    3. communicate with it
+    4. build up venv with requirements, source files, ...
+    5. check that code is loaded correctly
+    """
     manager = mpmanager
     inmanta.config.Config.set("test", "aaa", "bbbb")
 
+    # Simple empty venv
     simplest = inmanta.agent.executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(), requirements=[], sources=[]  # No pip
     )
     simplest = await manager.get_executor("agent1", simplest)
 
+    # check communications
     result = await simplest.connection.call(Echo(["aaaa"]))
     assert ["aaaa"] == result
+    # check config copying from parent to child
     result = await simplest.connection.call(GetConfig("test", "aaa"))
     assert "bbbb" == result
 
-    # Direct
+    # Make a more complete venv
+    # Direct: source is sent over directly
     direct_content = """
 def test():
    return "DIRECT"
@@ -114,7 +132,7 @@ def test():
     direct = inmanta.loader.ModuleSource(
         "inmanta_plugins.test.testA", inmanta.util.hash_file(direct_content), False, direct_content
     )
-    # Via server
+    # Via server: source is sent via server
     server_content = """
 def test():
    return "server"
@@ -123,21 +141,21 @@ def test():
     )
     server_content_hash = inmanta.util.hash_file(server_content)
     via_server = inmanta.loader.ModuleSource("inmanta_plugins.test.testB", server_content_hash, False)
+    # Upload
     res = await client.upload_file(id=server_content_hash, content=base64.b64encode(server_content).decode("ascii"))
     assert res.code == 200
 
+    # Full config: 2 source files, one python dependency
     full = inmanta.agent.executor.ExecutorBlueprint(
         pip_config=inmanta.data.PipConfig(use_system_config=True), requirements=["lorem"], sources=[direct, via_server]
     )
-
     full_runner = await manager.get_executor("agent2", full)
 
-    result = await full_runner.connection.call(Echo(["aaaa"]))
-    assert ["aaaa"] == result
-
+    # assert loaded
     result2 = await full_runner.connection.call(TestLoader())
     assert ["DIRECT", "server"] == result2
 
+    # assert they are distinct
     assert await simplest.connection.call(GetName()) == "agent1"
     assert await full_runner.connection.call(GetName()) == "agent2"
 
@@ -145,6 +163,11 @@ def test():
     await simplest.join(2)
     with pytest.raises(ConnectionLost):
         await simplest.connection.call(GetName())
+
+    with pytest.raises(ImportError):
+        # we aren't leaking into this venv
+        import lorem
+
 
 
 async def test_executor_server_dirty_shutdown(mpmanager):
