@@ -156,19 +156,19 @@ class Config:
 
     @classmethod
     def get_for_option(cls, option: "Option[T]") -> T:
-        raw_value: Optional[str | T] = cls._get_value(option.section, option.name, option.get_default_value())
+        raw_value: str | T = cls._get_value(option.section, option.name, option.get_default_value())
         return option.validate(raw_value)
 
     @classmethod
-    def _get_value(cls, section: str, name: str, default_value: Optional[T] = None) -> Optional[str | T]:
+    def _get_value(cls, section: str, name: str, default_value: T) -> str | T:
         cfg: ConfigParser = cls.get_instance()
         val: Optional[str] = _get_from_env(section, name)
         if val is not None:
             LOGGER.debug(f"Setting {section}:{name} was set using an environment variable")
-        else:
-            val = cfg.get(section, name, fallback=default_value)
-
-        return val
+            return val
+        # Typing of this method in the sdk is not entirely accurate
+        # It just returns the fallback, whatever its type
+        return cfg.get(section, name, fallback=default_value)
 
     @classmethod
     def is_set(cls, section: str, name: str) -> bool:
@@ -228,12 +228,12 @@ def is_float(value: str) -> float:
     return float(value)
 
 
-def is_time(value: str) -> int:
+def is_time(value: str | int) -> int:
     """Time, the number of seconds represented as an integer value"""
     return int(value)
 
 
-def is_time_or_cron(value: str) -> Union[int, str]:
+def is_time_or_cron(value: str | int) -> Union[int, str]:
     """Time, the number of seconds represented as an integer value or a cron-like expression"""
     try:
         return is_time(value)
@@ -255,8 +255,10 @@ def is_bool(value: Union[bool, str]) -> bool:
     return boolean_states[value.lower()]
 
 
-def is_list(value: str) -> list[str]:
+def is_list(value: str | list[str]) -> list[str]:
     """List of comma-separated values"""
+    if isinstance(value, list):
+        return value
     return [] if value == "" else [x.strip() for x in value.split(",")]
 
 
@@ -327,9 +329,9 @@ class Option(Generic[T]):
         self,
         section: str,
         name: str,
-        default: Union[T, None, Callable[[], T]],
+        default: Union[T, Callable[[], T]],
         documentation: str,
-        validator: Callable[[Optional[str | T]], T] = is_str,
+        validator: Callable[[str | T], T] = is_str,
         predecessor_option: Optional["Option"] = None,
     ) -> None:
         self.section = section
@@ -365,10 +367,10 @@ class Option(Generic[T]):
         else:
             return f"``{defa}``"
 
-    def validate(self, value: Optional[str | T]) -> T:
+    def validate(self, value: str | T) -> T:
         return self.validator(value)
 
-    def get_default_value(self) -> Optional[T]:
+    def get_default_value(self) -> T:
         defa = self.default
         if callable(defa):
             return defa()

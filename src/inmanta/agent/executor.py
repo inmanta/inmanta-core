@@ -25,13 +25,14 @@ import json
 import logging
 import os
 import typing
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional
 
 import pkg_resources
 
 from inmanta.agent import config as cfg
-from inmanta.data import PipConfig
+from inmanta.data.model import PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Resource
