@@ -1636,7 +1636,9 @@ class Agent(SessionEndpoint):
 
             cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
             if cached_spec:
-                LOGGER.debug("Code already present for %s version=%d", resource_type, version)
+                LOGGER.debug(
+                    "Cache hit, using existing ResourceInstallSpec for resource_type=%s version=%d", resource_type, version
+                )
                 resource_install_specs.append(cached_spec)
                 continue
             result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
@@ -1680,21 +1682,31 @@ class Agent(SessionEndpoint):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
                 if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.model_version:
-                    LOGGER.debug("Code already present for %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version)
+                    LOGGER.debug(
+                        "Handler code already installed for %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
+                    )
                     continue
 
                 self._last_loaded_version[resource_install_spec.resource_type] = -1
 
                 try:
                     # Install required python packages and the list of ``ModuleSource`` with the provided pip config
-                    LOGGER.debug("Installing handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version)
+                    LOGGER.debug(
+                        "Installing handler %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
+                    )
                     await self._install(
                         resource_install_spec.sources,
                         resource_install_spec.requirements,
                         pip_config=resource_install_spec.pip_config,
                     )
                     LOGGER.debug(
-                        "Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version
+                        "Installed handler %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
                     )
                     # Update the ``_previously_loaded`` cache to indicate that the given resource type's code
                     # was loaded successfully at the specified version.
