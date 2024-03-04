@@ -78,9 +78,10 @@ ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
 
 
 class ResourceActionBase(abc.ABC):
-    """Base class for Local and Remote resource actions"""
-
-    # Model dependencies between resources + inform each other when they're done deploying
+    """
+    Base class for Local and Remote resource actions. Model dependencies between resources
+    and inform each other when they're done deploying.
+    """
 
     resource_id: Id
     future: ResourceActionResultFuture
@@ -198,9 +199,9 @@ class Executor(ABC):
     @abc.abstractmethod
     async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
         """
-        Deserialize a resource from an in memory representation to an actual Resource
+        Deserialize a resource from an untyped representation to an actual Resource
 
-        :param resource_details: in memory representation of the resource
+        :param resource_details: untyped representation of the resource
         :param action: the current action being performed that required this resource deserialization
         """
 
@@ -208,14 +209,14 @@ class Executor(ABC):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_ref: ResourceDetails,
+        resource_details: ResourceDetails,
         reason: str,
     ) -> None:
         """
         Perform the actual deployment of the resource by calling the loaded handler code
 
         :param gid: unique id for this deploy
-        :param resource_ref: desired state for this resource as a ResourceDetails
+        :param resource_details: desired state for this resource as a ResourceDetails
         :param reason: textual reason for this deploy
         """
         pass
@@ -340,26 +341,23 @@ class InProcessExecutor(Executor):
 
     async def _report_resource_status(
         self,
-        env_id: uuid.UUID,
-        resource_id: Id,
-        resource_status: const.ResourceState,
-        resource_change: const.Change,
+        resource_details: ResourceDetails,
         ctx: handler.HandlerContext,
-    ) -> tuple[Optional[const.ResourceState], const.Change, dict[ResourceVersionIdStr, dict[str, AttributeStateChange]]]:
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_id.resource_version_str(): ctx.changes}
+    ) -> None:
+
+        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
         response = await self.agent.get_client().resource_deploy_done(
-            tid=env_id,
-            rvid=resource_id.resource_version_str(),
+            tid=resource_details.env_id,
+            rvid=resource_details.rvid,
             action_id=ctx.action_id,
-            status=resource_status,
+            status=ctx.status,
             messages=ctx.logs,
             changes=changes,
-            change=resource_change,
+            change=ctx.change,
         )
         if response.code != 200:
             LOGGER.error("Resource status update failed %s", response.result)
 
-        return resource_status, resource_change, changes
 
     async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
         started: datetime.datetime = datetime.datetime.now().astimezone()
@@ -388,18 +386,18 @@ class InProcessExecutor(Executor):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_ref: ResourceDetails,
+        resource_details: ResourceDetails,
         reason: str,
     ) -> None:
         try:
-            resource: Resource | None = await self.deserialize(resource_ref, const.ResourceAction.deploy)
+            resource: Resource | None = await self.deserialize(resource_details, const.ResourceAction.deploy)
         except Exception:
             return
         assert resource is not None
         ctx = handler.HandlerContext(resource, logger=self.agent.logger)
         ctx.debug(
             "Start run for resource %(resource)s because %(reason)s",
-            resource=str(resource_ref.rvid),
+            resource=str(resource_details.rvid),
             deploy_id=gid,
             agent=self.agent.name,
             reason=reason,
@@ -407,7 +405,7 @@ class InProcessExecutor(Executor):
 
         try:
             requires: dict[ResourceIdStr, const.ResourceState] = await self.send_in_progress(
-                ctx.action_id, resource_ref.env_id, resource_ref.rvid
+                ctx.action_id, resource_details.env_id, resource_details.rvid
             )
         except Exception:
             ctx.set_status(const.ResourceState.failed)
@@ -418,28 +416,29 @@ class InProcessExecutor(Executor):
 
         ctx.debug(
             "End run for resource %(r_id)s in deploy %(deploy_id)s",
-            r_id=resource_ref.rvid,
+            r_id=resource_details.rvid,
             deploy_id=gid,
         )
 
         if ctx.facts:
             ctx.debug("Sending facts to the server")
-            set_fact_response = await self.agent.get_client().set_parameters(tid=resource_ref.env_id, parameters=ctx.facts)
+            set_fact_response = await self.agent.get_client().set_parameters(tid=resource_details.env_id, parameters=ctx.facts)
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_ref.rvid: ctx.changes}
-        response = await self.agent.get_client().resource_deploy_done(
-            tid=resource_ref.env_id,
-            rvid=resource_ref.rvid,
-            action_id=ctx.action_id,
-            status=ctx.status,
-            messages=ctx.logs,
-            changes=changes,
-            change=ctx.change,
-        )
-        if response.code != 200:
-            LOGGER.error("Resource status update failed %s", response.result)
+        self._report_resource_status(resource_details, ctx)
+        # changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
+        # response = await self.agent.get_client().resource_deploy_done(
+        #     tid=resource_details.env_id,
+        #     rvid=resource_details.rvid,
+        #     action_id=ctx.action_id,
+        #     status=ctx.status,
+        #     messages=ctx.logs,
+        #     changes=changes,
+        #     change=ctx.change,
+        # )
+        # if response.code != 200:
+        #     LOGGER.error("Resource status update failed %s", response.result)
 
     async def dry_run(
         self,
@@ -621,7 +620,7 @@ class ExternalExecutor(Executor):
     async def execute(
         self,
         gid: uuid.UUID,
-        resource_ref: ResourceDetails,
+        resource_details: ResourceDetails,
         reason: str,
     ) -> None:
         raise NotImplementedError
@@ -699,7 +698,7 @@ class ResourceAction(ResourceActionBase):
 
                     await self.executor.execute(
                         gid=self.gid,
-                        resource_ref=self.resource,
+                        resource_details=self.resource,
                         reason=self.reason,
                     )
 
