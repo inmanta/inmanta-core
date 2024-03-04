@@ -565,7 +565,7 @@ class PythonEnvironment:
             self.env_path = self.get_env_path_for_python_path(self.python_path)
             if not self.python_path:
                 raise ValueError("The python_path cannot be an empty string.")
-        self.validate_path(env_path)
+        self.validate_path(self.env_path)
         self.site_packages_dir: str = self.get_site_dir_for_env_path(self.env_path)
         self._path_pth_file = os.path.join(self.site_packages_dir, "inmanta-inherit-from-parent-venv.pth")
 
