@@ -364,7 +364,7 @@ class ParameterService(protocol.ServerSlice):
             raise NotFound(f"Fact with id {id} does not exist")
         return param.as_fact()
 
-    async def _update_and_compile(
+    async def _update_and_recompile(
         self,
         env: data.Environment,
         name: str,
@@ -377,19 +377,6 @@ class ParameterService(protocol.ServerSlice):
     ) -> tuple[data.Parameter, Optional[list[str]]]:
         """
         Update a parameter or fact and optionally trigger recompilation.
-
-        Args:
-            env (data.Environment): The environment object.
-            name (str): The name of the parameter or fact.
-            value (str): The new value to set.
-            source (ParameterSource): The source of the parameter.
-            metadata (dict): Additional metadata for the operation.
-            recompile (bool): Whether to trigger recompilation.
-            resource_id (Optional[str]): The resource ID for the fact. Defaults to None.
-            expires (Optional[bool]): Whether the fact expires. Defaults to None.
-
-        Returns:
-            Tuple[data.Parameter, Optional[List[str]]]: The updated parameter and any warnings.
         """
         # Validate parameter or fact
         self._validate_parameter(name, resource_id, expires)
@@ -412,8 +399,6 @@ class ParameterService(protocol.ServerSlice):
 
         return param[0], warnings
 
-    # Now, refactor the set_parameter and set_fact functions to use this helper
-
     @handle(methods_v2.set_parameter, env="tid")
     async def set_parameter(
         self,
@@ -424,7 +409,7 @@ class ParameterService(protocol.ServerSlice):
         metadata: dict = {},
         recompile: bool = False,
     ) -> ReturnValue[Parameter]:
-        param, warnings = await self._update_and_compile(env, name, value, source, metadata, recompile)
+        param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile)
         return_value = ReturnValue(response=param.as_param())
         if warnings:
             return_value.add_warnings(warnings)
@@ -442,7 +427,7 @@ class ParameterService(protocol.ServerSlice):
         recompile: bool = False,
         expires: Optional[bool] = True,
     ) -> ReturnValue[Fact]:
-        param, warnings = await self._update_and_compile(env, name, value, source, metadata, recompile, resource_id, expires)
+        param, warnings = await self._update_and_recompile(env, name, value, source, metadata, recompile, resource_id, expires)
         return_value = ReturnValue(response=param.as_fact())
         if warnings:
             return_value.add_warnings(warnings)
