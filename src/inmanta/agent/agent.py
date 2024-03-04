@@ -607,8 +607,6 @@ class InProcessExecutor(Executor):
 class ExternalExecutor(Executor):
     """
     This class encapsulates an executor running in a separate process from the agent.
-    The AgentSupervisor is responsible for spawning and managing these executors
-    on demand of the ResourceScheduler.
     """
 
     async def execute(
@@ -1668,7 +1666,6 @@ class Agent(SessionEndpoint):
     async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> Set[str]:
         """Ensure that the code for the given environment and version is loaded"""
         failed_to_load: set[str] = set()
-        # breakpoint()
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
