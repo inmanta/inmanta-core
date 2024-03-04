@@ -149,14 +149,18 @@ class MPExecutor:
             self.process.join(grace_time)
             self.process.kill()
             self.process.join()
+            self.process.close()
         except ValueError:
             # Process already gone:
             pass
-        self.process.close()
 
     async def join(self, timeout: float) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
-        self.process.close()
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
+            self.process.close()
+        except ValueError:
+            # Process already gone:
+            pass
 
 
 class MPManager:
