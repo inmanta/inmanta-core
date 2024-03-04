@@ -227,14 +227,12 @@ class Executor(ABC):
         self,
         resources: Sequence[ResourceDetails],
         dry_run_id: uuid.UUID,
-        undeployable: Mapping[ResourceVersionIdStr, ResourceState],
     ) -> None:
         """
         Perform a dryrun for the given resources
 
         :param resources: Sequence of resources for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
-        :param undeployable: maps undeployable resources to their current state
         """
         pass
 
@@ -440,14 +438,12 @@ class InProcessExecutor(Executor):
         self,
         resources: Sequence[ResourceDetails],
         dry_run_id: uuid.UUID,
-        undeployable: Mapping[ResourceVersionIdStr, ResourceState],
     ) -> None:
         """
         Perform a dryrun for the given resources
 
         :param resources: Sequence of resources for which to perform a dryrun.
         :param dry_run_id: id for this dryrun
-        :param undeployable: maps undeployable resources to their current state
         """
         model_version: int = resources[0].model_version
         env_id: uuid.UUID = resources[0].env_id
@@ -465,14 +461,6 @@ class InProcessExecutor(Executor):
                 provider = None
 
                 resource_id: ResourceVersionIdStr = resource.rvid
-                if resource_id in undeployable:
-                    ctx.error(
-                        "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
-                        resource_id=resource_id,
-                        status=undeployable[resource_id],
-                    )
-                    await self.agent.get_client().dryrun_update(tid=env_id, id=dry_run_id, resource=resource_id, changes={})
-                    continue
 
                 try:
                     self.agent.logger.debug("Running dryrun for %s", resource_id)
@@ -1283,8 +1271,21 @@ class AgentInstance:
                 undeployable, resource_refs, executor = await self.setup_executor(
                     version, const.ResourceAction.dryrun, response.result["resources"]
                 )
+                deployable_resources: list[ResourceDetails] = []
+                for resource in resource_refs:
+                    if resource.rvid in undeployable:
+                        self.logger.error(
+                            "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
+                            resource_id=resource.rvid,
+                            status=undeployable[resource.rvid],
+                        )
+                        await self.get_client().dryrun_update(
+                            tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
+                        )
+                    else:
+                        deployable_resources.append(resource)
 
-                await executor.dry_run(resource_refs, dry_run_id, undeployable)
+                await executor.dry_run(deployable_resources, dry_run_id)
 
     async def get_facts(self, resource: JsonType) -> Apireturn:
         async with self.ratelimiter:
@@ -1632,8 +1633,6 @@ class Agent(SessionEndpoint):
         resource_install_specs: list[ResourceInstallSpec] = []
         invalid_resource_types: FailedResourcesSet = set()
         for resource_type in set(resource_types):
-            # LOGGER.debug("Building ResourceInstallSpec for resource_type=%s version=%d", resource_type, version)
-
             cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
             if cached_spec:
                 LOGGER.debug(
