@@ -776,6 +776,18 @@ class nullcontext(contextlib.nullcontext[T], contextlib.AbstractAsyncContextMana
         pass
 
 
+class FinallySet(contextlib.AbstractAsyncContextManager[asyncio.Event]):
+
+    def __init__(self, event: asyncio.Event) -> None:
+        self.event = event
+
+    async def __aenter__(self) -> asyncio.Event:
+        return self.event
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        self.event.set()
+
+
 async def join_threadpools(threadpools: list[ThreadPoolExecutor]) -> None:
     """
     Asynchronously join a set of threadpools

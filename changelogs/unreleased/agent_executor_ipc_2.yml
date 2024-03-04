@@ -1,0 +1,3 @@
+description: Added logging and config to agent fork infrastructure
+change-type: minor
+destination-branches: [master]

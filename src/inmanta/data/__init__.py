@@ -2832,6 +2832,7 @@ class Environment(BaseDocument):
             await ResourceAction.delete_all(environment=self.id, connection=con)
             await Resource.delete_all(environment=self.id, connection=con)
             await ConfigurationModel.delete_all(environment=self.id, connection=con)
+            await ResourcePersistentState.delete_all(environment=self.id, connection=con)
 
     async def get_next_version(self, connection: Optional[asyncpg.connection.Connection] = None) -> int:
         """
@@ -4632,6 +4633,40 @@ class Resource(BaseDocument):
         return out
 
     @classmethod
+    async def set_deployed_multi(
+        cls,
+        environment: uuid.UUID,
+        resource_ids: Sequence[m.ResourceIdStr],
+        version: int,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> None:
+        query = "UPDATE resource SET status='deployed' WHERE environment=$1 AND model=$2 AND resource_id =ANY($3) "
+        async with cls.get_connection(connection) as connection:
+            await connection.execute(query, environment, version, resource_ids)
+
+    @classmethod
+    async def get_resource_ids_with_status(
+        cls,
+        environment: uuid.UUID,
+        resource_version_ids: list[m.ResourceIdStr],
+        version: int,
+        statuses: Sequence[const.ResourceState],
+        lock: Optional[RowLockMode] = None,
+        connection: Optional[asyncpg.connection.Connection] = None,
+    ) -> list[m.ResourceIdStr]:
+        query = (
+            "SELECT resource_id as resource_id FROM resource WHERE "
+            "environment=$1 AND model=$2 AND status = ANY($3) and resource_id =ANY($4) "
+        )
+        if lock:
+            query += lock.value
+        async with cls.get_connection(connection) as connection:
+            return [
+                m.ResourceIdStr(cast(str, r["resource_id"]))
+                for r in await connection.fetch(query, environment, version, statuses, resource_version_ids)
+            ]
+
+    @classmethod
     async def get_undeployable(cls, environment: uuid.UUID, version: int) -> list["Resource"]:
         """
         Returns a list of resources with an undeployable state
@@ -4804,12 +4839,18 @@ class Resource(BaseDocument):
         cls,
         environment: uuid.UUID,
         version: int,
-        projection: Optional[list[str]],
-        projection_presistent: Optional[list[str]],
+        projection: Optional[list[typing.LiteralString]],
+        projection_presistent: Optional[list[typing.LiteralString]],
+        project_attributes: Optional[list[typing.LiteralString]] = None,
         *,
         connection: Optional[Connection] = None,
     ) -> list[dict[str, object]]:
-        """This method performs none of the mangling required to produce valid resources!"""
+        """This method performs none of the mangling required to produce valid resources!
+
+        project_attributes performs a projection on the json attributes of the resources table
+
+        all projections must be disjoint, as they become named fields in the output record
+        """
 
         def collect_projection(projection: Optional[list[str]], prefix: str) -> str:
             if not projection:
@@ -4817,16 +4858,23 @@ class Resource(BaseDocument):
             else:
                 return ",".join(f"{prefix}.{field}" for field in projection)
 
+        if project_attributes:
+            json_projection = "," + ",".join(f"r.attributes->'{v}' as {v}" for v in project_attributes)
+        else:
+            json_projection = ""
+
         query = f"""
-        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')}
+        SELECT {collect_projection(projection, 'r')}, {collect_projection(projection_presistent, 'ps')} {json_projection}
             FROM {cls.table_name()} r JOIN resource_persistent_state ps ON r.resource_id = ps.resource_id
             WHERE r.environment=$1 AND ps.environment = $1 and r.model = $2;"""
 
         resource_records = await cls._fetch_query(query, environment, version, connection=connection)
         resources = [dict(record) for record in resource_records]
         for res in resources:
-            if "attributes" in res:
-                res["attributes"] = json.loads(res["attributes"])
+            if project_attributes:
+                for k in project_attributes:
+                    if res[k]:
+                        res[k] = json.loads(res[k])
         return resources
 
     @classmethod
@@ -5413,6 +5461,7 @@ class ConfigurationModel(BaseDocument):
         no_obj: Optional[bool] = None,
         lock: Optional[RowLockMode] = None,
         connection: Optional[asyncpg.connection.Connection] = None,
+        no_status: bool = False,  # don't load the status field
         **query: object,
     ) -> list["ConfigurationModel"]:
         # sanitize and validate order parameters
@@ -5456,14 +5505,21 @@ class ConfigurationModel(BaseDocument):
                     {lock_statement}"""
         query_result = await cls._fetch_query(query_string, *values, connection=connection)
         result = []
-        for record in query_result:
-            record = dict(record)
+        for in_record in query_result:
+            record = dict(in_record)
             if no_obj:
-                record["status"] = await cls._get_status_field(record["environment"], record["status"])
+                if no_status:
+                    record["status"] = {}
+                else:
+                    record["status"] = await cls._get_status_field(record["environment"], record["status"])
                 result.append(record)
             else:
                 done = record.pop("done")
-                status = await cls._get_status_field(record["environment"], record.pop("status"))
+                if no_status:
+                    status = {}
+                    record.pop("status")
+                else:
+                    status = await cls._get_status_field(record["environment"], record.pop("status"))
                 obj = cls(from_postgres=True, **record)
                 obj._done = done
                 obj._status = status
@@ -5713,23 +5769,23 @@ class ConfigurationModel(BaseDocument):
         deployed and different hash -> increment
         """
         # Depends on deploying
-        projection_a_resource = [
+        projection_a_resource: list[typing.LiteralString] = [
             "resource_id",
             "attribute_hash",
-            "attributes",
             "status",
         ]
-        projection_a_state = [
+        projection_a_state: list[typing.LiteralString] = [
             "last_success",
             "last_produced_events",
             "last_deployed_attribute_hash",
             "last_non_deploying_status",
         ]
-        projection = ["resource_id", "status", "attribute_hash"]
+        projection_a_attributes: list[typing.LiteralString] = ["requires", "send_event"]
+        projection: list[typing.LiteralString] = ["resource_id", "status", "attribute_hash"]
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw_with_persistent_state(
-            environment, version, projection_a_resource, projection_a_state, connection=connection
+            environment, version, projection_a_resource, projection_a_state, projection_a_attributes, connection=connection
         )
 
         # to increment
@@ -5750,20 +5806,11 @@ class ConfigurationModel(BaseDocument):
                 continue
             # Now outstanding events
             last_success = resource["last_success"] or DATETIME_MIN_UTC
-            attributes = resource["attributes"]
-            assert isinstance(attributes, dict)  # mypy
-            for req in attributes["requires"]:
+            for req in resource["requires"]:
                 req_res = id_to_resource[req]
                 assert req_res is not None  # todo
-                req_res_attributes = req_res["attributes"]
-                assert isinstance(req_res_attributes, dict)  # mypy
                 last_produced_events = req_res["last_produced_events"]
-                if (
-                    last_produced_events is not None
-                    and last_produced_events > last_success
-                    and "send_event" in req_res_attributes
-                    and req_res_attributes["send_event"]
-                ):
+                if last_produced_events is not None and last_produced_events > last_success and req_res["send_event"]:
                     in_increment = True
                     break
 
@@ -5849,9 +5896,9 @@ class ConfigurationModel(BaseDocument):
 
         # build lookup tables
         for res in resources:
-            for req in res["attributes"]["requires"]:
+            for req in res["requires"]:
                 original_provides[req].append(res["resource_id"])
-            if "send_event" in res["attributes"] and res["attributes"]["send_event"]:
+            if res["send_event"]:
                 send_events.append(res["resource_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
