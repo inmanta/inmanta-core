@@ -289,7 +289,6 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         loop = asyncio.get_running_loop()
 
         # Start child
-        # TODO: do we need a specific thread pool?
         logfile = os.path.join(self.log_folder, f"{name}.log")
         process, parent_conn = await loop.run_in_executor(
             self.thread_pool, functools.partial(self._make_child, name, logfile, self.inmanta_log_level, self.cli_log)
