@@ -553,6 +553,7 @@ class PythonEnvironment:
             raise ValueError("Exactly one of `env_path` and `python_path` needs to be specified")
         self.env_path: str
         self.python_path: str
+        self._parent_python: Optional[str] = None
         if env_path is not None:
             self.env_path = env_path
             self.python_path = self.get_python_path_for_env_path(self.env_path)
@@ -603,6 +604,7 @@ class PythonEnvironment:
         """
         Initialize the virtual environment.
         """
+        self._parent_python = sys.executable
         LOGGER.info("Initializing virtual environment at %s", self.env_path)
 
         # check if the virtual env exists
@@ -1179,7 +1181,6 @@ class VirtualEnv(ActiveEnv):
         self.env_path: str = env_path
         self.virtual_python: Optional[str] = None
         self._using_venv: bool = False
-        self._parent_python: Optional[str] = None
 
     def validate_path(self, path: str) -> None:
         """

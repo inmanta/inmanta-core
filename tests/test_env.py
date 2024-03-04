@@ -680,7 +680,7 @@ def test_basic_logging(tmpdir, caplog):
 
         log_sequence = LogSequence(caplog)
         log_sequence.assert_not("inmanta.env", logging.INFO, f"Creating new virtual environment in {env_dir1}")
-        log_sequence.contains("inmanta.env", logging.INFO, f"Using virtual environment at {env_dir1}")
+        log_sequence.contains("inmanta.env", logging.INFO, f"Initializing virtual environment at {env_dir1}")
 
 
 @pytest.mark.slowtest
