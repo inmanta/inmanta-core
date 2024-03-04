@@ -166,8 +166,7 @@ def test():
 
     with pytest.raises(ImportError):
         # we aren't leaking into this venv
-        import lorem
-
+        import lorem  # noqa: F401
 
 
 async def test_executor_server_dirty_shutdown(mpmanager):
