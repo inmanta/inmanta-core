@@ -64,7 +64,7 @@ class TestLoader(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
     """
     Part of assertions for test_executor_server
 
-    Most be module level to be able to pickle it
+    Must be module level to be able to pickle it
     """
 
     async def call(self, ctx) -> list[str]:
