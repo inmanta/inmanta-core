@@ -273,7 +273,7 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         # entry point from parent class
         executor = await self.make_child_and_connect(executor_id.agent_name)
         storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.generate_blueprint_hash())
-        os.makedirs(storage_for_blueprint)
+        os.makedirs(storage_for_blueprint, exist_ok=True)
         await executor.connection.call(
             InitCommand(
                 venv.env_path,
