@@ -395,7 +395,7 @@ class ParameterService(protocol.ServerSlice):
         # Retrieve the updated parameter/fact
         param = await data.Parameter.get_list(environment=env.id, name=name)
         if not param:
-            raise NotFound(f"Fact with id {name} does not exist")
+            raise NotFound(f"Parameter with id {name} does not exist")
 
         return param[0], warnings
 
