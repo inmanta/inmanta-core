@@ -1910,7 +1910,6 @@ async def test_set_fact(
     Test the set_fact endpoint. First create a fact with expires set to true.
     Then set expires to false for the same fact.
     """
-
     await agent_factory(
         environment=environment,
         agent_map={"discovery_agent": "localhost"},
@@ -1980,3 +1979,51 @@ async def test_set_fact(
     assert result.code == 200
     assert len(result.result["data"]) == 1
     assert result.result["data"][0] == fact
+
+
+async def test_set_param_v2(server, client, environment):
+    """
+    Test the set_parameter endpoint. Create a parameters and verify that expires is set to false.
+    also test we can modify it and create a second one.
+    """
+
+    await client.set_parameter(
+        tid=environment,
+        id="param",
+        source=ParameterSource.user,
+        value="val",
+        metadata={"key1": "val1", "key2": "val2"},
+        recompile=False,
+    )
+
+    res = await client.list_params(tid=environment, query={})
+    assert res.code == 200
+    parameters = res.result["parameters"]
+    assert len(parameters) == 1
+    assert parameters[0]["name"] == "param"
+    assert parameters[0]["value"] == "val"
+    assert parameters[0]["expires"] is False
+
+    await client.set_parameter(
+        tid=environment,
+        id="param",
+        source=ParameterSource.user,
+        value="val2",
+        metadata={"key1": "val1", "key2": "val2"},
+        recompile=False,
+    )
+    res = await client.list_params(tid=environment, query={})
+    assert res.code == 200
+    parameters = res.result["parameters"]
+    assert len(parameters) == 1
+    assert parameters[0]["name"] == "param"
+    assert parameters[0]["value"] == "val2"
+    assert parameters[0]["expires"] is False
+
+    await client.set_parameter(
+        tid=environment, id="param2", source=ParameterSource.user, value="val3", metadata={}, recompile=False
+    )
+    res = await client.list_params(tid=environment, query={})
+    assert res.code == 200
+    parameters = res.result["parameters"]
+    assert len(parameters) == 2
