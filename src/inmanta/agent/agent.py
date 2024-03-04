@@ -32,7 +32,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Se
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from typing import Any, Dict, Optional, Self, Union, cast, Collection
+from typing import Any, Collection, Dict, Optional, Self, Union, cast
 
 import pkg_resources
 
@@ -48,7 +48,7 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConf
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
-from inmanta.types import Apireturn, JsonType, FailedResourcesSet
+from inmanta.types import Apireturn, FailedResourcesSet, JsonType
 from inmanta.util import (
     CronSchedule,
     IntervalSchedule,
@@ -264,7 +264,9 @@ class InProcessExecutor(Executor):
         self.agent: AgentInstance = agent
 
     @classmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, FailedResourcesSet]:
+    async def get_executor(
+        cls, agent: "AgentInstance", code: Collection[ResourceInstallSpec]
+    ) -> tuple[Self, FailedResourcesSet]:
         failed_resource_types: FailedResourcesSet = await agent.process.ensure_code(code)
         return cls(agent), failed_resource_types
 
@@ -363,7 +365,6 @@ class InProcessExecutor(Executor):
         )
         if response.code != 200:
             LOGGER.error("Resource status update failed %s", response.result)
-
 
     async def deserialize(self, resource_details: ResourceDetails, action: const.ResourceAction) -> Optional[Resource]:
         started: datetime.datetime = datetime.datetime.now().astimezone()
@@ -1298,7 +1299,7 @@ class AgentInstance:
 
             return await executor.get_facts(resource_refs[0])
 
-    async def get_executor(self, code: Sequence[ResourceInstallSpec]) -> tuple[Executor, FailedResourcesSet]:
+    async def get_executor(self, code: Collection[ResourceInstallSpec]) -> tuple[Executor, FailedResourcesSet]:
         return await InProcessExecutor.get_executor(self, code)
 
     async def setup_executor(
@@ -1318,7 +1319,7 @@ class AgentInstance:
         """
         started = datetime.datetime.now().astimezone()
         executor: Executor
-        code: Sequence[ResourceInstallSpec]
+        code: Collection[ResourceInstallSpec]
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
         invalid_resource_types: FailedResourcesSet
@@ -1612,8 +1613,8 @@ class Agent(SessionEndpoint):
         self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
     ) -> tuple[Collection[ResourceInstallSpec], FailedResourcesSet]:
         """
-        Get the collection of installation specifications (i.e. pip config, python package dependencies, Inmanta modules sources)
-        required to deploy a given version for the provided resource types.
+        Get the collection of installation specifications (i.e. pip config, python package dependencies,
+        Inmanta modules sources) required to deploy a given version for the provided resource types.
 
         :return: Tuple of:
             - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
@@ -1667,7 +1668,7 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
-    async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> FailedResourcesSet:
+    async def ensure_code(self, code: Collection[ResourceInstallSpec]) -> FailedResourcesSet:
         """Ensure that the code for the given environment and version is loaded"""
         failed_to_load: FailedResourcesSet = set()
         for resource_install_spec in code:
