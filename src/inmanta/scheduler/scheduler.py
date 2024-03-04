@@ -1,18 +1,19 @@
-import functools
 import asyncio
+import functools
+import graphlib
 import itertools
 import typing
 
 
-@functools.total_ordering
 class Task:
 
-    def __init__(self, name:str) -> None:
+    def __init__(self, name: str) -> None:
         self.name = name
         self.cancelled = False
         # Indicates if a cancel is requested
         self.started = False
         self.done = False
+
     async def run(self) -> None:
         if not self.done or not self.started or not self.cancelled:
             self.started = True
@@ -21,21 +22,37 @@ class Task:
 
     def cancel(self):
         self.cancelled = True
+
     def get_priority(self) -> int:
         return 1
 
-class DependentTask:
+
+class TaskSet:
+
+    def __init__(self, tasks: list[Task], dependencies: typing.Mapping[str, list[str]]) -> None:
+        """
+
+        :param tasks:
+        :param dependencies: mapping of a task (by name) on its predecessor
+        """
+        self.tasks = tasks
+        self.task_lookup = {task.name: task for task in tasks}
+        self.dependencies = dependencies
+
+    def linearize(self) -> typing.Iterable[Task]:
+        topo = graphlib.TopologicalSorter(self.dependencies)
+        return (self.task_lookup[name] for name in topo.static_order())
 
 
 class TaskQueue:
 
-    def __init__(self, name: str) -> None:
+    def __init__(self) -> None:
         # Interestingly, the queue is not ordered per-se
         # https://docs.python.org/3/library/heapq.html#priority-queue-implementation-notes
         self.queue: asyncio.PriorityQueue[typing.Tuple[int, int, Task]] = asyncio.PriorityQueue()
         self.counter = itertools.count()  # unique sequence count, makes sort stable in the heap
 
-    async def put(self, task:Task):
+    async def put(self, task: Task):
         "Add a new task"
         count = next(self.counter)
         entry = (task.get_priority(), count, task)
@@ -61,7 +78,7 @@ class TaskQueue:
 
 
 class Agent:
-    """ Agent fed by the scheduler"""
+    """Agent fed by the scheduler"""
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -79,10 +96,11 @@ class Agent:
         self.running = False
 
     async def do_run(self) -> None:
-        " Main loop "
+        "Main loop"
         while self.running:
             task = await self.queue.get()
             await task.run()
+
     async def join(self) -> None:
         if not self.runner:
             return
@@ -90,26 +108,23 @@ class Agent:
         self.runner = None
 
 
-
-
 class EnvironmentScheduler:
 
     def __init__(self):
         self.agents: dict[str, Agent] = {}
 
-    async def add_agent(self, name: str) -> None:
+    async def get_agent(self, name: str) -> Agent:
         if name in self.agents:
-            return
+            return self.agents[name]
         agent = Agent(name)
         self.agents[name] = agent
         await agent.start()
+        return agent
 
     async def remove_agent(self, name: str) -> None:
         agent = self.agents.get(name)
         if not agent:
             return
+        del self.agents[name]
         await agent.stop()
         await agent.join()
-
-
-
