@@ -289,9 +289,7 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
         self._locks: NamedLock = NamedLock()
 
     @abc.abstractmethod
-    async def create_executor(
-        self, venv: ExecutorVirtualEnvironment, executor_id: ExecutorId
-    ) -> MyExecutor:
+    async def create_executor(self, venv: ExecutorVirtualEnvironment, executor_id: ExecutorId) -> MyExecutor:
         pass
 
     async def get_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> MyExecutor:
