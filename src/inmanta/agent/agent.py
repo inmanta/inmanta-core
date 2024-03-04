@@ -48,7 +48,7 @@ from inmanta.data.model import LEGACY_PIP_DEFAULT, AttributeStateChange, PipConf
 from inmanta.loader import CodeLoader, ModuleSource
 from inmanta.protocol import SessionEndpoint, SyncClient, methods, methods_v2
 from inmanta.resources import Id, Resource
-from inmanta.types import Apireturn, JsonType
+from inmanta.types import Apireturn, JsonType, FailedResourcesSet
 from inmanta.util import (
     CronSchedule,
     IntervalSchedule,
@@ -264,8 +264,8 @@ class InProcessExecutor(Executor):
         self.agent: AgentInstance = agent
 
     @classmethod
-    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, Set[str]]:
-        failed_resource_types: Set[str] = await agent.process.ensure_code(code)
+    async def get_executor(cls, agent: "AgentInstance", code: Sequence[ResourceInstallSpec]) -> tuple[Self, FailedResourcesSet]:
+        failed_resource_types: FailedResourcesSet = await agent.process.ensure_code(code)
         return cls(agent), failed_resource_types
 
     async def send_in_progress(
@@ -1298,7 +1298,7 @@ class AgentInstance:
 
             return await executor.get_facts(resource_refs[0])
 
-    async def get_executor(self, code: Sequence[ResourceInstallSpec]) -> tuple[Executor, Set[str]]:
+    async def get_executor(self, code: Sequence[ResourceInstallSpec]) -> tuple[Executor, FailedResourcesSet]:
         return await InProcessExecutor.get_executor(self, code)
 
     async def setup_executor(
@@ -1321,12 +1321,12 @@ class AgentInstance:
         code: Sequence[ResourceInstallSpec]
         # Resource types for which no handler code exist for the given version
         # or for which the pip config couldn't be retrieved
-        invalid_resource_types: Set[str]
+        invalid_resource_types: FailedResourcesSet
         code, invalid_resource_types = await self.process.get_code(
             self._env_id, version, [res["resource_type"] for res in resources]
         )
         # Resource types for which an error occurred during handler code installation
-        failed_resource_types: Set[str]
+        failed_resource_types: FailedResourcesSet
         executor, failed_resource_types = await self.get_executor(code)
 
         loaded_resources: list[ResourceDetails] = []
@@ -1610,7 +1610,7 @@ class Agent(SessionEndpoint):
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
-    ) -> tuple[Collection[ResourceInstallSpec], set[str]]:
+    ) -> tuple[Collection[ResourceInstallSpec], FailedResourcesSet]:
         """
         Get the collection of installation specifications (i.e. pip config, python package dependencies, Inmanta modules sources)
         required to deploy a given version for the provided resource types.
@@ -1626,7 +1626,7 @@ class Agent(SessionEndpoint):
         pip_config: Optional[PipConfig] = None
 
         resource_install_specs: list[ResourceInstallSpec] = []
-        invalid_resource_types: set[str] = set()
+        invalid_resource_types: FailedResourcesSet = set()
         for resource_type in set(resource_types):
             LOGGER.debug("Building ResourceInstallSpec for resource_type=%s version=%d", resource_type, version)
 
@@ -1667,9 +1667,9 @@ class Agent(SessionEndpoint):
 
         return resource_install_specs, invalid_resource_types
 
-    async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> Set[str]:
+    async def ensure_code(self, code: Sequence[ResourceInstallSpec]) -> FailedResourcesSet:
         """Ensure that the code for the given environment and version is loaded"""
-        failed_to_load: set[str] = set()
+        failed_to_load: FailedResourcesSet = set()
         for resource_install_spec in code:
             # only one logical thread can load a particular resource type at any time
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
