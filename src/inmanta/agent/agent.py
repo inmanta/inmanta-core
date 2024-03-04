@@ -1275,9 +1275,9 @@ class AgentInstance:
                 for resource in resource_refs:
                     if resource.rvid in undeployable:
                         self.logger.error(
-                            "Skipping dryrun %(resource_id)s because in undeployable state %(status)s",
-                            resource_id=resource.rvid,
-                            status=undeployable[resource.rvid],
+                            "Skipping dryrun %s because in undeployable state %s",
+                            resource.rvid,
+                            undeployable[resource.rvid],
                         )
                         await self.get_client().dryrun_update(
                             tid=resource.env_id, id=dry_run_id, resource=resource.rvid, changes={}
