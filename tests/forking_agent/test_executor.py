@@ -17,22 +17,50 @@
 """
 
 import asyncio
+import logging
 
 import pytest
 
-from inmanta.agent.executor import MPManager
+import inmanta.config
+import inmanta.protocol.ipc_light
+from inmanta.agent.forking_executor import MPManager
 from inmanta.protocol.ipc_light import ConnectionLost
 
 
-async def test_executor_server():
-    manager = MPManager()
-    manager._init_once()
+class Echo(inmanta.protocol.ipc_light.IPCMethod[list[str], None]):
+
+    def __init__(self, args: list[str]) -> None:
+        self.args = args
+
+    async def call(self, ctx) -> list[str]:
+        logging.getLogger(__name__).info("Echo ")
+        return self.args
+
+
+class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
+
+    def __init__(self, section: str, name: str) -> None:
+        self.section = section
+        self.name = name
+
+    async def call(self, ctx) -> str:
+        return inmanta.config.Config.get(self.section, self.name)
+
+
+async def test_executor_server(tmp_path):
+    manager = MPManager(log_folder=str(tmp_path), cli_log=True)
+    manager.init_once()
+
+    inmanta.config.Config.set("test", "aaa", "bbbb")
 
     child1 = await manager.make_child_and_connect("Testchild")
 
-    result = await child1.connection.call("echo", ["aaaa"])
+    result = await child1.connection.call(Echo(["aaaa"]))
 
     assert ["aaaa"] == result
+
+    result = await child1.connection.call(GetConfig("test", "aaa"))
+    assert "bbbb" == result
 
     print("stopping")
     await manager.stop()
@@ -43,13 +71,13 @@ async def test_executor_server():
     assert child1.connection.transport.is_closing()
 
 
-async def test_executor_server_dirty_shutdown():
-    manager = MPManager()
-    manager._init_once()
+async def test_executor_server_dirty_shutdown(tmp_path):
+    manager = MPManager(log_folder=str(tmp_path))
+    manager.init_once()
 
     child1 = await manager.make_child_and_connect("Testchild")
 
-    result = await child1.connection.call("echo", ["aaaa"])
+    result = await child1.connection.call(Echo(["aaaa"]))
     assert ["aaaa"] == result
     print("Child there")
 
