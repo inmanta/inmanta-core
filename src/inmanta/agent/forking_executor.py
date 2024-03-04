@@ -45,10 +45,12 @@ class ExecutorContext:
 
     client: typing.Optional[inmanta.protocol.SessionClient]
     venv: typing.Optional[inmanta.env.VirtualEnv]
+    name: str
 
     def __init__(self, server: "ExecutorServer") -> None:
         self.server = server
         self.threadpool = concurrent.futures.thread.ThreadPoolExecutor()
+        self.name = server.name
 
     async def stop(self) -> None:
         """Request the executor to stop"""
@@ -77,9 +79,10 @@ class ExecutorServer(IPCServer[ExecutorContext]):
         super().__init__(name)
         self.stopping = False
         self.stopped = asyncio.Event()
+        self.ctx = ExecutorContext(self)
 
     def get_context(self) -> ExecutorContext:
-        return ExecutorContext(self)
+        return self.ctx
 
     async def stop(self) -> None:
         """Perform shutdown"""
@@ -105,8 +108,9 @@ class StopCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
     async def call(self, context: ExecutorContext) -> None:
         await context.stop()
 
+
 class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
-    def __init__(self, venv_path: str, storage_folder:str, session_gid: uuid.UUID, sources: list[inmanta.loader.ModuleSource]):
+    def __init__(self, venv_path: str, storage_folder: str, session_gid: uuid.UUID, sources: list[inmanta.loader.ModuleSource]):
         self.venv_path = venv_path
         self.storage_folder = storage_folder
         self.gid = session_gid
@@ -119,8 +123,9 @@ class InitCommand(inmanta.protocol.ipc_light.IPCMethod[ExecutorContext, None]):
         loader = inmanta.loader.CodeLoader(self.storage_folder)
         loop = asyncio.get_running_loop()
         sync_client = inmanta.protocol.SyncClient(client=context.client, ioloop=loop)
-        source = [s.with_client(sync_client) for s in self.sources]
-        await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, source))
+        sources = [s.with_client(sync_client) for s in self.sources]
+        for module_source in sources:
+            await loop.run_in_executor(context.threadpool, functools.partial(loader.install_source, module_source))
 
 
 def mp_worker_entrypoint(
@@ -157,20 +162,28 @@ def mp_worker_entrypoint(
 class MPExecutor(executor.Executor):
     """A Single Child Executor"""
 
-    def __init__(self, process: multiprocessing.Process, connection: FinalizingIPCClient[ExecutorContext]):
+    def __init__(self, owner: "MPManager", process: multiprocessing.Process, connection: FinalizingIPCClient[ExecutorContext]):
         self.process = process
         self.connection = connection
         self.connection.finalizers.append(self.force_stop)
+        self.closed = False
+        self.owner = owner
 
     async def stop(self) -> None:
         """Stop by shutdown"""
-        self.connection.call(StopCommand(), False)
+        try:
+            self.connection.call(StopCommand(), False)
+        except inmanta.protocol.ipc_light.ConnectionLost:
+            # Already gone
+            pass
 
     async def force_stop(self, grace_time: float = inmanta.const.SHUTDOWN_GRACE_HARD) -> None:
         """Stop by process close"""
         await asyncio.get_running_loop().run_in_executor(None, functools.partial(self._force_stop, grace_time))
 
     def _force_stop(self, grace_time: float) -> None:
+        if self.closed:
+            return
         try:
             self.process.terminate()
             self.process.join(grace_time)
@@ -180,10 +193,26 @@ class MPExecutor(executor.Executor):
             # Process already gone:
             pass
         self.process.close()
+        self._set_closed()
+
+    def _set_closed(self) -> None:
+        self.closed = True
+        self.owner._child_closed(self)
 
     async def join(self, timeout: float) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
-        self.process.close()
+        if self.closed:
+            return
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, functools.partial(self.process.join, timeout))
+            self.process.close()
+            self._set_closed()
+        except ValueError as e:
+            if "process object is closed" in str(e):
+                # process already closed
+                # raises a value error, so we also check the message
+                pass
+            else:
+                raise
 
 
 class MPManager(executor.ExecutorManager[MPExecutor]):
@@ -226,7 +255,14 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
         executor = await self.make_child_and_connect(executor_id.agent_name)
         storage_for_blueprint = os.path.join(self.storage_folder, "code", executor_id.blueprint.generate_blueprint_hash())
         os.makedirs(storage_for_blueprint)
-        await executor.connection.call(InitCommand(venv.env_path, storage_for_blueprint, self.session_gid, [x.for_transport() for x in executor_id.blueprint.sources]))
+        await executor.connection.call(
+            InitCommand(
+                venv.env_path,
+                storage_for_blueprint,
+                self.session_gid,
+                [x.for_transport() for x in executor_id.blueprint.sources],
+            )
+        )
         return executor
 
     async def make_child_and_connect(self, name: str) -> MPExecutor:
@@ -244,9 +280,16 @@ class MPManager(executor.ExecutorManager[MPExecutor]):
             functools.partial(FinalizingIPCClient, f"executor.{name}"), parent_conn
         )
 
-        child_handle = MPExecutor(process, protocol)
+        child_handle = MPExecutor(self, process, protocol)
         self.children.append(child_handle)
         return child_handle
+
+    def _child_closed(self, child_handle: MPExecutor) -> None:
+        try:
+            self.children.remove(child_handle)
+        except ValueError:
+            # already gone
+            pass
 
     def _make_child(
         self, name: str, log_file: str, log_level: int, cli_log: bool
