@@ -28,6 +28,7 @@ import time
 import uuid
 from abc import ABC
 from asyncio import Lock
+from collections import defaultdict
 from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Set
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -1423,8 +1424,10 @@ class Agent(SessionEndpoint):
             self._loader = CodeLoader(self._storage["code"])
             # Lock to ensure only one actual install runs at a time
             self._loader_lock = Lock()
+            # Keep track for each resource type of the last loaded version
+            self._last_loaded_version: dict[str, int] = defaultdict(lambda: -1)
             # Cache to prevent re-loading the same resource-version
-            self._last_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
+            self._previously_loaded: dict[tuple[str, int], ResourceInstallSpec] = {}
             # Per-resource lock to serialize all actions per resource
             self._resource_loader_lock = NamedLock()
 
@@ -1629,9 +1632,9 @@ class Agent(SessionEndpoint):
         resource_install_specs: list[ResourceInstallSpec] = []
         invalid_resource_types: FailedResourcesSet = set()
         for resource_type in set(resource_types):
-            LOGGER.debug("Building ResourceInstallSpec for resource_type=%s version=%d", resource_type, version)
+            # LOGGER.debug("Building ResourceInstallSpec for resource_type=%s version=%d", resource_type, version)
 
-            cached_spec: Optional[ResourceInstallSpec] = self._last_loaded.get((resource_type, version))
+            cached_spec: Optional[ResourceInstallSpec] = self._previously_loaded.get((resource_type, version))
             if cached_spec:
                 LOGGER.debug("Code already present for %s version=%d", resource_type, version)
                 resource_install_specs.append(cached_spec)
@@ -1676,30 +1679,36 @@ class Agent(SessionEndpoint):
             async with self._resource_loader_lock.get(resource_install_spec.resource_type):
                 # stop if the last successful load was this one
                 # The combination of the lock and this check causes the reloads to naturally 'batch up'
-                if self._last_loaded.get((resource_install_spec.resource_type, resource_install_spec.model_version)):
+                if self._last_loaded_version[resource_install_spec.resource_type] == resource_install_spec.model_version:
+                    LOGGER.debug("Code already present for %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version)
                     continue
-            try:
-                # Install required python packages and the list of ``ModuleSource`` with the provided pip config
-                await self._install(
-                    resource_install_spec.sources,
-                    resource_install_spec.requirements,
-                    pip_config=resource_install_spec.pip_config,
-                )
-                LOGGER.debug(
-                    "Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version
-                )
-                # Update the ``_last_loaded`` cache to indicate that the given resource type's code
-                # was loaded successfully at the specified version.
-                self._last_loaded[(resource_install_spec.resource_type, resource_install_spec.model_version)] = (
-                    resource_install_spec
-                )
-            except Exception:
-                LOGGER.exception(
-                    "Failed to install handler %s version=%d",
-                    resource_install_spec.resource_type,
-                    resource_install_spec.model_version,
-                )
-                failed_to_load.add(resource_install_spec.resource_type)
+
+                self._last_loaded_version[resource_install_spec.resource_type] = -1
+
+                try:
+                    # Install required python packages and the list of ``ModuleSource`` with the provided pip config
+                    LOGGER.debug("Installing handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version)
+                    await self._install(
+                        resource_install_spec.sources,
+                        resource_install_spec.requirements,
+                        pip_config=resource_install_spec.pip_config,
+                    )
+                    LOGGER.debug(
+                        "Installed handler %s version=%d", resource_install_spec.resource_type, resource_install_spec.model_version
+                    )
+                    # Update the ``_previously_loaded`` cache to indicate that the given resource type's code
+                    # was loaded successfully at the specified version.
+                    self._previously_loaded[(resource_install_spec.resource_type, resource_install_spec.model_version)] = (
+                        resource_install_spec
+                    )
+                    self._last_loaded_version[resource_install_spec.resource_type] = resource_install_spec.model_version
+                except Exception:
+                    LOGGER.exception(
+                        "Failed to install handler %s version=%d",
+                        resource_install_spec.resource_type,
+                        resource_install_spec.model_version,
+                    )
+                    failed_to_load.add(resource_install_spec.resource_type)
 
         return failed_to_load
 
