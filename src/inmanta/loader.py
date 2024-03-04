@@ -225,6 +225,11 @@ class ModuleSource:
 
         return base64.b64decode(response.result["content"])
 
+    def for_transport(self) -> "ModuleSource":
+        return ModuleSource(name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code)
+
+    def with_client(self, client: "protocol.SyncClient") -> "ModuleSource":
+        return ModuleSource(name=self.name, hash_value=self.hash_value, is_byte_code=self.is_byte_code, _client=client)
 
 class CodeLoader:
     """

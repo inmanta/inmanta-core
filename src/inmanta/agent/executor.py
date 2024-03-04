@@ -25,14 +25,13 @@ import json
 import logging
 import os
 import typing
-from collections.abc import Sequence
-from concurrent.futures.thread import ThreadPoolExecutor
-from typing import Any, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, Optional, Sequence
 
 import pkg_resources
 
 from inmanta.agent import config as cfg
-from inmanta.data.model import PipConfig
+from inmanta.data import PipConfig
 from inmanta.env import PythonEnvironment
 from inmanta.loader import ModuleSource
 from inmanta.resources import Resource
@@ -197,9 +196,9 @@ class VirtualEnvironmentManager:
     for storing these environments.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, envs_dir: str) -> None:
         self._environment_map: dict[EnvBlueprint, ExecutorVirtualEnvironment] = {}
-        self.envs_dir: str = initialize_envs_directory()
+        self.envs_dir: str = envs_dir
         self._locks: NamedLock = NamedLock()
 
     def get_or_create_env_directory(self, blueprint: EnvBlueprint) -> tuple[str, bool]:
@@ -289,9 +288,7 @@ class ExecutorManager(abc.ABC, typing.Generic[MyExecutor]):
         self._locks: NamedLock = NamedLock()
 
     @abc.abstractmethod
-    async def create_executor(
-        self, venv: ExecutorVirtualEnvironment, executor_id: ExecutorId
-    ) -> MyExecutor:
+    async def create_executor(self, venv: ExecutorVirtualEnvironment, executor_id: ExecutorId) -> MyExecutor:
         pass
 
     async def get_executor(self, agent_name: str, blueprint: ExecutorBlueprint) -> MyExecutor:

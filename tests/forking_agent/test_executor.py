@@ -17,10 +17,12 @@
 """
 
 import asyncio
+import concurrent.futures.thread
 import logging
 
 import pytest
 
+import inmanta.agent.executor
 import inmanta.config
 import inmanta.protocol.ipc_light
 from inmanta.agent.forking_executor import MPManager
@@ -48,7 +50,13 @@ class GetConfig(inmanta.protocol.ipc_light.IPCMethod[str, None]):
 
 
 async def test_executor_server(tmp_path):
-    manager = MPManager(log_folder=str(tmp_path), cli_log=True)
+    log_folder = tmp_path / "logs"
+    storage_folder = tmp_path / "executors"
+    venvs = tmp_path / "venvs"
+
+    threadpool = concurrent.futures.thread.ThreadPoolExecutor()
+    venv_manager = inmanta.agent.executor.VirtualEnvironmentManager(str(venvs))
+    manager = MPManager(threadpool, venv_manager, log_folder=str(tmp_path), cli_log=True)
     manager.init_once()
 
     inmanta.config.Config.set("test", "aaa", "bbbb")
