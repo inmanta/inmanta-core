@@ -358,7 +358,7 @@ Inter-module dependencies
 #########################
 
 The plugins code of a module A can have a dependency on the plugins code of another V2 module B. When doing this,
-care should be taken that the Python module(s) you depend on, do not define any resources or providers. Otherwise the
+care should be taken that the module(s) you depend on, do not define any resources or providers. Otherwise the
 python environment of the agent can get corrupt in the following way:
 
 1. Module A-1.0 depends on X.py of module B-1.0
