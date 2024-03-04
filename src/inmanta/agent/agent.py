@@ -339,11 +339,17 @@ class InProcessExecutor(Executor):
             if provider is not None:
                 provider.close()
 
-    async def _report_resource_status(
+    async def _report_resource_deploy_done(
         self,
         resource_details: ResourceDetails,
         ctx: handler.HandlerContext,
     ) -> None:
+        """
+        Report the end of a resource deployment to the server.
+
+        :param resource_details: Deployed resource being reported.
+        :param ctx: Context of the associated handler.
+        """
 
         changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
         response = await self.agent.get_client().resource_deploy_done(
@@ -426,19 +432,7 @@ class InProcessExecutor(Executor):
             if set_fact_response.code != 200:
                 ctx.error("Failed to send facts to the server %s", set_fact_response.result)
 
-        self._report_resource_status(resource_details, ctx)
-        # changes: dict[ResourceVersionIdStr, dict[str, AttributeStateChange]] = {resource_details.rvid: ctx.changes}
-        # response = await self.agent.get_client().resource_deploy_done(
-        #     tid=resource_details.env_id,
-        #     rvid=resource_details.rvid,
-        #     action_id=ctx.action_id,
-        #     status=ctx.status,
-        #     messages=ctx.logs,
-        #     changes=changes,
-        #     change=ctx.change,
-        # )
-        # if response.code != 200:
-        #     LOGGER.error("Resource status update failed %s", response.result)
+        await self._report_resource_deploy_done(resource_details, ctx)
 
     async def dry_run(
         self,
