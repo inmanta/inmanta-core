@@ -1987,7 +1987,7 @@ async def test_set_param_v2(server, client, environment):
     also test we can modify it and create a second one.
     """
 
-    await client.set_parameter(
+    result = await client.set_parameter(
         tid=environment,
         id="param",
         source=ParameterSource.user,
@@ -1995,6 +1995,8 @@ async def test_set_param_v2(server, client, environment):
         metadata={"key1": "val1", "key2": "val2"},
         recompile=False,
     )
+
+    assert result.code == 200
 
     res = await client.list_params(tid=environment, query={})
     assert res.code == 200
@@ -2012,6 +2014,8 @@ async def test_set_param_v2(server, client, environment):
         metadata={"key1": "val1", "key2": "val2"},
         recompile=False,
     )
+    assert result.code == 200
+
     res = await client.list_params(tid=environment, query={})
     assert res.code == 200
     parameters = res.result["parameters"]
@@ -2023,6 +2027,8 @@ async def test_set_param_v2(server, client, environment):
     await client.set_parameter(
         tid=environment, id="param2", source=ParameterSource.user, value="val3", metadata={}, recompile=False
     )
+    assert result.code == 200
+
     res = await client.list_params(tid=environment, query={})
     assert res.code == 200
     parameters = res.result["parameters"]

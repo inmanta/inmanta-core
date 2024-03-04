@@ -385,11 +385,11 @@ class ParameterService(protocol.ServerSlice):
             }
             warnings = await self.server_slice._async_recompile(env, False, metadata=compile_metadata)
 
-        param = await data.Parameter.get_one(environment=env.id, resource_id=None, name=name)
+        param = await data.Parameter.get_list(environment=env.id, name=name)
         if not param:
             raise NotFound(f"Fact with id {name} does not exist")
 
-        return_value = ReturnValue(response=param.as_param())
+        return_value = ReturnValue(response=param[0].as_param())
         if warnings:
             return_value.add_warnings(warnings)
         return return_value
@@ -417,11 +417,11 @@ class ParameterService(protocol.ServerSlice):
             }
             warnings = await self.server_slice._async_recompile(env, False, metadata=compile_metadata)
 
-        param = await data.Parameter.get_one(environment=env.id, resource_id=resource_id, name=name)
+        param = await data.Parameter.get_list(environment=env.id, name=name)
         if not param:
             raise NotFound(f"Fact with id {name} does not exist")
 
-        return_value = ReturnValue(response=param.as_fact())
+        return_value = ReturnValue(response=param[0].as_fact())
         if warnings:
             return_value.add_warnings(warnings)
         return return_value

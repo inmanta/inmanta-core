@@ -799,6 +799,89 @@ async def test_server_recompile(server, client, environment, monkeypatch):
     assert not os.path.exists(project_dir)
 
 
+@pytest.mark.slowtest
+async def test_server_recompile_param_v2(server, client, environment, monkeypatch):
+    """
+    Test recompile triggers when setting params with the v2 endpoint
+    """
+
+    project_dir = os.path.join(server.get_slice(SLICE_SERVER)._server_storage["environments"], str(environment))
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "project")
+    print("Project at: ", project_dir)
+
+    shutil.copytree(project_source, project_dir)
+    subprocess.check_output(["git", "init"], cwd=project_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+
+    # Set environment variable to be passed to the compiler
+    key_env_var = "TEST_MESSAGE"
+    value_env_var = "a_message"
+    monkeypatch.setenv(key_env_var, value_env_var)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w", encoding="utf-8") as fd:
+        fd.write(
+            f"""
+        host = std::Host(name="test", os=std::linux)
+        std::ConfigFile(host=host, path="/etc/motd", content="1234")
+        std::print(std::get_env("{key_env_var}"))
+"""
+        )
+
+    logger.info("request a compile")
+    result = await client.notify_change(environment)
+    assert result.code == 200
+
+    logger.info("wait for 1")
+    versions = await wait_for_version(client, environment, 1, compile_timeout=40)
+    assert versions["versions"][0]["total"] == 1
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
+
+    # get compile reports and make sure the environment variables are not logged
+    reports = await client.get_reports(environment)
+    assert reports.code == 200
+    assert len(reports.result["reports"]) == 1
+    env_vars_compile = reports.result["reports"][0]["environment_variables"]
+    assert key_env_var not in env_vars_compile
+
+    # get report
+    compile_report = await client.get_report(reports.result["reports"][0]["id"])
+    assert compile_report.code == 200
+    report_map = {r["name"]: r for r in compile_report.result["report"]["reports"]}
+    assert value_env_var in report_map["Recompiling configuration model"]["outstream"]
+
+    # set a parameter without requesting a recompile
+    result = await client.set_parameter(environment, id="param1", value="test", source=ParameterSource.plugin)
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, 1)
+    assert versions["count"] == 1
+
+    logger.info("request second compile")
+    # set a new parameter and request a recompile
+    result = await client.set_parameter(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    logger.info("wait for 2")
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
+    assert versions["count"] == 2
+
+    # update the parameter to the same value -> no compile
+    result = await client.set_parameter(environment, id="param2", value="test", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    versions = await wait_for_version(client, environment, 2)
+    assert versions["count"] == 2
+
+    # update the parameter to a new value
+    result = await client.set_parameter(environment, id="param2", value="test2", source=ParameterSource.plugin, recompile=True)
+    assert result.code == 200
+    logger.info("wait for 3")
+    versions = await wait_for_version(client, environment, 3)
+    assert versions["count"] == 3
+
+
 async def run_compile_and_wait_until_compile_is_done(
     compiler_service: CompilerService,
     compiler_queue: queue.Queue["CompileRunnerMock"],

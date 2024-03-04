@@ -1136,7 +1136,7 @@ def set_parameter(
     value: str,
     metadata: dict[str, str] = {},
     recompile: bool = False,
-) -> model.Parameter:
+) -> ReturnValue[model.Parameter]:
     """
     Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
     Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
