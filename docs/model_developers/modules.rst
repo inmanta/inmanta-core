@@ -367,6 +367,6 @@ python environment of the agent can get corrupt in the following way:
 3. In a later version of module B (B-2.0) the X.py file doesn't have any resources anymore.
 4. A-1.0 and B-2.0 are exported: The exporter doesn't export X.py anymore, because it doesn't have any resources. The
    agent doesn't modify the X.py present in its code directory, but the old version of X.py is still present. The
-   results is that the stale version of X.py is loadedinstead of the version present in the agents python environment.
+   result is that the stale version of X.py is loaded instead of the version present in the agent's python environment.
 
 This issue will persist after a restart of the agent process.
