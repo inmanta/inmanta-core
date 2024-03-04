@@ -21,7 +21,7 @@ from inmanta.agent import config as cfg
 from inmanta.loader import ModuleSource
 
 
-class LocalExecutor(executor.Executor):
+class InProcessExecutor(executor.Executor):
     def __init__(
         self, executor_id: executor.ExecutorId, executor_virtual_env: executor.ExecutorVirtualEnvironment, storage: str
     ):
@@ -33,7 +33,7 @@ class LocalExecutor(executor.Executor):
         print("Load the code of sources for executor")
 
 
-class LocalExecutorManager(executor.ExecutorManager[LocalExecutor]):
+class InProcessExecutorManager(executor.ExecutorManager[InProcessExecutor]):
 
     def __init__(self, thread_pool: ThreadPoolExecutor, environment_manager: executor.VirtualEnvironmentManager) -> None:
         super().__init__(thread_pool, environment_manager)
@@ -41,7 +41,7 @@ class LocalExecutorManager(executor.ExecutorManager[LocalExecutor]):
 
     async def create_executor(
         self, venv: executor.ExecutorVirtualEnvironment, executor_id: executor.ExecutorId
-    ) -> LocalExecutor:
+    ) -> InProcessExecutor:
         """
         Creates an Executor based with the specified agent name and blueprint.
         It ensures the required virtual environment is prepared and source code is loaded.
@@ -50,7 +50,7 @@ class LocalExecutorManager(executor.ExecutorManager[LocalExecutor]):
         :return: An Executor instance
         """
 
-        executor = LocalExecutor(executor_id, venv, self.storage)
+        executor = InProcessExecutor(executor_id, venv, self.storage)
         executor.load_code(executor_id.blueprint.sources)
         return executor
 

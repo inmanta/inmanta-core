@@ -20,7 +20,7 @@ import logging
 import os
 import subprocess
 
-from inmanta.agent import local_executor
+from inmanta.agent import in_process_executor
 from inmanta.agent.executor import EnvBlueprint, ExecutorBlueprint, ExecutorId, VirtualEnvironmentManager
 from inmanta.data.model import PipConfig
 from inmanta.loader import ModuleSource
@@ -89,7 +89,7 @@ async def test_process_manager(environment, tmpdir) -> None:
 
     # Initialize the virtual environment and executor managers
     venv_manager = VirtualEnvironmentManager()
-    executor_manager = local_executor.LocalExecutorManager(threadpool, venv_manager)
+    executor_manager = in_process_executor.InProcessExecutorManager(threadpool, venv_manager)
 
     # Getting a first executor should successfully create and map it
     executor_1 = await executor_manager.get_executor("agent1", blueprint1)
@@ -170,7 +170,7 @@ async def test_process_manager_restart(environment, tmpdir, caplog) -> None:
     with caplog.at_level(logging.INFO):
         # First execution: create an executor and verify its creation
         venv_manager = VirtualEnvironmentManager()
-        executor_manager = local_executor.LocalExecutorManager(threadpool, venv_manager)
+        executor_manager = in_process_executor.InProcessExecutorManager(threadpool, venv_manager)
         await executor_manager.get_executor("agent1", blueprint1)
         assert len(executor_manager.executor_map) == 1
         assert len(venv_manager._environment_map) == 1
@@ -181,7 +181,7 @@ async def test_process_manager_restart(environment, tmpdir, caplog) -> None:
 
         # Simulate ExecutorManager restart by creating new instances of ExecutorManager and VirtualEnvironmentManager
         venv_manager2 = VirtualEnvironmentManager()
-        executor_manager2 = local_executor.LocalExecutorManager(threadpool, venv_manager2)
+        executor_manager2 = in_process_executor.InProcessExecutorManager(threadpool, venv_manager2)
         # Assertions before retrieving the executor to verify a fresh start
         assert len(executor_manager2.executor_map) == 0
         assert len(venv_manager2._environment_map) == 0
@@ -339,7 +339,7 @@ async def test_executor_creation_and_reuse(environment, tmpdir) -> None:
     blueprint3 = ExecutorBlueprint(pip_config=pip_config, requirements=requirements2, sources=sources2)
 
     venv_manager = VirtualEnvironmentManager()
-    executor_manager = local_executor.LocalExecutorManager(threadpool, venv_manager)
+    executor_manager = in_process_executor.InProcessExecutorManager(threadpool, venv_manager)
     executor_1, executor_1_reuse, executor_2, executor_3 = await asyncio.gather(
         executor_manager.get_executor("agent1", blueprint1),
         executor_manager.get_executor("agent1", blueprint1),
