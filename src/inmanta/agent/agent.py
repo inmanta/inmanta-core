@@ -32,7 +32,7 @@ from collections.abc import Callable, Coroutine, Iterable, Mapping, Sequence, Se
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from logging import Logger
-from typing import Any, Dict, Optional, Self, Union, cast
+from typing import Any, Dict, Optional, Self, Union, cast, Collection
 
 import pkg_resources
 
@@ -1610,10 +1610,14 @@ class Agent(SessionEndpoint):
 
     async def get_code(
         self, environment: uuid.UUID, version: int, resource_types: Sequence[str]
-    ) -> tuple[list[ResourceInstallSpec], set[str]]:
+    ) -> tuple[Collection[ResourceInstallSpec], set[str]]:
         """
-        Get the list of installation specifications (i.e. pip config, python package dependencies, Inmanta modules sources)
+        Get the collection of installation specifications (i.e. pip config, python package dependencies, Inmanta modules sources)
         required to deploy a given version for the provided resource types.
+
+        :return: Tuple of:
+            - collection of ResourceInstallSpec for resource_types with valid handler code and pip config
+            - set of invalid resource_types (no handler code and/or invalid pip config)
         """
         if self._loader is None:
             return [], set()
@@ -1624,6 +1628,7 @@ class Agent(SessionEndpoint):
         resource_install_specs: list[ResourceInstallSpec] = []
         invalid_resource_types: set[str] = set()
         for resource_type in set(resource_types):
+            LOGGER.debug("Building ResourceInstallSpec for resource_type=%s version=%d", resource_type, version)
 
             cached_spec: Optional[ResourceInstallSpec] = self._last_loaded.get((resource_type, version))
             if cached_spec:
@@ -1633,7 +1638,6 @@ class Agent(SessionEndpoint):
             result: protocol.Result = await self._client.get_source_code(environment, version, resource_type)
             if result.code == 200 and result.result is not None:
                 sync_client = SyncClient(client=self._client, ioloop=self._io_loop)
-                LOGGER.debug("Installing handler %s version=%d", resource_type, version)
                 requirements: set[str] = set()
                 sources: list["ModuleSource"] = []
                 # Encapsulate source code details in ``ModuleSource`` objects
