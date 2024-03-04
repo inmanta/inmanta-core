@@ -33,7 +33,7 @@ class LocalExecutor(executor.Executor):
         print("Load the code of sources for executor")
 
 
-class LocalManager(executor.ExecutorManager[LocalExecutor]):
+class LocalExecutorManager(executor.ExecutorManager[LocalExecutor]):
 
     def __init__(self, thread_pool: ThreadPoolExecutor, environment_manager: executor.VirtualEnvironmentManager) -> None:
         super().__init__(thread_pool, environment_manager)
